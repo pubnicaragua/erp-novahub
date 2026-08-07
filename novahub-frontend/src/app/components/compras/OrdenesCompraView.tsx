@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
-import { purchaseOrdersService } from '../../services/compras.service';
+import { purchaseOrdersService, purchaseRequestsService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
@@ -44,6 +44,8 @@ interface Props {
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
   initialStatus?: string;
+  prefillDoc?: Partial<PurchaseOrder> | null;
+  onPrefillHandled?: () => void;
 }
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -195,7 +197,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
 }
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, initialStatus }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, initialStatus, prefillDoc, onPrefillHandled }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -211,6 +213,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const prefillRef = useRef<Partial<PurchaseOrder> | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [importIntroOpen, setImportIntroOpen] = useState(false);
@@ -470,23 +473,47 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   useEffect(() => {
     if (editingId) {
       if (editingId === 'NEW') {
-             setLocalDoc({
-                supplierId: '',
-                date: new Date().toISOString(),
-                expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-                currency: displayCurrency,
-                exchangeRate: globalRate,
-                status: 'DRAFT',
-                purchaseType: 'INVENTORY',
-                requestedBy: 'Admin',
-                address: '',
-                items: [],
-                subtotal: 0,
-                taxAmount: 0,
-                withholdingTotal: 0,
-                withholdingBase: 0,
-                total: 0
-          });
+        const pre = prefillRef.current;
+        if (pre) {
+          prefillRef.current = null;
+          const defaults = {
+            supplierId: '',
+            date: new Date().toISOString(),
+            expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+            currency: displayCurrency,
+            exchangeRate: globalRate,
+            status: 'DRAFT',
+            purchaseType: 'INVENTORY',
+            requestedBy: 'Admin',
+            address: '',
+            items: [],
+            subtotal: 0,
+            taxAmount: 0,
+            withholdingTotal: 0,
+            withholdingBase: 0,
+            total: 0
+          };
+          setLocalDoc({ ...defaults, ...pre } as Partial<PurchaseOrder>);
+        } else if (!localDoc) {
+          const defaults = {
+            supplierId: '',
+            date: new Date().toISOString(),
+            expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+            currency: displayCurrency,
+            exchangeRate: globalRate,
+            status: 'DRAFT',
+            purchaseType: 'INVENTORY',
+            requestedBy: 'Admin',
+            address: '',
+            items: [],
+            subtotal: 0,
+            taxAmount: 0,
+            withholdingTotal: 0,
+            withholdingBase: 0,
+            total: 0
+          };
+          setLocalDoc(defaults as Partial<PurchaseOrder>);
+        }
       } else {
          const found = data.find(x => x.id === editingId);
          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
@@ -497,6 +524,49 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       setEvidenceFiles([]);
     }
   }, [editingId, data, globalRate]);
+
+  useEffect(() => {
+    if (prefillDoc) {
+      prefillRef.current = enrichPrefillItems(prefillDoc);
+      setEditingId('NEW');
+      onPrefillHandled?.();
+    }
+  }, [prefillDoc]);
+
+  useEffect(() => {
+    if (editingId === 'NEW' && localDoc && Array.isArray(localDoc.items) && productCatalog.length > 0) {
+      const hasUnenriched = localDoc.items.some((it: any) => it.productId && (!it.code || !it.category));
+      if (hasUnenriched) {
+        const enriched = enrichPrefillItems(localDoc);
+        setLocalDoc(enriched);
+      }
+    }
+  }, [productCatalog, editingId, localDoc]);
+
+  const enrichPrefillItems = (doc: any): any => {
+    if (!doc || !Array.isArray(doc.items)) return doc;
+    const items = doc.items.map((it: any) => {
+      const prod = productCatalog.find((p: any) => String(p.id) === String(it.productId));
+      const stockVal = it.stock ?? it.currentStock ?? (prod ? (prod.stock != null ? prod.stock : (prod.quantity ?? 0)) : undefined);
+      if (prod) {
+        const costPrice = Number(prod.costPrice ?? prod.cost ?? prod.price ?? it.unitPrice ?? 0);
+        return {
+          ...it,
+          code: it.code || prod.code || prod.sku || '',
+          name: it.name || prod.name || it.description || '',
+          description: it.description || prod.name || it.name || '',
+          category: prod.category?.name || prod.category || prod.categoryId || it.category || '',
+          categoryId: it.categoryId || prod.categoryId || (prod.category?.id || ''),
+          stock: stockVal,
+          currentStock: stockVal,
+          unitPrice: (it.unitPrice != null && Number(it.unitPrice) > 0) ? Number(it.unitPrice) : costPrice,
+        };
+      }
+      return { ...it, stock: stockVal, currentStock: stockVal };
+    });
+    return { ...doc, items };
+  };
+
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
@@ -528,6 +598,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const columns: ColumnDef<PurchaseOrder>[] = [
     { key: 'number',   header: 'Número',   width: '120px',
       render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
+    { key: 'purchaseRequestNumber', header: 'Solicitud', width: '110px',
+      render: (_val, row) => <span className="text-xs text-muted-foreground">{row.purchaseRequestNumber || '-'}</span> },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Fecha',     width: '110px',
@@ -591,6 +663,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const cleanedDoc: any = {
       ...localDoc,
       isService: localDoc.purchaseType === 'SERVICE',
+      purchaseRequestId: localDoc.purchaseRequestId || null,
+      purchaseRequestNumber: localDoc.purchaseRequestNumber || null,
       taxRate: 0,
       withholdingRate: 0,
       subtotal: Number(localDoc.subtotal || 0),
@@ -643,7 +717,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     
     try {
       if (editingId === 'NEW') {
-        await purchaseOrdersService.create(cleanedDoc);
+        const created = await purchaseOrdersService.create(cleanedDoc);
+        if (created?.purchaseRequestId) {
+          try {
+            await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED');
+          } catch { /* la solicitud se podrá aprobar manualmente */ }
+        }
         toast.success('Orden creada');
       } else {
         await purchaseOrdersService.update(editingId!, cleanedDoc);
@@ -789,6 +868,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     ]);
     exportToCsv(`OC_${doc.number || doc.id || 'borrador'}`, [
       ['Numero', doc.number || '-'],
+      ['Solicitud', doc.purchaseRequestNumber || '-'],
       ['Proveedor', doc.supplier?.name || '-'],
       ['Direccion', doc.address || '-'],
       ['Fecha', doc.date ? new Date(doc.date).toLocaleDateString() : '-'],
@@ -920,7 +1000,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <Input value={localDoc.number || ''} disabled className="h-8 text-xs font-black uppercase bg-muted/20" />
                   </div>
                 )}
-                <div className={isNew ? 'col-span-2' : ''}>
+                {( !isNew || !!localDoc?.purchaseRequestNumber ) && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Solicitud de Compra</p>
+                    <Input value={localDoc?.purchaseRequestNumber || ''} disabled className="h-8 text-xs font-bold uppercase bg-muted/20" />
+                  </div>
+                )}
+                <div className={(isNew && !localDoc?.purchaseRequestNumber) ? 'col-span-2' : ''}>
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor</p>
                   <Combobox 
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}

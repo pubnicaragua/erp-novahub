@@ -484,6 +484,8 @@ export interface PurchaseOrder {
   withholdingRate?: number;
   withholdingAmount?: number;
   isService?: boolean;
+  purchaseRequestId?: string;
+  purchaseRequestNumber?: string;
   evidenceFileName?: string;
   evidenceFileType?: string;
   evidenceFileSize?: number;

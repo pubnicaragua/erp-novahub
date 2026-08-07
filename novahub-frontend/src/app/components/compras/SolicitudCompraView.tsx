@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   ClipboardList, Search, Eye, X, AlertTriangle,
-  CheckCircle, Clock, FileText, Printer,
-  Building2, ArrowUpRight, FileSpreadsheet, Plus,
-  Loader2, Package, ChevronLeft, ChevronRight,
+  CheckCircle, Clock, Printer,
+  Building2, ArrowUpRight,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,13 +13,11 @@ import { Card, CardContent } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
-import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
+import { purchaseRequestsService, purchaseManagementService, suppliersService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
-import { employeesService } from '../../services/rh.service';
-import type { PurchaseRequest, PurchaseManagement, Warehouse, Employee, PaginatedResponse } from '../../types';
+import type { PurchaseRequest, PurchaseManagement, Warehouse, PurchaseOrder } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
-import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PromptDialog } from '../ui/PromptDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -62,10 +60,10 @@ interface SolicitudCompraViewProps {
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
   warehouseCatalog?: Warehouse[];
+  onOpenOrderWithDraft?: (doc: Partial<PurchaseOrder>) => void;
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, warehouseCatalog = [] }: SolicitudCompraViewProps) {
-  const { user } = useAuth();
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, onOpenOrderWithDraft }: SolicitudCompraViewProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [detailOpen, setDetailOpen] = useState<PurchaseRequest | null>(null);
@@ -77,6 +75,12 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
   const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
+  const [pendingRejectRequest, setPendingRejectRequest] = useState<PurchaseRequest | null>(null);
+  const [pendingOrderRequest, setPendingOrderRequest] = useState<PurchaseRequest | null>(null);
+  const [orderSuppliers, setOrderSuppliers] = useState<any[]>([]);
+  const [orderSupplierId, setOrderSupplierId] = useState('');
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderCategories, setOrderCategories] = useState<any[]>([]);
 
   const filtered = useMemo(() => {
     return data.filter(r => {
@@ -158,6 +162,123 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     finally { setActionLoading(null); }
   };
 
+  const handleRequestGoInReview = async (req: PurchaseRequest) => {
+    setActionLoading(req.id);
+    try {
+      await purchaseRequestsService.changeStatus(req.id, 'IN_REVIEW');
+      toast.success(`${req.number} → En Revisión`);
+      onRefresh();
+    } catch (e: any) { toast.error(e?.message || 'Error al cambiar estado'); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleRequestReject = (req: PurchaseRequest) => {
+    setPendingRejectRequest(req);
+  };
+
+  const confirmRequestReject = async (rejectReason: string) => {
+    if (!pendingRejectRequest) return;
+    const req = pendingRejectRequest;
+    setActionLoading(req.id);
+    try {
+      await purchaseRequestsService.changeStatus(req.id, 'REJECTED', rejectReason || undefined);
+      toast.success(`${req.number} → Rechazado`);
+      setPendingRejectRequest(null);
+      onRefresh();
+    } catch (e: any) { toast.error(e?.message || 'Error al rechazar'); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleRequestApproveAndOrder = async (req: PurchaseRequest) => {
+    setPendingOrderRequest(req);
+    setOrderSupplierId('');
+    try {
+      const [res, catRes] = await Promise.all([
+        suppliersService.getAll({ page: 1, pageSize: 200 }),
+        inventoryService.getCategories(),
+      ]);
+      const list = Array.isArray(res) ? res : ((res as any)?.data || []);
+      if (list.length > 0) setOrderSupplierId(list[0]?.id || '');
+      setOrderSuppliers(list);
+const cats = Array.isArray(catRes) ? catRes : ((catRes as any)?.data || []);
+      setOrderCategories(cats);
+    } catch { setOrderSuppliers([]); setOrderCategories([]); }
+  };
+
+  const confirmRequestApproveAndOrder = async () => {
+    if (!pendingOrderRequest) return;
+    const req = pendingOrderRequest;
+    if (!orderSupplierId) { toast.error('Selecciona un proveedor'); return; }
+    setOrderLoading(true);
+    try {
+      const categoryMap = new Map(orderCategories.map((c: any) => [c.id, c.name || c._name]));
+      const requester = req.requestedBy
+        ? `${req.requestedBy.firstName || ''} ${req.requestedBy.lastName || ''}`.trim()
+        : (req.requestedById || 'Admin');
+      const items = (req.items || []).map((it: any) => {
+        const product = it.product || {};
+        const categoryId = product.categoryId || it.categoryId || null;
+        return {
+          productId: it.productId || product.id || null,
+          code: product.code || product.sku || it.code || '',
+          name: product.name || it.description || it.productName || '',
+          description: it.description || product.name || '',
+          category: categoryId ? (categoryMap.get(categoryId) || '') : (product.category?.name || ''),
+          categoryId,
+          stock: Number(it.currentStock ?? 0),
+          quantity: Number(it.quantity ?? 1),
+          unitPrice: 0,
+          total: 0,
+          taxType: 'GRAVADO',
+          taxRate: 15,
+          taxBase: 0,
+          taxAmount: 0,
+          withholdingType: 'NONE',
+          withholdingRate: 0,
+          withholdingBase: 0,
+          accountId: null,
+          costCenterId: null,
+          stockApplies: true,
+        };
+      });
+      const orderDoc: any = {
+        supplierId: orderSupplierId,
+        date: new Date().toISOString(),
+        expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+        currency: 'NIO',
+        exchangeRate: 1,
+        status: 'DRAFT',
+        purchaseType: 'INVENTORY',
+        isService: false,
+        requestedBy: requester,
+        address: '',
+        purchaseRequestId: req.id,
+        purchaseRequestNumber: req.number,
+        notes: req.notes || req.justification || '',
+        taxRate: 0,
+        withholdingRate: 0,
+        subtotal: 0,
+        taxAmount: 0,
+        withholdingTotal: 0,
+        withholdingBase: 0,
+        total: 0,
+        items,
+      };
+      setPendingOrderRequest(null);
+      setOrderSupplierId('');
+      onOpenOrderWithDraft?.(orderDoc as Partial<PurchaseOrder>);
+      toast.success('Solicitud enviada. Completa y guarda la orden de compra para aprobarla.');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al preparar la orden de compra');
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
+  const requestIsTerminal = (status?: string) =>
+    status === 'REJECTED' || status === 'CLOSED' || status === 'CONVERTED_TO_ORDER' || status === 'CANCELLED';
+
   const fm = (n: number | string | undefined | null) =>
     new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 
@@ -169,108 +290,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     { title: 'Aprobadas', value: data.filter(r => r.status === 'APPROVED').length, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'APPROVED' },
     { title: 'Rechazadas', value: data.filter(r => r.status === 'REJECTED').length, icon: X, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'REJECTED' },
   ];
-
-  // ─── Nueva Solicitud ──────────────────────────────────────────────────────────
-  const [createOpen, setCreateOpen] = useState(false);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [productSearch, setProductSearch] = useState('');
-  const [createForm, setCreateForm] = useState({
-    priority: 'NORMAL' as string,
-    justification: '',
-    warehouseId: '',
-    requiredDate: '',
-    notes: '',
-    requestedById: '',
-  });
-  const [createItems, setCreateItems] = useState<Array<{
-    productId: string; productName: string; description: string; quantity: number; observations: string;
-    currentStock: number; minStock: number;
-  }>>([]);
-  const [creating, setCreating] = useState(false);
-
-  useEffect(() => { setWarehouses(warehouseCatalog); }, [warehouseCatalog]);
-
-  useEffect(() => {
-    employeesService.getAll({ page: 1, pageSize: 200 }).then((res: any) => {
-      const list = Array.isArray(res) ? res : (res as PaginatedResponse<Employee>)?.data || [];
-      setEmployees(list);
-      const linked = list.find((e: Employee) => e.userId === user?.id);
-      if (linked) setCreateForm(prev => ({ ...prev, requestedById: linked.id }));
-    }).catch(() => setEmployees([]));
-  }, [user?.id]);
-
-  const searchProducts = async (q: string, signal?: AbortSignal) => {
-    if (!q || q.length < 2) { setProducts([]); return; }
-    try {
-      const res = await inventoryService.getProducts({ search: q, page: 1, pageSize: 10 }, signal);
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
-      setProducts(list);
-    } catch (error: any) { if (error?.name !== 'AbortError') setProducts([]); }
-  };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => searchProducts(productSearch, controller.signal), 300);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [productSearch]);
-
-  const addItem = (product: any) => {
-    setCreateItems(prev => [...prev, {
-      productId: product.id, productName: product.name, description: product.name,
-      quantity: 1, observations: '', currentStock: Number(product.stock || 0),
-      minStock: Number(product.minStock || 0),
-    }]);
-    setProductSearch('');
-    setProducts([]);
-  };
-
-  const updateItem = (idx: number, patch: Partial<typeof createItems[0]>) => {
-    setCreateItems(prev => prev.map((item, i) => i === idx ? { ...item, ...patch } : item));
-  };
-
-  const removeItem = (idx: number) => {
-    setCreateItems(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleCreate = async () => {
-    if (createItems.length === 0) { toast.error('Agrega al menos un artículo'); return; }
-    if (!createForm.warehouseId) { toast.error('Selecciona una bodega'); return; }
-    if (!createForm.requestedById) { toast.error('Selecciona el solicitante'); return; }
-    setCreating(true);
-    try {
-      const payload = {
-        priority: createForm.priority,
-        justification: createForm.justification || undefined,
-        warehouseId: createForm.warehouseId,
-        requiredDate: createForm.requiredDate || undefined,
-        notes: createForm.notes || undefined,
-        requestedById: createForm.requestedById,
-        userId: user?.id,
-        items: createItems.map(item => ({
-          productId: item.productId, description: item.description,
-          quantity: item.quantity, observations: item.observations || undefined,
-          currentStock: item.currentStock, minStock: item.minStock,
-          warehouseId: createForm.warehouseId,
-        })),
-      };
-      await purchaseRequestsService.create(payload as any);
-      toast.success('Solicitud de compra creada');
-      setCreateOpen(false);
-      setCreateForm({ priority: 'NORMAL', justification: '', warehouseId: '', requiredDate: '', notes: '', requestedById: '' });
-      setCreateItems([]);
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al crear solicitud');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const openCreateDialog = () => {
-    setCreateOpen(true);
-  };
 
   return (
     <div className="space-y-6">
@@ -302,9 +321,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
         <PurchaseViewTutorial view="requests" />
-        <Button size="sm" onClick={openCreateDialog} className="rounded-xl font-black uppercase text-[10px] tracking-widest">
-          <Plus className="size-3.5 mr-1" /> Nueva Solicitud
-        </Button>
         </div>
       </div>
 
@@ -346,7 +362,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</th>
                   <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Prioridad</th>
                   <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cotización</th>
                   <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total</th>
                   <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Items</th>
                   <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Solicitante</th>
@@ -374,7 +389,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                         <Badge className={cn('text-[9px]', PRIORITY_STYLES[req.priority])}>{req.priority}</Badge>
                       </td>
                       <td className="px-4 py-3 text-xs">{mgmt?.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="px-4 py-3 text-xs font-mono">{mgmt?.quotationNumber || <span className="text-muted-foreground/50">—</span>}</td>
                       <td className="px-4 py-3 text-right text-xs font-mono font-bold">{mgmt ? fm(mgmt.total) : <span className="text-muted-foreground/50">—</span>}</td>
                       <td className="px-4 py-3 text-center text-xs">{req.items?.length || 0}</td>
                       <td className="px-4 py-3 text-xs">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</td>
@@ -398,11 +412,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                                 <X className="size-3.5" />
                               </Button>
                             </>
-                          )}
-                          {mgmt?.status === 'APPROVED' && (
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-primary" onClick={() => handleConvertToOrder(mgmt)} disabled={actionLoading === mgmt.id}>
-                              <ArrowUpRight className="size-3.5" />
-                            </Button>
                           )}
                         </div>
                       </td>
@@ -451,7 +460,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Artículos Solicitados</h4>
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
-                      <thead><tr className="bg-muted/30"><th className="text-left p-2 text-[10px] font-bold">Producto</th><th className="text-left p-2 text-[10px] font-bold">Descripción</th><th className="text-right p-2 text-[10px] font-bold">Cant.</th><th className="text-right p-2 text-[10px] font-bold">Stock</th><th className="text-right p-2 text-[10px] font-bold">Stock Min</th><th className="text-left p-2 text-[10px] font-bold">Obs.</th></tr></thead>
+                      <thead><tr className="bg-muted/30"><th className="text-left p-2 text-[10px] font-bold">Producto</th><th className="text-left p-2 text-[10px] font-bold">Descripción</th><th className="text-right p-2 text-[10px] font-bold">Cant.</th><th className="text-right p-2 text-[10px] font-bold">Stock</th><th className="text-left p-2 text-[10px] font-bold">Proveedor</th><th className="text-right p-2 text-[10px] font-bold">Total</th></tr></thead>
                       <tbody>
                         {detailOpen.items.map((item, i) => (
                           <tr key={item.id || i} className="border-t">
@@ -459,8 +468,8 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                             <td className="p-2 text-xs">{item.description}</td>
                             <td className="p-2 text-right text-xs font-mono">{item.quantity}</td>
                             <td className="p-2 text-right text-xs font-mono">{item.currentStock}</td>
-                            <td className="p-2 text-right text-xs font-mono">{item.minStock}</td>
-                            <td className="p-2 text-xs">{item.observations || '—'}</td>
+                            <td className="p-2 text-xs">{mgmt?.supplier?.name || '—'}</td>
+                            <td className="p-2 text-right text-xs font-mono">{mgmt ? fm(mgmt.total) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -491,7 +500,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       <table className="w-full text-sm">
                         <thead><tr className="bg-muted/30"><th className="text-left p-2 text-[10px] font-bold">Producto</th><th className="text-left p-2 text-[10px] font-bold">Descripción</th><th className="text-right p-2 text-[10px] font-bold">Sol.</th><th className="text-right p-2 text-[10px] font-bold">Prop.</th><th className="text-right p-2 text-[10px] font-bold">Precio</th><th className="text-right p-2 text-[10px] font-bold">Dto%</th><th className="text-right p-2 text-[10px] font-bold">Total</th></tr></thead>
                         <tbody>
-                          {mgmt.items.map((item, i) => (
+                          {(mgmt.items || []).map((item, i) => (
                             <tr key={item.id || i} className="border-t">
                               <td className="p-2 text-xs font-mono">{item.productId?.slice(0, 8) || '—'}</td>
                               <td className="p-2 text-xs">{item.description}</td>
@@ -514,8 +523,33 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                 )}
 
                 <DialogFooter className="gap-2">
-                  <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="size-3.5 mr-1" /> Imprimir</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDetailOpen(null)}>Cerrar</Button>
+                  {detailOpen && (() => {
+                    const isApproved = detailOpen.status === 'APPROVED' || detailOpen.status === 'CONVERTED_TO_ORDER';
+                    const busy = actionLoading === detailOpen.id;
+                    return (
+                      <div className="mb-3 flex w-full flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 print:hidden">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acciones de la solicitud</span>
+                          <Button variant="outline" size="sm" className="h-9 shrink-0 px-3" onClick={() => window.print()} disabled={!isApproved} title={isApproved ? 'Imprimir solicitud' : 'Solo se puede imprimir cuando la solicitud está aprobada'}>
+                            <Printer className="size-3.5 mr-1.5" /> Imprimir
+                          </Button>
+                        </div>
+                        {!requestIsTerminal(detailOpen.status) && (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_1fr]">
+                            <Button variant="outline" size="sm" className="h-9 justify-center whitespace-nowrap px-3 text-amber-600 text-xs" onClick={() => handleRequestGoInReview(detailOpen)} disabled={isApproved || busy}>
+                              <Clock className="size-3.5 mr-1.5" /> En revisión
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-9 justify-center whitespace-nowrap px-3 text-red-600 text-xs" onClick={() => handleRequestReject(detailOpen)} disabled={isApproved || busy}>
+                              <X className="size-3.5 mr-1.5" /> Rechazar
+                            </Button>
+                            <Button size="sm" className="h-9 w-full justify-center whitespace-nowrap px-3 text-xs" onClick={() => handleRequestApproveAndOrder(detailOpen)} disabled={isApproved || busy}>
+                              <CheckCircle className="size-3.5 mr-1.5" /> Aprobar y enviar a OC
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </DialogFooter>
               </>
             );
@@ -558,143 +592,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         </DialogContent>
       </Dialog>
 
-      {/* Create Solicitud Dialog */}
-      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) { setCreateOpen(false); setCreateItems([]); }}}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="size-4" /> Nueva Solicitud de Compra
-            </DialogTitle>
-            <DialogDescription>Completa los datos para crear una solicitud. Se creará en estado Borrador.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold">Solicitante *</label>
-                <Select value={createForm.requestedById} onValueChange={(v) => setCreateForm(prev => ({ ...prev, requestedById: v }))}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} <span className="font-mono text-muted-foreground">({emp.code || emp.email})</span></SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold">Prioridad</label>
-                <Select value={createForm.priority} onValueChange={(v) => setCreateForm(prev => ({ ...prev, priority: v }))}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NORMAL">Normal</SelectItem>
-                    <SelectItem value="URGENT">Urgente</SelectItem>
-                    <SelectItem value="CRITICAL">Crítico</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold">Bodega</label>
-                <Select value={createForm.warehouseId} onValueChange={(v) => setCreateForm(prev => ({ ...prev, warehouseId: v }))}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map(w => (
-                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold">Fecha Requerida</label>
-                <Input type="date" className="h-9" value={createForm.requiredDate}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, requiredDate: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold">Justificación</label>
-              <textarea className="w-full min-h-[60px] rounded-lg border border-input bg-background p-3 text-sm"
-                value={createForm.justification}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, justification: e.target.value }))}
-                placeholder="Motivo de la solicitud..." />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold">Notas</label>
-              <textarea className="w-full min-h-[50px] rounded-lg border border-input bg-background p-3 text-sm"
-                value={createForm.notes}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Notas adicionales..." />
-            </div>
-
-            {/* Items */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold">Artículos</label>
-                <Badge variant="secondary" className="text-[10px]">{createItems.length} items</Badge>
-              </div>
-              {createItems.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-muted/30">
-                      <th className="text-left p-2 text-[10px] font-bold">Producto</th>
-                      <th className="text-left p-2 text-[10px] font-bold">Cant.</th>
-                      <th className="text-left p-2 text-[10px] font-bold">Obs.</th>
-                      <th className="w-10" />
-                    </tr></thead>
-                    <tbody>
-                      {createItems.map((item, idx) => (
-                        <tr key={idx} className="border-t">
-                          <td className="p-2">
-                            <span className="text-xs font-medium">{item.productName}</span>
-                          </td>
-                          <td className="p-2 w-24">
-                            <Input type="number" min={1} className="h-8 text-xs" value={item.quantity}
-                              onChange={(e) => updateItem(idx, { quantity: Math.max(1, Number(e.target.value) || 1) })} />
-                          </td>
-                          <td className="p-2">
-                            <Input className="h-8 text-xs" value={item.observations} placeholder="Obs."
-                              onChange={(e) => updateItem(idx, { observations: e.target.value })} />
-                          </td>
-                          <td className="p-2">
-                            <button onClick={() => removeItem(idx)} className="p-1 text-red-500 hover:text-red-400">
-                              <X className="size-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {/* Product search */}
-              <div className="relative">
-                <Input placeholder="Buscar producto por nombre o código..." className="h-9 pl-8"
-                  value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                {products.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border bg-background shadow-lg max-h-48 overflow-y-auto">
-                    {products.map((p: any) => (
-                      <button key={p.id} type="button" className="w-full flex items-center gap-3 px-3 py-2 text-left text-xs hover:bg-muted/50 transition-colors"
-                        onClick={() => addItem(p)}>
-                        <Package className="size-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate">{p.name}</span>
-                        <span className="text-muted-foreground font-mono shrink-0">{p.code}</span>
-                        <span className="text-muted-foreground shrink-0">Stock: {p.stock || 0}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setCreateOpen(false); setCreateItems([]); }} disabled={creating}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreate} disabled={creating}>
-              {creating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
-              Crear Solicitud
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <PromptDialog
         open={Boolean(pendingRejectManagement)}
         onOpenChange={open => { if (!open && !actionLoading) setPendingRejectManagement(null); }}
@@ -706,6 +603,17 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         onConfirm={confirmRejectManagement}
         loading={Boolean(actionLoading && pendingRejectManagement)}
       />
+      <PromptDialog
+        open={Boolean(pendingRejectRequest)}
+        onOpenChange={open => { if (!open && !actionLoading) setPendingRejectRequest(null); }}
+        title="Rechazar solicitud"
+        description="Indica el motivo para que quede registrado en el historial de la solicitud."
+        label="Motivo del rechazo"
+        placeholder="Escribe el motivo…"
+        confirmLabel="Rechazar"
+        onConfirm={confirmRequestReject}
+        loading={Boolean(actionLoading && pendingRejectRequest)}
+      />
       <ConfirmDialog
         open={Boolean(pendingConvertManagement)}
         onOpenChange={open => { if (!open && !actionLoading) setPendingConvertManagement(null); }}
@@ -716,6 +624,43 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         onConfirm={confirmConvertToOrder}
         loading={Boolean(actionLoading && pendingConvertManagement)}
       />
+
+      <Dialog open={Boolean(pendingOrderRequest)} onOpenChange={(o) => { if (!o && !orderLoading) { setPendingOrderRequest(null); setOrderSupplierId(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="size-4 text-emerald-600" /> Aprobar y enviar a orden de compra
+            </DialogTitle>
+            <DialogDescription>
+              {pendingOrderRequest?.number} — se abrirá el modal de nueva orden de compra con sus artículos precargados. La solicitud se aprobará solo cuando guardes la orden. Selecciona el proveedor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold">Proveedor *</label>
+              <Select value={orderSupplierId} onValueChange={setOrderSupplierId} disabled={orderLoading}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar proveedor..." /></SelectTrigger>
+                <SelectContent>
+                  {orderSuppliers.length === 0 && <SelectItem value="__none__" disabled>No hay proveedores registrados</SelectItem>}
+                  {orderSuppliers.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Se crearán {pendingOrderRequest?.items?.length || 0} artículo(s). Los precios se podrán ajustar en la orden de compra.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setPendingOrderRequest(null); setOrderSupplierId(''); }} disabled={orderLoading}>Cancelar</Button>
+            <Button onClick={confirmRequestApproveAndOrder} disabled={orderLoading || !orderSupplierId}>
+              {orderLoading && <span className="mr-2 inline-block size-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+              Abrir orden de compra
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

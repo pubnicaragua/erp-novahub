@@ -48,6 +48,7 @@ export function PurchaseOrderPreviewDialog({
           <DialogDescription className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground">
               {order?.number ? `Orden ${order.number}` : 'Orden de Compra'} · {supplier?.name || 'Sin proveedor'}
+              {order?.purchaseRequestNumber ? ` · Solicitud ${order.purchaseRequestNumber}` : ''}
             </span>
             {statusMeta && (
               <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', statusMeta.color)}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send } from 'lucide-react';
+import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Card } from '../ui/card';
@@ -15,6 +15,7 @@ import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
 import { inventoryService } from '../../services/inventario.service';
 import { purchaseRequestsService } from '../../services/compras.service';
+import { employeesService } from '../../services/rh.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -302,10 +303,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
   const [initialImportConfirmOpen, setInitialImportConfirmOpen] = useState(false);
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
-  const [replenishmentPeriod, setReplenishmentPeriod] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
-  const [downloadingReport, setDownloadingReport] = useState(false);
-  const [replenishmentData, setReplenishmentData] = useState<any[] | null>(null);
-  const [replenishmentModalOpen, setReplenishmentModalOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -315,48 +312,116 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Solicitar Compra Batch desde inventario ──────────────────────────────────
-  const [batchPrOpen, setBatchPrOpen] = useState(false);
-  const [batchPrWarehouses, setBatchPrWarehouses] = useState<any[]>([]);
-  const [batchPrWarehouseId, setBatchPrWarehouseId] = useState('');
-  const [batchPrJustification, setBatchPrJustification] = useState('');
-  const [batchPrCreating, setBatchPrCreating] = useState(false);
+  // ─── Solicitud de compra desde inventario ─────────────────────────────────────
+  const [solicitudOpen, setSolicitudOpen] = useState(false);
+  const [solicitudProducts, setSolicitudProducts] = useState<Array<{
+    productId: string; productName: string; code: string;
+    currentStock: number; minStock: number; quantity: number;
+  }>>([]);
+  const [solicitudWarehouseId, setSolicitudWarehouseId] = useState('');
+  const [solicitudJustification, setSolicitudJustification] = useState('');
+  const [solicitudRequiredDate, setSolicitudRequiredDate] = useState('');
+  const [solicitudPriority, setSolicitudPriority] = useState('NORMAL');
+  const [solicitudCreating, setSolicitudCreating] = useState(false);
+  const [solicitudEmployees, setSolicitudEmployees] = useState<any[]>([]);
+  const [solicitudEmployeeId, setSolicitudEmployeeId] = useState('');
+  const [solicitudEmployeesLoading, setSolicitudEmployeesLoading] = useState(false);
 
-  const openBatchPurchaseRequest = async () => {
-    setBatchPrWarehouses(warehouses);
-    setBatchPrWarehouseId('');
-    setBatchPrJustification('');
-    setBatchPrOpen(true);
+  const loadSolicitudEmployees = async () => {
+    if (solicitudEmployees.length > 0) return;
+    setSolicitudEmployeesLoading(true);
+    try {
+      const res = await employeesService.getAll({ page: 1, pageSize: 200 });
+      const list = Array.isArray(res) ? res : ((res as any)?.data || []);
+      setSolicitudEmployees(list);
+      const linked = list.find((e: any) => e.userId === user?.id);
+      setSolicitudEmployeeId(linked?.id || '');
+    } catch {
+      setSolicitudEmployees([]);
+    } finally {
+      setSolicitudEmployeesLoading(false);
+    }
   };
 
-  const handleBatchPurchaseRequest = async () => {
+  const buildSolicitudItems = (list: any[]) => list.map((p: any) => {
+    const minStock = Number(p.minStock ?? 0);
+    const currentStock = Number(p.stock ?? 0);
+    const suggested = minStock > 0 ? minStock * 2 : 4;
+    return {
+      productId: p.id,
+      productName: p.name,
+      code: p.code ?? '',
+      currentStock,
+      minStock,
+      quantity: Math.max(1, Math.ceil(suggested - currentStock)),
+    };
+  });
+
+  const openLowStockSolicitud = () => {
+    const lowStock = products.filter((p: any) =>
+      String(p.itemType || p.type || 'PRODUCT').toUpperCase() === 'PRODUCT' &&
+      Number(p.stock ?? 0) <= (Number(p.minStock ?? 0) > 0 ? Number(p.minStock) : 2),
+    );
+    if (lowStock.length === 0) { toast.info('No hay productos con stock bajo'); return; }
+    loadSolicitudEmployees();
+    setSolicitudProducts(buildSolicitudItems(lowStock));
+    setSolicitudWarehouseId('');
+    setSolicitudJustification('');
+    setSolicitudRequiredDate('');
+    setSolicitudPriority('NORMAL');
+    setSolicitudOpen(true);
+  };
+
+  const openSelectedSolicitud = () => {
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
-    if (!batchPrWarehouseId) { toast.error('Selecciona una bodega'); return; }
-    setBatchPrCreating(true);
+    loadSolicitudEmployees();
+    const selected = filteredProducts.filter((p: any) => selectedIds.has(p.id));
+    setSolicitudProducts(buildSolicitudItems(selected));
+    setSolicitudWarehouseId('');
+    setSolicitudJustification('');
+    setSolicitudRequiredDate('');
+    setSolicitudPriority('NORMAL');
+    setSolicitudOpen(true);
+  };
+
+  const updateSolicitudQuantity = (productId: string, quantity: number) => {
+    setSolicitudProducts(prev => prev.map(item => item.productId === productId
+      ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
+      : item));
+  };
+
+  const handleCreateSolicitud = async () => {
+    if (solicitudProducts.length === 0) { toast.error('No hay productos en la solicitud'); return; }
+    if (!solicitudWarehouseId) { toast.error('Selecciona una bodega'); return; }
+    setSolicitudCreating(true);
     try {
-      const selectedProducts = paginatedProducts.filter((p: any) => selectedIds.has(p.id));
-      const items = selectedProducts.map((p: any) => ({
-        productId: p.id,
-        description: p.name,
-        quantity: Math.max(1, Math.ceil((Number(p.minStock || 0) * 2) - Number(p.stock || 0))),
-        warehouseId: batchPrWarehouseId,
-        currentStock: Number(p.stock || 0),
-        minStock: Number(p.minStock || 0),
+      if (!solicitudEmployeeId) { setSolicitudCreating(false); toast.error('Selecciona el empleado solicitante'); return; }
+      const items = solicitudProducts.map(item => ({
+        productId: item.productId,
+        description: item.productName,
+        quantity: item.quantity,
+        warehouseId: solicitudWarehouseId,
+        currentStock: item.currentStock,
+        minStock: item.minStock,
       }));
       await purchaseRequestsService.create({
-        priority: 'NORMAL',
-        justification: batchPrJustification || 'Solicitud generada desde inventario',
-        warehouseId: batchPrWarehouseId,
-        requestedById: user?.id,
+        status: 'PENDING_APPROVAL',
+        priority: solicitudPriority,
+        justification: solicitudJustification || 'Solicitud generada desde inventario',
+        warehouseId: solicitudWarehouseId,
+        requiredDate: solicitudRequiredDate || undefined,
+        requestedById: solicitudEmployeeId,
+        userId: user?.id,
         items,
       } as any);
-      toast.success(`Solicitud creada con ${items.length} producto(s). Ve a Compras > Solicitudes.`);
-      setBatchPrOpen(false);
+      toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
+      setSolicitudOpen(false);
       setSelectedIds(new Set());
+      onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'Error al crear solicitud');
     } finally {
-      setBatchPrCreating(false);
+      setSolicitudCreating(false);
     }
   };
 
@@ -1294,49 +1359,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setSelectedIds(next);
   };
 
-  const handlePreviewReplenishment = async () => {
-    setDownloadingReport(true);
-    try {
-      const report = await inventoryService.getReplenishmentReport(replenishmentPeriod);
-      const rows = (report.items || []).map((item: any) => ({
-        ...item,
-        averageDailyDemand: Number(item.averageDailyDemand || 0).toFixed(2),
-      }));
-      if (rows.length === 0) {
-        toast.success('No hay productos que requieran reabastecimiento en este periodo');
-        return;
-      }
-      setReplenishmentData(rows);
-      setReplenishmentModalOpen(true);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo generar la solicitud de inventario');
-    } finally {
-      setDownloadingReport(false);
-    }
-  };
-
-  const handleExportReplenishmentExcel = () => {
-    if (!replenishmentData || replenishmentData.length === 0) return;
-    const rows = replenishmentData.map((item: any) => ({
-      Código: item.productCode,
-      Producto: item.productName,
-      Almacén: item.warehouseName,
-      Estado: item.status,
-      'Stock actual': item.currentStock,
-      'Stock mínimo': item.minStock,
-      'Stock máximo': item.maxStock || '',
-      'Salida del periodo': item.periodDemand,
-      'Demanda diaria prom.': item.averageDailyDemand,
-      'Demanda proyectada': item.projectedDemand,
-      'Cantidad sugerida': item.suggestedQuantity,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Solicitud de inventario');
-    XLSX.writeFile(wb, `solicitud-inventario-${replenishmentPeriod}.xlsx`);
-    toast.success(`Excel exportado con ${rows.length} producto(s)`);
-  };
-
   // ==================== EXCEL IMPORT ====================
   const handleDownloadTemplate = useCallback(() => {
     const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Almacén'];
@@ -1767,29 +1789,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           >
             <Upload className="size-4 mr-2" /> {initialImportCompleted ? 'Carga inicial completada' : 'Importar catálogo'}
           </Button>}
-          {!isServiceView && <Select value={replenishmentPeriod} onValueChange={(value) => setReplenishmentPeriod(value as 'weekly' | 'biweekly' | 'monthly')}>
-            <SelectTrigger className="h-9 w-full min-w-0 rounded-lg text-xs font-bold sm:w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="weekly">Semanal</SelectItem>
-              <SelectItem value="biweekly">Quincenal</SelectItem>
-              <SelectItem value="monthly">Mensual</SelectItem>
-            </SelectContent>
-          </Select>}
           {!isServiceView && <Button
             size="sm"
             variant="outline"
             className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
-            onClick={handlePreviewReplenishment}
-            disabled={downloadingReport}
+            onClick={openLowStockSolicitud}
           >
-            {downloadingReport ? (
-              <div className="size-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Download className="size-4 mr-2" />
-            )}
-            Solicitud
+            <PackageSearch className="size-4 mr-2" />
+            Solicitudes
           </Button>}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
             <>
@@ -1813,7 +1820,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Button
               size="sm"
               className="h-9 min-w-0 w-full rounded-lg bg-amber-600 px-3 font-black text-[10px] uppercase tracking-widest text-white hover:bg-amber-700 sm:w-auto"
-              onClick={openBatchPurchaseRequest}
+              onClick={openSelectedSolicitud}
             >
               <Package className="size-4 mr-2" />
               Solicitar Compra ({selectedIds.size})
@@ -2617,124 +2624,112 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }}
       />
 
-      <Dialog open={batchPrOpen} onOpenChange={(o) => { if (!o) setBatchPrOpen(false); }}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o && !solicitudCreating) setSolicitudOpen(false); }}>
+        <DialogContent className="sm:max-w-3xl max-h-[82vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Package className="size-4" /> Solicitar Compra ({selectedIds.size} productos)
+              <PackageSearch className="size-4" /> Solicitud de Compra ({solicitudProducts.length} productos)
             </DialogTitle>
             <DialogDescription>
-              Se crearán solicitudes para {selectedIds.size} producto(s) seleccionados. La cantidad sugerida será (minStock × 2) − stock actual.
+              Revisa y ajusta la cantidad a solicitar de cada producto. La solicitud se guardará en Compras &gt; Solicitudes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold">Bodega destino</label>
-              <Select value={batchPrWarehouseId} onValueChange={setBatchPrWarehouseId}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>
-                  {batchPrWarehouses.map((w: any) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Empleado solicitante *</label>
+                <Select value={solicitudEmployeeId} onValueChange={setSolicitudEmployeeId} disabled={solicitudCreating || solicitudEmployeesLoading}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder={solicitudEmployeesLoading ? 'Cargando...' : 'Seleccionar...'} /></SelectTrigger>
+                  <SelectContent>
+                    {solicitudEmployees.length === 0 && <SelectItem value="__none__" disabled>No hay empleados registrados</SelectItem>}
+                    {solicitudEmployees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Bodega destino *</label>
+                <Select value={solicitudWarehouseId} onValueChange={setSolicitudWarehouseId} disabled={solicitudCreating}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {warehouses.length === 0 && <SelectItem value="__none__" disabled>No hay bodegas registradas</SelectItem>}
+                    {warehouses.map((w: any) => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Justificación</label>
+                <Input className="h-9" value={solicitudJustification} onChange={(e) => setSolicitudJustification(e.target.value)} placeholder="Motivo de la solicitud..." />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Fecha requerida</label>
+                <Input type="date" className="h-9" value={solicitudRequiredDate} onChange={(e) => setSolicitudRequiredDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold">Prioridad</label>
+                <Select value={solicitudPriority} onValueChange={setSolicitudPriority} disabled={solicitudCreating}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NORMAL">Normal</SelectItem>
+                    <SelectItem value="URGENT">Urgente</SelectItem>
+                    <SelectItem value="CRITICAL">Crítico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold">Justificación</label>
-              <textarea className="w-full min-h-[60px] rounded-lg border border-input bg-background p-3 text-sm"
-                value={batchPrJustification}
-                onChange={(e) => setBatchPrJustification(e.target.value)}
-                placeholder="Ej: Reabastecimiento de inventario" />
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold">Productos</label>
+                <Badge variant="secondary" className="text-[10px]">{solicitudProducts.length} items</Badge>
+              </div>
+              {solicitudProducts.length > 0 ? (
+                <div className="overflow-x-auto border rounded-xl overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="font-black text-[10px] uppercase">Producto</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase text-right">Stock</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase text-right">Min</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase text-right w-28">Cantidad a solicitar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {solicitudProducts.map((item) => (
+                        <TableRow key={item.productId}>
+                          <TableCell className="font-medium text-xs min-w-0">
+                            <span className="truncate block">{item.productName}</span>
+                            <span className="text-muted-foreground font-mono text-[10px]">{item.code}</span>
+                          </TableCell>
+                          <TableCell className={`text-right text-xs tabular-nums ${item.currentStock <= item.minStock ? 'text-orange-500 font-bold' : ''}`}>{item.currentStock}</TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">{item.minStock}</TableCell>
+                          <TableCell className="text-right">
+                            <Input type="number" min={1} className="h-8 w-24 ml-auto text-right text-xs" value={item.quantity}
+                              onChange={(e) => updateSolicitudQuantity(item.productId, Number(e.target.value))} disabled={solicitudCreating} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No hay productos.</p>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchPrOpen(false)} disabled={batchPrCreating}>Cancelar</Button>
-            <Button onClick={handleBatchPurchaseRequest} disabled={batchPrCreating}>
-              {batchPrCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
-              Crear Solicitud
+            <Button variant="outline" onClick={() => setSolicitudOpen(false)} disabled={solicitudCreating}>Cancelar</Button>
+            <Button onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
+              {solicitudCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+              <Send className="size-3.5 mr-1" /> Crear Solicitud
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       </Card>
-
-      <Dialog open={replenishmentModalOpen} onOpenChange={(open) => { if (!open) setReplenishmentModalOpen(false); }}>
-        <DialogContent className="sm:max-w-5xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Solicitud de Reabastecimiento</DialogTitle>
-            <DialogDescription>
-              Periodo: {replenishmentPeriod === 'weekly' ? 'Semanal' : replenishmentPeriod === 'biweekly' ? 'Quincenal' : 'Mensual'} — {replenishmentData?.length || 0} producto(s) sugeridos
-            </DialogDescription>
-          </DialogHeader>
-          {replenishmentData && replenishmentData.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-black text-[10px] uppercase">Producto</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase">Almacén</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Stock</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Min</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Max</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Salida periodo</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Demanda diaria</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Demanda proy.</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase text-right">Sugerido</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {replenishmentData.map((item: any, idx: number) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium text-xs">{item.productName}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{item.warehouseName || '-'}</TableCell>
-                      <TableCell className={`text-right text-xs tabular-nums ${Number(item.currentStock) <= Number(item.minStock) ? 'text-orange-500 font-bold' : ''}`}>{item.currentStock}</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{item.minStock}</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{item.maxStock || '-'}</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{item.periodDemand}</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{item.averageDailyDemand}</TableCell>
-                      <TableCell className="text-right text-xs tabular-nums">{item.projectedDemand}</TableCell>
-                      <TableCell className="text-right text-xs font-black tabular-nums text-primary">{item.suggestedQuantity}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReplenishmentModalOpen(false)} className="rounded-xl font-bold text-xs uppercase tracking-widest">Cerrar</Button>
-            <Button onClick={handleExportReplenishmentExcel} className="rounded-xl font-bold text-xs uppercase tracking-widest" disabled={!replenishmentData || replenishmentData.length === 0}>
-              <Download className="size-4 mr-2" /> Exportar Excel
-            </Button>
-            <Button onClick={async () => {
-              if (!replenishmentData || replenishmentData.length === 0) return;
-              const items = replenishmentData.map((item: any) => ({
-                productId: item.productId,
-                description: item.productName,
-                quantity: item.suggestedQuantity || 1,
-                warehouseId: item.warehouseId,
-                currentStock: item.currentStock,
-                minStock: item.minStock,
-              }));
-              try {
-                await purchaseRequestsService.create({
-                  priority: 'NORMAL',
-                  justification: `Reabastecimiento ${replenishmentPeriod === 'weekly' ? 'semanal' : replenishmentPeriod === 'biweekly' ? 'quincenal' : 'mensual'}`,
-                  warehouseId: items[0]?.warehouseId || '',
-                  requestedById: user?.id,
-                  items,
-                } as any);
-                toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
-                setReplenishmentModalOpen(false);
-              } catch (e: any) {
-                toast.error(e?.response?.data?.message || e?.message || 'Error al crear solicitud');
-              }
-            }} className="rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-widest" disabled={!replenishmentData || replenishmentData.length === 0}>
-              <Send className="size-4 mr-2" /> Enviar a Compras
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
     );
 }
