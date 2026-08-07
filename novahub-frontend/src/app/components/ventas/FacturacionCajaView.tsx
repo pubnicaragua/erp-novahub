@@ -1082,10 +1082,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                       <Badge variant="secondary" className="shrink-0 text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
                                     </div>
                                   </div>
-                                  {prod.trackInventory && (
-                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                      {prod.currentStock ?? 0} unid.
+                                  {prod.itemType === 'SERVICE' ? (
+                                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.isActive !== false ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5" : "text-rose-500 border-rose-500/30 bg-rose-500/5"}`}>
+                                      {prod.isActive !== false ? 'Disponible' : 'No disp.'}
                                     </Badge>
+                                  ) : (
+                                    prod.trackInventory && (
+                                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                        {prod.currentStock ?? 0} unid.
+                                      </Badge>
+                                    )
                                   )}
                                 </div>
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
@@ -1095,9 +1101,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                               </td>
                               <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
-                                  disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
                                   className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                                  <Plus className="mr-1 size-3" /> {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar'}
+                                  <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar')}
                                 </Button>
                               </td>
                             </tr>
@@ -1128,10 +1134,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                     <Badge variant="outline" className="font-mono text-[9px] text-primary">{prod.code}</Badge>
                                     <Badge variant="secondary" className="text-[9px]">{prod.itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</Badge>
-                                    {prod.trackInventory && (
-                                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
-                                        {prod.currentStock ?? 0} unid.
+                                    {prod.itemType === 'SERVICE' ? (
+                                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.isActive !== false ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5" : "text-rose-500 border-rose-500/30 bg-rose-500/5"}`}>
+                                        {prod.isActive !== false ? 'Disponible' : 'No disponible'}
                                       </Badge>
+                                    ) : (
+                                      prod.trackInventory && (
+                                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-mono ${prod.currentStock && prod.currentStock > 0 ? "text-emerald-500 border-emerald-500/30" : "text-rose-500 border-rose-500/30"}`}>
+                                          {prod.currentStock ?? 0} unid.
+                                        </Badge>
+                                      )
                                     )}
                                   </div>
                                   <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod))}</span>
@@ -1143,11 +1155,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                               </div>
                               <Button
                                 onClick={() => addItem(prod)}
-                                disabled={isRegisterDisabled || (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                                disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
                                 className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
                               >
                                 <ShoppingCart className="mr-2 size-3.5" />
-                                {prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura'}
+                                {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura')}
                               </Button>
                             </div>
                           </article>

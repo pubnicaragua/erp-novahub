@@ -1199,6 +1199,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           />
         </TableCell>}
         {isServiceView && <TableCell className="w-28 align-top pt-3">
+          <Select
+            value={product.isActive === false ? 'false' : 'true'}
+            onValueChange={(v) => handleUpdateField(product.id, 'isActive', v === 'true')}
+            disabled={isSaving}
+          >
+            <SelectTrigger className="h-8 w-full text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">Disponible</SelectItem>
+              <SelectItem value="false">No disponible</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>}
+        {!isServiceView && <TableCell className="w-28 align-top pt-3">
           {(() => {
             const allocations = product.initialAllocations || [];
             return (
@@ -1221,21 +1236,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     </Select>
                   </div>
                 ))}
-                {product.itemType !== 'SERVICE' && (
-                  <div className="pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
-                      onClick={() => addInitialAllocation(product.id)}
-                      disabled={isSaving}
-                    >
-                      <Plus className="size-3 mr-1" />
-                      Bodega
-                    </Button>
-                  </div>
-                )}
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
+                    onClick={() => addInitialAllocation(product.id)}
+                    disabled={isSaving}
+                  >
+                    <Plus className="size-3 mr-1" />
+                    Bodega
+                  </Button>
+                </div>
               </div>
             );
           })()}
@@ -1892,11 +1905,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     <Badge variant="secondary" className="text-[9px]">{product.trackSerialNumbers ? 'Activo' : 'Inactivo'}</Badge>
                   </div>}
                   <div className="mt-3 flex min-w-0 items-center gap-2">
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacenes</span>
+                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {isServiceView ? 'Estado' : 'Almacenes'}
+                    </span>
                     <div className="flex min-w-0 flex-wrap gap-1">
-                      {warehousesForProduct.length > 0
-                        ? Array.from(new Set(warehousesForProduct)).map((name: any) => <Badge key={name} variant="secondary" className="max-w-full truncate text-[9px]">{name}</Badge>)
-                        : <span className="text-[10px] text-muted-foreground">-</span>}
+                      {isServiceView ? (
+                        <Badge variant="outline" className={product.isActive !== false ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}>
+                          {product.isActive !== false ? 'Disponible' : 'No disponible'}
+                        </Badge>
+                      ) : (
+                        warehousesForProduct.length > 0
+                          ? Array.from(new Set(warehousesForProduct)).map((name: any) => <Badge key={name} variant="secondary" className="max-w-full truncate text-[9px]">{name}</Badge>)
+                          : <span className="text-[10px] text-muted-foreground">-</span>
+                      )}
                     </div>
                   </div>
                   {!isServiceView && status.label !== 'OK' && <Badge className={`mt-3 ${status.color} text-[10px]`}>{status.label}</Badge>}
@@ -1930,7 +1951,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Min</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Max</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Almacenes</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">{isServiceView ? 'Estado' : 'Almacenes'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Stock</TableHead>}
               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>}
@@ -2051,12 +2072,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       </span>
                     </TableCell>}
                     <TableCell>
-                      {String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'SERVICE' ? (
-                        <div className="flex flex-wrap gap-1">
-                          {product.warehouseCatalogs?.length ? product.warehouseCatalogs.map((catalog: any, idx: number) => (
-                            <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">{catalog.warehouse?.name || '-'}</Badge>
-                          )) : <span className="text-[10px] text-muted-foreground">-</span>}
-                        </div>
+                      {isServiceView ? (
+                        <Badge variant="outline" className={product.isActive !== false ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}>
+                          {product.isActive !== false ? 'Disponible' : 'No disponible'}
+                        </Badge>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {product.stockLevels && product.stockLevels.length > 0 ? (
