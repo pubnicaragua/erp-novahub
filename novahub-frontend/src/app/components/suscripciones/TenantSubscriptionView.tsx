@@ -55,6 +55,12 @@ const TEAM_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="team-departments"]', title: 'Departamentos', description: 'Crea áreas de trabajo y asigna usuarios a cada departamento para mantener organizado el equipo.', placement: 'bottom' },
 ];
 
+const linkedEmployeePuesto = (user: any, employees: any[]) => {
+  if (!user?.employee?.id) return '';
+  const employee = employees.find((e: any) => e.id === user.employee.id) || user.employee;
+  return employee.position?.title || employee.position || '';
+};
+
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
   const { user: currentUser } = useAuth();
@@ -712,7 +718,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground"><Mail className="size-3" /> {u.email}</p>
                       <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-primary/80">{u.departments?.map((department: any) => department.name).join(' · ') || u.department?.name || 'Sin departamento'}</p>
-                      {u.employee && <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}</p>}
+                      {u.employee ? <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><UserRoundCheck className="size-3" /> Empleado: {u.employee.firstName} {u.employee.lastName}{linkedEmployeePuesto(u, employees) ? <span className="normal-case"> · Puesto: {linkedEmployeePuesto(u, employees)}</span> : <span className="font-semibold text-muted-foreground"> · Sin puesto</span>}</p> : <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-muted-foreground"><UserRoundCheck className="size-3" /> Sin puesto</p>}
                     </div>
                   </div>
                   <Badge variant="outline" className={cn('shrink-0 text-[10px] font-black uppercase tracking-widest', u.isActive ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')}>

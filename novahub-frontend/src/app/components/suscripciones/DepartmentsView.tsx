@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  Briefcase,
   Building2,
   Check,
   Code2,
@@ -55,13 +56,17 @@ const getRoleLabel = (user: any) => {
 export function DepartmentsView({ tenantId, users, employees, onBack, onDataChange, onLinkUserToEmployee }: DepartmentsViewProps) {
   const queryClient = useQueryClient();
   const [departments, setDepartments] = useState<any[]>([]);
+  const [positions, setPositions] = useState<any[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [newDepartment, setNewDepartment] = useState('');
+  const [newPosition, setNewPosition] = useState('');
   const [departmentSearch, setDepartmentSearch] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [savingKey, setSavingKey] = useState('');
   const [creating, setCreating] = useState(false);
+  const [creatingPosition, setCreatingPosition] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingPositionKey, setDeletingPositionKey] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: departmentsData, isLoading, refetch: refetchDepartments } = useTenantQuery(
@@ -69,6 +74,17 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
     async (signal) => asList(await hrService.getDepartments(signal)),
     { enabled: Boolean(tenantId), onError: (error) => toast.error(error.message || 'No se pudieron cargar los departamentos') },
   );
+
+  const { data: positionsData, refetch: refetchPositions } = useTenantQuery(
+    ['my-company-positions', tenantId],
+    async (signal) => asList(await hrService.getPositions(undefined, signal)),
+    { enabled: Boolean(tenantId), onError: (error) => toast.error(error.message || 'No se pudieron cargar los puestos') },
+  );
+
+  useEffect(() => {
+    if (!positionsData) return;
+    setPositions(positionsData);
+  }, [positionsData]);
 
   useEffect(() => {
     if (!departmentsData) return;
@@ -93,6 +109,10 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
 
   const selectedDepartment = departments.find((department) => department.id === selectedDepartmentId) || null;
 
+  const departmentPositions = useMemo(() => {
+    return positions.filter((position) => position.departmentId === selectedDepartmentId);
+  }, [positions, selectedDepartmentId]);
+
   const departmentUsers = useMemo(() => {
     const term = memberSearch.trim().toLowerCase();
     const filtered = users.filter((user) => !term || `${user.name || ''} ${user.email || ''}`.toLowerCase().includes(term));
@@ -107,6 +127,7 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
   const countMembers = (departmentId: string) => ({
     users: users.filter((user) => getUserDepartmentIds(user).includes(departmentId)).length,
     employees: employees.filter((employee) => getEmployeeDepartmentIds(employee).includes(departmentId)).length,
+    positions: positions.filter((position) => position.departmentId === departmentId).length,
   });
 
   const createDepartment = async () => {
@@ -129,6 +150,43 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
       toast.error(error?.response?.data?.message || error?.message || 'Error al crear departamento');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const createPosition = async () => {
+    if (!selectedDepartment) return;
+    const title = newPosition.trim();
+    if (!title) {
+      toast.error('Escribe el título del puesto');
+      return;
+    }
+    try {
+      setCreatingPosition(true);
+      const code = `POS-${title.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}${Math.floor(Math.random() * 100)}`;
+      await hrService.createPosition({ title, departmentId: selectedDepartment.id, code });
+      setNewPosition('');
+      await refetchPositions();
+      await onDataChange?.();
+      toast.success('Puesto creado correctamente');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al crear el puesto');
+    } finally {
+      setCreatingPosition(false);
+    }
+  };
+
+  const deletePosition = async (position: any) => {
+    try {
+      setDeletingPositionKey(position.id);
+      await hrService.deletePosition(position.id);
+      setPositions((items) => items.filter((item) => item.id !== position.id));
+      await refetchPositions();
+      await onDataChange?.();
+      toast.success('Puesto eliminado');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar el puesto');
+    } finally {
+      setDeletingPositionKey('');
     }
   };
 
@@ -259,7 +317,7 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
                     <div className="min-w-0"><p className="truncate text-sm font-black uppercase tracking-wide">{department.name}</p><p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Code2 className="size-3" /> {department.code || 'Sin código'}</p></div>
                     {department.isSellerDepartment && <Badge className="shrink-0 bg-emerald-500/10 text-[9px] text-emerald-600 hover:bg-emerald-500/10">Vendedores</Badge>}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground"><span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1"><Users className="size-3" /> {counts.users} usuarios</span><span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1"><UserRound className="size-3" /> {counts.employees} empleados</span></div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-muted-foreground"><span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1"><Users className="size-3" /> {counts.users} usuarios</span><span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1"><UserRound className="size-3" /> {counts.employees} empleados</span><span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1"><Briefcase className="size-3" /> {counts.positions} puestos</span></div>
                 </button>;
               })}
             </div>
@@ -284,6 +342,26 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
                 <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><Users className="size-4 text-primary" /> Usuarios <Badge variant="secondary" className="text-[9px]">{users.filter((user) => getUserDepartmentIds(user).includes(selectedDepartment.id)).length}</Badge></CardTitle><CardDescription className="text-xs">Personas con acceso a la empresa.</CardDescription></CardHeader><CardContent className="space-y-2"><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!departmentUsers.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay usuarios que coincidan.</p>}{departmentUsers.map((user) => { const assigned = getUserDepartmentIds(user).includes(selectedDepartment.id); const busy = savingKey === `user:${user.id}`; const needsEmployee = selectedDepartment.isSellerDepartment && !user.employee?.id && !assigned; return <div key={user.id} className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/40 bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-primary">{getRoleLabel(user)}</span>{needsEmployee && <p className="mt-1 text-[10px] font-semibold text-amber-600">Requiere empleado vinculado para comisiones</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><Button type="button" size="sm" variant={assigned ? 'default' : 'outline'} disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleUserDepartment(user)} aria-pressed={assigned}>{assigned ? <Check className="size-3" /> : <Plus className="size-3" />}{assigned ? 'Vinculado' : 'Vincular'}</Button>{needsEmployee && onLinkUserToEmployee && <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 border-amber-500/25 text-[10px] font-bold text-amber-600 hover:bg-amber-500/10" onClick={() => onLinkUserToEmployee(user)}><Link2 className="size-3" /> Vincular empleado</Button>}</div></div>; })}</div></CardContent></Card>
                 <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><UserRound className="size-4 text-primary" /> Empleados <Badge variant="secondary" className="text-[9px]">{employees.filter((employee) => getEmployeeDepartmentIds(employee).includes(selectedDepartment.id)).length}</Badge></CardTitle><CardDescription className="text-xs">Empleados de Recursos Humanos y futuros vendedores.</CardDescription></CardHeader><CardContent className="space-y-2"><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!departmentEmployees.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay empleados que coincidan.</p>}{departmentEmployees.map((employee) => { const assigned = getEmployeeDepartmentIds(employee).includes(selectedDepartment.id); const busy = savingKey === `employee:${employee.id}`; return <div key={employee.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/60 px-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold">{getEmployeeName(employee)}</p><p className="truncate text-[10px] text-muted-foreground">{employee.employeeNumber || employee.email || 'Sin identificador'}</p>{employee.user && <p className="mt-1 text-[10px] font-semibold text-emerald-600">Usuario vinculado: {employee.user.name}</p>}</div><Button type="button" size="sm" variant={assigned ? 'default' : 'outline'} disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleEmployeeDepartment(employee)} aria-pressed={assigned}>{assigned ? <Check className="size-3" /> : <Plus className="size-3" />}{assigned ? 'Vinculado' : 'Vincular'}</Button></div>; })}</div></CardContent></Card>
               </div>
+              <Card className="min-w-0 border-border/50 bg-muted/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm font-black"><Briefcase className="size-4 text-primary" /> Puestos del departamento <Badge variant="secondary" className="text-[9px]">{departmentPositions.length}</Badge></CardTitle>
+                  <CardDescription className="text-xs">Los puestos creados aquí se comparten con Recursos Humanos y pueden asignarse a los empleados.</CardDescription>
+                  <div className="flex min-w-0 gap-2 pt-2">
+                    <Input value={newPosition} onChange={(event) => setNewPosition(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void createPosition()} placeholder="Nuevo puesto (Ej. Vendedor)" className="h-9 min-w-0 text-sm" aria-label="Nombre del nuevo puesto" />
+                    <Button size="sm" className="h-9 shrink-0 gap-1.5" onClick={() => void createPosition()} disabled={creatingPosition}><Plus className="size-4" /> Crear</Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {!departmentPositions.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay puestos creados en este departamento.</p>}
+                  {departmentPositions.map((position) => {
+                    const busy = deletingPositionKey === position.id;
+                    return <div key={position.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/60 px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2"><div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-[11px] font-black text-primary"><Briefcase className="size-3.5" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{position.title}</p><p className="truncate text-[10px] text-muted-foreground">{position.code || 'Sin código'}</p></div></div>
+                      <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0 text-rose-500 hover:bg-rose-500/10" disabled={busy} onClick={() => void deletePosition(position)} title="Eliminar puesto" aria-label={`Eliminar puesto ${position.title}`}><Trash2 className="size-3.5" /></Button>
+                    </div>;
+                  })}
+                </CardContent>
+              </Card>
               <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground"><Info className="mt-0.5 size-4 shrink-0 text-primary" /><p>Los roles y permisos de módulos continúan configurándose directamente en cada usuario. Este departamento solo organiza integrantes y define si sus empleados participan como vendedores.</p></div>
             </CardContent>
           </>}
