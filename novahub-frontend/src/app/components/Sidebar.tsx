@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -21,6 +21,7 @@ import {
   UserCircle,
   FileSpreadsheet,
   ClipboardList,
+  ClipboardPen,
   FileText,
   FileCheck,
 
@@ -112,6 +113,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
   'control-caja': ['RETAIL_POS', 'SALES_POS'],
   // Compras
+  solicitudes: ['PURCHASES_REQUESTS'],
   proveedores: ['PURCHASES_PROVIDERS'],
   gastos: ['PURCHASES_EXPENSES'],
   'gastos-recurrentes': ['PURCHASES_EXPENSES_REC'],
@@ -209,6 +211,7 @@ const menuItems: MenuItem[] = [
     label: 'Compras',
     icon: <ShoppingCart className="size-5" />,
     submenu: [
+      { id: 'solicitudes', label: 'Solicitudes', icon: <ClipboardPen className="size-4" /> },
       { id: 'proveedores', label: 'Proveedores', icon: <Truck className="size-4" />, hasAdd: true },
       { id: 'gastos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'gastos-recurrentes', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
