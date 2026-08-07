@@ -294,6 +294,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     return flatList.filter(a => matched.has(a.id));
   }, [flatList, searchTerm]);
 
+  const filteredTree = useMemo(() => buildTree(filteredList), [filteredList]);
+
   const getTypeLabel = (t: AccountType) => ACCOUNT_TYPES.find(at => at.value === t)?.label ?? t;
   const getSubtypeLabel = (subtype: AccountSubtype) => ACCOUNT_SUBTYPES.find(item => item.value === subtype)?.label ?? subtype;
   const getDetailTypeLabel = (detailType: AccountDetailType) => ACCOUNT_DETAIL_TYPES.find(item => item.value === detailType)?.label ?? detailType;
@@ -739,7 +741,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                     <div className="border-b border-border bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:hidden">
                       Cuentas contables
                     </div>
-                    {accounts.map(acc => renderTreeRow(acc))}
+                    {filteredTree.map(acc => renderTreeRow(acc))}
                   </div>
                 </div>
               )}
