@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2 } from 'lucide-react';
+import { Ban, BadgeCheck, FilePlus2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
@@ -12,7 +12,6 @@ const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',     color: 'bg-muted/20 text-muted-foreground' },
   { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Aprobada',   value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Recibida',   value: 'RECEIVED',  color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cancelada',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
@@ -29,15 +28,17 @@ interface PurchaseOrderPreviewDialogProps {
   onClose: () => void;
   onApprove: (id: string) => void;
   onCancel: (id: string) => void;
+  onGenerateInvoice?: () => void;
 }
 
 export function PurchaseOrderPreviewDialog({
-  open, order, suppliers, canApprove, canCancel, approving = false, onClose, onApprove, onCancel,
+  open, order, suppliers, canApprove, canCancel, approving = false, onClose, onApprove, onCancel, onGenerateInvoice,
 }: PurchaseOrderPreviewDialogProps) {
   const supplier = suppliers?.find((s) => s.id === order?.supplierId);
   const status = (order?.status || '').toUpperCase();
   const statusMeta = statusOpts.find((o) => o.value === status);
-  const isTerminal = ['APPROVED', 'RECEIVED', 'CANCELLED'].includes(status);
+  const isCancelled = status === 'CANCELLED';
+  const canApproveState = ['DRAFT', 'PENDING'].includes(status);
   const items = order?.items || [];
 
   return (
@@ -100,8 +101,10 @@ export function PurchaseOrderPreviewDialog({
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-3">
           <div className="text-xs text-muted-foreground">
-            {isTerminal
-              ? 'Esta orden no puede modificarse en este estado.'
+            {isCancelled
+              ? 'Esta orden está anulada y no puede procesarse.'
+              : status === 'APPROVED'
+                ? 'Esta orden está aprobada y puede generar una factura de proveedor.'
               : 'Confirme la acción a realizar sobre la orden.'}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm font-black uppercase tracking-widest">
@@ -113,17 +116,24 @@ export function PurchaseOrderPreviewDialog({
         </div>
 
         <DialogFooter className="mt-4 flex-wrap gap-2">
-          {canCancel && !isTerminal && (
-            <Button variant="outline" className="border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => order?.id && onCancel(order.id)}>
-              Cancelar orden
+          {onGenerateInvoice && status === 'APPROVED' && (
+            <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
+              onClick={onGenerateInvoice}>
+              <FilePlus2 className="mr-2 size-3.5" /> Generar factura
             </Button>
           )}
-          {canApprove && !isTerminal && (
+          {canCancel && !isCancelled && (
+            <Button variant="outline" className="border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+              onClick={() => order?.id && onCancel(order.id)}>
+              <Ban className="mr-2 size-3.5" />
+              Anular orden
+            </Button>
+          )}
+          {canApprove && canApproveState && (
             <Button className="rounded-xl bg-emerald-500 shadow-xl shadow-emerald-500/20 text-white font-black uppercase text-[10px] tracking-widest px-6 disabled:opacity-50"
               disabled={approving}
               onClick={() => order?.id && onApprove(order.id)}>
-              <CheckCircle2 className="size-3 mr-2" />
+              <BadgeCheck className="mr-2 size-3.5" />
               {approving ? 'Aprobando…' : 'Aprobar'}
             </Button>
           )}

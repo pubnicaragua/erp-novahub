@@ -621,6 +621,16 @@ export const generatePurchaseOrderPDF = async ({
   doc.text(`N°: ${order.number || order.id || 'N/A'}`, 196, 22, { align: 'right' });
   doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+  const orderStatusLabels: Record<string, string> = {
+    DRAFT: 'Borrador',
+    PENDING: 'Pendiente',
+    APPROVED: 'Aprobada',
+    CANCELLED: 'Anulada',
+  };
+  const orderStatus = orderStatusLabels[String(order.status || '').toUpperCase()] || order.status || 'Sin estado';
+  const orderOrigin = order.purchaseRequestNumber || order.purchaseRequestId
+    ? `Desde solicitud de compra${order.purchaseRequestNumber ? ` ${order.purchaseRequestNumber}` : ''}`
+    : 'Orden creada directamente';
 
   autoTable(doc, {
     startY: 45,
@@ -628,7 +638,8 @@ export const generatePurchaseOrderPDF = async ({
     body: [
       ['Proveedor', order.supplier?.name || '-'],
       ['Dirección', order.address || '-'],
-      ['Estado', order.status || '-'],
+      ['Estado', orderStatus],
+      ['Origen', orderOrigin],
       ['Moneda', order.currency || '-'],
       ['Evidencia', order.evidenceFileName || 'No adjunta'],
     ],

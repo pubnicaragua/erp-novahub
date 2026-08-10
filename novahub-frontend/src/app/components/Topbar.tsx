@@ -382,6 +382,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </div>
           )}
         </div>
+
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-3 lg:gap-4">

@@ -25,7 +25,6 @@ export const purchaseOrdersService = {
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/cancel`, { reason }),
-  delete: (id: string) => api.delete<void>(`/purchases/orders/${id}`),
   convertToReceipt: (id: string) => api.post<PurchaseReceipt>(`/purchases/orders/${id}/convert-to-receipt`, {}),
 };
 
@@ -47,7 +46,6 @@ export const supplierInvoicesService = {
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<SupplierInvoice, 'id' | 'number' | 'status'> }>(`/purchases/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<SupplierInvoice>(`/purchases/invoices/${id}/cancel`, { reason }),
-  delete: (id: string) => api.delete<void>(`/purchases/invoices/${id}`),
   addAttachment: (id: string, data: { fileName: string; fileType: string; fileSize: number; fileUrl: string }) => api.post<any>(`/purchases/invoices/${id}/attachments`, data),
   removeAttachment: (id: string, attachmentId: string) => api.delete<void>(`/purchases/invoices/${id}/attachments/${attachmentId}`),
 };
@@ -68,7 +66,6 @@ export const paymentsMadeService = {
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PaymentMade, 'id' | 'number' | 'isActive'> }>(`/purchases/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<PaymentMade>(`/purchases/payments/${id}/cancel`, { reason }),
-  delete: (id: string) => api.delete<void>(`/purchases/payments/${id}`),
 };
 
 // ✅ CORRECTED: was /supplier-credits (404) → now /purchases/credits
@@ -112,7 +109,7 @@ export const purchaseRequestsService = {
   create: (data: Partial<PurchaseRequest>) => api.post<PurchaseRequest>('/purchases/requests', data),
   update: (id: string, data: Partial<PurchaseRequest>) => api.patch<PurchaseRequest>(`/purchases/requests/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/requests/${id}`),
-  changeStatus: (id: string, status: string, reason?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason }),
+  changeStatus: (id: string, status: string, reason?: string, supplierId?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason, supplierId }),
 };
 
 // ─── GESTIÓN DE COMPRA ──────────────────────────────────────────────────────

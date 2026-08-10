@@ -108,11 +108,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'supplierInvoice', label: 'Facturas de proveedor pagadas', icon: Package,
-    description: 'Solo al pagar la factura → inventario/gasto + IVA acreditable + retenciones + medio de pago',
+    description: 'Solo al pagar la factura → inventario/gasto + IVA acreditable + IR + IVA retenido + otras retenciones + medio de pago',
     fields: [
       { key: 'inventory', label: 'Inventario / Gasto', side: 'debit', description: 'Se debita el costo del inventario o gasto', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
       { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
-      { key: 'withholdingPayable', label: 'IR / Retenciones por Pagar', side: 'credit', description: 'Se acredita el IR o la retención aplicada al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
+      { key: 'irWithholdingPayable', label: 'IR retenido por pagar', side: 'credit', description: 'Se acredita el IR retenido al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
+      { key: 'ivaWithholdingPayable', label: 'IVA retenido por pagar', side: 'credit', description: 'Se acredita el IVA retenido al proveedor', defaultCode: '2110', defaultName: 'IVA Retenido por Pagar', defaultType: 'LIABILITY' },
+      { key: 'otherWithholdingPayable', label: 'Otras retenciones por pagar', side: 'credit', description: 'Se acreditan retenciones fiscales distintas de IR e IVA', defaultCode: '2130', defaultName: 'Otras Retenciones por Pagar', defaultType: 'LIABILITY' },
       { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita cuando la factura pagada sale de caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta configurada para pagos con tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
@@ -476,6 +478,17 @@ export function ConfiguracionContableView() {
       Object.entries(configuredMappings).forEach(([moduleId, mapping]) => {
         mergedMappings[moduleId] = { ...(mergedMappings[moduleId] || {}), ...(mapping as Record<string, string>) }
       })
+      // Compatibilidad con la configuración anterior, que agrupaba IR y todas
+      // las retenciones en `withholdingPayable`. La cuenta histórica se usa
+      // como IR hasta que el usuario configure las cuentas separadas.
+      const legacySupplierWithholding = configuredMappings?.supplierInvoice?.withholdingPayable
+      if (legacySupplierWithholding && !configuredMappings?.supplierInvoice?.irWithholdingPayable) {
+        mergedMappings.supplierInvoice.irWithholdingPayable = legacySupplierWithholding
+      }
+      if (mergedMappings.supplierInvoice) {
+        const { withholdingPayable: _legacyWithholding, ...supplierInvoiceMapping } = mergedMappings.supplierInvoice
+        mergedMappings.supplierInvoice = supplierInvoiceMapping
+      }
       accountMappingsRef.current = mergedMappings
       setAccountMappings(mergedMappings)
       setCustomModules(cfg.customModules || [])

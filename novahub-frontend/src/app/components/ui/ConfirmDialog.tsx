@@ -21,6 +21,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
   disabled?: boolean;
+  closeOnConfirm?: boolean;
   children?: React.ReactNode;
 }
 
@@ -53,6 +54,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   loading = false,
   disabled = false,
+  closeOnConfirm = true,
   children,
 }) => {
   const config = variantConfig[variant];
@@ -60,7 +62,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const handleConfirm = async () => {
     try {
       await onConfirm();
-      onOpenChange(false);
+      if (closeOnConfirm) onOpenChange(false);
     } catch {
       // Error handling is done by the caller
     }

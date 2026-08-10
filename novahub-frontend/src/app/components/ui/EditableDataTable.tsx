@@ -9,7 +9,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Pencil, Trash2, Ban, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -35,6 +35,8 @@ interface EditableDataTableProps<T> {
   onRowUpdate?: (id: string | number, updates: Partial<T>) => Promise<void>;
   onRowDelete?: (id: string | number) => Promise<void>;
   onBulkDelete?: (ids: (string | number)[]) => Promise<void>;
+  /** Use cancel semantics for transactional records that must never be deleted. */
+  bulkAction?: 'delete' | 'cancel';
   onBulkDuplicate?: (ids: (string | number)[]) => Promise<void>;
   onBulkUpdate?: (ids: (string | number)[], updates: Partial<T>) => Promise<void>;
   idField?: keyof T;
@@ -42,6 +44,7 @@ interface EditableDataTableProps<T> {
   actions?: (row: T) => React.ReactNode;
   onRowClick?: (row: T) => void;
   onRowDoubleClick?: (row: T) => void;
+  highlightedRowId?: string | number | null;
   editOnPencilOnly?: boolean;
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
@@ -60,12 +63,14 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   onRowUpdate,
   onRowDelete,
   onBulkDelete,
+  bulkAction = 'delete',
   onBulkDuplicate,
   idField = 'id' as keyof T,
   isLoading,
   actions,
   onRowClick,
   onRowDoubleClick,
+  highlightedRowId,
   editOnPencilOnly = false,
   showSelection = true,
   bulkActions,
@@ -77,6 +82,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   layoutMode = 'responsive',
   showHorizontalControls = false,
 }: EditableDataTableProps<T>) {
+  const isBulkCancel = bulkAction === 'cancel';
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
@@ -429,7 +435,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                    className="h-8 text-[10px] font-black uppercase tracking-wider"
                    onClick={() => setConfirmBulkDeleteIds(Array.from(selectedIds))}
                  >
-                    <Trash2 className="size-3 mr-2" /> Eliminar
+                    {isBulkCancel ? <Ban className="mr-2 size-3.5" /> : <Trash2 className="mr-2 size-3" />}
+                    {isBulkCancel ? 'Anular' : 'Eliminar'}
                  </Button>
                )}
             </div>
@@ -502,6 +509,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               const rowId = row[idField];
               const isDraft = draftRows.has(rowId);
               const isSelected = selectedIds.has(rowId);
+              const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
 
               return (
                 <TableRow 
@@ -511,7 +519,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   className={cn(
                     "group/row h-14 transition-all duration-300",
                     (onRowClick || onRowDoubleClick) && !editOnPencilOnly && "cursor-pointer",
-                    isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"
+                    isHighlighted
+                      ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-l-primary ring-1 ring-inset ring-primary/50"
+                      : isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"
                   )}
                 >
                   {showSelection && (
@@ -655,6 +665,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         {data.map((row) => {
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);
+          const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
           return (
             <motion.article
               key={rowId}
@@ -664,7 +675,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               className={cn(
                 'overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm',
                 (onRowClick || onRowDoubleClick) && !editOnPencilOnly && 'cursor-pointer',
-                isSelected && 'border-primary/50 bg-primary/5'
+                isHighlighted ? 'border-primary bg-primary/10 ring-2 ring-primary/40' : isSelected && 'border-primary/50 bg-primary/5'
               )}
             >
               <div className="flex items-start justify-between gap-3 border-b border-border/40 p-4">
@@ -856,9 +867,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       <ConfirmDialog
         open={confirmBulkDeleteIds.length > 0}
         onOpenChange={(open) => { if (!open) setConfirmBulkDeleteIds([]); }}
-        title="¿Eliminar registros seleccionados?"
-        description={`Se eliminarán ${confirmBulkDeleteIds.length} registros. Esta acción no se puede deshacer.`}
-        confirmLabel="Eliminar"
+        title={isBulkCancel ? '¿Anular registros seleccionados?' : '¿Eliminar registros seleccionados?'}
+        description={isBulkCancel
+          ? `${confirmBulkDeleteIds.length} registros quedarán anulados. No se borrará ningún dato y esta acción no se puede deshacer.`
+          : `Se eliminarán ${confirmBulkDeleteIds.length} registros. Esta acción no se puede deshacer.`}
+        confirmLabel={isBulkCancel ? 'Anular' : 'Eliminar'}
         variant="destructive"
         loading={bulkDeleteLoading}
         onConfirm={async () => {

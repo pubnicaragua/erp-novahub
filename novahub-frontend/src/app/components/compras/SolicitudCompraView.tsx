@@ -1,19 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   ClipboardList, Search, Eye, X, AlertTriangle,
   CheckCircle, FileDown, ThumbsUp, Ban,
-  Building2, ArrowUpRight,
+  Building2,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
-import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
-import type { PurchaseRequest, PurchaseManagement, Warehouse, PurchaseOrder } from '../../types';
+import { purchaseRequestsService, purchaseManagementService, purchaseOrdersService } from '../../services/compras.service';
+import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -26,6 +27,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseRequestPDF } from '../../utils/pdfGenerator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-muted/50 text-muted-foreground border-border/50',
@@ -58,19 +60,16 @@ const STATUS_LABELS: Record<string, string> = {
 
 const REQUEST_STATUS_OPTIONS = ['PENDING_APPROVAL', 'APPROVED', 'CANCELLED'] as const;
 
+type RequestActionState = {
+  request: PurchaseRequest;
+  action: 'approve' | 'cancel';
+};
+
 function normalizeRequestStatus(status?: string): 'PENDING_APPROVAL' | 'APPROVED' | 'CANCELLED' {
   const normalized = String(status || '').toUpperCase();
   if (normalized === 'APPROVED' || normalized === 'CONVERTED_TO_ORDER' || normalized === 'CLOSED') return 'APPROVED';
   if (normalized === 'CANCELLED' || normalized === 'REJECTED') return 'CANCELLED';
   return 'PENDING_APPROVAL';
-}
-
-function requestWasSentToOrder(request: PurchaseRequest): boolean {
-  return Boolean(
-    request.purchaseOrder?.id
-    || String(request.status || '').toUpperCase() === 'CONVERTED_TO_ORDER'
-    || request.management?.some((management) => String(management.status || '').toUpperCase() === 'CONVERTED_TO_ORDER'),
-  );
 }
 
 interface SolicitudCompraViewProps {
@@ -80,22 +79,36 @@ interface SolicitudCompraViewProps {
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
+  purchaseAlert?: PurchaseAlertDetail;
   warehouseCatalog?: Warehouse[];
-  onOpenOrderWithDraft?: (doc: Partial<PurchaseOrder>) => void;
+  supplierCatalog?: Supplier[];
+  productCatalog?: Product[];
 }
 
-export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, onOpenOrderWithDraft }: SolicitudCompraViewProps) {
+export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog, supplierCatalog = [], productCatalog = [] }: SolicitudCompraViewProps) {
   const { user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
   const [detailOpen, setDetailOpen] = useState<PurchaseRequest | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pendingApproveManagement, setPendingApproveManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
   const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
-  const [pendingRequestAction, setPendingRequestAction] = useState<{ request: PurchaseRequest; action: 'approve' | 'cancel' | 'send' } | null>(null);
+  const [pendingRequestAction, setPendingRequestAction] = useState<RequestActionState | null>(null);
+  // Radix mantiene el contenido montado durante el cierre animado. Conservamos
+  // la intención visual para evitar que el título cambie a "Anular" un instante
+  // antes de desmontar el diálogo de aprobación.
+  const [requestActionPresentation, setRequestActionPresentation] = useState<RequestActionState | null>(null);
+  const [approvalSupplierId, setApprovalSupplierId] = useState('');
 
   const filtered = useMemo(() => {
     return data.filter(r => {
@@ -106,12 +119,14 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         || (r.requestedBy?.firstName?.toLowerCase().includes(s))
         || (r.requestedBy?.lastName?.toLowerCase().includes(s))
         || (r.warehouse?.name?.toLowerCase().includes(s))
+        || (r.supplier?.name?.toLowerCase().includes(s))
         || (r.management?.[0]?.supplier?.name?.toLowerCase().includes(s));
     });
   }, [data, search, statusFilter]);
 
   const getActiveManagement = (pr: PurchaseRequest): PurchaseManagement | undefined =>
     pr.management?.[0];
+  const getRequestSupplierId = (pr: PurchaseRequest) => pr.supplierId || getActiveManagement(pr)?.supplierId || '';
   const actionButtonClass = 'rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors';
   const actionIconClass = 'size-3.5';
 
@@ -160,35 +175,108 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
   const handleRequestApprove = (req: PurchaseRequest) => {
     if (normalizeRequestStatus(req.status) !== 'PENDING_APPROVAL') return;
-    setPendingRequestAction({ request: req, action: 'approve' });
+    setApprovalSupplierId(getRequestSupplierId(req));
+    const action: RequestActionState = { request: req, action: 'approve' };
+    setRequestActionPresentation(action);
+    setPendingRequestAction(action);
   };
 
   const handleRequestCancel = (req: PurchaseRequest) => {
     if (normalizeRequestStatus(req.status) !== 'PENDING_APPROVAL') return;
-    setPendingRequestAction({ request: req, action: 'cancel' });
+    setApprovalSupplierId('');
+    const action: RequestActionState = { request: req, action: 'cancel' };
+    setRequestActionPresentation(action);
+    setPendingRequestAction(action);
   };
 
-  const handleRequestSend = (req: PurchaseRequest) => {
-    if (normalizeRequestStatus(req.status) !== 'APPROVED' || requestWasSentToOrder(req)) return;
-    setPendingRequestAction({ request: req, action: 'send' });
+  const buildOrderFromRequest = (request: PurchaseRequest, supplierId: string) => {
+    const requester = request.requestedBy
+      ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim()
+      : (request.requestedById || 'Admin');
+    const items = (request.items || []).map((item: any) => {
+      const product = item.product || productCatalog.find((candidate) => String(candidate.id) === String(item.productId));
+      const priceCandidates = [item.unitPrice, product?.lastPurchasePrice, product?.costPrice, product?.cost, product?.price]
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0);
+      const unitPrice = priceCandidates[0] || 0;
+      const quantity = Math.max(0, Number(item.quantity || 0));
+      const taxRateValue = Number(product?.taxRate);
+      const taxRate = Number.isFinite(taxRateValue) && taxRateValue >= 0
+        ? (taxRateValue > 0 && taxRateValue <= 1 ? taxRateValue * 100 : taxRateValue)
+        : 15;
+      const taxType = String(item.taxType || (taxRate > 0 ? 'GRAVADO' : 'EXENTO')).toUpperCase();
+      const lineSubtotal = Number((quantity * unitPrice).toFixed(2));
+      const taxBase = taxType === 'GRAVADO' ? lineSubtotal : 0;
+      const taxAmount = Number((taxBase * (taxType === 'GRAVADO' ? taxRate : 0) / 100).toFixed(2));
+
+      return {
+        productId: item.productId || null,
+        code: item.code || product?.code || product?.sku || '',
+        name: item.name || product?.name || item.description || '',
+        description: item.description || product?.name || '',
+        category: item.category || (product as any)?.category?.name || (product as any)?.category || '',
+        categoryId: item.categoryId || product?.categoryId || null,
+        stock: Number(item.currentStock || product?.stock || 0),
+        stockApplies: product?.itemType !== 'SERVICE',
+        quantity,
+        unitPrice,
+        total: lineSubtotal,
+        taxType,
+        taxRate: taxType === 'GRAVADO' ? taxRate : 0,
+        taxBase,
+        taxAmount,
+        withholdingType: 'NONE',
+        withholdingRate: 0,
+        withholdingBase: 0,
+      };
+    });
+    const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const taxAmount = items.reduce((sum, item) => sum + Number(item.taxAmount || 0), 0);
+
+    return {
+      supplierId,
+      date: new Date().toISOString(),
+      expectedDelivery: request.requiredDate || new Date(Date.now() + 7 * 86400000).toISOString(),
+      warehouseId: request.warehouseId,
+      currency: displayCurrency,
+      exchangeRate: globalRate,
+      status: 'PENDING',
+      purchaseType: 'INVENTORY',
+      requestedBy: requester,
+      purchaseRequestId: request.id,
+      purchaseRequestNumber: request.number,
+      notes: request.notes || request.justification || '',
+      subtotal,
+      taxAmount,
+      withholdingTotal: 0,
+      withholdingBase: 0,
+      total: subtotal + taxAmount,
+      items,
+    };
   };
 
   const confirmRequestAction = async () => {
     if (!pendingRequestAction) return;
     const { request: req, action } = pendingRequestAction;
-    if (action === 'send') {
-      handleOpenOrder(req);
-      setPendingRequestAction(null);
+    if (action === 'approve' && !approvalSupplierId) {
+      toast.error('Seleccione un proveedor para aprobar la solicitud.');
       return;
     }
     setActionLoading(req.id);
     try {
-      const nextStatus = action === 'approve' ? 'APPROVED' : 'CANCELLED';
-      await purchaseRequestsService.changeStatus(req.id, nextStatus);
-      toast.success(`${req.number} → ${action === 'approve' ? 'Aprobada' : 'Anulada'}`);
+      if (action === 'approve') {
+        await purchaseOrdersService.create(buildOrderFromRequest(req, approvalSupplierId));
+        toast.success(`${req.number} aprobada y enviada a órdenes de compra`);
+      } else {
+        await purchaseRequestsService.changeStatus(req.id, 'CANCELLED');
+        toast.success(`${req.number} → Anulada`);
+      }
       setPendingRequestAction(null);
+      setApprovalSupplierId('');
       onRefresh();
-    } catch (e: any) { toast.error(e?.message || `Error al ${action === 'approve' ? 'aprobar' : 'anular'} la solicitud`); }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || `Error al ${action === 'approve' ? 'aprobar y enviar' : 'anular'} la solicitud`);
+    }
     finally { setActionLoading(null); }
   };
 
@@ -206,59 +294,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo generar el PDF');
     }
-  };
-
-  const handleOpenOrder = (request: PurchaseRequest) => {
-    if (normalizeRequestStatus(request.status) !== 'APPROVED' || !onOpenOrderWithDraft) return;
-    const requester = request.requestedBy
-      ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim()
-      : (request.requestedById || 'Admin');
-    onOpenOrderWithDraft({
-      supplierId: '',
-      date: new Date().toISOString(),
-      expectedDelivery: request.requiredDate || new Date(Date.now() + 7 * 86400000).toISOString(),
-      currency: displayCurrency,
-      exchangeRate: globalRate,
-      status: 'DRAFT',
-      purchaseType: 'INVENTORY',
-      isService: false,
-      requestedBy: requester,
-      address: '',
-      purchaseRequestId: request.id,
-      purchaseRequestNumber: request.number,
-      notes: request.notes || request.justification || '',
-      taxRate: 0,
-      withholdingRate: 0,
-      subtotal: 0,
-      taxAmount: 0,
-      withholdingTotal: 0,
-      withholdingBase: 0,
-      total: 0,
-      items: (request.items || []).map((item: any) => ({
-        productId: item.productId || null,
-        code: item.product?.code || '',
-        name: item.product?.name || item.description || '',
-        description: item.description || item.product?.name || '',
-        category: item.product?.category?.name || '',
-        categoryId: item.product?.categoryId || null,
-        stock: Number(item.currentStock || 0),
-        quantity: Number(item.quantity || 0),
-        unitPrice: 0,
-        total: 0,
-        taxType: 'GRAVADO',
-        taxRate: 15,
-        taxBase: 0,
-        taxAmount: 0,
-        withholdingType: 'NONE',
-        withholdingRate: 0,
-        withholdingBase: 0,
-        accountId: null,
-        costCenterId: null,
-        stockApplies: true,
-      })),
-    } as Partial<PurchaseOrder>);
-    setDetailOpen(null);
-    toast.success('Solicitud enviada a orden de compra. Completa el proveedor y los precios.');
   };
 
   const requestKpis = [
@@ -307,6 +342,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
         </div>
+        {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
         {pagination && (
           <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground" data-tour="purchases-list-pagination">
             <span>Mostrando {filtered.length} de {pagination.total} solicitudes</span>
@@ -352,7 +388,10 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   const mgmt = getActiveManagement(req);
                   return (
                     <motion.tr key={req.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className="border-b border-border/10 hover:bg-muted/10 transition-colors"
+                      className={cn(
+                        'border-b border-border/10 hover:bg-muted/10 transition-colors',
+                        highlightedAlertId === String(req.id) && 'bg-primary/10 ring-1 ring-inset ring-primary/50',
+                      )}
                     >
                       <td className="px-4 py-3 font-mono font-bold text-xs">{req.number}</td>
                       <td className="px-4 py-3">
@@ -366,7 +405,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       <td className="px-4 py-3">
                         <Badge className={cn('text-[9px]', PRIORITY_STYLES[req.priority])}>{req.priority}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-xs">{mgmt?.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
+                      <td className="px-4 py-3 text-xs">{req.supplier?.name || mgmt?.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
                       <td className="px-4 py-3 text-right text-xs font-mono font-bold">{mgmt ? formatRequestAmount(mgmt.total, mgmt.currency, mgmt.exchangeRate) : <span className="text-muted-foreground/50">—</span>}</td>
                       <td className="px-4 py-3 text-center text-xs">{req.items?.length || 0}</td>
                       <td className="px-4 py-3 text-xs">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</td>
@@ -380,18 +419,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                             <Eye className={actionIconClass} />
                           </Button>
                           {normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
-                            <Button title="Aprobar solicitud" aria-label="Aprobar solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
+                            <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
                               <ThumbsUp className={actionIconClass} />
                             </Button>
                             <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
                               <Ban className={actionIconClass} />
                             </Button>
                           </>}
-                          {normalizeRequestStatus(req.status) === 'APPROVED' && !requestWasSentToOrder(req) && (
-                            <Button title="Enviar a orden de compra" aria-label="Enviar a orden de compra" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestSend(req)} disabled={actionLoading === req.id}>
-                              <ArrowUpRight className={actionIconClass} />
-                            </Button>
-                          )}
                           {normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
                             <>
                               <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
@@ -416,7 +450,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           {filtered.map((req) => {
             const mgmt = getActiveManagement(req);
             return (
-              <motion.article key={req.id} layout className="overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm">
+              <motion.article key={req.id} layout className={cn('overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm', highlightedAlertId === String(req.id) && 'border-primary ring-2 ring-primary/40 bg-primary/10')}>
                 <CardContent className="space-y-4 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -430,7 +464,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Proveedor</p>
-                      <p className="mt-1 truncate font-semibold">{mgmt?.supplier?.name || 'Sin asignar'}</p>
+                      <p className="mt-1 truncate font-semibold">{req.supplier?.name || mgmt?.supplier?.name || 'Sin asignar'}</p>
                     </div>
                     <div className="min-w-0 text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</p>
@@ -457,18 +491,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                         <Eye className={actionIconClass} />
                       </Button>
                       {normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
-                        <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id} title="Aprobar solicitud" aria-label="Aprobar solicitud">
+                        <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id} title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra">
                           <ThumbsUp className={actionIconClass} />
                         </Button>
                         <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id} title="Anular solicitud" aria-label="Anular solicitud">
                           <Ban className={actionIconClass} />
                         </Button>
                       </>}
-                      {normalizeRequestStatus(req.status) === 'APPROVED' && !requestWasSentToOrder(req) && (
-                        <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestSend(req)} disabled={actionLoading === req.id} title="Enviar a orden de compra" aria-label="Enviar a orden de compra">
-                          <ArrowUpRight className={actionIconClass} />
-                        </Button>
-                      )}
                       {normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
                         <>
                           <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Aprobar gestión">
@@ -548,7 +577,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="break-words text-sm font-semibold">{item.description || 'Producto sin descripción'}</p>
-                                <p className="mt-1 font-mono text-[10px] text-muted-foreground">{item.productId ? item.productId.slice(0, 8) : 'Sin código'}{mgmt?.supplier?.name ? ` · ${mgmt.supplier.name}` : ''}</p>
+                                <p className="mt-1 font-mono text-[10px] text-muted-foreground">{item.productId ? item.productId.slice(0, 8) : 'Sin código'}{(detailOpen.supplier?.name || mgmt?.supplier?.name) ? ` · ${detailOpen.supplier?.name || mgmt?.supplier?.name}` : ''}</p>
                               </div>
                               <div className="shrink-0 text-right">
                                 <p className="font-mono text-sm font-black">{item.quantity}</p>
@@ -571,7 +600,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     <section className="space-y-3 border-t border-border/50 pt-5">
                       <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary"><Building2 className="size-3.5" /> Gestión de compra</h4>
                       <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/20 p-4 text-sm sm:grid-cols-4">
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span><p className="mt-1 break-words font-medium">{mgmt.supplier?.name || '—'}</p></div>
+                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span><p className="mt-1 break-words font-medium">{detailOpen.supplier?.name || mgmt.supplier?.name || '—'}</p></div>
                         <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Cotización</span><p className="mt-1 font-mono">{mgmt.quotationNumber || '—'}</p></div>
                         <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Total ({displayCurrency})</span><p className="mt-1 font-mono font-bold">{formatRequestAmount(mgmt.total, mgmt.currency, mgmt.exchangeRate)}</p></div>
                         <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Moneda origen</span><p className="mt-1">{mgmt.currency || displayCurrency}</p></div>
@@ -633,18 +662,40 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       />
       <ConfirmDialog
         open={Boolean(pendingRequestAction)}
-        onOpenChange={open => { if (!open && !actionLoading) setPendingRequestAction(null); }}
-        title={pendingRequestAction?.action === 'approve' ? '¿Aprobar solicitud?' : pendingRequestAction?.action === 'cancel' ? '¿Anular solicitud?' : '¿Enviar a orden de compra?'}
-        description={pendingRequestAction?.action === 'approve'
-          ? 'La solicitud quedará aprobada y ya no podrá volver a pendiente.'
-          : pendingRequestAction?.action === 'cancel'
-            ? 'La solicitud quedará anulada y no podrá aprobarse desde este flujo.'
-            : 'Se abrirá una orden de compra con los artículos precargados para completar proveedor y precios.'}
-        confirmLabel={pendingRequestAction?.action === 'approve' ? 'Aprobar' : pendingRequestAction?.action === 'cancel' ? 'Anular' : 'Enviar a orden'}
-        variant={pendingRequestAction?.action === 'cancel' ? 'destructive' : 'default'}
+        onOpenChange={open => { if (!open && !actionLoading) { setPendingRequestAction(null); setApprovalSupplierId(''); } }}
+        title={requestActionPresentation?.action === 'approve' ? '¿Aprobar y enviar a orden de compra?' : '¿Anular solicitud?'}
+        description={requestActionPresentation?.action === 'approve'
+          ? 'Selecciona el proveedor. La solicitud quedará aprobada y se creará una orden de compra sin cambiar de vista.'
+          : 'La solicitud quedará anulada y no podrá aprobarse desde este flujo.'}
+        confirmLabel={requestActionPresentation?.action === 'approve' ? 'Aprobar y enviar' : 'Anular'}
+        variant={requestActionPresentation?.action === 'cancel' ? 'destructive' : 'default'}
         onConfirm={confirmRequestAction}
+        closeOnConfirm={false}
+        disabled={pendingRequestAction?.action === 'approve' && !approvalSupplierId}
         loading={Boolean(pendingRequestAction && actionLoading === pendingRequestAction.request.id)}
-      />
+      >
+        {pendingRequestAction?.action === 'approve' && (
+          <div className="mt-4 space-y-2 text-left">
+            <Label htmlFor="purchase-request-approval-supplier" className="text-xs font-bold uppercase tracking-wider">
+              Proveedor <span className="text-destructive">*</span>
+            </Label>
+            <Select value={approvalSupplierId} onValueChange={setApprovalSupplierId}>
+              <SelectTrigger id="purchase-request-approval-supplier" className="h-11 w-full">
+                <SelectValue placeholder="Seleccionar proveedor..." />
+              </SelectTrigger>
+              <SelectContent>
+                {supplierCatalog.filter(supplier => String(supplier.status || '').toUpperCase() === 'ACTIVE' || supplier.id === approvalSupplierId).map(supplier => (
+                  <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
+                ))}
+                {supplierCatalog.filter(supplier => String(supplier.status || '').toUpperCase() === 'ACTIVE' || supplier.id === approvalSupplierId).length === 0 && (
+                  <SelectItem value="__no_active_suppliers" disabled>No hay proveedores activos</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">El proveedor seleccionado quedará vinculado a la solicitud y a la orden de compra que se creará.</p>
+          </div>
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={Boolean(pendingConvertManagement)}
         onOpenChange={open => { if (!open && !actionLoading) setPendingConvertManagement(null); }}

@@ -478,6 +478,7 @@ export interface PurchaseOrder {
   baseTotal?: number;
   status: PurchaseOrderStatus;
   requestedBy: string;
+  warehouseId?: string;
   address?: string;
   purchaseType?: string;
   includeTax?: boolean;
@@ -497,7 +498,7 @@ export interface PurchaseOrder {
   updatedAt: string;
 }
 
-export type PurchaseOrderStatus = 'draft' | 'sent' | 'pending' | 'approved' | 'received' | 'cancelled' | 'DRAFT' | 'SENT' | 'PENDING' | 'APPROVED' | 'RECEIVED' | 'CANCELLED';
+export type PurchaseOrderStatus = 'draft' | 'pending' | 'approved' | 'cancelled' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'CANCELLED';
 
 export interface PurchaseOrderItem {
   id: string;
@@ -1224,6 +1225,8 @@ export interface PurchaseRequest {
   clientTenantId: string;
   warehouseId: string;
   warehouse?: Warehouse;
+  supplierId?: string;
+  supplier?: Supplier;
   branchId?: string;
   branch?: any;
   requestedById: string;

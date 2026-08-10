@@ -1138,7 +1138,6 @@ enum PurchaseOrderStatus {
   DRAFT
   PENDING
   APPROVED
-  RECEIVED
   CANCELLED
 }
 

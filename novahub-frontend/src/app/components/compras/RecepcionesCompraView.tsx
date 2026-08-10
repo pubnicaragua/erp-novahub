@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FileInput, Pencil,
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil,
   AlertTriangle, XCircle, ArrowDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -27,8 +27,9 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; }
 
 const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-500' },
@@ -46,12 +47,19 @@ const incidenciaIcons: Record<string, any> = {
   incidencia: AlertTriangle,
 };
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange, purchaseAlert }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-receipts-layout', 'table', 24 * 365);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -464,7 +472,7 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                   toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
                 }}
               >
-                <FileInput className="size-3 mr-2" /> Convertir a Factura
+                <FilePlus2 className="mr-2 size-3.5" /> Generar factura
               </Button>
             )}
             {isNew && canPerform('PURCHASES_RECEIPTS', 'create') && (
@@ -813,12 +821,13 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
             <PurchaseViewTutorial view="receipts" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
+            {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId}
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

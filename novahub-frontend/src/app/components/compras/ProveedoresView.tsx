@@ -151,7 +151,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         const row = emptyImportRow();
         row.code = String(getCell(source, ['codigo', 'code', 'codigoproveedor']) || '').trim();
         row.name = String(getCell(source, ['nombre', 'name', 'proveedor', 'razonsocial']) || '').trim();
-        row.taxId = String(getCell(source, ['ruc', 'identificacion', 'identificacionfiscal', 'taxid']) || '').trim();
+        // La plantilla oficial usa "RUC / identificación"; al normalizar el
+        // encabezado queda como "rucidentificacion", por lo que debe aceptar
+        // tanto ese formato combinado como los nombres abreviados.
+        row.taxId = String(getCell(source, ['ruc', 'rucidentificacion', 'identificacion', 'identificacionfiscal', 'taxid', 'numeroidentificacion']) || '').trim();
         row.contactName = String(getCell(source, ['personadecontacto', 'contacto', 'contactname']) || '').trim();
         row.email = String(getCell(source, ['correo', 'email']) || '').trim();
         row.phone = String(getCell(source, ['telefono', 'phone']) || '').trim();

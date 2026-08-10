@@ -4,7 +4,7 @@ import {
   ShoppingCart, Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, FileInput, RotateCcw,
   Banknote, BadgeDollarSign,
-  ClipboardPen, X,
+  ClipboardPen,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
@@ -42,6 +42,7 @@ import { FacturasProveedorRecView } from './compras/FacturasProveedorRecView';
 import { PagosRealizadosView }     from './compras/PagosRealizadosView';
 import { CreditosProveedorView }   from './compras/CreditosProveedorView';
 import { SolicitudCompraView }     from './compras/SolicitudCompraView';
+import type { PurchaseAlertDetail, PurchaseAlertItem } from './compras/PurchaseAlertsButton';
 
 const COMPRAS_SECTIONS = [
   { id: 'solicitudes',   label: 'Solicitudes',         icon: ClipboardPen,   description: 'Solicitudes de compra', requiredModules: ['PURCHASES_REQUESTS', 'PURCHASES'] },
@@ -99,7 +100,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
   const [draftInvoiceFromOrder, setDraftInvoiceFromOrder] = useState<any>(null);
   const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<any>(null);
-  const [orderPrefill, setOrderPrefill] = useState<any>(null);
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
   const purchasesStaleTime = 15_000;
@@ -109,11 +109,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
 
   const [ordersPrefilter, setOrdersPrefilter] = useState<string | undefined>(undefined);
-  const bannerStorageKey = `compras-orders-banner-dismissed:${tenantKey}`;
-  const bannerIdsKey = `compras-orders-banner-ids:${tenantKey}`;
-  const [bannerDismissed, setBannerDismissed] = useState<boolean>(() => {
-    try { return localStorage.getItem(bannerStorageKey) === '1'; } catch { return false; }
-  });
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({
@@ -193,7 +188,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const suppliersCatalogQuery = useQuery({
     queryKey: ['purchases', 'suppliers-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => suppliersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: ['gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-prov', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
+    enabled: ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-prov', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -243,13 +238,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
-  const receiptCatalogQuery = useQuery({
-    queryKey: ['purchases', 'receipts-catalog', tenantKey, 1, 200],
-    queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: 1, pageSize: 200 }, signal),
-    enabled: activeSection === 'facturas-prov',
-    placeholderData: keepPreviousData,
-    staleTime: purchasesStaleTime,
-  });
   const chartAccountCatalog = useMemo(() => toArr(chartAccountsQuery.data) as any[], [chartAccountsQuery.data]);
   const expenseCategoryCatalog = useMemo(() => toArr(expenseCategoriesQuery.data) as any[], [expenseCategoriesQuery.data]);
   const accountCatalog = useMemo(() => toArr(accountCatalogQuery.data) as any[], [accountCatalogQuery.data]);
@@ -257,7 +245,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const productCatalog = useMemo(() => toArr(productCatalogQuery.data) as any[], [productCatalogQuery.data]);
   const productCategories = useMemo(() => toArr(productCategoriesQuery.data) as any[], [productCategoriesQuery.data]);
   const orderCatalog = useMemo(() => toArr(orderCatalogQuery.data) as any[], [orderCatalogQuery.data]);
-  const receiptCatalog = useMemo(() => toArr(receiptCatalogQuery.data) as any[], [receiptCatalogQuery.data]);
   const expensesPage = pageFor('gastos');
   const expensesQuery = useQuery({
     queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos')],
@@ -404,40 +391,36 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     solicitudes: filterByBranch(data.solicitudes),
   };
 
-  const pendingOrderIds = useMemo(
-    () => (filteredData.ordenes as PurchaseOrder[])
-      .filter((o) => ['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase()))
-      .map((o) => o.id),
-    [filteredData.ordenes],
-  );
+  const purchaseAlert = useMemo<PurchaseAlertDetail | null>(() => {
+    const requestItems: PurchaseAlertItem[] = (filteredData.solicitudes as PurchaseRequest[]).filter((request) => {
+      const status = String(request.status || '').toUpperCase();
+      return !['APPROVED', 'CONVERTED_TO_ORDER', 'CLOSED', 'CANCELLED', 'REJECTED'].includes(status);
+    }).map((request) => ({
+      id: String(request.id),
+      label: request.number,
+      detail: request.supplier?.name || `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || 'Sin proveedor asignado',
+    }));
+    const orderItems: PurchaseAlertItem[] = (filteredData.ordenes as PurchaseOrder[])
+      .filter((order) => ['PENDING', 'DRAFT'].includes(String(order.status || '').toUpperCase()))
+      .map((order) => ({ id: String(order.id), label: order.number, detail: order.supplier?.name || 'Sin proveedor asignado' }));
+    const invoiceItems: PurchaseAlertItem[] = (filteredData.facturasProv as SupplierInvoice[])
+      .filter((invoice) => ['PENDING', 'PARTIAL'].includes(String(invoice.status || '').toUpperCase()))
+      .map((invoice) => ({ id: String(invoice.id), label: invoice.number, detail: invoice.supplier?.name || 'Sin proveedor asignado' }));
+    const receiptItems: PurchaseAlertItem[] = (filteredData.recepciones as PurchaseReceipt[])
+      .filter((receipt) => String(receipt.status || 'PENDING').toUpperCase() === 'PENDING')
+      .map((receipt) => ({ id: String(receipt.id), label: receipt.number, detail: receipt.supplier?.name || 'Sin proveedor asignado' }));
 
-  useEffect(() => {
-    if (!bannerDismissed || pendingOrderIds.length === 0) return;
-    let stored: string[] = [];
-    try {
-      stored = JSON.parse(localStorage.getItem(bannerIdsKey) || '[]');
-    } catch { stored = []; }
-    if (pendingOrderIds.some((id) => !stored.includes(id))) {
-      setBannerDismissed(false);
-      try { localStorage.removeItem(bannerIdsKey); } catch { /* ignore */ }
+    const bySection: Record<'solicitudes' | 'ordenes' | 'facturas-prov' | 'recepciones', PurchaseAlertDetail> = {
+      solicitudes: { label: 'Solicitudes nuevas', singularLabel: 'solicitud nueva', count: requestItems.length, items: requestItems },
+      ordenes: { label: 'Órdenes nuevas', singularLabel: 'orden nueva', count: orderItems.length, items: orderItems },
+      'facturas-prov': { label: 'Facturas nuevas', singularLabel: 'factura nueva', count: invoiceItems.length, items: invoiceItems },
+      recepciones: { label: 'Recepciones nuevas', singularLabel: 'recepción nueva', count: receiptItems.length, items: receiptItems },
+    };
+    if (!(Object.keys(bySection) as Array<keyof typeof bySection>).includes(activeSection as keyof typeof bySection)) {
+      return null;
     }
-  }, [pendingOrderIds, bannerDismissed, bannerIdsKey]);
-
-  const dismissOrdersBanner = () => {
-    setBannerDismissed(true);
-    try {
-      localStorage.setItem(bannerStorageKey, '1');
-      localStorage.setItem(bannerIdsKey, JSON.stringify(pendingOrderIds));
-    } catch { /* ignore */ }
-  };
-
-  const openOrdersToApprove = () => {
-    setActiveSection('ordenes');
-    setStatusState((s) => ({ ...s, ordenes: 'ALL' }));
-    setOrdersPrefilter('TO_APPROVE');
-  };
-
-  const showOrdersBanner = pendingOrderIds.length > 0 && !bannerDismissed;
+    return bySection[activeSection as keyof typeof bySection];
+  }, [activeSection, filteredData.facturasProv, filteredData.ordenes, filteredData.recepciones, filteredData.solicitudes]);
 
   return (
     <div className="purchases-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
@@ -467,25 +450,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
             <BranchScopeFilter className="ml-auto" showLabel={false} />
           </div>
           <CurrencyValuationBanner className="mb-5" />
-
-          {showOrdersBanner && (
-            <div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <button type="button" onClick={openOrdersToApprove} className="flex items-center gap-2 text-left">
-                <ClipboardList className="size-5 shrink-0 text-amber-500" />
-                <p className="text-xs font-black uppercase tracking-widest text-amber-600">
-                  Hay {pendingOrderIds.length} orden(es) de compra por aprobar
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={dismissOrdersBanner}
-                aria-label="Quitar aviso"
-                className="ml-auto rounded-lg p-1 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          )}
 
           <Tabs value={activeSection} className="w-full" onValueChange={(val) => { setActiveSection(val); }}>
         <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
@@ -524,18 +488,18 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                    exit={{ opacity: 0, y: -10 }}
                    transition={{ duration: 0.2 }}
                  >
-                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} warehouseCatalog={warehouseCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} onOpenOrderWithDraft={(doc) => { setOrderPrefill(doc); setActiveSection('ordenes'); }} />}
+                    {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} warehouseCatalog={warehouseCatalog} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} />}
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
                     {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} prefillDoc={orderPrefill} onPrefillHandled={() => setOrderPrefill(null)} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}
+                       purchaseAlert={purchaseAlert || undefined}
                        supplierCatalog={supplierCatalog}
                        accountCatalog={chartAccountCatalog}
-                       purchaseReceiptCatalog={receiptCatalog}
                        data={filteredData.facturasProv}
                        draftInvoiceFromOrder={draftInvoiceFromOrder}
                        onDraftConsumed={() => setDraftInvoiceFromOrder(null)}

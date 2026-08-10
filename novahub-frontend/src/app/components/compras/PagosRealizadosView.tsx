@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -256,7 +256,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
-                  <Trash2 className="size-3 mr-2" /> Anular
+                  <Ban className="mr-2 size-3.5" /> Anular
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_PAYMENTS', 'create')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
@@ -506,7 +506,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
              )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
@@ -539,7 +539,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
                <PurchaseAuditButton entity="PAYMENT_MADE" entityId={row.id} title="Auditoria del Pago" />
                {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
+                <Button title="Anular pago" aria-label="Anular pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>
           )}

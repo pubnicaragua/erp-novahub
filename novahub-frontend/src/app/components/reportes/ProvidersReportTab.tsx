@@ -238,7 +238,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         const kpis = [
           { label: 'SUMINISTRO TOTAL', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${suppliers.length} proveedores registrados`, color: [245, 158, 11] },
-          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length.toString(), detail: 'Órdenes pendientes de entrega', color: [59, 130, 246] },
+          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => ['PENDING', 'APPROVED'].includes(String(o.status || '').toUpperCase())).length.toString(), detail: 'Órdenes pendientes de entrega', color: [59, 130, 246] },
           { label: 'CUENTAS POR PAGAR', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% de deuda saldada`, color: [244, 63, 94] },
           { label: 'FLUJO DE PAGO', value: formatConvertedAmount(totalPaid, 'NIO'), detail: 'Total liquidado con terceros', color: [16, 185, 129] },
         ];
@@ -380,7 +380,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         // ── KPIs ──
         const kpiBoxes = [
           { label: 'SUMINISTRO TOTAL', value: formatConvertedAmount(totalPurchased, 'NIO'), detail: `${suppliers.length} proveedores registrados`, bgColor: 'FFF59E0B' },
-          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length.toString(), detail: 'Órdenes pendientes de entrega', bgColor: 'FF3B82F6' },
+          { label: 'LOGÍSTICA ACTIVA', value: orders.filter(o => ['PENDING', 'APPROVED'].includes(String(o.status || '').toUpperCase())).length.toString(), detail: 'Órdenes pendientes de entrega', bgColor: 'FF3B82F6' },
           { label: 'CUENTAS POR PAGAR', value: formatConvertedAmount(totalPurchased - totalPaid, 'NIO'), detail: `${payRatio.toFixed(1)}% de deuda saldada`, bgColor: 'FFF43F5E' },
           { label: 'FLUJO DE PAGO', value: formatConvertedAmount(totalPaid, 'NIO'), detail: 'Total liquidado con terceros', bgColor: 'FF10B981' },
         ];
@@ -558,7 +558,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-black text-blue-500">{orders.filter(o => o.status !== 'RECEIVED' && o.status !== 'CANCELLED').length}</p>
+            <p className="text-xl font-black text-blue-500">{orders.filter(o => ['PENDING', 'APPROVED'].includes(String(o.status || '').toUpperCase())).length}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">Órdenes pendientes de entrega</p>
           </CardContent>
         </Card>

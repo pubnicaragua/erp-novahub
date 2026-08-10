@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, FilePlus2, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
@@ -12,6 +12,7 @@ import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
 import { purchaseOrdersService, purchaseRequestsService } from '../../services/compras.service';
+import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
@@ -27,12 +28,12 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
-import { exportToCsv } from '../../utils/exportUtils';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseOrderPreviewDialog } from './ui/PurchaseOrderPreviewDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 
 interface Props {
   data: PurchaseOrder[];
@@ -45,9 +46,11 @@ interface Props {
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
+  purchaseAlert?: PurchaseAlertDetail;
   initialStatus?: string;
   prefillDoc?: Partial<PurchaseOrder> | null;
   onPrefillHandled?: () => void;
+  onConvertToInvoice?: (draft: any) => void;
 }
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -133,7 +136,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 <TableHead className="w-24 text-right text-[10px] uppercase">IVA %</TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Retención</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Ret. %</TableHead>
-                <TableHead className="min-w-[270px] text-[10px] uppercase">Validación</TableHead>
+                <TableHead className="min-w-[270px] text-[10px] uppercase">Validación / vínculo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -186,7 +189,6 @@ const statusOpts = [
   { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
   { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Recibida',   value: 'RECEIVED',   color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
@@ -201,7 +203,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
 
 const LINKED_PRODUCT_LOCKED_FIELDS = new Set([
   'code', 'name', 'description', 'category', 'categoryId', 'stock', 'currentStock', 'stockApplies',
-  'unitPrice', 'taxType', 'taxRate', 'taxBase', 'taxAmount', 'withholdingType', 'withholdingRate', 'withholdingBase',
+  'unitPrice',
 ]);
 
 const formatInputNumber = (value: unknown) => {
@@ -216,12 +218,26 @@ const formatInputInteger = (value: unknown) => {
   return Number.isFinite(numeric) ? String(Math.trunc(numeric)) : '';
 };
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, initialStatus, prefillDoc, onPrefillHandled }: Props) {
+const getProductListFromResponse = (response: any): any[] => (
+  Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : []
+);
+
+const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
+
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, initialStatus, prefillDoc, onPrefillHandled, onConvertToInvoice }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingBulkCancelIds, setPendingBulkCancelIds] = useState<string[]>([]);
   const [previewOrder, setPreviewOrder] = useState<Partial<PurchaseOrder> | null>(null);
   const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -258,13 +274,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     if (initialStatus) setStatusFilter(initialStatus);
   }, [initialStatus]);
 
-  const findImportProduct = (sku: unknown) => {
+  const findImportProduct = (sku: unknown, catalog = products) => {
     const normalized = String(sku || '').trim().toLowerCase();
     if (!normalized) return undefined;
-    return products.find((product: any) => String(product.code || product.sku || '').trim().toLowerCase() === normalized);
+    return catalog.find((product: any) => normalizeProductCode(product) === normalized);
   };
 
-  const validateImportRows = useCallback((rows: PurchaseImportRow[]) => {
+  const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products) => {
     const skuCounts = new Map<string, number>();
     const existingOrderSkus = new Set(((localDoc?.items || []) as any[]).map((item) => String(item.code || item.sku || '').trim().toLowerCase()).filter(Boolean));
     rows.forEach((row) => {
@@ -275,9 +291,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     return rows.map((sourceRow) => {
       const row = { ...sourceRow };
       const sku = String(row.sku || '').trim();
-      const product = findImportProduct(sku);
+      const product = findImportProduct(sku, catalog);
       const quantity = Number(row.quantity);
-      const unitPrice = Number(row.unitPrice);
+      const importedUnitPrice = Number(row.unitPrice);
+      const productCost = Number(product?.costPrice ?? product?.cost ?? product?.lastPurchasePrice ?? 0);
+      const unitPrice = product && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
       const taxRate = Number(row.taxRate || 0);
       const withholdingRate = Number(row.withholdingRate || 0);
       const errors = [
@@ -291,17 +309,18 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         !Number.isFinite(withholdingRate) || withholdingRate < 0 ? 'Tasa de retención inválida' : '',
       ].filter(Boolean);
       const warningParts = [
-        sku && product ? `SKU en uso: ${product.name || product.code || sku}` : sku && !product ? 'SKU no encontrado en inventario; se importará como artículo manual' : '',
+        sku && !product ? 'SKU no encontrado en inventario; se importará como artículo manual' : '',
       ].filter(Boolean);
 
       return {
         ...row,
-        sku,
+        sku: product?.code || sku,
         productId: product?.id,
         currentStock: product?.stock != null ? Number(product.stock) : product?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
         description: String(row.description || product?.name || '').trim(),
         category: String(row.category || product?.category?.name || product?.category || '').trim(),
         categoryId: product?.categoryId || (product?.category?.id ? product.category.id : ''),
+        unitPrice,
         taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
         withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
         _hasError: errors.length > 0,
@@ -309,10 +328,49 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
         _skuStatus: skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined,
-        _skuMessage: product ? `SKU en uso: ${product.name || product.code || sku}` : sku ? 'SKU no encontrado en inventario' : '',
+        _skuMessage: product ? `SKU existente · vinculado a: ${product.name || product.code || sku}` : sku ? 'SKU no encontrado en inventario' : '',
       };
     });
   }, [localDoc?.items, products]);
+
+  const resolveImportProducts = useCallback(async (rows: PurchaseImportRow[]) => {
+    const catalog = [...products];
+    const unresolvedSkus = Array.from(new Set(
+      rows
+        .map((row) => String(row.sku || '').trim())
+        .filter((sku) => sku && !findImportProduct(sku, catalog)),
+    ));
+    const remoteProducts: any[] = [];
+
+    for (let start = 0; start < unresolvedSkus.length; start += 8) {
+      const batch = unresolvedSkus.slice(start, start + 8);
+      const matches = await Promise.all(batch.map(async (sku) => {
+        try {
+          const response = await inventoryService.getProducts({
+            type: 'PRODUCT',
+            search: sku,
+            page: 1,
+            pageSize: 200,
+            includeInactive: true,
+          });
+          return getProductListFromResponse(response).find((product) => normalizeProductCode(product) === sku.toLowerCase());
+        } catch {
+          return undefined;
+        }
+      }));
+      remoteProducts.push(...matches.filter(Boolean));
+    }
+
+    if (remoteProducts.length > 0) {
+      setProducts((current) => {
+        const merged = new Map(current.map((product: any) => [String(product.id), product]));
+        remoteProducts.forEach((product) => merged.set(String(product.id), product));
+        return Array.from(merged.values());
+      });
+    }
+
+    return [...catalog, ...remoteProducts];
+  }, [products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
     const headers = ['SKU', 'Descripción', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Tasa IVA', 'Retención', 'Tasa retención', 'Cuenta contable'];
@@ -350,7 +408,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setImportProcessing(true);
     const reader = new FileReader();
     reader.onload = (event) => {
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         try {
           const workbook = XLSX.read(new Uint8Array(event.target?.result as ArrayBuffer), { type: 'array' });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -396,7 +454,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               currentStock: undefined,
             } as PurchaseImportRow));
           if (!parsed.length) throw new Error('No se encontraron filas con datos');
-          setImportData(validateImportRows(parsed));
+          const importCatalog = await resolveImportProducts(parsed);
+          setImportData(validateImportRows(parsed, importCatalog));
           setImportFileName(file.name);
           setImportProgress(0);
           toast.success(`${parsed.length} artículo(s) encontrados`);
@@ -412,7 +471,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       toast.error('No se pudo leer el archivo seleccionado');
     };
     reader.readAsArrayBuffer(file);
-  }, [validateImportRows]);
+  }, [resolveImportProducts, validateImportRows]);
 
   const handlePurchaseImportRowUpdate = (index: number, field: keyof PurchaseImportRow, value: any) => {
     setImportData((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row)));
@@ -584,7 +643,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       }
       return { ...it, stock: stockVal, currentStock: stockVal };
     });
-    return { ...doc, items };
+    return { ...doc, items, ...calculateTotals(items) };
   };
 
 
@@ -616,8 +675,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   });
 
   const columns: ColumnDef<PurchaseOrder>[] = [
-    { key: 'number',   header: 'Número',   width: '120px',
-      render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
+    { key: 'number',   header: 'Número',   width: '140px',
+      render: (val, row) => (
+        <div className="flex flex-col items-start gap-1">
+          <span className="font-black font-mono text-primary text-xs">{val}</span>
+          {(row.purchaseRequestId || row.purchaseRequestNumber) && (
+            <Badge className="border-none bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-orange-500">
+              Desde solicitud
+            </Badge>
+          )}
+        </div>
+      ) },
     { key: 'purchaseRequestNumber', header: 'Solicitud', width: '110px',
       render: (_val, row) => <span className="text-xs text-muted-foreground">{row.purchaseRequestNumber || '-'}</span> },
     { key: 'supplier', header: 'Proveedor',
@@ -638,15 +706,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   };
 
   const handleCancelConfirm = async () => {
-    if (!pendingCancelId || !cancelReason.trim()) return;
+    const cancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
+    if (cancelIds.length === 0 || !cancelReason.trim()) return;
     setCancelLoading(true);
     try {
-      await purchaseOrdersService.cancel(pendingCancelId, cancelReason.trim());
-      toast.success('Orden de compra anulada');
+      for (const id of cancelIds) {
+        await purchaseOrdersService.cancel(id, cancelReason.trim());
+      }
+      toast.success(cancelIds.length === 1 ? 'Orden de compra anulada' : `${cancelIds.length} órdenes de compra anuladas`);
       setPendingCancelId(null);
+      setPendingBulkCancelIds([]);
       setCancelReason('');
       setPreviewOrder(null);
-      if (editingId === pendingCancelId) setEditingId(null);
+      if (editingId && cancelIds.includes(editingId)) setEditingId(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
@@ -672,7 +744,66 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     }
   };
 
-  const handleSaveDoc = async () => {
+  const handleGenerateInvoiceFromOrder = (order: Partial<PurchaseOrder>) => {
+    if (String(order.status || '').toUpperCase() !== 'APPROVED') {
+      return toast.error('La factura solo puede generarse desde una orden aprobada.');
+    }
+    if (!order.id || !order.supplierId) {
+      return toast.error('La orden no tiene los datos necesarios para generar la factura.');
+    }
+
+    const items = (order.items || []).map((item: any) => {
+      const quantity = Math.trunc(Number(item.quantity || 0));
+      const unitPrice = Number(item.unitPrice || 0);
+      const taxType = String(item.taxType || 'GRAVADO').toUpperCase();
+      const taxRate = isTaxExempt(taxType) ? 0 : Number(item.taxRate || 15);
+      const taxBase = isTaxExempt(taxType) ? 0 : Number(item.taxBase ?? quantity * unitPrice);
+      const taxAmount = isTaxExempt(taxType) ? 0 : Number(item.taxAmount ?? (taxBase * taxRate) / 100);
+      const withholdingType = String(item.withholdingType || 'NONE').toUpperCase();
+      const withholdingRate = withholdingType === 'NONE' ? 0 : Number(item.withholdingRate || 0);
+      const withholdingBase = withholdingType === 'NONE' ? 0 : Number(item.withholdingBase ?? quantity * unitPrice);
+      return {
+        description: item.description || item.name || '',
+        quantity,
+        unitPrice,
+        productId: item.productId || null,
+        taxType,
+        taxRate,
+        taxBase,
+        taxAmount,
+        withholdingType,
+        withholdingRate,
+        withholdingBase,
+        accountId: item.accountId || null,
+        costCenterId: item.costCenterId || null,
+        total: Number(item.total ?? quantity * unitPrice),
+      };
+    });
+    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const taxAmount = items.reduce((sum, item) => sum + item.taxAmount, 0);
+    const withholdingBase = items.reduce((sum, item) => sum + item.withholdingBase, 0);
+    const withholdingTotal = items.reduce((sum, item) => sum + (item.withholdingBase * item.withholdingRate) / 100, 0);
+
+    onConvertToInvoice?.({
+      supplierId: order.supplierId,
+      purchaseOrderId: order.id,
+      date: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      currency: order.currency || displayCurrency,
+      exchangeRate: order.exchangeRate || globalRate,
+      status: 'PENDING',
+      items,
+      subtotal: Number(order.subtotal ?? subtotal),
+      taxAmount: Number(order.taxAmount ?? taxAmount),
+      withholdingBase: Number(order.withholdingBase ?? withholdingBase),
+      withholdingTotal: Number(order.withholdingTotal ?? withholdingTotal),
+      total: Number(order.total ?? subtotal + taxAmount - withholdingTotal),
+    });
+    setPreviewOrder(null);
+    toast.success('Orden aprobada disponible para generar factura', { position: 'bottom-right' });
+  };
+
+  const handleSaveDoc = async (newStatus: 'DRAFT' | 'PENDING' = 'PENDING') => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
     if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
@@ -680,18 +811,24 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       return toast.error('Cada ítem requiere código y nombre');
     }
 
+    const calculatedTotals = calculateTotals((localDoc.items || []) as any[]);
+    const currentOrderStatus = String(localDoc.status || 'PENDING').toUpperCase();
+    const statusToSave = editingId === 'NEW'
+      ? newStatus
+      : (['DRAFT', 'PENDING'].includes(newStatus) && currentOrderStatus !== 'APPROVED' ? newStatus : currentOrderStatus);
     const cleanedDoc: any = {
       ...localDoc,
+      status: statusToSave,
       isService: localDoc.purchaseType === 'SERVICE',
       purchaseRequestId: localDoc.purchaseRequestId || null,
       purchaseRequestNumber: localDoc.purchaseRequestNumber || null,
       taxRate: 0,
       withholdingRate: 0,
-      subtotal: Number(localDoc.subtotal || 0),
-      taxAmount: Number(localDoc.taxAmount || 0),
-      withholdingTotal: Number(localDoc.withholdingTotal || 0),
-      withholdingBase: Number(localDoc.withholdingBase || 0),
-      total: Number(localDoc.total || 0),
+      subtotal: Number(calculatedTotals.subtotal || 0),
+      taxAmount: Number(calculatedTotals.taxAmount || 0),
+      withholdingTotal: Number(calculatedTotals.withholdingTotal || 0),
+      withholdingBase: Number(calculatedTotals.withholdingBase || 0),
+      total: Number(calculatedTotals.total || 0),
       items: (localDoc.items || []).map((it: any) => ({
         ...it,
         description: it.description || it.name || '',
@@ -740,10 +877,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         const created = await purchaseOrdersService.create(cleanedDoc);
         if (created?.purchaseRequestId) {
           try {
-            await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED');
+            await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED', undefined, created.supplierId);
           } catch { /* la solicitud se podrá aprobar manualmente */ }
         }
-        toast.success('Orden creada');
+        toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada como pendiente');
       } else {
         await purchaseOrdersService.update(editingId!, cleanedDoc);
         toast.success('Orden guardada');
@@ -893,37 +1030,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
-  const handlePurchaseOrderExportCSV = (doc: Partial<PurchaseOrder>) => {
-    const rows = (doc.items || []).map((item: any) => [
-      item.code || '',
-      item.name || '',
-      item.category || '',
-      item.stock ?? '',
-      item.quantity || 0,
-      item.unitPrice || 0,
-      item.taxType || 'GRAVADO',
-      item.withholdingType || 'NONE',
-      item.total || 0,
-    ]);
-    exportToCsv(`OC_${doc.number || doc.id || 'borrador'}`, [
-      ['Numero', doc.number || '-'],
-      ['Solicitud', doc.purchaseRequestNumber || '-'],
-      ['Proveedor', doc.supplier?.name || '-'],
-      ['Direccion', doc.address || '-'],
-      ['Fecha', doc.date ? new Date(doc.date).toLocaleDateString() : '-'],
-      ['Entrega Esperada', doc.expectedDelivery ? new Date(doc.expectedDelivery).toLocaleDateString() : '-'],
-      ['Moneda', doc.currency || 'NIO'],
-      ['Tipo OC', doc.purchaseType || 'INVENTORY'],
-      ['Subtotal', Number(doc.subtotal || 0)],
-      ['IVA', Number(doc.taxAmount || 0)],
-      ['Retencion', Number(doc.withholdingTotal || 0)],
-      ['Total', Number(doc.total || 0)],
-      [],
-      ['Codigo', 'Nombre', 'Categoria', 'Stock', 'Cantidad', 'Precio U.', 'TipoIVA', 'Retencion', 'Total'],
-      ...rows,
-    ]);
-  };
-
   if (importPreviewOpen) {
     return (
       <>
@@ -970,9 +1076,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
-    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    const currentStatus = String(localDoc.status || 'DRAFT').toUpperCase();
+    const canApproveCurrent = !isNew && ['DRAFT', 'PENDING'].includes(currentStatus);
     const canEditOrderItems = isNew ? canPerform('PURCHASES_ORDERS', 'create') : canPerform('PURCHASES_ORDERS', 'edit');
     const isItemMasterFieldDisabled = (item: any) => Boolean(item.productId) || !canEditOrderItems;
+    const financialTotals = calculateTotals((localDoc.items || []) as any[]);
     
     return (
       <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
@@ -983,7 +1091,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             </Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Orden de Compra' : `Orden ${localDoc.number}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
+                {localDoc.purchaseRequestNumber && (
+                  <Badge className="border-none bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-orange-500">
+                    Desde solicitud · {localDoc.purchaseRequestNumber}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1007,22 +1122,40 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                  >
                    <Download className="size-3 mr-2" /> Exportar PDF
                  </Button>
-                 <Button
-                   variant="outline"
-                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-                   onClick={() => handlePurchaseOrderExportCSV(localDoc)}
-                 >
-                   <FileText className="size-3 mr-2" /> Exportar Excel
-                 </Button>
                </>
              )}
-              {!isNew && canPerform('PURCHASES_ORDERS', 'delete') && (
+              {!isNew && currentStatus !== 'CANCELLED' && canPerform('PURCHASES_ORDERS', 'delete') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                    onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
-                   <Trash2 className="size-3 mr-2" /> Anular
+                   <Ban className="size-3 mr-2" /> Anular
                  </Button>
               )}
-            {((isNew && canPerform('PURCHASES_ORDERS', 'create')) || (!isNew && canPerform('PURCHASES_ORDERS', 'edit'))) && (
+            {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'edit') && (
+              <Button variant="outline" onClick={() => setApproveConfirmId(editingId)} className="rounded-xl border-emerald-500/50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4">
+                <CheckCircle2 className="size-3 mr-2" /> Aprobar
+              </Button>
+            )}
+            {isNew && canPerform('PURCHASES_ORDERS', 'create') && (
+              <>
+                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                  Guardar borrador
+                </Button>
+                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                  Guardar pendiente
+                </Button>
+              </>
+            )}
+            {!isNew && currentStatus === 'DRAFT' && canPerform('PURCHASES_ORDERS', 'edit') && (
+              <>
+                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                  Guardar borrador
+                </Button>
+                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                  Enviar a pendiente
+                </Button>
+              </>
+            )}
+            {!isNew && !['DRAFT', 'CANCELLED'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
@@ -1080,10 +1213,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-foreground mb-1">Estado</p>
-                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Borrador'}</Badge></div>
-                </div>
-                <div>
                   <p className="text-[10px] text-foreground mb-1">Moneda</p>
                   <select 
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
@@ -1118,7 +1247,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                       <option value="ADMIN">Gasto Administrativo</option>
                     </select>
                   </div>
-                <div className="col-span-2">
+                <div className="order-2 col-span-2">
                   <p className="text-[10px] text-foreground mb-1">Dirección</p>
                   <Input
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
@@ -1128,7 +1257,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     placeholder="Dirección de entrega o facturación"
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="order-1 col-span-1 sm:col-span-1">
                   <p className="text-[10px] text-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
                   <Input
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
@@ -1177,15 +1306,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.subtotal||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.subtotal || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IVA</span>
-                  <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.taxAmount || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Retenciones</span>
-                  <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingTotal||0).toLocaleString()}</span>
+                   <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.withholdingTotal || 0).toLocaleString()}</span>
                 </div>
                 <div className="border-t pt-3 border-border/50">
                   <p className="text-[10px] text-foreground mb-2 font-bold uppercase tracking-widest">Impuestos por línea</p>
@@ -1197,8 +1326,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
-                     {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
-                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.total || 0).toLocaleString()}
+                      {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(financialTotals.total || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
                   </span>
                 </div>
               </div>
@@ -1287,7 +1416,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <div className="col-span-2 min-w-0">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Código</p>
                       <Input
-                        disabled={isItemMasterFieldDisabled(item)}
+                       disabled={!canEditOrderItems}
                         value={item.code || ''}
                         onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
                         className="h-8 text-xs font-mono"
@@ -1370,7 +1499,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                       item={item}
                       onItemChange={(field, value) => handleItemChange(idx, field, value)}
                       lineTotal={Number(item.quantity || 0) * Number(item.unitPrice || 0)}
-                      disabled={isItemMasterFieldDisabled(item)}
+                      disabled={!canEditOrderItems}
                     />
                   </div>
 
@@ -1490,11 +1619,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         </Dialog>
 
         <ConfirmDialog
-          open={!!pendingCancelId}
-          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-          title="Anular Orden de Compra"
-          description="La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer."
-          confirmLabel="Anular Orden"
+          open={Boolean(pendingCancelId || pendingBulkCancelIds.length > 0)}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingBulkCancelIds([]); setCancelReason(''); } }}
+          title={pendingBulkCancelIds.length > 0 ? 'Anular órdenes de compra' : 'Anular Orden de Compra'}
+          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán anuladas. No se podrán recibir ni facturar. Esta acción no se puede deshacer.` : 'La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer.'}
+          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Anular órdenes' : 'Anular Orden'}
           variant="destructive"
           loading={cancelLoading}
           disabled={!cancelReason.trim()}
@@ -1522,6 +1651,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           onClose={() => setPreviewOrder(null)}
           onApprove={(id) => setApproveConfirmId(id)}
           onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
+          onGenerateInvoice={() => previewOrder && handleGenerateInvoiceFromOrder(previewOrder)}
         />
         <ConfirmDialog
           open={!!approveConfirmId}
@@ -1571,23 +1701,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
+            {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_ORDERS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Orden</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await purchaseOrdersService.cancel(id as string, 'Anulación masiva');
-              }
-              toast.success('Órdenes anuladas');
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
-            }
+            const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
+            if (validIds.length === 0) return;
+            setPendingCancelId(null);
+            setPendingBulkCancelIds(validIds);
+            setCancelReason('');
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
@@ -1601,19 +1727,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <FileInput className="size-4" />
               </Button>
               <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {String(row.status || '').toUpperCase() === 'APPROVED' && onConvertToInvoice && (
+                <Button title="Generar factura desde orden aprobada" aria-label="Generar factura desde orden aprobada" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleGenerateInvoiceFromOrder(row)}><FilePlus2 className="size-4" /></Button>
+              )}
               <PurchaseAuditButton entity="PURCHASE_ORDER" entityId={row.id} title="Auditoria de la Orden" />
-              {canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
+              {String(row.status || '').toUpperCase() !== 'CANCELLED' && canPerform('PURCHASES_ORDERS', 'delete') && (
+                <Button title="Anular orden" aria-label="Anular orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingCancelId}
-          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-          title="Anular Orden de Compra"
-          description="La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer."
-          confirmLabel="Anular Orden"
+          open={Boolean(pendingCancelId || pendingBulkCancelIds.length > 0)}
+          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingBulkCancelIds([]); setCancelReason(''); } }}
+          title={pendingBulkCancelIds.length > 0 ? 'Anular órdenes de compra' : 'Anular Orden de Compra'}
+          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán anuladas. No se podrán recibir ni facturar. Esta acción no se puede deshacer.` : 'La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer.'}
+          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Anular órdenes' : 'Anular Orden'}
           variant="destructive"
           loading={cancelLoading}
           disabled={!cancelReason.trim()}
@@ -1641,6 +1770,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           onClose={() => setPreviewOrder(null)}
           onApprove={(id) => setApproveConfirmId(id)}
           onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
+          onGenerateInvoice={() => previewOrder && handleGenerateInvoiceFromOrder(previewOrder)}
         />
         <ConfirmDialog
           open={!!approveConfirmId}

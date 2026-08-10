@@ -3,6 +3,7 @@ import { contabilidadService } from '../../services/contabilidad.service'
 import { Input } from './input'
 import { Label } from './label'
 import { ShieldAlert } from 'lucide-react'
+import { isTaxExempt } from '../../utils/taxUtils'
 
 interface TaxCatalogEntry {
   id: string
@@ -106,7 +107,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
   const calcTaxAmount = (base: number) => base * effectiveTaxRate / 100
   const calcWhAmount = (base: number) => base * effectiveWhRate / 100
 
-  const hasTax = Boolean(item.taxType && !['EXENTO', 'EXONERADO', 'NO_SUJETO', ''].includes(item.taxType))
+  const hasTax = Boolean(item.taxType && !isTaxExempt(item.taxType))
   const hasWithholding = Boolean(item.withholdingType && item.withholdingType !== 'NONE')
   const taxBase = Number(item.taxBase || lineTotal)
   const taxAmount = Number(item.taxAmount || calcTaxAmount(taxBase))
