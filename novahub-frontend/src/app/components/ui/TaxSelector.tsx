@@ -95,7 +95,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
 
   return (
     <div className="min-w-0 space-y-2">
-      <div className="grid min-w-0 grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo IVA</Label>
           <TaxTypeSelect
@@ -153,7 +153,7 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
           </>
         )}
       </div>
-      <div className="grid min-w-0 grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Retención</Label>
           <TaxTypeSelect
