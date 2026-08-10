@@ -510,13 +510,15 @@ export function ProductDetailDrawer({
                 <TabsContent value="general" className="mt-0 space-y-4">
                   {/* Grid de métricas principales */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <MetricCard
-                      label="Stock total"
-                      value={isService ? '—' : totalStock.toString()}
-                      icon={Package}
-                      accent="text-primary"
-                      loading={loading && !productSnapshot}
-                    />
+                    {!isService && (
+                      <MetricCard
+                        label="Stock total"
+                        value={totalStock.toString()}
+                        icon={Package}
+                        accent="text-primary"
+                        loading={loading && !productSnapshot}
+                      />
+                    )}
                     <MetricCard
                       label="Categoría"
                       value={product?.category?.name || '—'}
@@ -531,20 +533,32 @@ export function ProductDetailDrawer({
                       accent={isService ? 'text-violet-500' : 'text-sky-500'}
                       loading={false}
                     />
-                    <MetricCard
-                      label="Valor stock"
-                      value={isService ? '—' : <CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
-                      icon={DollarSign}
-                      accent="text-emerald-500"
-                      loading={loading && !productSnapshot}
-                    />
-                    <MetricCard
-                      label="Precio costo"
-                      value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
-                      icon={TrendingDown}
-                      accent="text-rose-500"
-                      loading={loading && !productSnapshot}
-                    />
+                    {!isService && (
+                      <MetricCard
+                        label="Valor stock"
+                        value={<CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
+                        icon={DollarSign}
+                        accent="text-emerald-500"
+                        loading={loading && !productSnapshot}
+                      />
+                    )}
+                    {isService ? (
+                      <MetricCard
+                        label="Precio"
+                        value={<CurrencyValuationAmount amount={Number(product?.salePrice || 0)} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
+                        icon={DollarSign}
+                        accent="text-emerald-500"
+                        loading={loading && !productSnapshot}
+                      />
+                    ) : (
+                      <MetricCard
+                        label="Precio costo"
+                        value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
+                        icon={TrendingDown}
+                        accent="text-rose-500"
+                        loading={loading && !productSnapshot}
+                      />
+                    )}
                     <MetricCard
                       label="Última act."
                       value={
@@ -572,42 +586,50 @@ export function ProductDetailDrawer({
                         icon={Info}
                         muted={!product?.description && !product?.descriptionHtml}
                       />
-                      <InfoField
-                        label="Código de barras"
-                        value={product?.barcode || product?.ean || '—'}
-                        icon={Barcode}
-                        mono
-                      />
+                      {!isService && (
+                        <InfoField
+                          label="Código de barras"
+                          value={product?.barcode || product?.ean || '—'}
+                          icon={Barcode}
+                          mono
+                        />
+                      )}
                       <InfoField
                         label="SKU"
                         value={product?.sku || product?.code || '—'}
                         icon={Hash}
                         mono
                       />
-                      <InfoField
-                        label="Unidad de medida"
-                        value={product?.unit || 'Unidad'}
-                        icon={Layers}
-                      />
-                      <InfoField
-                        label="Proveedor preferido"
-                        value={
-                          product?.preferredSupplier?.name ||
-                          product?.supplier?.name ||
-                          product?.preferredSupplierName ||
-                          '—'
-                        }
-                        icon={Truck}
-                      />
-                      <InfoField
-                        label="Stock mínimo"
-                        value={
-                          product?.minStock != null
-                            ? String(product.minStock)
-                            : '—'
-                        }
-                        icon={AlertCircle}
-                      />
+                      {!isService && (
+                        <InfoField
+                          label="Unidad de medida"
+                          value={product?.unit || 'Unidad'}
+                          icon={Layers}
+                        />
+                      )}
+                      {!isService && (
+                        <InfoField
+                          label="Proveedor preferido"
+                          value={
+                            product?.preferredSupplier?.name ||
+                            product?.supplier?.name ||
+                            product?.preferredSupplierName ||
+                            '—'
+                          }
+                          icon={Truck}
+                        />
+                      )}
+                      {!isService && (
+                        <InfoField
+                          label="Stock mínimo"
+                          value={
+                            product?.minStock != null
+                              ? String(product.minStock)
+                              : '—'
+                          }
+                          icon={AlertCircle}
+                        />
+                      )}
                     </div>
                   </Card>
                 </TabsContent>

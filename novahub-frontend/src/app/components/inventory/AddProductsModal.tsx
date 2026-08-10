@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { Textarea } from '@/app/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
@@ -27,10 +28,12 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   name: '',
   categoryId,
   itemType,
+  description: '',
   priceCurrency: 'NIO',
   costPrice: '',
   salePrice: '',
   trackSerialNumbers: false,
+  isActive: true,
   initialStock: '',
   initialWarehouseId: '',
   imageFile: null as File | null,
@@ -194,7 +197,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
           costPrice: convertedCost,
+          salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
+          priceCurrency: product.priceCurrency || baseCurrency,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
+          isActive: product.isActive !== false,
+          description: product.description || '',
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
           imageUrl: uploadedImageUri || undefined,
@@ -298,6 +305,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     placeholder={`Nombre del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
               </div>
+              <div className="sm:col-span-2 md:col-span-5">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción <span className="normal-case font-medium">(opcional)</span></label>
+                <Textarea
+                  value={draftProduct.description}
+                  onChange={e => handleUpdateDraft('description', e.target.value)}
+                  className="mt-1 min-h-16 text-xs"
+                  placeholder={`Descripción del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
+                />
+              </div>
               <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
                 <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
@@ -329,6 +345,18 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   </SelectContent>
                 </Select>
               </div>
+              {catalogItemType === 'SERVICE' && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={draftProduct.salePrice}
+                  onChange={e => handleUpdateDraft('salePrice', e.target.value)}
+                  className="h-8 text-xs text-right mt-1 tabular-nums"
+                  placeholder="0.00"
+                />
+              </div>}
               
               {catalogItemType !== 'SERVICE' && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
@@ -376,15 +404,27 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   </div>
                 </>
               ) : (
-                <div className="sm:col-span-2 md:col-span-3">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén vinculado *</label>
-                  <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
-                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
-                    <SelectContent>
-                      {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="sm:col-span-2 md:col-span-3">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén vinculado *</label>
+                    <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                      <SelectContent>
+                        {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
+                    <Select value={draftProduct.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdateDraft('isActive', v === 'available')}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available">Disponible</SelectItem>
+                        <SelectItem value="unavailable">No disponible</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
               
               <div className={`sm:col-span-2 md:col-span-5 flex justify-end ${draftProduct.itemType === 'SERVICE' ? 'mt-0' : 'mt-0'}`}>

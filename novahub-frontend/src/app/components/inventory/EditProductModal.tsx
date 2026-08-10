@@ -73,6 +73,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             String(product.trackingType || '').toUpperCase() === 'SERIAL',
           ),
           itemType: (product.itemType || 'PRODUCT').toUpperCase(),
+          isActive: product.isActive !== false,
           minStock: Number(product.minStock) || 0,
           maxStock: Number(product.maxStock) || 0,
           unit: product.unit || 'unidad',
@@ -157,6 +158,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         costPrice: Number(draft.costPrice || 0) * rate,
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
         itemType: draft.itemType || 'PRODUCT',
+        isActive: draft.isActive !== false,
         unit: draft.unit,
         minStock: draft.minStock,
         maxStock: draft.maxStock,
@@ -356,6 +358,19 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                   <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén..." /></SelectTrigger>
                   <SelectContent>
                     {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {isService && (
+              <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
+                <Select value={draft.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdate('isActive', v === 'available')}>
+                  <SelectTrigger className="h-9 text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="available">Disponible</SelectItem>
+                    <SelectItem value="unavailable">No disponible</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

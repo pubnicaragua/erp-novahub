@@ -75,6 +75,7 @@ interface EditingProduct {
   maxStock?: number;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
+  isActive?: boolean;
   warehouseId?: string;
   imageUrl?: string;
   imageStorageUri?: string;
@@ -263,6 +264,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
@@ -375,7 +377,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const openSelectedSolicitud = () => {
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
     loadSolicitudEmployees();
-    const selected = filteredProducts.filter((p: any) => selectedIds.has(p.id));
+    const selected = products.filter((p: any) => selectedIds.has(p.id));
     setSolicitudProducts(buildSolicitudItems(selected));
     setSolicitudWarehouseId('');
     setSolicitudJustification('');
@@ -479,17 +481,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   }, [warehouseModalOpen, warehouseAccounts.length]);
 
 
-  // Reset page & selection when filters change
+  // Reset page when filters change; keep selection so users can pick items and search freely
   useEffect(() => {
     setPage(1);
-    setSelectedIds(new Set());
     pagination?.onPageChange(1);
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, catalogItemType]);
-
-  // Clear selection when products list changes (e.g. after refresh)
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [products]);
+  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, catalogItemType]);
 
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
@@ -514,7 +510,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
       || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
       || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock;
+    const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
+      || (availabilityFilter === 'available' && p.isActive !== false)
+      || (availabilityFilter === 'unavailable' && p.isActive === false);
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesAvailability;
       });
 
   const paginatedProducts = useMemo(() => {
@@ -636,6 +635,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         String(product.trackingType || '').toUpperCase() === 'SERIAL',
       ),
       itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase() as 'PRODUCT' | 'SERVICE',
+      isActive: product.isActive !== false,
       imageUrl: product.imageUrl,
       imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
       warehouseId: product.warehouseCatalogs?.[0]?.warehouseId || product.warehouseCatalogs?.[0]?.warehouse?.id,
@@ -883,6 +883,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           type: product.itemType || catalogItemType,
           itemType: product.itemType || 'PRODUCT',
+          isActive: product.isActive,
           warehouseId: product.itemType === 'SERVICE' ? serviceWarehouseId : undefined,
           imageUrl: nextImageUrl,
         });
@@ -1197,6 +1198,24 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             className="h-8 min-w-0 w-full text-right text-xs"
             disabled={isSaving}
           />
+        </TableCell>}
+        {isServiceView && <TableCell className="w-32 align-top pt-3">
+          <Select
+            value={product.initialAllocations?.[0]?.warehouseId || ''}
+            onValueChange={(v) => {
+              const alloc = product.initialAllocations?.[0];
+              if (alloc) updateInitialAllocation(product.id, alloc.id, { warehouseId: v });
+              else handleUpdateField(product.id, 'warehouseId', v);
+            }}
+            disabled={isSaving}
+          >
+            <SelectTrigger className="h-8 w-full text-xs"><SelectValue placeholder="Almacén..." /></SelectTrigger>
+            <SelectContent>
+              {warehouses.map((w: any) => (
+                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </TableCell>}
         {isServiceView && <TableCell className="w-28 align-top pt-3">
           <Select
@@ -1768,7 +1787,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <Plus className="size-4" />
             </Button>
           </div>
-          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all') && (
+          {isServiceView && (
+            <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
+              <SelectTrigger className="h-9 min-w-0 flex-1 rounded-lg sm:w-auto">
+                <SelectValue placeholder="Disponibilidad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="available">Disponibles</SelectItem>
+                <SelectItem value="unavailable">No disponibles</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all') && (
             <Button
               variant="ghost"
               size="sm"
@@ -1780,6 +1811,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 onCategoryChange?.([]);
                 onWarehouseChange?.([]);
                 setStockFilter('all');
+                setAvailabilityFilter('all');
               }}
             >
               <X className="size-3.5 mr-1" />
@@ -1951,6 +1983,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Min</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Max</TableHead>}
+              {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-32">Almacén</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">{isServiceView ? 'Estado' : 'Almacenes'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Stock</TableHead>}
               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio</TableHead>}
@@ -1967,7 +2000,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {/* Existing products */}
             {filteredProducts.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={isServiceView ? 7 : 11} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={isServiceView ? 8 : 11} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -2070,6 +2103,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       <span className="text-xs text-muted-foreground text-right block">
                         {getProductMaxStock(product) > 0 ? getProductMaxStock(product) : '-'}
                       </span>
+                    </TableCell>}
+                    {isServiceView && <TableCell>
+                      <span className="text-xs text-muted-foreground">{product.warehouseCatalogs?.[0]?.warehouse?.name || '-'}</span>
                     </TableCell>}
                     <TableCell>
                       {isServiceView ? (

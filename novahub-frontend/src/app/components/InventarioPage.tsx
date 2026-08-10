@@ -95,7 +95,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
       const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined, includeInactive: true }, signal);
     },
     enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });

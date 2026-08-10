@@ -681,6 +681,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       toast.error(missingPriceMessage);
       return;
     }
+    for (const item of cart) {
+      const product = productsById.get(item.productId);
+      if (product?.itemType === 'SERVICE' && product.isActive === false) {
+        toast.error(`El servicio ${product.name || item.description || ''} no está disponible`);
+        return;
+      }
+    }
     setPayments([{ method: 'CASH', amount: 0 }]);
     setPaymentCurrency('NIO');
     setCreatedInvoice(null);

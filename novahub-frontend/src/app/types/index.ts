@@ -37,6 +37,8 @@ export interface ApiFilters {
   sortOrder?: 'asc' | 'desc';
   /** Bounded bulk mode used by reports; regular lists remain capped at 200. */
   report?: boolean;
+  /** Incluye ítems inactivos (p. ej. servicios "No disponible") en el listado de inventario. */
+  includeInactive?: boolean | string;
 }
 
 export type SalesPageSize = 50 | 100 | 200;
@@ -871,6 +873,7 @@ export interface Product {
   maxStock?: number | null;
   trackSerialNumbers?: boolean;
   itemType?: 'PRODUCT' | 'SERVICE';
+  isActive?: boolean;
   status: EntityStatus;
   createdAt: string;
   updatedAt: string;

@@ -384,6 +384,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         toast.error(priceMessage);
         return;
       }
+      if (!localDoc.salesOrderId) {
+        for (const item of localDoc.items || []) {
+          if (resolveItemType(item) !== 'SERVICE') continue;
+          const p = findProductForItem(item);
+          if (p && p.isActive === false) {
+            toast.error(`El servicio ${p.name || item.description || ''} no está disponible`);
+            return;
+          }
+        }
+      }
     }
     const serialRows = (localDoc.items || []).filter((item: any) => {
       const p = findProductForItem(item);
@@ -967,6 +977,20 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         {(() => {
                           const p = findProductForItem(item);
                           if (!p) return null;
+                          if (resolveItemType(item) === 'SERVICE') {
+                            const available = p.isActive !== false;
+                            return (
+                              <>
+                                <Badge variant="outline" className={cn(
+                                  "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
+                                  available ? "text-emerald-500 bg-emerald-500/10" : "text-rose-500 bg-rose-500/10"
+                                )}>
+                                  {available ? 'DISPONIBLE' : 'NO DISPONIBLE'}
+                                </Badge>
+                                {item.priceMissing && <PriceMissingBadge />}
+                              </>
+                            );
+                          }
                           const stock = Number(p.stock || 0);
                           return (
                             <>
@@ -1059,11 +1083,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </div>
                   )}
                   <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="number" min="0" max={Number(findProductForItem(item)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
+                    <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' ? 1000000 : Number(findProductForItem(item)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = findProductForItem(item);
-                        if (p && newQty > Number(p.stock || 0)) {
+                        if (p && resolveItemType(item) !== 'SERVICE' && newQty > Number(p.stock || 0)) {
                           toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
                           newQty = Number(p.stock || 0);
                         }
