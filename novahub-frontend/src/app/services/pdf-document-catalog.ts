@@ -39,7 +39,7 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'compras.purchase-order', module: 'compras', moduleLabel: 'Compras', label: 'Órdenes de compra', structure: 'transaction', source: 'generatePurchaseOrderPDF' },
   { key: 'compras.supplier-invoice', module: 'compras', moduleLabel: 'Compras', label: 'Facturas de proveedor', structure: 'transaction', source: 'generateSupplierInvoicePDF' },
   { key: 'compras.payment-made', module: 'compras', moduleLabel: 'Compras', label: 'Pagos realizados', structure: 'receipt', source: 'generateExpensePDF' },
-  { key: 'compras.purchase-request', module: 'compras', moduleLabel: 'Compras', label: 'Solicitud de compra', structure: 'administrative', source: 'window.print' },
+  { key: 'compras.purchase-request', module: 'compras', moduleLabel: 'Compras', label: 'Solicitud de compra', structure: 'administrative', source: 'generatePurchaseRequestPDF' },
 
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
   { key: 'finanzas.transactions', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Tabla financiera', structure: 'report', source: 'FinanceTableView.exportPDF' },

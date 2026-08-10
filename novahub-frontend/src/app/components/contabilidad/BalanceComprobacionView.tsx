@@ -5,11 +5,12 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Printer, RefreshCw, Filter, X } from 'lucide-react';
+import { Search, Printer, RefreshCw, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { AccountMovementsDetail } from './AccountMovementsDetail';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -38,6 +39,7 @@ export function BalanceComprobacionView() {
   const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`);
   const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const query = useAccountingQuery<TrialBalanceRow[]>(
     ['trial-balance', dateFrom, dateTo],
     async (signal) => {
@@ -77,6 +79,10 @@ export function BalanceComprobacionView() {
   const isBalanced = Math.abs(totalDebitos - totalCreditos) < 0.01;
 
   const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const toggleAccount = (row: TrialBalanceRow) => {
+    setExpandedAccountId(current => current === row.accountId ? null : row.accountId);
+  };
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -150,16 +156,16 @@ export function BalanceComprobacionView() {
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
+        <div className="flex items-center gap-2 text-xs font-black text-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
+            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Desde</label>
             <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
+            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Hasta</label>
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           {(dateFrom || dateTo) && (
@@ -182,26 +188,35 @@ export function BalanceComprobacionView() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-lg font-bold">
-            <span>Balance de Comprobación</span>
-            <Badge variant={isBalanced ? "default" : "destructive"} className="text-[10px] font-black uppercase tracking-widest">
-              {isBalanced ? '✓ Balanceado' : '✗ No Balanceado'}
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <Scale className="size-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <CardTitle className="text-xl font-black uppercase italic tracking-tight">Balance de Comprobación</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Haz clic en una cuenta para consultar sus movimientos.</p>
+              </div>
+            </div>
+            <Badge variant={isBalanced ? "default" : "destructive"} className={cn("gap-1 text-[10px] font-black uppercase tracking-widest", isBalanced && "bg-emerald-600")}>
+              {isBalanced ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
+              {isBalanced ? 'Balanceado' : 'No balanceado'}
             </Badge>
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débitos</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Créditos</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Código</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Cuenta</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Tipo</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Débitos</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Créditos</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Saldo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -216,10 +231,22 @@ export function BalanceComprobacionView() {
                       <span className="ml-2 text-[10px] text-muted-foreground">({group.rows.length} cuentas)</span>
                     </TableCell>
                   </TableRow>,
-                  ...group.rows.map((row, ri) => (
-                    <TableRow key={`row-${gi}-${ri}`} className="hover:bg-muted/30 border-border/30">
+                  ...group.rows.flatMap((row, ri) => {
+                    const isExpanded = expandedAccountId === row.accountId;
+                    return [
+                    <TableRow key={`row-${gi}-${ri}`} className="border-border/30 hover:bg-muted/30">
                       <TableCell className="font-mono text-xs">{row.codigo}</TableCell>
-                      <TableCell className="font-medium text-xs">{row.cuenta}</TableCell>
+                      <TableCell className="font-medium text-xs">
+                        <button
+                          type="button"
+                          onClick={() => toggleAccount(row)}
+                          aria-expanded={isExpanded}
+                          className="flex min-w-0 items-center gap-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          {isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
+                          <span className="break-words">{row.cuenta}</span>
+                        </button>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(row.tipo)}</Badge>
                       </TableCell>
@@ -228,8 +255,23 @@ export function BalanceComprobacionView() {
                       <TableCell className={cn("text-right font-mono text-xs font-bold", row.saldo >= 0 ? "text-emerald-600" : "text-red-600")}>
                         {fmt(row.saldo)}
                       </TableCell>
-                    </TableRow>
-                  )),
+                    </TableRow>,
+                    ...(isExpanded ? [
+                      <TableRow key={`detail-${gi}-${ri}`} className="hover:bg-transparent">
+                        <TableCell colSpan={6} className="p-0">
+                          <AccountMovementsDetail
+                            accountId={row.accountId}
+                            codigo={row.codigo}
+                            cuenta={row.cuenta}
+                            tipo={row.tipo}
+                            dateFrom={dateFrom}
+                            dateTo={dateTo}
+                          />
+                        </TableCell>
+                      </TableRow>,
+                    ] : []),
+                    ];
+                  }),
                 ])}
               </TableBody>
             </Table>
@@ -245,16 +287,26 @@ export function BalanceComprobacionView() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-primary">{group.label}</span>
                     <span className="text-[10px] text-muted-foreground">{group.rows.length} cuentas</span>
                   </div>
-                  {group.rows.map((row) => (
-                    <div key={`${group.type}-${row.accountId}-${row.codigo}`} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
-                      <div className="flex min-w-0 items-start justify-between gap-3">
-                        <div className="min-w-0">
+                  {group.rows.map((row) => {
+                    const isExpanded = expandedAccountId === row.accountId;
+                    return (
+                    <div key={`${group.type}-${row.accountId}-${row.codigo}`} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => toggleAccount(row)}
+                        aria-expanded={isExpanded}
+                        className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <div className="flex min-w-0 items-start gap-2">
+                          {isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                          <div className="min-w-0">
                           <p className="font-mono text-[10px] text-muted-foreground">{row.codigo}</p>
                           <p className="mt-0.5 truncate text-sm font-bold" title={row.cuenta}>{row.cuenta}</p>
+                          </div>
                         </div>
                         <Badge variant="outline" className="shrink-0 text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(row.tipo)}</Badge>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/50 pt-3">
+                      </button>
+                      <div className="grid grid-cols-3 gap-2 border-t border-border/50 px-3 py-3">
                         <div className="min-w-0">
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Débitos</p>
                           <p className={cn("mt-0.5 truncate font-mono text-xs", row.debitos > 0 && "text-emerald-600")}>{fmt(row.debitos)}</p>
@@ -268,8 +320,19 @@ export function BalanceComprobacionView() {
                           <p className={cn("mt-0.5 truncate font-mono text-xs font-bold", row.saldo >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(row.saldo)}</p>
                         </div>
                       </div>
+                      {isExpanded && (
+                        <AccountMovementsDetail
+                          accountId={row.accountId}
+                          codigo={row.codigo}
+                          cuenta={row.cuenta}
+                          tipo={row.tipo}
+                          dateFrom={dateFrom}
+                          dateTo={dateTo}
+                        />
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ))}
           </div>

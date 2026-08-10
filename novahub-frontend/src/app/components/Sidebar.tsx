@@ -101,7 +101,7 @@ interface MenuItem {
 }
 
 const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
-  // Ventas â€” cada sub-item solo se controla por su sub-mÃ³dulo especÃ­fico
+  // Ventas — cada subítem solo se controla por su submódulo específico
   clientes: ['SALES_CLIENTS'],
   estimaciones: ['SALES_QUOTES'],
   'ordenes-venta': ['SALES_ORDERS'],
@@ -195,14 +195,14 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'clientes', label: 'Clientes', icon: <UserCircle className="size-4" /> },
       { id: 'estimaciones', label: 'Cotizaciones', icon: <FileSpreadsheet className="size-4" /> },
-      { id: 'ordenes-venta', label: 'Ordenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
+      { id: 'ordenes-venta', label: 'Órdenes de venta', icon: <ClipboardList className="size-4" />, hasAdd: true },
       { id: 'facturas', label: 'Facturas', icon: <FileText className="size-4" /> },
       { id: 'facturas-recurrentes', label: 'Facturas recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
-      { id: 'notas-credito', label: 'Notas de credito', icon: <FileMinus className="size-4" /> },
+      { id: 'notas-credito', label: 'Notas de crédito', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
-      { id: 'facturacion-caja', label: 'FacturaciÃ³n por Caja', icon: <Calculator className="size-4" /> },
+      { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
   },
@@ -215,12 +215,12 @@ const menuItems: MenuItem[] = [
       { id: 'proveedores', label: 'Proveedores', icon: <Truck className="size-4" />, hasAdd: true },
       { id: 'gastos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'gastos-recurrentes', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
-      { id: 'ordenes-compra', label: 'Ordenes de compra', icon: <ClipboardList className="size-4" /> },
+      { id: 'ordenes-compra', label: 'Órdenes de compra', icon: <ClipboardList className="size-4" /> },
       { id: 'recepciones-compra', label: 'Recepciones de compra', icon: <PackageCheck className="size-4" /> },
       { id: 'facturas-proveedor', label: 'Facturas de proveedor', icon: <FileInput className="size-4" /> },
       { id: 'facturas-proveedor-rec', label: 'Facturas de proveedor rec.', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-realizados', label: 'Pagos realizados', icon: <Banknote className="size-4" /> },
-      { id: 'creditos-proveedor', label: 'Creditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
+      { id: 'creditos-proveedor', label: 'Créditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
     ]
   },
   {
@@ -240,7 +240,7 @@ const menuItems: MenuItem[] = [
     id: 'finanzas',
     label: 'Finanzas',
     icon: <DollarSign className="size-5" />,
-    section: 'Administracion',
+    section: 'Administración',
     submenu: [
       { id: 'resumen-financiero', label: 'Resumen Financiero', icon: <BarChart3 className="size-4" /> },
       { id: 'caja-bancos', label: 'Caja y Bancos', icon: <Landmark className="size-4" /> },
@@ -250,7 +250,7 @@ const menuItems: MenuItem[] = [
       { id: 'egresos', label: 'Gastos', icon: <Wallet className="size-4" /> },
       { id: 'movimientos-recurrentes', label: 'Movimientos Recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'calendario-financiero', label: 'Calendario Financiero', icon: <CalendarClock className="size-4" /> },
-      { id: 'analisis-ingresos-gastos', label: 'AnÃ¡lisis Ingresos/Gastos', icon: <BarChart3 className="size-4" /> },
+      { id: 'analisis-ingresos-gastos', label: 'Análisis de ingresos y gastos', icon: <BarChart3 className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <Landmark className="size-4" /> },
     ]
   },
@@ -258,22 +258,22 @@ const menuItems: MenuItem[] = [
     id: 'contabilidad',
     label: 'Contabilidad',
     icon: <BookOpen className="size-5" />,
-    section: 'Administracion',
+    section: 'Administración',
     submenu: [
       { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: <BookOpen className="size-4" /> },
       { id: 'diario', label: 'Libro Diario', icon: <FileText className="size-4" /> },
       { id: 'libro-mayor', label: 'Libro Mayor', icon: <BookOpenCheck className="size-4" /> },
-      { id: 'balance-comprobacion', label: 'Balance de ComprobaciÃ³n', icon: <Scale className="size-4" /> },
+      { id: 'balance-comprobacion', label: 'Balance de comprobación', icon: <Scale className="size-4" /> },
       { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <PieChart className="size-4" /> },
       { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: <DollarSign className="size-4" /> },
       { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
-      { id: 'conciliacion', label: 'ConciliaciÃ³n Bancaria', icon: <Landmark className="size-4" /> },
-      { id: 'periodos', label: 'PerÃ­odos Contables', icon: <Calendar className="size-4" /> },
+      { id: 'conciliacion', label: 'Conciliación bancaria', icon: <Landmark className="size-4" /> },
+      { id: 'periodos', label: 'Períodos contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
-      { id: 'configuracion', label: 'ConfiguraciÃ³n', icon: <Settings2 className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },
   {
@@ -283,13 +283,13 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'dashboard-hr', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'empleados', label: 'Empleados', icon: <Users className="size-4" /> },
-      { id: 'nominas', label: 'NÃ³minas', icon: <DollarSign className="size-4" /> },
+      { id: 'nominas', label: 'Nóminas', icon: <DollarSign className="size-4" /> },
       { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
       { id: 'ausencias', label: 'Vacaciones', icon: <CalendarClock className="size-4" /> },
-      { id: 'evaluaciones', label: 'DesempeÃ±o', icon: <BarChart3 className="size-4" /> },
-      { id: 'capacitaciones', label: 'CapacitaciÃ³n', icon: <FileCheck className="size-4" /> },
+      { id: 'evaluaciones', label: 'Desempeño', icon: <BarChart3 className="size-4" /> },
+      { id: 'capacitaciones', label: 'Capacitación', icon: <FileCheck className="size-4" /> },
       { id: 'beneficios', label: 'Beneficios', icon: <Plus className="size-4" /> },
-      { id: 'config-nomina', label: 'Config NÃ³mina', icon: <Settings className="size-4" /> },
+      { id: 'config-nomina', label: 'Configuración de nómina', icon: <Settings className="size-4" /> },
     ]
   },
   {
@@ -301,7 +301,7 @@ const menuItems: MenuItem[] = [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
       { id: 'eventos', label: 'Eventos', icon: <CalendarDays className="size-4" /> },
       { id: 'recordatorios', label: 'Recordatorios', icon: <Bell className="size-4" /> },
-      { id: 'bitacora', label: 'BitÃ¡cora', icon: <Database className="size-4" /> }
+      { id: 'bitacora', label: 'Bitácora', icon: <Database className="size-4" /> }
     ]
   },
   { 
@@ -316,14 +316,14 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'centro-capacitacion',
-    label: 'Centro de CapacitaciÃ³n',
+    label: 'Centro de capacitación',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
   },
-  { id: 'soporte-tecnico', label: 'Soporte TÃ©cnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" /> },
   { 
     id: 'asesoria-legal', 
-    label: 'AsesorÃ­a Legal', 
+    label: 'Asesoría legal',
     icon: <Scale className="size-5" />,
     submenu: [
       { id: 'cases', label: 'Casos', icon: <FileText className="size-4" /> },
@@ -371,7 +371,7 @@ const menuItems: MenuItem[] = [
   },
   { id: 'suscripciones', label: 'Mi Empresa', icon: <Zap className="size-5" />, section: 'Sistema' },
   { id: 'dashboard-cxc', label: 'CxC / CxP', icon: <BadgeDollarSign className="size-5" /> },
-  { id: 'configuracion', label: 'Configuracion', icon: <Settings className="size-5" /> },
+  { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-5" /> },
 ];
 
 const platformMenuItems: MenuItem[] = [
@@ -383,23 +383,23 @@ const platformMenuItems: MenuItem[] = [
   },
   {
     id: 'suscripciones',
-    label: 'GestiÃ³n de Empresas',
+    label: 'Gestión de empresas',
     icon: <Building2 className="size-5" />,
   },
   {
     id: 'configuracion',
-    label: 'ConfiguraciÃ³n Global',
+    label: 'Configuración global',
     icon: <Settings className="size-5" />,
     section: 'Ajustes',
   },
   {
     id: 'centro-capacitacion',
-    label: 'CapacitaciÃ³n ERP',
+    label: 'Capacitación ERP',
     icon: <GraduationCap className="size-5" />,
     section: 'Ayuda',
   },
-  { id: 'soporte-tecnico', label: 'Soporte TÃ©cnico', icon: <LifeBuoy className="size-5" /> },
-  { id: 'asesoria-legal', label: 'AsesorÃ­a Legal', icon: <Scale className="size-5" /> },
+  { id: 'soporte-tecnico', label: 'Soporte técnico', icon: <LifeBuoy className="size-5" /> },
+  { id: 'asesoria-legal', label: 'Asesoría legal', icon: <Scale className="size-5" /> },
   {
     id: 'qa-console',
     label: 'Validador ERP (QA)',
@@ -577,7 +577,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             <button
               onClick={onClose}
               className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
-              aria-label="Cerrar menu"
+              aria-label="Cerrar menú"
             >
               <X className="size-5" />
             </button>

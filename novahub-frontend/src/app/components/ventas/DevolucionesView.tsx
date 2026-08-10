@@ -6,6 +6,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { salesReturnsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -49,6 +51,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-returns-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -320,6 +323,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de retornos y aprobación de mercancía.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="returns" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de devoluciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar devolución..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -333,6 +337,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          layoutMode={layoutMode}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RETURNS', 'edit') && (row.status||'').toUpperCase() === 'PENDING' && (

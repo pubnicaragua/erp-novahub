@@ -37,10 +37,13 @@ export function TaxTypeSelect({ value, onChange, type, disabled }: TaxSelectorPr
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
     >
       {type === 'TAX' && <option value="">Seleccionar IVA</option>}
       {type === 'WITHHOLDING' && <option value="NONE">Sin retención</option>}
+      {value && value !== 'NONE' && !entries.some(entry => entry.isActive && entry.code === value) && (
+        <option value={value}>{value === 'GRAVADO' ? 'IVA gravado' : value}</option>
+      )}
       {entries.filter(e => e.isActive).map(entry => (
         <option key={entry.id} value={entry.code}>
           {entry.name} ({entry.rate}%)
@@ -64,9 +67,15 @@ interface TaxDetailProps {
   onItemChange: (field: string, value: any) => void
   lineTotal: number
   currency?: string
+  disabled?: boolean
 }
 
-export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrency }: TaxDetailProps) {
+const formatTwoDecimals = (value: unknown) => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric.toFixed(2) : '0.00'
+}
+
+export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrency, disabled = false }: TaxDetailProps) {
   const [taxEntries, setTaxEntries] = useState<TaxCatalogEntry[]>([])
   const [whEntries, setWhEntries] = useState<TaxCatalogEntry[]>([])
   const sym = (item.currency || propCurrency) === 'USD' ? '$' : 'C$'
@@ -87,84 +96,107 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
   const isTaxManual = taxEntry?.requiresAuth ?? true
   const isWhManual = whEntry?.requiresAuth ?? true
 
-  const effectiveTaxRate = taxEntry ? taxEntry.rate : (item.taxType === 'GRAVADO' || item.taxType === 'GRAVADO_15' ? 15 : 0)
-  const effectiveWhRate = whEntry ? whEntry.rate : Number(item.withholdingRate || 0)
+  const effectiveTaxRate = item.taxRate !== undefined && item.taxRate !== null
+    ? Number(item.taxRate)
+    : (taxEntry ? taxEntry.rate : (item.taxType === 'GRAVADO' || item.taxType === 'GRAVADO_15' ? 15 : 0))
+  const effectiveWhRate = item.withholdingRate !== undefined && item.withholdingRate !== null
+    ? Number(item.withholdingRate)
+    : (whEntry ? whEntry.rate : 0)
 
   const calcTaxAmount = (base: number) => base * effectiveTaxRate / 100
   const calcWhAmount = (base: number) => base * effectiveWhRate / 100
 
+  const hasTax = Boolean(item.taxType && !['EXENTO', 'EXONERADO', 'NO_SUJETO', ''].includes(item.taxType))
+  const hasWithholding = Boolean(item.withholdingType && item.withholdingType !== 'NONE')
+  const taxBase = Number(item.taxBase || lineTotal)
+  const taxAmount = Number(item.taxAmount || calcTaxAmount(taxBase))
+  const withholdingBase = Number(item.withholdingBase || lineTotal)
+
   return (
-    <div className="min-w-0 space-y-2">
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-        <div>
-          <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo IVA</Label>
+    <div className="min-w-0">
+      <div className="grid min-w-0 grid-cols-2 items-end gap-x-2 gap-y-2 md:grid-cols-4 xl:grid-cols-[minmax(8rem,1.35fr)_minmax(6.5rem,1fr)_minmax(4.5rem,.72fr)_minmax(6rem,.9fr)_minmax(8rem,1.25fr)_minmax(6.5rem,1fr)_minmax(4.5rem,.72fr)_minmax(7rem,.9fr)]">
+        <div className="min-w-0 xl:col-start-1">
+          <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Tipo IVA</Label>
           <TaxTypeSelect
             type="TAX"
             value={item.taxType || ''}
+            disabled={disabled}
             onChange={(v) => {
               const entry = taxEntries.find(e => e.code === v)
               onItemChange('taxType', v)
               if (entry) {
-                onItemChange('taxRate', entry.rate)
-                const base = entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : item.taxBase || lineTotal
+                const rate = Number(entry.rate)
+                const base = Number((entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : item.taxBase || lineTotal).toFixed(2))
+                onItemChange('taxRate', rate)
                 onItemChange('taxBase', base)
-                onItemChange('taxAmount', base * Number(entry.rate) / 100)
+                onItemChange('taxAmount', Number((base * rate / 100).toFixed(2)))
               }
             }}
           />
         </div>
-        {item.taxType && item.taxType !== 'EXENTO' && item.taxType !== 'EXONERADO' && item.taxType !== 'NO_SUJETO' && item.taxType !== '' && (
+        {hasTax ? (
           <>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Base IVA</Label>
+            <div className="min-w-0 xl:col-start-2">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Base IVA</Label>
               <Input
                 type="number"
-                value={item.taxBase || 0}
-                className="h-9 min-w-0 px-2 text-xs"
+                step="0.01"
+                min="0"
+                value={formatTwoDecimals(item.taxBase || 0)}
+                disabled={disabled}
+                className="h-8 min-w-0 px-2 text-right text-xs"
                 onChange={(e) => {
-                  const base = Number(e.target.value)
+                  const base = Number(e.target.value || 0)
                   onItemChange('taxBase', base)
-                  onItemChange('taxAmount', calcTaxAmount(base))
+                  onItemChange('taxAmount', Number(calcTaxAmount(base).toFixed(2)))
                 }}
               />
             </div>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="min-w-0 xl:col-start-3">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
                 Tasa %
-                {isTaxManual && <ShieldAlert className="inline size-3 ml-1 text-amber-500" />}
+                {isTaxManual && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
               </Label>
               <Input
                 type="number"
-                value={effectiveTaxRate}
-                className="h-9 min-w-0 px-2 text-xs"
+                step="0.01"
+                min="0"
+                value={formatTwoDecimals(effectiveTaxRate)}
+                disabled={disabled}
+                className="h-8 min-w-0 px-2 text-right text-xs"
                 onChange={(e) => {
-                  const rate = Number(e.target.value)
+                  const rate = Number(e.target.value || 0)
                   onItemChange('taxRate', rate)
-                  onItemChange('taxAmount', calcTaxAmount(Number(item.taxBase || lineTotal)))
+                  onItemChange('taxAmount', Number((taxBase * rate / 100).toFixed(2)))
                 }}
               />
             </div>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">IVA</Label>
-              <div className="h-9 flex items-center text-sm font-medium text-rose-500">
-                {sym} {(item.taxAmount || calcTaxAmount(Number(item.taxBase || lineTotal))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="min-w-0 xl:col-start-4">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">IVA</Label>
+              <div className="flex h-8 items-center text-right text-sm font-medium tabular-nums text-rose-500">
+                {sym} {formatTwoDecimals(taxAmount)}
               </div>
             </div>
           </>
+        ) : (
+          <>
+            <div className="hidden xl:col-start-2 xl:block xl:invisible" aria-hidden="true" />
+            <div className="hidden xl:col-start-3 xl:block xl:invisible" aria-hidden="true" />
+            <div className="hidden xl:col-start-4 xl:block xl:invisible" aria-hidden="true" />
+          </>
         )}
-      </div>
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-        <div>
-          <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Retención</Label>
+        <div className="min-w-0 xl:col-start-5">
+          <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Retención</Label>
           <TaxTypeSelect
             type="WITHHOLDING"
             value={item.withholdingType || 'NONE'}
+            disabled={disabled}
             onChange={(v) => {
               const entry = whEntries.find(e => e.code === v)
               onItemChange('withholdingType', v)
               if (entry && v !== 'NONE') {
+                const base = Number((entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : Number(item.withholdingBase || lineTotal)).toFixed(2))
                 onItemChange('withholdingRate', entry.rate)
-                const base = entry.baseCalculation === 'LINE_TOTAL' ? lineTotal : Number(item.withholdingBase || lineTotal)
                 onItemChange('withholdingBase', base)
               } else {
                 onItemChange('withholdingRate', 0)
@@ -173,38 +205,47 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
             }}
           />
         </div>
-        {item.withholdingType && item.withholdingType !== 'NONE' && (
+        {hasWithholding ? (
           <>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Base Retención</Label>
+            <div className="min-w-0 xl:col-start-6">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Base Retención</Label>
               <Input
                 type="number"
-                value={item.withholdingBase || 0}
-                className="h-9 min-w-0 px-2 text-xs"
-                onChange={(e) => {
-                  const base = Number(e.target.value)
-                  onItemChange('withholdingBase', base)
-                }}
+                step="0.01"
+                min="0"
+                value={formatTwoDecimals(item.withholdingBase || 0)}
+                disabled={disabled}
+                className="h-8 min-w-0 px-2 text-right text-xs"
+                onChange={(e) => onItemChange('withholdingBase', Number(e.target.value || 0))}
               />
             </div>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="min-w-0 xl:col-start-7">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
                 Tasa %
-                {isWhManual && <ShieldAlert className="inline size-3 ml-1 text-amber-500" />}
+                {isWhManual && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
               </Label>
               <Input
                 type="number"
-                value={effectiveWhRate}
-                className="h-9 min-w-0 px-2 text-xs"
-                onChange={(e) => onItemChange('withholdingRate', Number(e.target.value))}
+                step="0.01"
+                min="0"
+                value={formatTwoDecimals(effectiveWhRate)}
+                disabled={disabled}
+                className="h-8 min-w-0 px-2 text-right text-xs"
+                onChange={(e) => onItemChange('withholdingRate', Number(e.target.value || 0))}
               />
             </div>
-            <div>
-              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto Retenido</Label>
-              <div className="h-9 flex items-center text-sm font-medium text-amber-600">
-                -{sym} {(calcWhAmount(Number(item.withholdingBase || lineTotal))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="min-w-0 xl:col-start-8">
+              <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">Monto Retenido</Label>
+              <div className="flex h-8 items-center text-right text-sm font-medium tabular-nums text-amber-600">
+                -{sym} {formatTwoDecimals(calcWhAmount(withholdingBase))}
               </div>
             </div>
+          </>
+        ) : (
+          <>
+            <div className="hidden xl:col-start-6 xl:block xl:invisible" aria-hidden="true" />
+            <div className="hidden xl:col-start-7 xl:block xl:invisible" aria-hidden="true" />
+            <div className="hidden xl:col-start-8 xl:block xl:invisible" aria-hidden="true" />
           </>
         )}
       </div>

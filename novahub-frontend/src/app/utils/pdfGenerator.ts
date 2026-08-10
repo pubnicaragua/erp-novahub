@@ -700,6 +700,111 @@ export const generatePurchaseOrderPDF = async ({
   doc.save(`${order.number || order.id || 'orden_compra'}.pdf`);
 };
 
+export const generatePurchaseRequestPDF = async ({
+  request,
+  tenantName,
+  formatAmount,
+}: {
+  request: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+}) => {
+  const settings = await getPdfDesignSettings('compras.purchase-request');
+  const doc = new jsPDF(pdfDesignPaper(settings));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
+  const statusLabels: Record<string, string> = {
+    PENDING_APPROVAL: 'Pendiente',
+    APPROVED: 'Aprobada',
+    CANCELLED: 'Anulada',
+  };
+  const rawStatus = String(request.status || 'PENDING_APPROVAL').toUpperCase();
+  const status = statusLabels[rawStatus] || (['REJECTED'].includes(rawStatus) ? 'Anulada' : 'Pendiente');
+  const management = request.management?.[0];
+
+  doc.setFontSize(20);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tenantName || 'Nova Hub', 14, 22);
+
+  doc.setFontSize(12);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text('Solicitud de Compra', 14, 30);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`N°: ${request.number || request.id || 'N/A'}`, 196, 22, { align: 'right' });
+  doc.text(`Fecha: ${request.date ? new Date(request.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Estado: ${status}`, 196, 34, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Campo', 'Detalle']],
+    body: [
+      ['Solicitante', request.requestedBy ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim() : '-'],
+      ['Bodega', request.warehouse?.name || '-'],
+      ['Prioridad', request.priority || '-'],
+      ['Fecha requerida', request.requiredDate ? new Date(request.requiredDate).toLocaleDateString() : '-'],
+      ['Justificación', request.justification || '-'],
+      ['Moneda de origen', management?.currency || '-'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
+    bodyStyles: { textColor },
+    columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
+  });
+
+  const itemsRows = (request.items || []).map((item: any) => {
+    const managementItem = (management?.items || []).find((candidate: any) => (
+      (candidate.productId && item.productId && candidate.productId === item.productId)
+      || (candidate.description && item.description && candidate.description === item.description)
+    ));
+    return [
+      item.product?.code || item.productId?.slice?.(0, 8) || '-',
+      item.description || '-',
+      Number(item.quantity || 0).toString(),
+      Number(item.currentStock || 0).toString(),
+      managementItem ? formatAmount(Number(managementItem.total || 0), management.currency, management.exchangeRate) : '-',
+    ];
+  });
+
+  autoTable(doc, {
+    startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    head: [['Código', 'Descripción', 'Cantidad', 'Stock', 'Total']],
+    body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    bodyStyles: { textColor, fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 25 },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 24, halign: 'right' },
+      3: { cellWidth: 24, halign: 'right' },
+      4: { cellWidth: 32, halign: 'right' },
+    },
+    styles: { cellPadding: 3, overflow: 'linebreak', lineWidth: 0.2, lineColor: [203, 213, 225] },
+    tableLineWidth: 0.2,
+    tableLineColor: [203, 213, 225],
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  if (request.notes) {
+    const notesY = ((doc as any).lastAutoTable?.finalY || 140) + 10;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Notas: ${request.notes}`, 14, notesY, { maxWidth: 180 });
+  }
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'italic');
+  doc.text(`Generado por ${tenantName || 'Nova Hub'} - Módulo de Compras`, 14, doc.internal.pageSize.height - 10);
+
+  doc.save(`${request.number || request.id || 'solicitud_compra'}.pdf`);
+};
+
 export const generateRecurringInvoicePDF = async ({
   recurringInvoice,
   tenantName,

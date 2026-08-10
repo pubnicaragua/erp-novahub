@@ -7,6 +7,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { estimatesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -21,7 +23,6 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -48,7 +49,6 @@ const statusOptions = [
   { label: 'Rechazada',value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
 ];
-const editableStatusOptions = statusOptions.filter((status) => status.value !== 'APPROVED');
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
@@ -57,6 +57,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-estimates-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -155,7 +156,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
-    accountId: (localDoc as any)?.accountId || null,
     notes: localDoc?.notes,
     items: localDoc?.items || [],
     status,
@@ -381,8 +381,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       header: 'Estado', 
       width: '135px',
       editable: false,
-      type: 'select',
-                  options: editableStatusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
         return (
@@ -504,19 +502,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     </Select>
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
-                <div className="sm:col-span-2">
-                  <AccountingAccountSelect
-                    value={(localDoc as any)?.accountId || ''}
-                    onChange={(accountId) => {
-                      setLocalDoc({ ...localDoc, accountId } as any);
-                      void handleUpdate(localDoc!.id, { accountId } as any);
-                    }}
-                    label="Cuenta contable de ingresos"
-                    incomeOnly
-                    required
-                  />
-                  <p className="mt-1 text-[10px] text-muted-foreground">Necesaria para enviar este borrador a orden de venta o emitirlo como factura.</p>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -797,6 +782,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="quotes" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
@@ -822,6 +808,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           onRowClick={(row) => setEditingId(row.id)}
           actionsWidth="w-52"
           fitContent
+          layoutMode={layoutMode}
           showHorizontalControls
           actions={(row) => (
             <>

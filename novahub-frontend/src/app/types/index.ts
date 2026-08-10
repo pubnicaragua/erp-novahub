@@ -134,7 +134,6 @@ export interface Estimate {
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
-  accountId?: string;
   status: DocumentStatus;
   notes?: string;
   items: EstimateItem[];
@@ -245,7 +244,7 @@ export interface Invoice {
   accountId?: string;
   registerId?: string | null;
   sessionId?: string | null;
-  sourceType?: 'SALES_ORDER' | 'CASH_SALE' | 'RECURRING' | 'DIRECT' | string;
+  sourceType?: 'ESTIMATE' | 'SALES_ORDER' | 'CASH_SALE' | 'RECURRING' | 'DIRECT' | string;
   sourceLabel?: string | null;
   status: PaymentStatus;
   notes?: string;
@@ -572,6 +571,9 @@ export interface SupplierInvoice {
   supplier?: Supplier;
   purchaseOrderId?: string;
   purchaseReceiptId?: string;
+  originType?: 'PURCHASE_REQUEST' | 'PURCHASE_ORDER' | 'DIRECT' | string;
+  originLabel?: string | null;
+  originNumber?: string | null;
   date: string;
   dueDate: string;
   subtotal: number;
@@ -586,9 +588,20 @@ export interface SupplierInvoice {
   baseTotal?: number;
   status: PaymentStatus;
   notes?: string;
+  attachments?: SupplierInvoiceAttachment[];
   items: SupplierInvoiceItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SupplierInvoiceAttachment {
+  id: string;
+  supplierInvoiceId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileUrl: string;
+  createdAt: string;
 }
 
 export interface SupplierInvoiceItem {
@@ -1224,6 +1237,7 @@ export interface PurchaseRequest {
   notes?: string;
   items: PurchaseRequestItem[];
   management?: PurchaseManagement[];
+  purchaseOrder?: { id: string; number: string; status?: string } | null;
   createdAt: string;
   updatedAt: string;
 }

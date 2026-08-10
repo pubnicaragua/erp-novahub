@@ -10,6 +10,7 @@ export const suppliersService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Supplier>>('/purchases/suppliers', { params: filters as any, signal }),
   getById: (id: string) => api.get<Supplier>(`/purchases/suppliers/${id}`),
   create: (data: Partial<Supplier>) => api.post<Supplier>('/purchases/suppliers', data),
+  importMassive: (data: { rows: Array<Partial<Supplier> & { paymentTerms?: string }> }) => api.post<{ total: number; created: number; skipped: number; errors: string[]; warnings: string[] }>('/purchases/suppliers/import', data),
   update: (id: string, data: Partial<Supplier>) => api.patch<Supplier>(`/purchases/suppliers/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/suppliers/${id}`),
   recalculateBalance: (id: string) => api.patch<any>(`/purchases/suppliers/${id}/recalculate-balance`, {}),
@@ -47,6 +48,8 @@ export const supplierInvoicesService = {
     api.get<{ exists: boolean; record?: Pick<SupplierInvoice, 'id' | 'number' | 'status'> }>(`/purchases/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<SupplierInvoice>(`/purchases/invoices/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/invoices/${id}`),
+  addAttachment: (id: string, data: { fileName: string; fileType: string; fileSize: number; fileUrl: string }) => api.post<any>(`/purchases/invoices/${id}/attachments`, data),
+  removeAttachment: (id: string, attachmentId: string) => api.delete<void>(`/purchases/invoices/${id}/attachments/${attachmentId}`),
 };
 
 // ✅ CORRECTED: was /recurring-supplier-invoices (404) → now /purchases/recurring-invoices
@@ -73,6 +76,8 @@ export const supplierCreditsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<SupplierCredit>>('/purchases/credits', { params: filters as any, signal }),
   create: (data: Partial<SupplierCredit>) => api.post<SupplierCredit>('/purchases/credits', data),
   update: (id: string, data: Partial<SupplierCredit>) => api.patch<SupplierCredit>(`/purchases/credits/${id}`, data),
+  issue: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/issue`, {}),
+  apply: (id: string, data: { paymentMethod?: string } = {}) => api.post<SupplierCredit>(`/purchases/credits/${id}/apply`, data),
   delete: (id: string) => api.delete<void>(`/purchases/credits/${id}`),
 };
 

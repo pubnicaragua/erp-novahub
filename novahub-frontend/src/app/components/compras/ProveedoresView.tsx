@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, FileDown, Info, Ban, Pencil } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,6 +10,8 @@ import { suppliersService } from '../../services/compras.service';
 import type { Supplier, EntityStatus } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -18,8 +21,9 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
 
-interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
 const emptyDraft = () => ({
   code: '',
@@ -35,10 +39,11 @@ const emptyDraft = () => ({
 
 const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
 
-export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange }: ProveedoresViewProps) {
+export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ProveedoresViewProps) {
   const { canPerform } = useAuth();
   const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
   const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
@@ -46,8 +51,11 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importRows, setImportRows] = useState<SupplierImportRow[]>([]);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importResult, setImportResult] = useState<SupplierImportResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -67,149 +75,140 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     );
   });
 
-  const downloadTemplate = () => {
-    const rows = [
-      ['code', 'name', 'contactName', 'email', 'phone', 'address', 'status'],
-      ['PRV-000001', 'Proveedor Ejemplo', 'Maria Lopez', 'proveedor@correo.com', '8888-1111', 'Managua', 'ACTIVE'],
-    ];
-    const csv = [
-      'sep=;',
-      ...rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')),
-    ].join('\r\n');
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'plantilla_proveedores.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Plantilla descargada');
+  const normalizeHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
+  const getCell = (row: Record<string, any>, aliases: string[]) => {
+    const match = aliases.map(normalizeHeader).find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
+    return match ? row[match] : '';
   };
 
-  const splitCsvLine = (line: string, delimiter: string) => {
-    const values: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const next = line[i + 1];
-      if (char === '"') {
-        if (inQuotes && next === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
-      }
-      if (char === delimiter && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-    values.push(current.trim());
-    return values.map((v) => v.replace(/^"(.*)"$/, '$1').trim());
-  };
+  const emptyImportRow = (): SupplierImportRow => ({
+    code: '', name: '', taxId: '', contactName: '', email: '', phone: '', address: '', city: '', country: 'Nicaragua', paymentTerms: '', status: 'ACTIVE',
+  });
 
-  const parseSuppliersCsv = async (file: File) => {
-    const text = await file.text();
-    const rawLines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const lines = rawLines[0]?.toLowerCase().startsWith('sep=') ? rawLines.slice(1) : rawLines;
-    if (lines.length < 2) return [];
-    const headerLine = lines[0];
-    const delimiter = (
-      (headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/;/g)?.length || 0)
-        ? ((headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ',' : '\t')
-        : ((headerLine.match(/;/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ';' : '\t')
-    );
-    const headers = splitCsvLine(headerLine, delimiter).map((h) => h.toLowerCase());
-    return lines.slice(1).map((line) => {
-      const cols = splitCsvLine(line, delimiter);
-      const row: Record<string, string> = {};
-      headers.forEach((h, idx) => {
-        row[h] = cols[idx] ?? '';
-      });
-      return row;
+  const validateImportRows = (rows: SupplierImportRow[]) => {
+    const existingCodes = new Set(data.map((supplier) => String(supplier.code || '').trim().toLowerCase()).filter(Boolean));
+    const existingEmails = new Set(data.map((supplier) => String(supplier.email || '').trim().toLowerCase()).filter(Boolean));
+    const existingTaxIds = new Set(data.map((supplier) => String(supplier.taxId || '').trim().toLowerCase()).filter(Boolean));
+    const seenCodes = new Set<string>();
+    const seenEmails = new Set<string>();
+    const seenTaxIds = new Set<string>();
+    return rows.map((row) => {
+      const next: SupplierImportRow = { ...row, error: undefined, warning: undefined };
+      const code = row.code.trim().toLowerCase();
+      const email = row.email.trim().toLowerCase();
+      const taxId = row.taxId.trim().toLowerCase();
+      if (!row.name.trim()) next.error = 'Nombre obligatorio';
+      else if (code && (existingCodes.has(code) || seenCodes.has(code))) next.error = 'Código duplicado';
+      else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
+      else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
+      else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
+      if (!next.error && !code) next.warning = 'Se generará el código automáticamente';
+      if (code) { existingCodes.add(code); seenCodes.add(code); }
+      if (email) { existingEmails.add(email); seenEmails.add(email); }
+      if (taxId) { existingTaxIds.add(taxId); seenTaxIds.add(taxId); }
+      return next;
     });
   };
 
-  const handleImportSuppliers = async () => {
-    if (!importFile) {
-      toast.error('Selecciona un archivo CSV');
-      return;
-    }
-    setImporting(true);
-    setImportResult(null);
+  const downloadTemplate = () => {
+    const headers = ['Código', 'Nombre', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Estado'];
+    const example = ['PRV-000001', 'Proveedor Ejemplo', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', 'ACTIVO'];
+    const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
+    sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['GUÍA DE LLENADO · IMPORTACIÓN DE PROVEEDORES'],
+      ['Puedes repetir la importación. El código es opcional; si lo omites, el sistema lo genera automáticamente.'],
+      ['Campo', 'Regla'],
+      ['Código', 'Opcional. No se puede repetir dentro de la empresa.'],
+      ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
+      ['RUC / identificación', 'Opcional. No se puede repetir dentro de la empresa.'],
+      ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
+      ['Contacto y ubicación', 'Completa persona de contacto, teléfono, dirección, ciudad y país cuando aplique.'],
+      ['Condiciones de pago', 'Opcional. Ejemplos: Contado, 30 días, crédito.'],
+      ['Estado', 'Usa ACTIVO o INACTIVO.'],
+      ['Previsualización', 'Después de cargar el archivo podrás corregir los datos y revisar los errores antes de guardar.'],
+    ]);
+    guide['!cols'] = [{ wch: 30 }, { wch: 110 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Proveedores');
+    XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
+    XLSX.writeFile(workbook, 'plantilla_proveedores.xlsx');
+    toast.success('Plantilla descargada');
+  };
+
+  const readImportFile = async (file: File) => {
     try {
-      const rows = await parseSuppliersCsv(importFile);
-      if (rows.length === 0) {
-        toast.error('El archivo no contiene filas para importar');
-        return;
-      }
-
-      const existingCodes = new Set(data.map((s) => String(s.code || '').toUpperCase()).filter(Boolean));
-      const existingEmails = new Set(data.map((s) => String(s.email || '').toLowerCase()).filter(Boolean));
-      let created = 0;
-      let skipped = 0;
-      const errors: string[] = [];
-
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
-        const rowNumber = idx + 2;
-        const name = String(row.name || row.nombre || '').trim();
-        const code = String(row.code || row.codigo || '').trim();
-        const email = String(row.email || '').trim().toLowerCase();
-        const statusRaw = String(row.status || row.estado || 'ACTIVE').trim().toUpperCase();
-        const status = statusRaw === 'INACTIVE' || statusRaw === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE';
-
-        if (!name) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: nombre es obligatorio`);
-          continue;
-        }
-        if (code && existingCodes.has(code.toUpperCase())) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: código duplicado (${code})`);
-          continue;
-        }
-        if (email && existingEmails.has(email)) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: email duplicado (${email})`);
-          continue;
-        }
-
-        try {
-          await suppliersService.create({
-            code: code || `PRV-${Date.now().toString().slice(-6)}-${idx}`,
-            name,
-            contactName: String(row.contactname || row.contacto || '').trim() || undefined,
-            email: email || undefined,
-            phone: String(row.phone || row.telefono || '').trim() || undefined,
-            address: String(row.address || row.direccion || '').trim() || undefined,
-            status: status as any,
-          } as any);
-          created++;
-          if (code) existingCodes.add(code.toUpperCase());
-          if (email) existingEmails.add(email);
-        } catch (e: any) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: ${e?.response?.data?.message || e?.message || 'no se pudo crear'}`);
-        }
-      }
-
-      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
-      if (created > 0) onRefresh();
-      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
+      const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'proveedores') || workbook.SheetNames[0];
+      const rawSheet = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      const raw = rawSheet[0]?.length === 1 && String(rawSheet[0][0] || '').toLowerCase().startsWith('sep=') ? rawSheet.slice(1) : rawSheet;
+      if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
+      const headers = (raw[0] || []).map(normalizeHeader);
+      const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[]) => {
+        const source: Record<string, any> = {};
+        headers.forEach((header: string, index: number) => { source[header] = values[index] ?? ''; });
+        const row = emptyImportRow();
+        row.code = String(getCell(source, ['codigo', 'code', 'codigoproveedor']) || '').trim();
+        row.name = String(getCell(source, ['nombre', 'name', 'proveedor', 'razonsocial']) || '').trim();
+        row.taxId = String(getCell(source, ['ruc', 'identificacion', 'identificacionfiscal', 'taxid']) || '').trim();
+        row.contactName = String(getCell(source, ['personadecontacto', 'contacto', 'contactname']) || '').trim();
+        row.email = String(getCell(source, ['correo', 'email']) || '').trim();
+        row.phone = String(getCell(source, ['telefono', 'phone']) || '').trim();
+        row.address = String(getCell(source, ['direccion', 'address']) || '').trim();
+        row.city = String(getCell(source, ['ciudad', 'city']) || '').trim();
+        row.country = String(getCell(source, ['pais', 'country']) || 'Nicaragua').trim();
+        row.paymentTerms = String(getCell(source, ['condicionesdepago', 'condiciones', 'paymentterms']) || '').trim();
+        const status = normalizeHeader(getCell(source, ['estado', 'status']) || 'activo');
+        row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
+        return row;
+      });
+      setImportFile(file);
+      setImportRows(validateImportRows(parsed));
+      setImportResult(null);
+      toast.success(`${parsed.length} proveedores listos para previsualizar`);
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
-    } finally {
-      setImporting(false);
+      setImportFile(null);
+      setImportRows([]);
+      toast.error(error?.message || 'No se pudo leer el archivo');
     }
+  };
+
+  const updateImportRow = (index: number, field: keyof SupplierImportRow, value: string) => {
+    setImportRows((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row)));
+  };
+
+  const executeImport = async () => {
+    const validRows = importRows.filter((row) => !row.error);
+    if (!validRows.length) return;
+    setImporting(true);
+    setImportProgress(8);
+    setImportResult(null);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    try {
+      timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
+      const result = await suppliersService.importMassive({
+        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, code: row.code || undefined })),
+      });
+      if (timer) clearInterval(timer);
+      setImportProgress(100);
+      setImportResult(result);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar proveedores');
+    } finally {
+      if (timer) clearInterval(timer);
+      setImporting(false);
+      setImportProgress(0);
+    }
+  };
+
+  const finishImport = () => {
+    setImportResult(null);
+    setImportPreviewOpen(false);
+    setImportRows([]);
+    setImportFile(null);
+    setImportOpen(false);
   };
 
   const filteredAndSorted = [...filtered].sort((a, b) => {
@@ -232,7 +231,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { key: 'balance', header: 'Saldo', width: '170px',
       render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
     },
-    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('proveedores', 'edit'), type: 'select', options: statusOptions,
+    { key: 'status', header: 'Estado', width: '120px',
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>;
@@ -336,6 +335,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { title: `Saldo Total${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), baseCurrency),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10', kind: 'indicator' as const },
   ];
 
+  if (importPreviewOpen) {
+    return <SupplierImportPreview rows={importRows} fileName={importFile?.name || ''} isSidebarCollapsed={isSidebarCollapsed} importing={importing} progress={importProgress} result={importResult} onRowUpdate={updateImportRow} onBack={() => { setImportPreviewOpen(false); setImportOpen(true); }} onConfirm={executeImport} onDone={finishImport} />;
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
@@ -352,6 +355,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de proveedores" />
             <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
               <SelectTrigger className="h-10 w-full sm:w-44 rounded-xl text-[10px] font-black uppercase tracking-widest">
                 <ArrowUpDown className="mr-2 size-4 shrink-0" />
@@ -370,7 +374,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             {canPerform('proveedores', 'create') && (
               <Button
                 variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); }}
+                onClick={() => { setImportOpen(true); setImportPreviewOpen(false); setImportRows([]); setImportFile(null); setImportResult(null); }}
                 className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
               >
                 <Upload className="size-4" /> Importar
@@ -383,7 +387,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
@@ -437,57 +441,15 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         }}
       />
 
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle>
-            <DialogDescription>
-              Sube un CSV para cargar proveedores masivamente. Usa la plantilla para evitar errores de formato.
-            </DialogDescription>
-          </DialogHeader>
-
+      <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
-              <p className="text-xs text-muted-foreground">
-                Columnas: <span className="font-mono">code,name,contactName,email,phone,address,status</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                status: <b>ACTIVE</b> o <b>INACTIVE</b>
-              </p>
-              <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadTemplate}>
-                <FileDown className="size-4" /> Descargar plantilla CSV
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground">Archivo CSV</label>
-              <Input type="file" accept=".csv,text/csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
-              {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
-            </div>
-
-            {importResult && (
-              <div className="rounded-xl border border-border/60 p-4 bg-background">
-                <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
-                <p className="text-sm">
-                  Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
-                </p>
-                {importResult.errors.length > 0 && (
-                  <div className="mt-2 space-y-1 text-xs text-amber-500">
-                    <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
-                    {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código es opcional y se genera automáticamente si lo dejas vacío. Los códigos, correos e identificaciones repetidas se marcarán como errores. Podrás editar cada fila antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
+            <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
+            <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del proveedor.</li><li>Carga el archivo; el sistema lo valida sin guardar todavía.</li><li>Presiona “Previsualizar proveedores” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; solo se guardarán las filas válidas.</li></ol></div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
-            <Button onClick={handleImportSuppliers} disabled={importing || !importFile} className="gap-2">
-              <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar proveedores'}
-            </Button>
-          </DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar proveedores</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -514,7 +476,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 text-sm font-bold text-emerald-500">{editingSupplier ? 'Usa el botón Activar / Desactivar' : 'Activo al crear'}</div></div>
               </div>
             </section>
           </div>
@@ -548,7 +510,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Managua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={draft.country} onChange={(e) => setDraft({ ...draft, country: e.target.value })} placeholder="Nicaragua" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dirección</label><Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} placeholder="Calle, número y referencias" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as EntityStatus })} className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><div className="flex h-11 items-center rounded-xl border border-border bg-muted/20 px-3 text-sm font-bold text-muted-foreground">Usa el botón Activar / Desactivar</div></div>
               </div>
             </section>
           </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
   ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
 } from 'lucide-react';
@@ -69,7 +70,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
     'invoiceNumber', 'invoicedAt', 'invoicedBy',
   ]);
-  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-orders-layout', 'table', 24 * 365);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
@@ -390,8 +391,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       header: 'Estado', 
       width: '135px',
       editable: false,
-      type: 'select',
-      options: statusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
         return (

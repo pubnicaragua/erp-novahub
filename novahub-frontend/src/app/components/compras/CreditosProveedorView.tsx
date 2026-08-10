@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BadgeDollarSign, Plus, Search, Eye, TrendingUp, Hash, Trash2, ChevronLeft } from 'lucide-react';
+import { BadgeDollarSign, Plus, Search, Eye, TrendingUp, Hash, Trash2, ChevronLeft, Send, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,6 +9,8 @@ import { vendorCreditsService } from '../../services/compras.service';
 import type { SupplierCredit, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -32,6 +34,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const { canPerform } = useAuth();
   const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-credits-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED'>('ALL');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -79,13 +82,29 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '120px',
       render: (val, row) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={resolveSourceCurrency((row as any)?.currency)} sourceExchangeRate={(row as any)?.exchangeRate} className="font-black" /> },
-    { key: 'status',   header: 'Estado',     width: '110px', editable: canPerform('PURCHASES_RETURNS', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',     width: '110px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<SupplierCredit>) => {
     try { await vendorCreditsService.update(id as string, updates); toast.success('Crédito actualizado'); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+  };
+
+  const handleStatusAction = async (row: SupplierCredit) => {
+    const status = String(row.status || '').toUpperCase();
+    try {
+      if (status === 'DRAFT') {
+        await vendorCreditsService.issue(row.id);
+        toast.success('Crédito emitido');
+      } else if (status === 'ISSUED') {
+        await vendorCreditsService.apply(row.id, { paymentMethod: 'OTHER' });
+        toast.success('Crédito aplicado');
+      }
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del crédito');
+    }
   };
 
   const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
@@ -215,14 +234,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_RETURNS', 'create') : !canPerform('PURCHASES_RETURNS', 'edit')}
-                    value={localDoc.status || 'issued'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Emitido'}</Badge></div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
@@ -368,15 +380,21 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos de proveedor" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_RETURNS', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           actions={(row) => (
              <div className="flex gap-1">
+              {canPerform('PURCHASES_RETURNS', 'edit') && ['DRAFT', 'ISSUED'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title={String(row.status || '').toUpperCase() === 'DRAFT' ? 'Emitir crédito' : 'Aplicar crédito'} aria-label={String(row.status || '').toUpperCase() === 'DRAFT' ? 'Emitir crédito' : 'Aplicar crédito'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row)}>
+                  {String(row.status || '').toUpperCase() === 'DRAFT' ? <Send className="size-4" /> : <CheckCircle2 className="size-4" />}
+                </Button>
+              )}
               <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="SUPPLIER_CREDIT" entityId={row.id} title="Auditoria del Credito" />
               {canPerform('PURCHASES_RETURNS', 'delete') && (

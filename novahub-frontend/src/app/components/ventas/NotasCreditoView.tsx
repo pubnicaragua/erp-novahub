@@ -6,6 +6,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { creditNotesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -47,6 +49,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credit-notes-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -305,6 +308,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Registros de crédito emitidos a clientes.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="credit-notes" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de notas de crédito" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -318,6 +322,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          layoutMode={layoutMode}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (

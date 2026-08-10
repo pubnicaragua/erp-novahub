@@ -64,11 +64,7 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('nh-auth-token');
-  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-  if (localStorage.getItem('nh-bypass-accounting') === 'true') {
-    headers['X-Bypass-Accounting'] = 'true';
-  }
-  return headers;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function asTextList(value: unknown): string[] {

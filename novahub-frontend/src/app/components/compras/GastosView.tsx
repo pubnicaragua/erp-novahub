@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download, Upload, FileDown, Info
+  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,6 +14,8 @@ import { expensesService } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -46,6 +48,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-expenses-layout', 'table', 24 * 365);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -344,13 +347,24 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
-    { key: 'status',      header: 'Estado',    width: '120px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',      header: 'Estado',    width: '120px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+  };
+
+  const handleStatusAction = async (row: Expense, status: 'APPROVED' | 'PAID' | 'REJECTED') => {
+    try {
+      await expensesService.update(row.id, { status } as any);
+      const labels = { APPROVED: 'Gasto aprobado', PAID: 'Gasto marcado como pagado', REJECTED: 'Gasto rechazado' };
+      toast.success(labels[status]);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del gasto');
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -578,14 +592,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   )}
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                    <select
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
-                      value={localDoc.status || 'PENDING'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                      className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                    >
-                      {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
@@ -725,6 +732,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
           <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1">
               <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
               <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
@@ -801,7 +809,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
@@ -816,6 +824,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
+              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'PENDING' && (
+                <Button title="Aprobar gasto" aria-label="Aprobar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'APPROVED')}><CheckCircle2 className="size-4" /></Button>
+              )}
+              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'APPROVED' && (
+                <Button title="Marcar gasto como pagado" aria-label="Marcar gasto como pagado" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'PAID')}><CheckCircle2 className="size-4" /></Button>
+              )}
+              {canPerform('PURCHASES_EXPENSES', 'edit') && ['PENDING', 'APPROVED'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title="Rechazar gasto" aria-label="Rechazar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => void handleStatusAction(row, 'REJECTED')}><Ban className="size-4" /></Button>
+              )}
               <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="EXPENSE" entityId={row.id} title="Auditoria del Gasto" />
               {canPerform('PURCHASES_EXPENSES', 'delete') && (

@@ -5,11 +5,12 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Filter, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { AccountMovementsDetail } from './AccountMovementsDetail';
 
 interface PnLAccount {
   accountId: string;
@@ -32,6 +33,7 @@ export function EstadoResultadosView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showPreviousYear, setShowPreviousYear] = useState(false);
+  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const query = useAccountingQuery<PnLData | null>(
     ['profit-loss', dateFrom, dateTo, showPreviousYear],
     async (signal) => {
@@ -44,7 +46,7 @@ export function EstadoResultadosView() {
       const curr = raw?.current || raw || {};
       const prev = raw?.previous || null;
       const mapAccounts = (list: any[]): PnLAccount[] => (list || []).map((a: any) => ({
-        accountId: a.code || '',
+        accountId: a.accountId || a.id || a.code || '',
         codigo: a.code || '',
         cuenta: a.name || '',
         currentAmount: a.balance || 0,
@@ -89,6 +91,10 @@ export function EstadoResultadosView() {
     return ((current - previous) / Math.abs(previous)) * 100;
   };
 
+  const toggleAccount = (account: PnLAccount) => {
+    setExpandedAccountId(current => current === account.accountId ? null : account.accountId);
+  };
+
   const renderSection = (title: string, accounts: PnLAccount[], total: number, totalPrev: number, color: string) => (
     <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", color)}>
@@ -98,24 +104,35 @@ export function EstadoResultadosView() {
       <Table>
         <TableHeader className="bg-muted/30">
           <TableRow className="hover:bg-transparent border-border/50">
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Código</TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta</TableHead>
-            <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Período Actual</TableHead>
+            <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Código</TableHead>
+            <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Cuenta</TableHead>
+            <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Período Actual</TableHead>
             {showPreviousYear && (
-              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Período Anterior</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Período Anterior</TableHead>
             )}
             {showPreviousYear && (
-              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Variación %</TableHead>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Variación %</TableHead>
             )}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {accounts.map((acc, i) => {
+          {accounts.flatMap((acc, i) => {
             const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
-            return (
-              <TableRow key={acc.accountId || i} className="hover:bg-muted/30 border-border/30">
+            const isExpanded = expandedAccountId === acc.accountId;
+            return [
+              <TableRow key={acc.accountId || i} className="border-border/30 hover:bg-muted/30">
                 <TableCell className="font-mono text-xs">{acc.codigo}</TableCell>
-                <TableCell className="font-medium">{acc.cuenta}</TableCell>
+                <TableCell className="font-medium text-xs">
+                  <button
+                    type="button"
+                    onClick={() => toggleAccount(acc)}
+                    aria-expanded={isExpanded}
+                    className="flex min-w-0 items-center gap-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    {isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
+                    <span className="break-words">{acc.cuenta}</span>
+                  </button>
+                </TableCell>
                 <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                   {fmt(acc.currentAmount)}
                 </TableCell>
@@ -129,8 +146,22 @@ export function EstadoResultadosView() {
                     {varPct !== null ? fmtPct(varPct) : '-'}
                   </TableCell>
                 )}
-              </TableRow>
-            );
+              </TableRow>,
+              ...(isExpanded ? [
+                <TableRow key={`detail-${acc.accountId || i}`} className="hover:bg-transparent">
+                  <TableCell colSpan={showPreviousYear ? 5 : 3} className="p-0">
+                    <AccountMovementsDetail
+                      accountId={acc.accountId}
+                      codigo={acc.codigo}
+                      cuenta={acc.cuenta}
+                      tipo={title === 'INGRESOS' ? 'INCOME' : 'EXPENSE'}
+                      dateFrom={dateFrom}
+                      dateTo={dateTo}
+                    />
+                  </TableCell>
+                </TableRow>,
+              ] : []),
+            ];
           })}
           <TableRow className="bg-muted/50 font-bold border-t-2 border-border">
             <TableCell colSpan={2} className="text-sm uppercase tracking-wider">Total {title}</TableCell>
@@ -148,22 +179,41 @@ export function EstadoResultadosView() {
       <div className="space-y-2 p-3 md:hidden">
         {accounts.map((acc, i) => {
           const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
+          const isExpanded = expandedAccountId === acc.accountId;
           return (
-            <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
-              <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className="min-w-0">
+            <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
+              <button
+                type="button"
+                onClick={() => toggleAccount(acc)}
+                aria-expanded={isExpanded}
+                className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  {isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                  <div className="min-w-0">
                   <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
                   <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                  </div>
                 </div>
                 <span className={cn("shrink-0 text-right font-mono text-sm font-black", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                   {fmt(acc.currentAmount)}
                 </span>
-              </div>
+              </button>
               {showPreviousYear && (
-                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
+                <div className="grid grid-cols-2 gap-2 border-t border-border/50 px-3 py-2 text-[10px] text-muted-foreground">
                   <div><span className="block uppercase tracking-wider">Anterior</span><span className="font-mono">{acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}</span></div>
                   <div className="text-right"><span className="block uppercase tracking-wider">Variación</span><span className={cn("font-mono font-bold", varPct !== null && varPct >= 0 ? "text-emerald-600" : "text-red-600")}>{varPct !== null ? fmtPct(varPct) : '-'}</span></div>
                 </div>
+              )}
+              {isExpanded && (
+                <AccountMovementsDetail
+                  accountId={acc.accountId}
+                  codigo={acc.codigo}
+                  cuenta={acc.cuenta}
+                  tipo={title === 'INGRESOS' ? 'INCOME' : 'EXPENSE'}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                />
               )}
             </div>
           );
@@ -182,21 +232,21 @@ export function EstadoResultadosView() {
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
+        <div className="flex items-center gap-2 text-xs font-black text-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Filter className="size-3.5" /> Filtros
         </div>
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
+            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Desde</label>
             <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
+            <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Hasta</label>
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
           </div>
           <div className="flex items-center gap-3 mt-5">
             <Switch id="prev-year" checked={showPreviousYear} onCheckedChange={setShowPreviousYear} />
-            <label htmlFor="prev-year" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground cursor-pointer select-none">
+            <label htmlFor="prev-year" className="text-[10px] font-black uppercase tracking-widest text-foreground cursor-pointer select-none">
               Comparar año anterior
             </label>
           </div>
@@ -213,11 +263,19 @@ export function EstadoResultadosView() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-bold">Estado de Resultados</CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <BarChart3 className="size-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-xl font-black uppercase italic tracking-tight">Estado de Resultados</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Haz clic en una cuenta para consultar sus movimientos.</p>
+            </div>
+          </div>
           {dateFrom && dateTo && (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Período: {new Date(dateFrom).toLocaleDateString('es')} - {new Date(dateTo).toLocaleDateString('es')}
             </p>
           )}

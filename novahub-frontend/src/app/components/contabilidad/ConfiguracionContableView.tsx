@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Settings2, Save, Building2, Upload, FileDown, RefreshCw,
   Loader2, CheckCircle2, Globe, DollarSign,
@@ -44,6 +44,10 @@ const INDUSTRIES = [
 ]
 
 const CURRENCIES = ['NIO', 'USD']
+const HR_ACCOUNT_CODES = new Set([
+  '1120', '2200', '2210', '2220', '2300', '2400', '2410', '2420', '2430', '2500',
+  '5100', '5110', '5120', '5130', '5140', '5150', '5160', '5170', '5180', '5600', '5700',
+])
 
 type AccountInfo = {
   id: string
@@ -51,6 +55,7 @@ type AccountInfo = {
   name: string
   type: string
   subtype?: string
+  detailType?: string
   parentId?: string | null
   isLeaf?: boolean
   isActive?: boolean
@@ -102,63 +107,61 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
-    id: 'supplierInvoice', label: 'Facturas de Proveedor', icon: Package,
-    description: 'Factura de compra → inventario + IVA + cuenta por pagar',
+    id: 'supplierInvoice', label: 'Facturas de proveedor pagadas', icon: Package,
+    description: 'Solo al pagar la factura → inventario/gasto + IVA acreditable + retenciones + medio de pago',
     fields: [
       { key: 'inventory', label: 'Inventario / Gasto', side: 'debit', description: 'Se debita el costo del inventario o gasto', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
-      { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA (es acreditable)', defaultCode: '2105', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
+      { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
+      { key: 'withholdingPayable', label: 'IR / Retenciones por Pagar', side: 'credit', description: 'Se acredita el IR o la retención aplicada al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
       { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
-    ],
-  },
-  {
-    id: 'paymentMade', label: 'Pagos a Proveedores', icon: Wallet,
-    description: 'Pago realizado → disminuye CxP y disminuye caja',
-    fields: [
-      { key: 'payable', label: 'Cuenta por Pagar', side: 'debit', description: 'Se debita la deuda (disminuye)', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
-      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita la salida en efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la salida por tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la salida por transferencia', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la salida por cheque', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la salida por otro medio', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
-    ],
-  },
-  {
-    id: 'purchaseReceipt', label: 'Recepciones de Compra', icon: Package,
-    description: 'Recepción de mercancía → inventario + inventario en tránsito',
-    fields: [
-      { key: 'inventory', label: 'Inventario', side: 'debit', description: 'Se debita el inventario recibido', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
-      { key: 'inTransit', label: 'Inventario en Tránsito', side: 'credit', description: 'Se acredita el inventario en tránsito', defaultCode: '1205', defaultName: 'Inventario en Tránsito', defaultType: 'ASSET' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita cuando la factura pagada sale de caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta configurada para pagos con tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta configurada para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {
     id: 'expense', label: 'Gastos', icon: FileText,
-    description: 'Gasto operativo → se registra el gasto y la salida de caja',
+    description: 'Solo al pagar el gasto → cuenta de gasto + medio de pago',
     fields: [
       { key: 'expense', label: 'Cuenta de Gasto', side: 'debit', description: 'Se debita el gasto', defaultCode: '5000', defaultName: 'Gastos Operativos', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita la salida de efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta configurada para pagos con tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
+      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta configurada para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'supplierCredit', label: 'Créditos de proveedor aplicados', icon: RotateCcw,
+    description: 'Crédito aplicado → disminuye CxP y revierte inventario o compras',
+    fields: [
+      { key: 'payable', label: 'Cuenta por Pagar', side: 'debit', description: 'Se debita la deuda que disminuye con el crédito', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
+      { key: 'inventory', label: 'Inventario / Compras', side: 'credit', description: 'Se acredita la reversión del inventario o la compra', defaultCode: '1200', defaultName: 'Inventario y compras', defaultType: 'ASSET' },
     ],
   },
   {
     id: 'payroll', label: 'Nóminas', icon: Users,
     description: 'Un solo asiento al pagar la nómina: costos laborales, obligaciones y salida del neto',
     fields: [
-      { key: 'salaryExpense', label: 'Salario base', side: 'debit', description: 'Se debita el salario base devengado', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'bonusesExpense', label: 'Bonificaciones', side: 'debit', description: 'Se debitan las bonificaciones devengadas', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'overtimeExpense', label: 'Horas extras', side: 'debit', description: 'Se debita el pago por horas extras', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'commissionsExpense', label: 'Comisiones', side: 'debit', description: 'Se debita la comisión incluida en nómina', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'inssPatronalExpense', label: 'Gasto INSS patronal', side: 'debit', description: 'Se debita el aporte patronal asumido por la empresa', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'inatecExpense', label: 'Gasto INATEC', side: 'debit', description: 'Se debita el aporte patronal de INATEC', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'thirteenthExpense', label: 'Provisión de aguinaldo', side: 'debit', description: 'Se debita la provisión del décimo tercer mes', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'vacationExpense', label: 'Provisión de vacaciones', side: 'debit', description: 'Se debita la provisión de vacaciones', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'indemnityExpense', label: 'Provisión de indemnización', side: 'debit', description: 'Se debita la provisión de indemnización', defaultCode: '5100', defaultName: 'Gastos de Nómina', defaultType: 'EXPENSE' },
-      { key: 'inssLaboralPayable', label: 'INSS laboral por pagar', side: 'credit', description: 'Retención INSS al empleado', defaultCode: '2200', defaultName: 'INSS por Pagar', defaultType: 'LIABILITY' },
-      { key: 'inssPatronalPayable', label: 'INSS patronal por pagar', side: 'credit', description: 'Obligación patronal de INSS', defaultCode: '2200', defaultName: 'INSS por Pagar', defaultType: 'LIABILITY' },
-      { key: 'inatecPayable', label: 'INATEC por pagar', side: 'credit', description: 'Obligación patronal de INATEC', defaultCode: '2200', defaultName: 'INATEC por Pagar', defaultType: 'LIABILITY' },
+      { key: 'salaryExpense', label: 'Salario base', side: 'debit', description: 'Se debita el salario base devengado', defaultCode: '5100', defaultName: 'Salarios base', defaultType: 'EXPENSE' },
+      { key: 'bonusesExpense', label: 'Bonificaciones', side: 'debit', description: 'Se debitan las bonificaciones devengadas', defaultCode: '5110', defaultName: 'Bonificaciones', defaultType: 'EXPENSE' },
+      { key: 'overtimeExpense', label: 'Horas extras', side: 'debit', description: 'Se debita el pago por horas extras', defaultCode: '5120', defaultName: 'Horas extras', defaultType: 'EXPENSE' },
+      { key: 'commissionsExpense', label: 'Comisiones', side: 'debit', description: 'Se debita la comisión incluida en nómina', defaultCode: '5130', defaultName: 'Comisiones', defaultType: 'EXPENSE' },
+      { key: 'inssPatronalExpense', label: 'Gasto INSS patronal', side: 'debit', description: 'Se debita el aporte patronal asumido por la empresa', defaultCode: '5140', defaultName: 'Aporte patronal INSS', defaultType: 'EXPENSE' },
+      { key: 'inatecExpense', label: 'Gasto INATEC', side: 'debit', description: 'Se debita el aporte patronal de INATEC', defaultCode: '5150', defaultName: 'Aporte patronal INATEC', defaultType: 'EXPENSE' },
+      { key: 'thirteenthExpense', label: 'Provisión de aguinaldo', side: 'debit', description: 'Se debita la provisión del décimo tercer mes', defaultCode: '5160', defaultName: 'Provisión de aguinaldo', defaultType: 'EXPENSE' },
+      { key: 'vacationExpense', label: 'Provisión de vacaciones', side: 'debit', description: 'Se debita la provisión de vacaciones', defaultCode: '5170', defaultName: 'Provisión de vacaciones', defaultType: 'EXPENSE' },
+      { key: 'indemnityExpense', label: 'Provisión de indemnización', side: 'debit', description: 'Se debita la provisión de indemnización', defaultCode: '5180', defaultName: 'Provisión de indemnización', defaultType: 'EXPENSE' },
+      { key: 'inssLaboralPayable', label: 'INSS laboral por pagar', side: 'credit', description: 'Retención INSS al empleado', defaultCode: '2200', defaultName: 'INSS laboral por pagar', defaultType: 'LIABILITY' },
+      { key: 'inssPatronalPayable', label: 'INSS patronal por pagar', side: 'credit', description: 'Obligación patronal de INSS', defaultCode: '2210', defaultName: 'INSS patronal por pagar', defaultType: 'LIABILITY' },
+      { key: 'inatecPayable', label: 'INATEC por pagar', side: 'credit', description: 'Obligación patronal de INATEC', defaultCode: '2220', defaultName: 'INATEC por pagar', defaultType: 'LIABILITY' },
       { key: 'irPayable', label: 'IR por pagar', side: 'credit', description: 'Retención de IR al empleado', defaultCode: '2300', defaultName: 'IR por Pagar', defaultType: 'LIABILITY' },
-      { key: 'otherDeductionsPayable', label: 'Otras deducciones', side: 'credit', description: 'Deducciones adicionales retenidas al empleado', defaultCode: '2400', defaultName: 'Otras Deducciones por Pagar', defaultType: 'LIABILITY' },
-      { key: 'thirteenthPayable', label: 'Aguinaldo por pagar', side: 'credit', description: 'Pasivo acumulado por aguinaldo', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
-      { key: 'vacationPayable', label: 'Vacaciones por pagar', side: 'credit', description: 'Pasivo acumulado por vacaciones', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
-      { key: 'indemnityPayable', label: 'Indemnización por pagar', side: 'credit', description: 'Pasivo acumulado por indemnización', defaultCode: '2400', defaultName: 'Provisiones Laborales por Pagar', defaultType: 'LIABILITY' },
+      { key: 'otherDeductionsPayable', label: 'Otras deducciones', side: 'credit', description: 'Deducciones adicionales retenidas al empleado', defaultCode: '2400', defaultName: 'Otras deducciones por pagar', defaultType: 'LIABILITY' },
+      { key: 'thirteenthPayable', label: 'Aguinaldo por pagar', side: 'credit', description: 'Pasivo acumulado por aguinaldo', defaultCode: '2410', defaultName: 'Aguinaldo por pagar', defaultType: 'LIABILITY' },
+      { key: 'vacationPayable', label: 'Vacaciones por pagar', side: 'credit', description: 'Pasivo acumulado por vacaciones', defaultCode: '2420', defaultName: 'Vacaciones por pagar', defaultType: 'LIABILITY' },
+      { key: 'indemnityPayable', label: 'Indemnización por pagar', side: 'credit', description: 'Pasivo acumulado por indemnización', defaultCode: '2430', defaultName: 'Indemnización por pagar', defaultType: 'LIABILITY' },
       { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita al pagar el neto al empleado', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
     ],
   },
@@ -190,7 +193,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     id: 'hrTraining', label: 'Formación y Capacitaciones', icon: Users,
     description: 'Gasto pagado de formación → gasto + medio de pago propio de esta subvista',
     fields: [
-      { key: 'expense', label: 'Gasto de Formación', side: 'debit', description: 'Se debita el costo pagado de la capacitación', defaultCode: '5000', defaultName: 'Gastos de Formación', defaultType: 'EXPENSE' },
+      { key: 'expense', label: 'Gasto de Formación', side: 'debit', description: 'Se debita el costo pagado de la capacitación', defaultCode: '5600', defaultName: 'Formación y capacitación', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Formación', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Formación', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
       { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Formación', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
@@ -202,7 +205,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     id: 'hrBenefit', label: 'Beneficios de Empleados', icon: Users,
     description: 'Gasto pagado de beneficios → gasto + medio de pago propio de esta subvista',
     fields: [
-      { key: 'expense', label: 'Gasto de Beneficios', side: 'debit', description: 'Se debita el costo pagado de los beneficios', defaultCode: '5000', defaultName: 'Gastos de Beneficios', defaultType: 'EXPENSE' },
+      { key: 'expense', label: 'Gasto de Beneficios', side: 'debit', description: 'Se debita el costo pagado de los beneficios', defaultCode: '5700', defaultName: 'Beneficios de empleados', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Beneficios', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Beneficios', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
       { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Beneficios', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
@@ -238,20 +241,22 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Revaluación de saldos abiertos en moneda extranjera al cierre',
     fields: [
       { key: 'unrealizedGain', label: 'Ganancia cambiaria no realizada', side: 'credit', description: 'Se acredita cuando la revaluación incrementa el valor económico', defaultCode: '4200', defaultName: 'Ganancia Cambiaria No Realizada', defaultType: 'INCOME' },
-      { key: 'unrealizedLoss', label: 'Pérdida cambiaria no realizada', side: 'debit', description: 'Se debita cuando la revaluación reduce el valor económico', defaultCode: '5200', defaultName: 'Pérdida Cambiaria No Realizada', defaultType: 'EXPENSE' },
+      { key: 'unrealizedLoss', label: 'Pérdida cambiaria no realizada', side: 'debit', description: 'Se debita cuando la revaluación reduce el valor económico', defaultCode: '5400', defaultName: 'Pérdida Cambiaria No Realizada', defaultType: 'EXPENSE' },
     ],
   },
 ]
 
 const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
 
+const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade', 'purchaseReceipt'])
+
 const ACCOUNTING_MODULE_GROUPS = [
   {
     id: 'purchases',
     label: 'Cuentas contables de Compras',
-    description: 'Facturas de proveedor, recepciones, pagos y gastos.',
+    description: 'Solo procesos que generan asiento: facturas pagadas, gastos pagados y créditos de proveedor aplicados.',
     icon: Package,
-    moduleIds: ['supplierInvoice', 'purchaseReceipt', 'paymentMade', 'expense'],
+    moduleIds: ['supplierInvoice', 'expense', 'supplierCredit'],
   },
   {
     id: 'hr',
@@ -284,7 +289,9 @@ const ACCOUNTING_MODULE_GROUPS = [
 ]
 
 const getDefaultAccountMappings = () => Object.fromEntries(
-  BUILTIN_MODULES.map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, field.defaultCode]))]),
+  BUILTIN_MODULES
+    .filter(module => !OPERATIONAL_ONLY_MODULE_IDS.has(module.id))
+    .map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, field.defaultCode]))]),
 )
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -421,6 +428,8 @@ export function ConfiguracionContableView() {
   const [taxRate, setTaxRate] = useState(15)
   const [industry, setIndustry] = useState('RETAIL')
   const [accountMappings, setAccountMappings] = useState<Record<string, any>>({})
+  const accountMappingsRef = useRef<Record<string, any>>({})
+  const accountMappingSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
   const [customModules, setCustomModules] = useState<ConnectionModule[]>([])
   const configQuery = useAccountingQuery<any>(['config'], async (signal) => contabilidadService.getConfig(signal))
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)))
@@ -437,6 +446,7 @@ export function ConfiguracionContableView() {
         name: item.name,
         type: item.type,
         subtype: item.subtype,
+        detailType: item.detailType ?? (item.type === 'INCOME' || item.type === 'EXPENSE' ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
         parentId: item.parentId,
         isLeaf: !(item.children?.length),
         isActive: item.isActive,
@@ -449,7 +459,7 @@ export function ConfiguracionContableView() {
   }, [accountsQuery.data])
 
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
-  const [salesExpanded, setSalesExpanded] = useState(true)
+  const [salesExpanded, setSalesExpanded] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -466,9 +476,14 @@ export function ConfiguracionContableView() {
       Object.entries(configuredMappings).forEach(([moduleId, mapping]) => {
         mergedMappings[moduleId] = { ...(mergedMappings[moduleId] || {}), ...(mapping as Record<string, string>) }
       })
+      accountMappingsRef.current = mergedMappings
       setAccountMappings(mergedMappings)
       setCustomModules(cfg.customModules || [])
   }, [configQuery.data])
+
+  useEffect(() => {
+    accountMappingsRef.current = accountMappings
+  }, [accountMappings])
 
   useEffect(() => {
     if (configQuery.error) toast.error(configQuery.error.message || 'Error al cargar configuración')
@@ -479,24 +494,9 @@ export function ConfiguracionContableView() {
   const loadConnections = () => connectionsQuery.refetch()
 
   const handleSave = async () => {
-    const moduleDefinitions = [
-      ...BUILTIN_MODULES,
-      ...customModules.map(module => ({ id: module.id, label: module.label, fields: module.fields })),
-    ]
-    const invalidMappings = moduleDefinitions.flatMap(module => module.fields.flatMap(field => {
-      const code = accountMappings[module.id]?.[field.key] || field.defaultCode
-      const account = allAccounts.find(item => item.code === code)
-      if (!account) return []
-      const state = getAccountOptionState(account, field)
-      return state.disabled ? [`${module.label}: ${field.label} (${state.label})`] : []
-    }))
-    if (invalidMappings.length > 0) {
-      toast.error(`Corrige las cuentas no seleccionables antes de guardar: ${invalidMappings.slice(0, 2).join(' · ')}`)
-      return
-    }
     setSaving(true)
     try {
-      const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings, customModules }
+      const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings: accountMappingsRef.current, customModules }
       await contabilidadService.updateConfig(payload)
       toast.success('Configuración guardada. El motor usará estas cuentas en adelante.')
     } catch (e: any) {
@@ -505,6 +505,34 @@ export function ConfiguracionContableView() {
       setSaving(false)
     }
   }
+
+  const persistAccountMappings = useCallback((nextMappings: Record<string, any>) => {
+    const saveTask = accountMappingSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        setSaving(true)
+        try {
+          await contabilidadService.updateConfig({
+            autoGenEnabled,
+            defaultCurrency,
+            taxRate,
+            industry,
+            accountMappings: nextMappings,
+            customModules,
+          })
+          toast.success('Cuenta contable guardada automáticamente', { id: 'account-mapping-save' })
+        } catch (error: any) {
+          toast.error(
+            error?.response?.data?.message || error?.message || 'No se pudo guardar la cuenta contable',
+            { id: 'account-mapping-save' },
+          )
+        } finally {
+          setSaving(false)
+        }
+      })
+    accountMappingSaveQueueRef.current = saveTask
+    return saveTask
+  }, [autoGenEnabled, defaultCurrency, taxRate, industry, customModules])
 
   const handleSeedConfig = async () => {
     setSeeding(true)
@@ -520,12 +548,25 @@ export function ConfiguracionContableView() {
   }
 
   const updateMapping = (moduleId: string, fieldKey: string, value: string) => {
-    setAccountMappings(prev => {
-      const next = { ...prev }
-      if (!next[moduleId]) next[moduleId] = {}
-      next[moduleId] = { ...next[moduleId], [fieldKey]: value }
-      return next
-    })
+    const module = allModuleDefs.find(item => item.id === moduleId)
+    const field = module?.fields.find(item => item.key === fieldKey)
+    const account = allAccounts.find(item => item.code === value)
+    const optionState = field && account ? getAccountOptionState(account, field) : undefined
+    if (account && optionState?.disabled) {
+      toast.error(`No se puede seleccionar ${account.code}: ${optionState.label}`)
+      return
+    }
+
+    const next = {
+      ...accountMappingsRef.current,
+      [moduleId]: {
+        ...(accountMappingsRef.current[moduleId] || {}),
+        [fieldKey]: value,
+      },
+    }
+    accountMappingsRef.current = next
+    setAccountMappings(next)
+    void persistAccountMappings(next)
   }
 
   const toggleGroup = (id: string) => {
@@ -620,7 +661,7 @@ export function ConfiguracionContableView() {
 
   // builtin + custom modules combined for display
   const allModuleDefs = useMemo(() => {
-    const builtins = BUILTIN_MODULES.map(m => ({
+    const builtins = BUILTIN_MODULES.filter(m => !OPERATIONAL_ONLY_MODULE_IDS.has(m.id)).map(m => ({
       ...m,
       isBuiltin: true as const,
       fields: m.fields,
@@ -871,7 +912,7 @@ export function ConfiguracionContableView() {
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Save className="size-3.5 mr-1" />}
-            Guardar Cambios
+            Guardar configuración general
           </Button>
         </div>
       </div>
@@ -999,7 +1040,7 @@ export function ConfiguracionContableView() {
               <div className="min-w-0">
                 <CardTitle className="text-sm font-black uppercase tracking-tight">Configuración de cuentas para asientos contables por módulos y vistas</CardTitle>
                 <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-                  Define las cuentas Debe y Haber que alimentan el Libro Diario, el Libro Mayor y los reportes contables del ERP.
+                  Define las cuentas Debe y Haber que alimentan el Libro Diario, el Libro Mayor y los reportes contables del ERP. Cada selección se guarda automáticamente; los módulos que no utilices pueden permanecer sin configurar.
                 </p>
               </div>
             </button>
@@ -1164,9 +1205,9 @@ export function ConfiguracionContableView() {
                   <X className="size-3.5" />
                 </button>
               </div>
-              <div className="hidden max-h-60 overflow-y-auto sm:block">
-                <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-muted/30">
+              <div className="relative hidden max-h-60 overflow-auto sm:block">
+                <table className="w-full min-w-[560px] text-[11px]">
+                  <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                     <tr className="border-b border-border/20">
                       <th className="text-left px-3 py-1.5 font-bold text-muted-foreground">Código</th>
                       <th className="text-left px-3 py-1.5 font-bold text-muted-foreground">Nombre</th>
@@ -1213,17 +1254,31 @@ export function ConfiguracionContableView() {
         <CardHeader className="pb-3 px-5 pt-4">
           <div className="flex items-center gap-2">
             <BookOpen className="size-4 text-primary" />
-            <CardTitle className="text-sm font-black uppercase tracking-tight">Tipo detallados de Cuentas</CardTitle>
+            <CardTitle className="text-sm font-black uppercase tracking-tight">Tipos detallados de cuentas</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="px-5 pb-4 space-y-4">
           <p className="text-xs text-muted-foreground">
-            Subtipos de cuenta y su tipo de detalle asignado a cada cuenta del catálogo.
+            Clasificación financiera de cada cuenta. El catálogo incluye las obligaciones, provisiones, nómina, formación y beneficios que utiliza Recursos Humanos.
           </p>
+          <div className="flex flex-wrap gap-2" aria-label="Resumen de tipos de detalle">
+            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-[10px]">
+              <span className="size-1.5 rounded-full bg-sky-500" />
+              Balance General · {allAccounts.filter(acc => acc.detailType === 'BALANCE_SHEET').length}
+            </Badge>
+            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-[10px]">
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              Estado de Resultados · {allAccounts.filter(acc => acc.detailType === 'INCOME_STATEMENT').length}
+            </Badge>
+            <Badge variant="outline" className="gap-1.5 border-primary/30 bg-primary/5 px-2.5 py-1 text-[10px] text-primary">
+              <Users className="size-3" />
+              RRHH incluido · {allAccounts.filter(acc => HR_ACCOUNT_CODES.has(acc.code)).length} cuentas
+            </Badge>
+          </div>
           <div className="rounded-xl border border-border/30">
-            <div className="hidden overflow-x-auto sm:block">
-            <table className="w-full text-[11px]">
-              <thead className="bg-muted/30">
+            <div className="relative hidden max-h-[28rem] overflow-auto sm:block">
+            <table className="w-full min-w-[680px] text-[11px]">
+              <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                 <tr className="border-b border-border/20">
                   <th className="text-left px-3 py-2 font-bold text-muted-foreground">Subtipo de cuenta</th>
                   <th className="text-left px-3 py-2 font-bold text-muted-foreground">Nombre</th>

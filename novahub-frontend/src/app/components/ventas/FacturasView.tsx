@@ -6,6 +6,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { invoicesService, paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -13,7 +15,6 @@ import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
@@ -64,6 +65,9 @@ const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => 
   if (sourceType === 'CASH_SALE' || invoice?.registerId || invoice?.sessionId) {
     return { label: 'Desde Facturación por Caja', className: 'bg-cyan-500/10 text-cyan-500' };
   }
+  if (sourceType === 'ESTIMATE') {
+    return { label: 'Desde Cotización', className: 'bg-violet-500/10 text-violet-500' };
+  }
   if (sourceType === 'SALES_ORDER' || invoice?.salesOrderId) {
     return { label: 'Desde Orden de Venta', className: 'bg-orange-500/10 text-orange-500' };
   }
@@ -95,6 +99,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -103,20 +108,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
 
-  const [bypassActive, setBypassActive] = useState(() => {
-    return localStorage.getItem('nh-bypass-accounting') === 'true';
-  });
-
-  const toggleBypass = () => {
-    const newVal = !bypassActive;
-    setBypassActive(newVal);
-    localStorage.setItem('nh-bypass-accounting', String(newVal));
-    if (newVal) {
-      toast.success('Bypass de cuentas contables activado');
-    } else {
-      toast.info('Bypass de cuentas contables desactivado');
-    }
-  };
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const findProductForItem = (item: any) => products.find((product: any) => product.id === item?.productId)
@@ -1164,6 +1155,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
@@ -1173,10 +1165,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
-            </div>
-            <div className="flex items-center gap-2 bg-muted/30 border border-border/40 rounded-xl px-3 h-10 text-xs font-bold text-muted-foreground">
-              <Switch checked={bypassActive} onCheckedChange={toggleBypass} id="bypass-switch" />
-              <label htmlFor="bypass-switch" className="cursor-pointer select-none">Bypass Cuentas</label>
             </div>
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
@@ -1192,6 +1180,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         showHorizontalControls
         actionsWidth="w-52"
         fitContent
+        layoutMode={layoutMode}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
           onRowClick={(row) => setEditingId(row.id)}
         onBulkDelete={async (ids) => {

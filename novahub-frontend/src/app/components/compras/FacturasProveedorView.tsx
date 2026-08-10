@@ -9,12 +9,15 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { billsService, purchaseOrdersService, paymentsService, expensesService } from '../../services/compras.service';
+import { billsService, purchaseOrdersService } from '../../services/compras.service';
+import { storageService } from '../../services/storage.service';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
 import type { SupplierInvoice, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -48,6 +51,13 @@ const statusOpts = [
   { label: 'Reembolsada', value: 'REFUNDED', color: 'bg-muted/30 text-muted-foreground/50' },
 ];
 
+const getPurchaseOriginBadge = (invoice: Partial<SupplierInvoice> | null | undefined) => {
+  const type = String(invoice?.originType || '').toUpperCase();
+  if (type === 'PURCHASE_REQUEST') return 'Desde solicitud de compra';
+  if (type === 'PURCHASE_ORDER' || invoice?.purchaseOrderId) return 'Desde orden de compra';
+  return 'Factura directa';
+};
+
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
   const tt = (item.taxType || 'GRAVADO').toUpperCase();
   if (isTaxExempt(tt)) return { taxBase: 0, taxRate: 0, taxAmount: 0 };
@@ -74,6 +84,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     convertCurrentAmount,
   } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-supplier-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -84,6 +95,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierInvoice> | null>(null);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [nowMs] = useState(() => Date.now());
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -158,8 +170,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
     const data = [
-      ['number', 'supplier', 'date', 'dueDate', 'currency', 'status', 'description', 'quantity', 'unitPrice', 'total'],
-      ['FAC-001', 'Proveedor Ejemplo', '2026-01-15', '2026-02-15', 'NIO', 'PENDING', 'Servicio de consultoría', '1', '15000', '15000'],
+      ['number', 'supplier', 'date', 'dueDate', 'currency', 'status', 'description', 'quantity', 'unitPrice', 'total', 'taxType', 'taxRate', 'withholdingType', 'withholdingRate'],
+      ['FAC-001', 'Proveedor Ejemplo', '2026-01-15', '2026-02-15', 'NIO', 'PENDING', 'Servicio de consultoría', '1', '15000', '15000', 'GRAVADO', '15', 'IR_SERVICIOS_2', '2'],
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = data[0].map(() => ({ wch: 18 }));
@@ -189,7 +201,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         const total = Number(String(row.total || '0').replace(',', '.'));
         if (!description) { skipped++; errors.push(`Fila ${rowNum}: descripción del item es obligatoria`); continue; }
         if (total <= 0 && unitPrice <= 0) { skipped++; errors.push(`Fila ${rowNum}: total o precio unitario inválido`); continue; }
-        const finalTotal = total > 0 ? total : qty * unitPrice;
+        const safeQuantity = Math.max(qty, 1);
+        const finalTotal = total > 0 ? total : safeQuantity * unitPrice;
         const dateRaw = String(row.date || row.fecha || '').trim();
         const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
@@ -198,17 +211,28 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         const dueDate = Number.isNaN(dueDateParsed.getTime()) ? new Date(Date.now() + 30 * 86400000).toISOString() : dueDateParsed.toISOString();
         const currency = String(row.currency || row.moneda || 'NIO').trim().toUpperCase() === 'USD' ? 'USD' : 'NIO';
         const status = normalizeStatus(String(row.status || row.estado || 'PENDING'));
+        const taxType = String(row.taxtype || row.tipoiva || 'GRAVADO').trim().toUpperCase() || 'GRAVADO';
+        const taxRate = isTaxExempt(taxType) ? 0 : Number(String(row.taxrate || row.tasaiva || '15').replace(',', '.')) || 15;
+        const taxBase = isTaxExempt(taxType) ? 0 : finalTotal;
+        const taxAmount = taxBase * taxRate / 100;
+        const withholdingType = String(row.withholdingtype || row.retencion || 'NONE').trim().toUpperCase() || 'NONE';
+        const withholdingRate = withholdingType === 'NONE'
+          ? 0
+          : Number(String(row.withholdingrate || row.tasaretencion || '0').replace(',', '.')) || 0;
+        const withholdingBase = withholdingType === 'NONE' ? 0 : finalTotal;
+        const withholdingTotal = withholdingBase * withholdingRate / 100;
+        const unitPriceForImport = unitPrice > 0 ? unitPrice : finalTotal / safeQuantity;
         try {
           await billsService.create({
             supplierId: supplier.id,
             number: String(row.number || row.numero || `IMP-${Date.now()}-${idx}`).trim(),
             date, dueDate, currency, exchangeRate: globalRate, status,
             subtotal: finalTotal,
-            taxAmount: 0,
-            withholdingTotal: 0,
-            withholdingBase: 0,
-            total: finalTotal,
-            items: [{ description, quantity: Math.max(qty, 1), unitPrice: Math.max(unitPrice, finalTotal), taxType: 'GRAVADO', taxRate: 0, taxBase: 0, taxAmount: 0, withholdingType: 'NONE', withholdingRate: 0, withholdingBase: 0, accountId: null, costCenterId: null, total: finalTotal }],
+            taxAmount,
+            withholdingTotal,
+            withholdingBase,
+            total: finalTotal + taxAmount - withholdingTotal,
+            items: [{ description, quantity: safeQuantity, unitPrice: unitPriceForImport, taxType, taxRate, taxBase, taxAmount, withholdingType, withholdingRate, withholdingBase, accountId: null, costCenterId: null, total: finalTotal }],
           } as any);
           created++;
         } catch (e: any) {
@@ -267,60 +291,9 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     return total;
   };
 
-  const ensureFinanceExpenseForInvoice = async (invoice: Partial<SupplierInvoice>) => {
-    const nextStatus = String(invoice.status || '').toUpperCase();
-    if (!['PAID', 'PARTIAL'].includes(nextStatus)) return;
-    if (!invoice.id || !invoice.supplierId) return;
-
-    const amount = getBillPaymentAmount(invoice);
-    if (amount <= 0) return;
-
-    const supplier = suppliers.find((s) => s.id === invoice.supplierId);
-    const syncReference = `AUTO-INV-${invoice.id}`;
-    const [paymentsResponse, expensesResponse] = await Promise.all([
-      paymentsService.getAll({ supplierInvoiceId: invoice.id, page: 1, pageSize: 200 }).catch(() => ({ data: [] as any[] })),
-      expensesService.getAll({ search: syncReference, page: 1, pageSize: 50 }).catch(() => ({ data: [] as any[] })),
-    ]);
-    const existingPayments = (paymentsResponse as any)?.data || [];
-    const existingExpenses = (expensesResponse as any)?.data || [];
-
-    const paymentExists = existingPayments.some(
-      (payment: any) => payment.supplierInvoiceId === invoice.id || payment.reference === syncReference,
-    );
-    if (!paymentExists) {
-      await paymentsService.create({
-        supplierId: invoice.supplierId,
-        supplierInvoiceId: invoice.id,
-        date: invoice.date || new Date().toISOString(),
-        amount,
-        currency: (invoice.currency as any) || displayCurrency,
-        exchangeRate: invoice.exchangeRate || globalRate,
-        method: 'TRANSFER',
-        reference: syncReference,
-        notes: `Pago automático por factura ${invoice.number || invoice.id}`,
-      } as any);
-    }
-
-    const expenseExists = existingExpenses.some((expense: any) => expense.reference === syncReference);
-    if (!expenseExists) {
-      await expensesService.create({
-        supplierId: invoice.supplierId,
-        date: invoice.date || new Date().toISOString(),
-        amount,
-        currency: (invoice.currency as any) || displayCurrency,
-        exchangeRate: invoice.exchangeRate || globalRate,
-        category: 'FACTURA_PROVEEDOR',
-        description: `Pago de factura proveedor ${invoice.number || invoice.id}`,
-        paidTo: supplier?.name || 'Proveedor',
-        reference: syncReference,
-        status: 'PAID',
-      } as any);
-    }
-  };
-
   const columns: ColumnDef<SupplierInvoice>[] = [
-    { key: 'number',   header: 'Factura #',   width: '120px',
-      render: (val) => <span className="font-black font-mono text-primary text-xs">{val||'-'}</span> },
+    { key: 'number',   header: 'Factura #',   width: '170px',
+      render: (val, row) => <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span><Badge variant="outline" className="border-none bg-primary/10 px-1.5 py-0 text-[8px] font-black text-primary">{getPurchaseOriginBadge(row)}</Badge></div> },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Emisión',     width: '110px',
@@ -352,7 +325,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           </div>
         );
       } },
-    { key: 'status',   header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_INVOICES', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',   header: 'Estado',      width: '110px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -367,19 +340,6 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     try {
       const updatedResponse = await billsService.update(id as string, updates);
       const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-      const nextStatus = String(updatedInvoice?.status || updates.status || previousStatus).toUpperCase();
-      if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-        try {
-          await ensureFinanceExpenseForInvoice({
-            ...(currentInvoice || {}),
-            ...(updatedInvoice || {}),
-            id: String(id),
-            status: nextStatus,
-          });
-        } catch (syncError: any) {
-          toast.warning(`Factura actualizada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-        }
-      }
       toast.success('Factura actualizada');
       onRefresh();
     }
@@ -459,13 +419,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
 
         const createdResponse = await billsService.create(docToSave);
         const created = (createdResponse as any)?.data || createdResponse;
-        if (isPayingStatus(String(created?.status || localDoc.status || ''))) {
-          try {
-            await ensureFinanceExpenseForInvoice(created);
-          } catch (syncError: any) {
-            toast.warning(`Factura creada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-          }
-        }
+        if (attachmentFiles.length > 0 && created?.id) await uploadInvoiceAttachments(String(created.id));
         
         if ((localDoc as any)._sourceOrderId) {
           try {
@@ -479,28 +433,36 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         openEditor(null);
         setLocalDoc(null);
       } else {
-        const existingInvoice = data.find((x) => x.id === editingId);
-        const previousStatus = String(existingInvoice?.status || '').toUpperCase();
         const updatedResponse = await billsService.update(editingId!, docToSave);
-        const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-        const nextStatus = String(updatedInvoice?.status || docToSave.status || '').toUpperCase();
-        if (!isPayingStatus(previousStatus) && isPayingStatus(nextStatus)) {
-          try {
-            await ensureFinanceExpenseForInvoice({
-              ...(existingInvoice || {}),
-              ...(updatedInvoice || {}),
-              id: editingId!,
-              status: nextStatus,
-            });
-          } catch (syncError: any) {
-            toast.warning(`Factura guardada, pero no se pudo sincronizar pago/finanzas: ${syncError?.message || 'Error de sincronización'}`);
-          }
-        }
+        if (attachmentFiles.length > 0 && editingId) await uploadInvoiceAttachments(String(editingId));
         toast.success('Factura guardada');
       }
       onRefresh();
+      setAttachmentFiles([]);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura');
+    }
+  };
+
+  const uploadInvoiceAttachments = async (invoiceId: string) => {
+    for (const file of attachmentFiles) {
+      if (file.size > 10 * 1024 * 1024) throw new Error(`El comprobante "${file.name}" supera el límite de 10 MB`);
+      const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `facturas/${invoiceId}` });
+      await billsService.addAttachment(invoiceId, {
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        fileUrl: uploaded.uri,
+      });
+    }
+  };
+
+  const openInvoiceAttachment = async (attachment: any) => {
+    try {
+      const url = await storageService.resolveUrl(attachment.fileUrl);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo abrir el comprobante');
     }
   };
 
@@ -593,7 +555,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Factura de Proveedor' : `Factura ${localDoc.number||''}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle financiero</p>
+              <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle financiero</p><Badge variant="outline" className="border-none bg-primary/10 text-[8px] font-black text-primary">{getPurchaseOriginBadge(localDoc)}</Badge></div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -737,14 +699,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                    value={localDoc.status || 'PENDING'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
@@ -791,6 +746,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
                      {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
                   </span>
+                </div>
+                <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                  <div className="flex items-center gap-2">
+                    <Info className="size-3.5 shrink-0 text-primary" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Contabilización al pagar</p>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                    Una factura pendiente o parcial no genera asiento. Al liquidarla se registra un asiento único con inventario/gasto e IVA acreditable en Debe, y el medio de pago más IR/retenciones en Haber.
+                  </p>
+                  <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>
                 </div>
               </div>
             </CardContent>
@@ -905,6 +870,31 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </div>
           </CardContent>
         </Card>
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="space-y-3 p-6">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Comprobantes de la factura</p>
+              <p className="mt-1 text-xs text-muted-foreground">Puedes adjuntar uno o varios PDF, imágenes o archivos de soporte. Máximo 10 MB por archivo.</p>
+            </div>
+            {((localDoc.attachments || []) as any[]).length > 0 && (
+              <div className="space-y-2">
+                {((localDoc.attachments || []) as any[]).map((attachment: any) => (
+                  <div key={attachment.id} className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
+                    <FileDown className="size-4 shrink-0 text-primary" />
+                    <button type="button" className="min-w-0 flex-1 truncate text-left text-xs font-bold hover:text-primary" onClick={() => openInvoiceAttachment(attachment)}>{attachment.fileName}</button>
+                    {!isNew && canPerform('PURCHASES_INVOICES', 'edit') && (
+                      <Button variant="ghost" size="icon" className="size-7 shrink-0 text-rose-500" aria-label={`Eliminar ${attachment.fileName}`} onClick={async () => { try { await billsService.removeAttachment(String(editingId), attachment.id); setLocalDoc((prev: any) => prev ? { ...prev, attachments: (prev.attachments || []).filter((item: any) => item.id !== attachment.id) } : prev); toast.success('Comprobante eliminado'); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el comprobante'); } }}><Trash2 className="size-3.5" /></Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {((isNew && canPerform('PURCHASES_INVOICES', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES', 'edit'))) && (
+              <Input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv" onChange={(event) => setAttachmentFiles(Array.from(event.target.files || []))} className="h-9 text-xs" />
+            )}
+            {attachmentFiles.length > 0 && <p className="text-xs text-muted-foreground">Pendientes por subir: {attachmentFiles.map(file => file.name).join(', ')}</p>}
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -919,7 +909,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
               <p className="text-xs text-muted-foreground">
-                Columnas: <span className="font-mono">number, supplier, date, dueDate, currency, status, description, quantity, unitPrice, total</span>
+                Columnas: <span className="font-mono">number, supplier, date, dueDate, currency, status, description, quantity, unitPrice, total, taxType, taxRate, withholdingType, withholdingRate</span>
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 status: PENDING/PARTIAL/PAID/OVERDUE/REFUNDED · currency: NIO/USD
@@ -996,6 +986,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">{showValuationLegend ? `Cuentas por pagar · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Cuentas por pagar.'}</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="invoices" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas de proveedor" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES', 'create') && (
               <>
@@ -1004,7 +995,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

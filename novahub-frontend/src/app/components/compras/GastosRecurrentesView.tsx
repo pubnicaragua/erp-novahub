@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Trash2, ChevronLeft } from 'lucide-react';
+import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Trash2, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,6 +9,8 @@ import { recurringExpensesService } from '../../services/compras.service';
 import type { RecurringExpense, Supplier, Account } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -40,6 +42,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -94,13 +97,25 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
 
     { key: 'startDate',   header: 'Inicio',      width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
-    { key: 'status',      header: 'Estado',      width: '110px', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit'), type: 'select', options: statusOpts,
+    { key: 'status',      header: 'Estado',      width: '110px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringExpense>) => {
     try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); } 
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+  };
+
+  const handleStatusAction = async (row: RecurringExpense) => {
+    const current = String(row.status || '').toUpperCase();
+    const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    try {
+      await recurringExpensesService.update(row.id, { status } as any);
+      toast.success(status === 'ACTIVE' ? 'Gasto recurrente activado' : 'Gasto recurrente pausado');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado');
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -256,14 +271,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    value={localDoc.status || 'active'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Activa'}</Badge></div>
                 </div>
               </div>
             </CardContent>
@@ -344,13 +352,14 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Compromisos fijos periódicos</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-expenses" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {
@@ -365,6 +374,11 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
+              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title={String(row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar gasto recurrente' : 'Activar gasto recurrente'} aria-label={String(row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar gasto recurrente' : 'Activar gasto recurrente'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={() => void handleStatusAction(row)}>
+                  {String(row.status || '').toUpperCase() === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />}
+                </Button>
+              )}
               <Button title={canPerform('PURCHASES_EXPENSES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="RECURRING_EXPENSE" entityId={row.id} title="Auditoria del Gasto Recurrente" />
               {canPerform('PURCHASES_EXPENSES_REC', 'delete') && (

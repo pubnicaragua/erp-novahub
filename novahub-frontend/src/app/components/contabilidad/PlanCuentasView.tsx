@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, FolderTree,
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   Info, Activity, ArrowDownLeft, ArrowUpRight,
-  ChevronsLeft, ChevronsRight, Settings2, Check, Ban
+  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -161,6 +161,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [selectedAccount, setSelectedAccount] = useState<AccountNode | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [transactionsPage, setTransactionsPage] = useState(1);
@@ -275,24 +276,27 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 
   const filteredList = useMemo(() => {
-    if (!searchTerm.trim()) return flatList;
-    const q = searchTerm.toLowerCase();
-    const matched = new Set<string>();
-    const byNameOrCode = flatList.filter(a =>
-      a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q)
+    const q = searchTerm.trim().toLowerCase();
+    const matchesStatus = (account: AccountNode) => (
+      statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? account.isActive : !account.isActive)
     );
+    const statusFiltered = flatList.filter(matchesStatus);
+    const matched = new Set<string>();
+    const byNameOrCode = q
+      ? statusFiltered.filter(a => a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q))
+      : statusFiltered;
     for (const a of byNameOrCode) {
       matched.add(a.id);
       let parent = flatList.find(p => p.id === a.parentId);
       while (parent) { matched.add(parent.id); parent = flatList.find(p => p.id === parent!.parentId); }
     }
     const addChildren = (id: string) => {
-      const children = flatList.filter(c => c.parentId === id);
+      const children = flatList.filter(c => c.parentId === id && matchesStatus(c));
       for (const c of children) { matched.add(c.id); addChildren(c.id); }
     };
     for (const a of byNameOrCode) addChildren(a.id);
     return flatList.filter(a => matched.has(a.id));
-  }, [flatList, searchTerm]);
+  }, [flatList, searchTerm, statusFilter]);
 
   const filteredTree = useMemo(() => buildTree(filteredList), [filteredList]);
 
@@ -568,7 +572,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                     onClick={() => setPendingStatusAccount(account)}
                     title={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}
                   >
-                    <Ban className="size-3.5" />
+                    {account.isActive ? <Ban className="size-3.5" /> : <CircleCheck className="size-3.5 text-emerald-500" />}
                   </Button>
                 </>
               )}
@@ -610,7 +614,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <Pencil className="size-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => setPendingStatusAccount(account)} title={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'} aria-label={account.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}>
-                  <Ban className="size-3.5" />
+                  {account.isActive ? <Ban className="size-3.5" /> : <CircleCheck className="size-3.5 text-emerald-500" />}
                 </Button>
               </>
             )}
@@ -665,8 +669,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </div>
 
       {/* Filtros */}
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-        <div className="relative min-w-0 max-w-sm">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="relative min-w-[min(100%,16rem)] max-w-sm flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por código o nombre..."
@@ -675,6 +679,19 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             className="pl-8 h-9"
           />
         </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => setStatusFilter(value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+        >
+          <SelectTrigger className="h-9 w-full sm:w-[160px]" aria-label="Filtrar cuentas por estado">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Todas las cuentas</SelectItem>
+            <SelectItem value="ACTIVE">Solo activas</SelectItem>
+            <SelectItem value="INACTIVE">Solo inactivas</SelectItem>
+          </SelectContent>
+        </Select>
         <Button variant="ghost" size="icon" className="w-9 h-9" onClick={() => fetchAccounts(true)} title="Recargar">
           <RefreshCw className="w-4 h-4" />
         </Button>
@@ -718,18 +735,26 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               ) : filteredList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <FolderTree className="w-10 h-10 mb-2 opacity-40" />
-                  <p className="text-sm">{searchTerm ? 'Sin resultados de búsqueda' : 'No hay cuentas registradas'}</p>
-                  {!searchTerm && (
+                  <p className="text-sm">
+                    {searchTerm
+                      ? 'Sin resultados de búsqueda'
+                      : statusFilter === 'ACTIVE'
+                        ? 'No hay cuentas activas'
+                        : statusFilter === 'INACTIVE'
+                          ? 'No hay cuentas inactivas'
+                          : 'No hay cuentas registradas'}
+                  </p>
+                  {!searchTerm && statusFilter === 'ALL' && (
                     <Button variant="link" size="sm" onClick={() => openAddDialog()}>
                       Crear primera cuenta
                     </Button>
                   )}
                 </div>
               ) : (
-                <div className="max-h-[600px] overflow-x-hidden overflow-y-auto">
-                  <div className="divide-y divide-border">
+                <div className="max-h-[600px] overflow-auto">
+                  <div className="min-w-0 sm:min-w-[720px] divide-y divide-border">
                     {/* Header row */}
-                    <div className="hidden min-w-0 items-center gap-0 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
+                    <div className="sticky top-0 z-20 hidden min-w-0 items-center gap-0 border-b border-border/60 bg-card/95 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
                       <span className="px-2" aria-hidden="true" />
                       {ACCOUNT_COLUMN_DEFS.filter((column) => visibleAccountColumnKeys.includes(column.key)).map((column) => (
                         <span key={column.key} className={cn('min-w-0 truncate px-2', column.key === 'balance' && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
@@ -834,7 +859,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         variant="outline" size="sm" className="flex-1"
                         onClick={() => setPendingStatusAccount(selectedAccount)}
                       >
-                        <Ban className="mr-1 size-3.5" /> {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
+                        {selectedAccount.isActive ? <Ban className="mr-1 size-3.5" /> : <CircleCheck className="mr-1 size-3.5 text-emerald-500" />} {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
                       </Button>
                     </>
                   )}

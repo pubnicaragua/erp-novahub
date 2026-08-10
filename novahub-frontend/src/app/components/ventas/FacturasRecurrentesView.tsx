@@ -7,6 +7,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { recurringInvoicesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -89,6 +91,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -100,6 +103,50 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
   const resolveItemType = (item: any) => String(item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT')).toUpperCase();
+  const findProductForItem = (item: any) => products.find((product) => product.id === item?.productId)
+    || products.find((product) => product.code && (product.code === item?.code || product.code === item?.productCode))
+    || products.find((product) => String(product.name || '').trim().toLowerCase() === String(item?.description || '').trim().toLowerCase());
+  const getItemCatalog = (item: any) => {
+    const catalog = resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog;
+    if (!item?.productId || catalog.some((product) => product.id === item.productId)) return catalog;
+    const linkedProduct = findProductForItem(item);
+    return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
+  };
+
+  const handleCatalogItemChange = (idx: number, value: string) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])] as any[];
+    const itemType = resolveItemType(newItems[idx]);
+    const catalog = itemType === 'SERVICE' ? serviceCatalog : productCatalog;
+    const selectedProduct = catalog.find((product) => product.id === value);
+    const baseSalePrice = Number(selectedProduct?.salePrice ?? selectedProduct?.price ?? 0);
+    const unitPrice = localDoc.currency === 'USD' ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1) : baseSalePrice;
+    newItems[idx] = {
+      ...newItems[idx],
+      itemType,
+      productId: value,
+      serviceName: itemType === 'SERVICE' ? (selectedProduct?.name || newItems[idx].serviceName || '') : '',
+      description: selectedProduct?.name || newItems[idx].description || '',
+      unitPrice,
+      total: Number(newItems[idx].quantity || 1) * unitPrice,
+    };
+    const calc = recalcTotals(newItems);
+    setLocalDoc({ ...localDoc, ...calc, items: calc.items });
+  };
+
+  const handlePriceListChange = (idx: number, priceListId: string, result: { unitPrice?: number; priceMissing: boolean }) => {
+    if (!localDoc) return;
+    const newItems = [...(localDoc.items || [])] as any[];
+    newItems[idx] = {
+      ...newItems[idx],
+      priceListId,
+      unitPrice: result.unitPrice ?? 0,
+      priceMissing: result.priceMissing,
+      total: Number(newItems[idx].quantity || 1) * Number(result.unitPrice ?? 0),
+    };
+    const calc = recalcTotals(newItems);
+    setLocalDoc({ ...localDoc, ...calc, items: calc.items, priceListId });
+  };
 
   const calculateRates = (doc: any) => {
     const subtotal = Number(doc?.subtotal || 0);
@@ -492,7 +539,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex flex-wrap gap-2">
-              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
+              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
                 const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
               }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
@@ -500,86 +547,40 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-2">Tipo</div><div className="col-span-3">Producto / Servicio</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div><div className="col-span-1"></div>
+                <div className={cn('col-span-4', pricingMode === 'individual' && 'col-span-3')}>Producto / Servicio</div>
+                {pricingMode === 'individual' && <div className="col-span-3">Impuestos y retenciones</div>}
+                <div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'col-span-1')}>Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="recurrent" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div className="col-span-2">
-                    <label className="flex items-center gap-2 text-[10px] font-bold uppercase">
-                      <input
-                        type="checkbox"
-                        checked={resolveItemType(item) === 'SERVICE'}
-                        onChange={(e) => {
-                          const ni = [...(localDoc.items || [])];
-                          const itemType = e.target.checked ? 'SERVICE' : 'PRODUCT';
-                          ni[idx] = {
-                            ...ni[idx],
-                            itemType,
-                            productId: itemType === 'PRODUCT' ? ni[idx].productId : '',
-                            serviceName: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : '',
-                            description: itemType === 'SERVICE' ? (ni[idx].serviceName || ni[idx].description || '') : ni[idx].description,
-                          };
-                          setLocalDoc({ ...localDoc, items: ni });
-                        }}
-                      />
-                      {resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'}
-                    </label>
-                  </div>
-                  <div className="col-span-3 min-w-0">
-                    {resolveItemType(item) === 'SERVICE' ? (
-                      <div className="space-y-1">
+                  <div className={cn('min-w-0 xl:col-span-4', pricingMode === 'individual' && 'xl:col-span-3')}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <div className="min-w-0 flex-1">
                         <Combobox
-                          options={serviceCatalog.map(p => ({ label: `Servicio · ${p.code} - ${p.name}`, value: p.id }))}
+                          options={getItemCatalog(item).map((product: any) => ({
+                            label: `${String(product.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code || ''} - ${product.name}`,
+                            value: product.id,
+                          }))}
                           value={item.productId || ''}
-                          onChange={(val) => {
-                            const ni = [...(localDoc.items || [])];
-                            const service = serviceCatalog.find(p => p.id === val);
-                            const baseSalePrice = Number(service?.salePrice ?? service?.price ?? 0);
-                            const unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
-                            ni[idx] = { ...ni[idx], itemType: 'SERVICE', productId: val, serviceName: service?.name || ni[idx].serviceName || '', description: service?.name || ni[idx].description || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
-                            const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc });
-                          }}
-                          placeholder="Seleccionar servicio..."
-                          disabled={!localDoc?.customerId}
-                        />
-                        {!item.productId && <Input
-                          value={item.serviceName || item.description || ''}
-                          onChange={(e) => {
-                            const ni = [...(localDoc.items || [])];
-                            ni[idx] = { ...ni[idx], serviceName: e.target.value, description: e.target.value };
-                            setLocalDoc({ ...localDoc, items: ni });
-                          }}
-                          className="h-8 text-xs"
-                          placeholder="O escribir servicio personalizado"
-                        />}
-                        <SalesLinePriceListSelect
-                          productId={item.productId}
-                          productCode={serviceCatalog.find((product) => product.id === item.productId)?.code || item.code}
-                          productName={item.description}
-                          itemType={item.itemType}
-                          value={item.priceListId}
-                          defaultPriceListId={localDoc?.priceListId}
-                          currency={localDoc?.currency}
-                          exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
-                          onChange={(priceListId, result) => {
-                            const ni = [...(localDoc.items || [])] as any[];
-                            ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing };
-                            const calc = recalcTotals(ni);
-                            setLocalDoc({ ...localDoc, ...calc, priceListId });
-                          }}
+                          onChange={(value) => handleCatalogItemChange(idx, value)}
+                          placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                         />
                       </div>
-                    ) : (
-                      <div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><Combobox options={productCatalog.map(p => ({ label: `Producto · ${p.code} - ${p.name}`, value: p.id }))} value={item.productId || ''}
-                        onChange={(val) => { const ni = [...(localDoc.items || [])]; const prod = productCatalog.find(p => p.id === val);
-                          const baseSalePrice = Number(prod?.salePrice ?? prod?.price ?? 0);
-                          const unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
-                          ni[idx] = { ...ni[idx], itemType: 'PRODUCT', productId: val, description: prod?.name || '', unitPrice, total: Number(ni[idx].quantity || 1) * unitPrice };
-                          const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} placeholder="Seleccionar producto..." /></div><SalesLinePriceListSelect productId={item.productId} productCode={productCatalog.find((product) => product.id === item.productId)?.code || item.code} value={item.priceListId} defaultPriceListId={localDoc?.priceListId} currency={localDoc?.currency} exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} onChange={(priceListId, result) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing }; const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc, priceListId }); }} /></div>
-                    )}
+                      <SalesLinePriceListSelect
+                        productId={item.productId}
+                        productCode={findProductForItem(item)?.code || item.code}
+                        productName={item.description}
+                        itemType={item.itemType}
+                        value={item.priceListId}
+                        defaultPriceListId={localDoc?.priceListId}
+                        currency={localDoc?.currency}
+                        exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+                        onChange={(priceListId, result) => handlePriceListChange(idx, priceListId, result)}
+                      />
+                    </div>
                     {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   </div>
-                  {pricingMode === 'individual' && <div className="col-span-3 flex min-w-0 flex-wrap items-end gap-1.5 text-[10px] xl:col-span-3">
+                  {pricingMode === 'individual' && <div className="col-span-3 flex min-w-0 flex-wrap items-end gap-1.5 text-[10px]">
                     <label className="flex h-8 items-center gap-1 rounded-md bg-muted/30 px-2 font-black"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                       const ni = [...(localDoc.items || [])];
                       ni[idx] = { ...ni[idx], taxRate: event.target.checked ? 15 : 0 };
@@ -602,7 +603,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                   <div className="col-span-2"><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                       const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
-                  <div className="col-span-2 text-right"><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
+                  <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>
@@ -632,6 +633,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="recurring" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -645,6 +647,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          layoutMode={layoutMode}
           actions={(row) => (
             <div className="flex items-center gap-1">
                {canPerform('SALES_RECURRING', 'edit') && (

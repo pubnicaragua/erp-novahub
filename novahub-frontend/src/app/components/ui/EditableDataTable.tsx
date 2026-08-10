@@ -686,23 +686,82 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2">
                 {columns.map((col) => {
+                  const colKey = col.key as string;
                   const value = row[col.key as string];
+                  const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;
                   return (
-                    <div key={col.key as string} className="min-w-0">
-                      <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
-                        {col.header}
-                      </p>
-                      <div className="min-w-0 truncate text-sm font-medium text-foreground">
-                        {col.render ? col.render(value, row) : String(value ?? '—')}
+                    <div
+                      key={colKey}
+                      className={cn('min-w-0 rounded-xl', col.editable && 'transition-colors hover:bg-primary/5')}
+                      onClick={(event) => {
+                        if (!col.editable || editOnPencilOnly) return;
+                        event.stopPropagation();
+                        handleCellClick(rowId, colKey, value, col.editable);
+                      }}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="min-w-0 text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                          {col.header}
+                        </p>
+                        {col.editable && !isEditing && (
+                          <button
+                            type="button"
+                            title={`Editar ${col.header}`}
+                            aria-label={`Editar ${col.header}`}
+                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-primary hover:bg-primary/10"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleCellClick(rowId, colKey, value, col.editable);
+                            }}
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                        )}
                       </div>
+                      {isEditing ? (
+                        col.type === 'select' ? (
+                          <select
+                            value={editValue ?? ''}
+                            onChange={(event) => {
+                              const newValue = event.target.value;
+                              setEditValue(newValue);
+                              void handleSave(rowId, colKey, newValue);
+                            }}
+                            onBlur={() => void handleSave(rowId, colKey)}
+                            onClick={(event) => event.stopPropagation()}
+                            className="h-9 w-full rounded-lg border border-primary bg-background px-2 text-sm font-medium text-foreground outline-none"
+                          >
+                            {col.options?.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            ref={inputRef}
+                            type={col.type === 'datetime-local' ? 'datetime-local' : col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
+                            value={editValue ?? ''}
+                            onChange={(event) => setEditValue(event.target.value)}
+                            onBlur={() => void handleSave(rowId, colKey)}
+                            onKeyDown={(event) => handleKeyDown(event, rowId, colKey)}
+                            onClick={(event) => event.stopPropagation()}
+                            className="h-9 w-full rounded-lg border-primary text-sm font-medium"
+                          />
+                        )
+                      ) : (
+                        <div className="min-w-0 break-words text-sm font-medium text-foreground">
+                          {col.render ? col.render(value, row) : String(value ?? '—')}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
               {(actions || onRowDelete) && (
-                <div className="flex items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
                   {actions ? actions(row) : (
                     <Button
                       type="button"

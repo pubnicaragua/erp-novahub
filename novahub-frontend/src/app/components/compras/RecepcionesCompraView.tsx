@@ -16,6 +16,8 @@ import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from 'sonner';
 import { TaxTypeSelect } from '../ui/TaxSelector';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -49,6 +51,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-receipts-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -122,7 +125,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           {rechazados.length > 0 && <span className="text-[9px] font-black text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-full">{rechazados.length} recha.</span>}
         </div>;
       } },
-    { key: 'status',    header: 'Estado',      width: '130px', editable: false, type: 'select', options: statusOpts,
+    { key: 'status',    header: 'Estado',      width: '130px',
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -544,14 +547,7 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_RECEIPTS', 'create') : !canPerform('PURCHASES_RECEIPTS', 'edit')}
-                    value={localDoc.status || 'PENDING'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, status: e.target.value as any })}
-                    className={cn("h-8 w-full rounded-md border border-input px-2 text-xs font-bold uppercase", currentStatus?.color || 'bg-background')}
-                  >
-                    {statusOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
                 </div>
               </div>
             </CardContent>
@@ -815,13 +811,14 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Inventario entregado por proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
               <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

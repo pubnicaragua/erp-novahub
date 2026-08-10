@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import * as XLSX from 'xlsx';
 import { 
   Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp
@@ -111,7 +112,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'balance', 'status']);
   const [creating, setCreating] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
   const [newCustomer, setNewCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
   const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
   const [showTutorial, setShowTutorial] = useState(false);

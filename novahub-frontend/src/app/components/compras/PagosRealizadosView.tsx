@@ -5,10 +5,12 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { paymentsService, billsService } from '../../services/compras.service';
+import { paymentsService } from '../../services/compras.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -44,6 +46,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [bills, setBills] = useState<SupplierInvoice[]>([]);
@@ -171,73 +174,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       const payload = { ...updates } as any;
       if (payload.method) payload.method = normalizeMethod(payload.method);
       await paymentsService.update(id as string, payload);
-      const updatedPayment = {
-        ...(data.find((p) => p.id === id) || {}),
-        ...payload,
-      } as Partial<PaymentMade>;
-      if (updatedPayment.supplierInvoiceId && Number(updatedPayment.amount || 0) > 0) {
-        await syncLinkedInvoiceStatus(updatedPayment, String(id));
-      }
       toast.success('Pago actualizado');
       onRefresh();
     }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
-  };
-
-  const syncLinkedInvoiceStatus = async (paymentDraft: Partial<PaymentMade>, paymentIdToUpsert?: string) => {
-    const invoiceId = String(paymentDraft.supplierInvoiceId || '');
-    if (!invoiceId) return;
-
-    const [invoiceResponse, paymentsResponse] = await Promise.all([
-      billsService.getById(invoiceId),
-      paymentsService.getAll({ supplierInvoiceId: invoiceId, page: 1, pageSize: 200 }),
-    ]);
-    const invoice = (invoiceResponse as any)?.data || invoiceResponse;
-    const allPayments = ((paymentsResponse as any)?.data || []) as PaymentMade[];
-
-    const paymentsForInvoice = allPayments.filter((payment) => String(payment.supplierInvoiceId || '') === invoiceId);
-    const nextAmount = Number(paymentDraft.amount || 0);
-    const nextPaymentEntry = {
-      id: paymentIdToUpsert || `draft-${Date.now()}`,
-      supplierInvoiceId: invoiceId,
-      amount: nextAmount,
-    };
-
-    const mergedPayments = paymentIdToUpsert
-      ? (() => {
-          const replaced = paymentsForInvoice.map((payment) =>
-            String(payment.id) === String(paymentIdToUpsert) ? ({ ...payment, ...nextPaymentEntry } as any) : payment,
-          );
-          const exists = replaced.some((payment) => String(payment.id) === String(paymentIdToUpsert));
-          return exists ? replaced : [...replaced, nextPaymentEntry as any];
-        })()
-      : [...paymentsForInvoice, nextPaymentEntry as any];
-
-    const totalPaidBase = mergedPayments.reduce((acc, payment: any) => acc + (
-      payment.baseAmount !== null && payment.baseAmount !== undefined
-        ? Number(payment.baseAmount)
-        : toBaseAmount(Number(payment.amount || 0), payment.currency, payment.exchangeRate)
-    ), 0);
-    const invoiceTotal = Number(invoice?.total || 0);
-    const invoiceCurrency = String(invoice?.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
-    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(invoice?.exchangeRate || globalRate || 1);
-    const invoiceTotalBase = invoice?.baseTotal !== null && invoice?.baseTotal !== undefined
-      ? Number(invoice.baseTotal)
-      : toBaseAmount(invoiceTotal, invoiceCurrency, invoiceRate);
-    const appliedBase = Math.min(invoiceTotalBase, totalPaidBase);
-    const nextAmountPaid = invoiceCurrency === baseCurrency
-      ? appliedBase
-      : baseCurrency === 'NIO' && invoiceCurrency === 'USD'
-        ? appliedBase / invoiceRate
-        : appliedBase * invoiceRate;
-    const nextBalance = Math.max(invoiceTotal - nextAmountPaid, 0);
-    const nextStatus = nextAmountPaid <= 0 ? 'PENDING' : nextBalance <= 0 ? 'PAID' : 'PARTIAL';
-
-    await billsService.update(invoiceId, {
-      amountPaid: nextAmountPaid,
-      balance: nextBalance,
-      status: nextStatus as any,
-    } as any);
   };
 
   const handleSaveDoc = async () => {
@@ -263,27 +203,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       }
       if (editingId === 'NEW') {
         const created = await paymentsService.create(payload);
-        const createdPayment = (created as any)?.data || created;
-        if (payload.supplierInvoiceId) {
-          try {
-            await syncLinkedInvoiceStatus(
-              { ...payload, id: createdPayment?.id || createdPayment?.number },
-              String(createdPayment?.id || ''),
-            );
-          } catch (syncError: any) {
-            toast.warning(`Pago registrado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
-          }
-        }
         toast.success('Pago registrado exitosamente');
       } else {
         await paymentsService.update(editingId!, payload);
-        if (payload.supplierInvoiceId) {
-          try {
-            await syncLinkedInvoiceStatus({ ...payload, id: editingId }, String(editingId));
-          } catch (syncError: any) {
-            toast.warning(`Pago guardado, pero no se pudo actualizar estado de la factura: ${syncError?.message || 'Error de sincronización'}`);
-          }
-        }
         toast.success('Pago guardado');
       }
       setEditingId(null);
@@ -577,13 +499,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && (
                <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
              )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             try {
               for (const id of ids) {

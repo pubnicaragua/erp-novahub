@@ -6,6 +6,8 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -46,6 +48,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -292,6 +295,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="payments" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos recibidos" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -305,6 +309,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           pagination={pagination}
           onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular'); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          layoutMode={layoutMode}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
