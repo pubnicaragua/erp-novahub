@@ -547,9 +547,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className={cn('col-span-4', pricingMode === 'individual' && 'col-span-3')}>Producto / Servicio</div>
-                {pricingMode === 'individual' && <div className="col-span-3">Impuestos y retenciones</div>}
-                <div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'col-span-1')}>Total</div><div className="col-span-1"></div>
+                <div className={cn('col-span-4', pricingMode === 'individual' && 'col-span-3')}>Producto / Servicio</div>{pricingMode === 'individual' && <div className="col-span-2 flex gap-1.5"><span className="flex-1">Aplicar</span><span className="flex-1 text-right">Desc.</span></div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div><div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>{pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}<div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Total</div><div className="col-span-1"></div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
                 <div key={item.id || idx} data-item-layout="recurrent" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
@@ -580,30 +578,43 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                     </div>
                     {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   </div>
-                  {pricingMode === 'individual' && <div className="col-span-3 flex min-w-0 flex-wrap items-end gap-1.5 text-[10px]">
-                    <label className="flex h-8 items-center gap-1 rounded-md bg-muted/30 px-2 font-black"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
+                  {pricingMode === 'individual' && <div className="col-span-2 flex min-w-0 flex-wrap items-start gap-1.5 text-[10px] xl:col-span-2">
+                    <label className="flex h-9 items-center gap-1 rounded-md bg-muted/30 px-2 font-black"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                       const ni = [...(localDoc.items || [])];
                       ni[idx] = { ...ni[idx], taxRate: event.target.checked ? 15 : 0 };
                       const recalculated = recalcTotals(ni, 'individual');
                       setLocalDoc({ ...localDoc, ...recalculated });
                       if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
                     }} /> IVA 15%</label>
-                    <Input type="number" min="0" max="100" value={item.discount || ''} placeholder="Desc. %" onChange={(event) => {
-                      const ni = [...(localDoc.items || [])];
-                      ni[idx] = { ...ni[idx], discount: Math.min(100, Math.max(0, Number(event.target.value) || 0)) };
-                      const recalculated = recalcTotals(ni, 'individual');
-                      setLocalDoc({ ...localDoc, ...recalculated });
-                      if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
-                    }} className="h-8 min-w-0 flex-1 text-right text-xs" />
+                    <div className="relative min-w-0 flex-1">
+                      <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
+                        const ni = [...(localDoc.items || [])];
+                        ni[idx] = { ...ni[idx], discount: Math.min(100, Math.max(0, Number(event.target.value) || 0)) };
+                        const recalculated = recalcTotals(ni, 'individual');
+                        setLocalDoc({ ...localDoc, ...recalculated });
+                        if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
+                      }} className="w-full pr-6 text-left text-xs" />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+                    </div>
                     <SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact onChange={(option) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], irRate: Number(option?.rate || 0), irTaxId: option?.id || null }; const recalculated = recalcTotals(ni, 'individual'); setLocalDoc({ ...localDoc, ...recalculated }); }} />
                   </div>}
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
+                  <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
                       const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
-                  <div className="col-span-2"><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
+                  <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
                       const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }} /></div>
-                  <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}><span className="text-xs font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
+                  {pricingMode === 'individual' && (
+                    <div className="col-span-2 flex items-center justify-end xl:col-span-1">
+                      <Input
+                        type="text"
+                        readOnly
+                        value={formatSalesAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100)}
+                        className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:ring-0 focus-visible:border-transparent"
+                      />
+                    </div>
+                  )}
+                  <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}><span className="text-sm font-black">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span></div>
                   <div className="col-span-1 flex justify-end"><Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
                     onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); const calc = recalcTotals(ni); setLocalDoc({ ...localDoc, ...calc }); }}><Trash2 className="size-3" /></Button></div>
                 </div>

@@ -721,9 +721,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className={cn('col-span-6', pricingMode === 'individual' && 'xl:col-span-5')}>Descripción</div>
-                {pricingMode === 'individual' && <div className="col-span-2" />}
+                {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
+                  <div>Aplicar</div>
+                  <div className="text-right">Desc.</div>
+                </div>}
                 <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Cant.</div>
-                <div className="col-span-2 text-right">Precio U.</div>
+                <div className={cn('col-span-2 text-right', pricingMode === 'individual' && 'xl:col-span-1')}>Precio U.</div>
+                {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
@@ -831,8 +835,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     )}
                   </div>
                   {pricingMode === 'individual' && (
-                    <div className="col-span-2 mt-0 flex min-w-0 items-start gap-2 self-start text-[10px]">
-                      <label className="flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                    <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
                           <input
                             type="checkbox"
@@ -845,11 +849,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               void handleUpdate(localDoc!.id, next as any);
                             }}
                           />
-                          <span className="text-xs">Aplicar</span>
+                          <span className="text-xs">IVA</span>
                         </span>
                       </label>
-                      <label className="relative flex-1">
-                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desc.</span>
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <Input
                           type="number"
                           min="0"
@@ -862,8 +865,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             setLocalDoc({ ...localDoc, ...next } as any);
                             void handleUpdate(localDoc!.id, next as any);
                           }}
-                          className="h-8 w-full rounded-md bg-muted/30 pl-12 text-right text-xs"
+                          className="w-full pr-6 text-left text-xs"
                         />
+                        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
                       </label>
                     </div>
                   )}
@@ -898,7 +902,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       className="h-8 text-xs text-right" 
                     />
                   </div>
-                  <div className="col-span-2 min-w-0">
+                  <div className={cn('col-span-2 min-w-0', pricingMode === 'individual' && 'xl:col-span-1')}>
                     <Input 
                       min="0"
                       type="text"
@@ -921,8 +925,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       className="h-8 text-xs text-right" 
                     />
                   </div>
+                  {pricingMode === 'individual' && (
+                    <div className="col-span-2 flex items-center justify-end xl:col-span-1">
+                      <Input
+                        type="text"
+                        readOnly
+                        value={formatSalesAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100)}
+                        className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:ring-0 focus-visible:border-transparent"
+                      />
+                    </div>
+                  )}
                   <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
+                    <span className="text-sm font-black w-16 text-right">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(item.total)}</span>
                     <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);

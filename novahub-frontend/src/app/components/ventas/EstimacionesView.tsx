@@ -605,9 +605,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             <div className="space-y-2">
               <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                 <div className="col-span-5">Descripción</div>
-                {pricingMode === 'individual' && <div className="col-span-2" />}
+                {pricingMode === 'individual' && <div className="col-span-2 grid grid-cols-2 gap-1.5">
+                  <div>Aplicar</div>
+                  <div className="text-right">Desc.</div>
+                </div>}
                 <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Cant.</div>
-                <div className="col-span-2 text-right">Precio U.</div>
+                <div className={cn("col-span-2 text-right", pricingMode === 'individual' && "xl:col-span-1")}>Precio U.</div>
+                {pricingMode === 'individual' && <div className="col-span-2 text-right xl:col-span-1">IVA</div>}
                 <div className="col-span-2 text-right">Total</div>
               </div>
               {(localDoc.items || []).map((item: any, idx: number) => (
@@ -668,7 +672,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   </div>
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
-                      <label className="relative flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
@@ -677,17 +681,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                             setLocalDoc({ ...localDoc, ...recalculated });
                             void handleUpdate(localDoc!.id, recalculated as any);
                           }} />
-                          <span className="text-xs">Aplicar</span>
+                          <span className="text-xs">IVA</span>
                         </span>
                       </label>
-                      <label className="relative flex min-w-0 flex-1 flex-col items-start gap-1 font-black uppercase tracking-wider">
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
                           nextItems[idx] = { ...nextItems[idx], discount: Number(event.target.value) || 0 };
                           const recalculated = recalcIndividualTotals(nextItems);
                           setLocalDoc({ ...localDoc, ...recalculated });
                           void handleUpdate(localDoc!.id, recalculated as any);
-                        }} className="h-8 w-full rounded-md bg-muted/30 text-right text-xs" />
+                        }} className="w-full pr-6 text-left text-xs" />
+                        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
                       </label>
                     </div>
                   )}
@@ -711,14 +716,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
                     <Input 
                       type="text" 
                       min="0"
                       value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)}
                       placeholder="0"
                       readOnly
-                      className="h-8 bg-muted/20 text-right text-xs"
+                      className="w-full text-right text-xs"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems[idx].unitPrice = Number(e.target.value);
@@ -733,8 +738,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
                     />
                   </div>
+                  {pricingMode === 'individual' && (
+                    <div className="flex min-w-0 h-9 items-center justify-end xl:col-span-1">
+                      <Input
+                        type="text"
+                        readOnly
+                        value={formatSalesAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100)}
+                        className="h-9 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:ring-0 focus-visible:border-transparent"
+                      />
+                    </div>
+                  )}
                   <div className="flex min-w-0 items-center justify-end gap-3 whitespace-nowrap xl:col-span-2">
-                    <span className="min-w-[7rem] shrink-0 text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}{formatSalesAmount(item.total)}</span>
+                    <span className="min-w-[7rem] shrink-0 text-right text-sm font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}{formatSalesAmount(item.total)}</span>
                     <Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
