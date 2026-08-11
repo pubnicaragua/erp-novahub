@@ -78,7 +78,7 @@ const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => 
     String(invoice?.number || '').toUpperCase().startsWith('FAC-REC-') ||
     String(invoice?.notes || '').toLowerCase().includes('desde recurrente')
   ) {
-    return { label: 'Desde Factura Recurrente', className: 'bg-purple-500/10 text-purple-500' };
+    return { label: 'Desde Facturas Recurrentes', className: 'bg-purple-500/10 text-purple-500' };
   }
   return null;
 };

@@ -91,6 +91,21 @@ export const contabilidadService = {
   getFixedAssets: (signal?: AbortSignal) => api.get<any[]>('/accounting/fixed-assets', { signal }),
   registerFixedAsset: (data: any) => api.post<any>('/accounting/fixed-assets', data),
 
+  // Activos Fijos (nuevo módulo)
+  getFixedAssetCategories: (signal?: AbortSignal) => api.get<any[]>('/accounting/fixed-assets/categories', { signal }),
+  seedFixedAssetCategories: () => api.post<any>('/accounting/fixed-assets/categories/seed', {}),
+  createFixedAssetCategory: (data: any) => api.post<any>('/accounting/fixed-assets/categories', data),
+  updateFixedAssetCategory: (id: string, data: any) => api.patch<any>(`/accounting/fixed-assets/categories/${id}`, data),
+  deleteFixedAssetCategory: (id: string) => api.delete(`/accounting/fixed-assets/categories/${id}`),
+  getFixedAssetsDetail: (signal?: AbortSignal) => api.get<any[]>('/accounting/fixed-assets/records', { signal }),
+  getFixedAssetDetail: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/fixed-assets/${id}`, { signal }),
+  createFixedAsset: (data: any) => api.post<any>('/accounting/fixed-assets/records', data),
+  updateFixedAsset: (id: string, data: any) => api.patch<any>(`/accounting/fixed-assets/${id}`, data),
+  generateFixedAssetProjection: (id: string) => api.post<any>(`/accounting/fixed-assets/${id}/depreciation/generate-projection`, {}),
+  processFixedAssetDepreciation: (period: string) => api.post<any>('/accounting/fixed-assets/depreciation/process', { period }),
+  validateFixedAssetImport: (rows: any[]) => api.post<any>('/accounting/fixed-assets/validate-import', { rows }),
+  importFixedAssets: (rows: any[]) => api.post<any>('/accounting/fixed-assets/import', { rows }),
+
   // Import CSV
   importCsv: (data: { type: string; rows: any[][] }) => api.post<any>('/accounting/import/csv', data),
 

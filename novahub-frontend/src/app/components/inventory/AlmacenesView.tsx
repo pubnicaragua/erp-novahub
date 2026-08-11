@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { SucursalesView } from './SucursalesView';
-import { Store } from 'lucide-react';
+
 import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
@@ -32,7 +33,7 @@ interface EditingWarehouse {
   location: string;
   type: string;
   parentId: string | null;
-  inventoryAccountId: string | null;
+  inventoryAccountId?: string | null;
   isNew?: boolean;
 }
 
@@ -71,15 +72,29 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
+const flattenAccounts = (list: any[]): any[] => {
+  const result: any[] = [];
+  const recurse = (items: any[]) => {
+    for (const item of items) {
+      result.push(item);
+      if (item.children && Array.isArray(item.children) && item.children.length > 0) {
+        recurse(item.children);
+      }
+    }
+  };
+  recurse(list);
+  return result;
+};
+
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [isManageSucursalesDialogOpen, setIsManageSucursalesDialogOpen] = useState(false);
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
   const [accounts, setAccounts] = useState<any[]>([]);
+  const flatAccounts = flattenAccounts(accounts);
   const cameFromSetupRef = useRef(false);
 
   // Estados de Cajas
@@ -98,6 +113,10 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       console.error(e);
     }
   };
+
+  useEffect(() => {
+    fetchSucursales();
+  }, [warehouses]);
 
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
@@ -199,7 +218,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       }
       if (context.action === 'open-branch-form') {
         setAutoOpenSucursalForm(true);
-        setIsManageSucursalesDialogOpen(true);
       }
     }, 250);
   }, []);
@@ -365,21 +383,33 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </Select>
         </TableCell>
         <TableCell>
-          <Select 
-            value={warehouse.inventoryAccountId || 'none'} 
-            onValueChange={(v) => handleUpdateField(warehouse.id, 'inventoryAccountId', v === 'none' ? null : v)}
+          <Combobox
+            value={warehouse.inventoryAccountId || ''}
+            onChange={(v) => handleUpdateField(warehouse.id, 'inventoryAccountId', v || null)}
+            options={flatAccounts.map((a: any) => {
+              const type = String(a.type || '').toUpperCase();
+              const typeLabel = {
+                ASSET: 'Activo',
+                LIABILITY: 'Pasivo',
+                EQUITY: 'Capital',
+                INCOME: 'Ingreso',
+                EXPENSE: 'Gasto',
+              }[type] || type || 'Sin tipo';
+              const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
+              const isUsable = a.isActive !== false;
+              const usabilityLabel = isUsable ? '' : ' · No acepta registros';
+              return {
+                label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
+                value: a.id,
+                description: a.code,
+                disabled: !isUsable
+              };
+            })}
+            placeholder="Seleccionar cuenta..."
+            searchPlaceholder="Buscar por código o nombre..."
+            className="w-full max-w-[280px]"
             disabled={isSaving}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Sin cuenta" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin cuenta</SelectItem>
-              {accounts.map((a: any) => (
-                <SelectItem key={a.id} value={a.id}>{a.code} - {a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
@@ -427,7 +457,35 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacén matriz</p><Select value={draft.parentId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'parentId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin padre" /></SelectTrigger><SelectContent><SelectItem value="none">Sin padre</SelectItem>{warehouses.filter((item) => item.id !== draft.id).map((item: any) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p><Select value={draft.inventoryAccountId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'inventoryAccountId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin cuenta" /></SelectTrigger><SelectContent><SelectItem value="none">Sin cuenta</SelectItem>{accounts.map((account: any) => <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>)}</SelectContent></Select></div>
+             <div className="space-y-1">
+               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
+               <Combobox
+                 value={draft.inventoryAccountId || ''}
+                 onChange={(value) => handleUpdateField(draft.id, 'inventoryAccountId', value || null)}
+                 options={flatAccounts.map((a: any) => {
+                   const type = String(a.type || '').toUpperCase();
+                   const typeLabel = {
+                     ASSET: 'Activo',
+                     LIABILITY: 'Pasivo',
+                     EQUITY: 'Capital',
+                     INCOME: 'Ingreso',
+                     EXPENSE: 'Gasto',
+                   }[type] || type || 'Sin tipo';
+                   const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
+                   const isUsable = a.isActive !== false;
+                   const usabilityLabel = isUsable ? '' : ' · No acepta registros';
+                   return {
+                     label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
+                     value: a.id,
+                     description: a.code,
+                     disabled: !isUsable
+                   };
+                 })}
+                 placeholder="Seleccionar cuenta..."
+                 searchPlaceholder="Buscar por código o nombre..."
+                 disabled={isSaving}
+               />
+             </div>
           </div>
         </Card>
       );
@@ -463,7 +521,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Almacenes y Sucursales</h3>
+          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Almacenes</h3>
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
             {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
           </p>
@@ -472,17 +530,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
             <CircleHelp className="size-3.5 mr-1" /> Tutorial
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="order-3 col-span-2 h-10 min-w-0 w-full gap-2 whitespace-nowrap border-primary/20 px-3 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground sm:order-none sm:col-span-1 sm:w-auto"
-            onClick={() => {
-              setIsManageSucursalesDialogOpen(true);
-            }}
-            data-tour="almacenes-sucursales-btn"
-          >
-            <Store className="size-4" /> Administrar Sucursales
-          </Button>
+
           <Button 
             size="sm" 
             className="order-2 h-10 min-w-0 w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-3 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:order-none sm:w-auto" 
@@ -619,6 +667,16 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       />
       {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" allowTargetInteraction />}
     </Card>
+
+    <div className="mt-8">
+      <SucursalesView
+        warehouses={warehouses}
+        onRefresh={onRefresh}
+        isModal={false}
+        autoOpenCreate={autoOpenSucursalForm}
+        onAutoOpenHandled={() => setAutoOpenSucursalForm(false)}
+      />
+    </div>
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
       <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
@@ -809,26 +867,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       </DialogContent>
     </Dialog>
 
-    <Dialog open={isManageSucursalesDialogOpen} onOpenChange={(open) => {
-      setIsManageSucursalesDialogOpen(open);
-      if (!open) fetchSucursales();
-    }}>
-      <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg font-black"><Store className="size-5 text-primary" /> Administrar Sucursales</DialogTitle>
-          <DialogDescription>Gestiona las sucursales asociadas a los almacenes.</DialogDescription>
-        </DialogHeader>
-        <div className="overflow-y-auto py-2">
-          <SucursalesView
-            warehouses={warehouses}
-            onRefresh={onRefresh}
-            isModal={true}
-            autoOpenCreate={autoOpenSucursalForm}
-            onAutoOpenHandled={() => setAutoOpenSucursalForm(false)}
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
+
   </>
   );
 }

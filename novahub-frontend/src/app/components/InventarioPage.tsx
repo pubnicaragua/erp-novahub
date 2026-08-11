@@ -1,4 +1,3 @@
-import { cn } from './ui/utils';
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
@@ -10,6 +9,7 @@ import {
   Download,
   RefreshCw,
   BriefcaseBusiness,
+  Settings2,
   AlertTriangle
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -24,6 +24,7 @@ import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
+import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
@@ -38,6 +39,7 @@ const INVENTORY_SECTIONS = [
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
+  { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_WAREHOUSES'] },
 ];
 
 interface InventarioPageProps {
@@ -479,6 +481,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     onTypeChange={(value) => updateMovementFilter('type', value)}
                     onWarehouseChange={(value) => updateMovementFilter('warehouseId', value)}
                   />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="configuracion" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <ConfiguracionInventarioView isSidebarCollapsed={isSidebarCollapsed} />
                 </motion.div>
               </TabsContent>
             </>

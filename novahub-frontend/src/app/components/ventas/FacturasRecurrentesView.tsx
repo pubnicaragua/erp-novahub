@@ -20,7 +20,6 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesIrSelector } from './SalesIrSelector';
@@ -222,7 +221,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       discountAmount: 0,
       taxAmount: 0,
       total: 0,
-      accountId: '',
     });
     setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
     setPricingMode('global');
@@ -269,7 +267,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const handleSave = async () => {
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
-    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable de ingresos'); return; }
     const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
     if (priceMessage) { toast.error(priceMessage); return; }
     const saveToastId = toast.loading(isCreating ? 'Creando factura recurrente...' : 'Guardando cambios...');
@@ -308,7 +305,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           discountAmount: localDoc.discountAmount,
           taxAmount: localDoc.taxAmount,
           total: localDoc.total,
-          accountId: localDoc.accountId,
           status: 'ACTIVE',
         } as any);
 
@@ -334,8 +330,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         }
         toast.success('Factura recurrente creada', { id: saveToastId });
       } else {
+        const { accountId: _ignoredAccountId, ...updatePayload } = localDoc;
         await handleUpdate(localDoc.id, {
-          ...localDoc,
+          ...updatePayload,
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
           nextInvoiceDate: calculatedNextInvoiceDate,
@@ -484,14 +481,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                     <SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent>
                   </Select>
                   <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
-                </div>
-                <div className="col-span-2">
-                  <AccountingAccountSelect
-                    value={localDoc?.accountId || ''}
-                    onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
-                    label="Cuenta contable de ingresos"
-                    required
-                  />
                 </div>
               </div>
             </CardContent>

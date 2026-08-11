@@ -31,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Combobox } from '../ui/Combobox';
 
 interface AccountNode {
   id: string;
@@ -1122,20 +1123,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="parentId">Cuenta Padre</Label>
-                <Select
+                <Combobox
+                  options={[
+                    { label: 'Ninguna (Raíz)', value: 'NONE' },
+                    ...getParentOptions(editingAccount?.id).map(opt => ({ label: opt.label, value: opt.id })),
+                  ]}
                   value={formData.parentId ?? 'NONE'}
-                  onValueChange={(v) => setFormData(p => ({ ...p, parentId: v === 'NONE' ? undefined : v }))}
-                >
-                  <SelectTrigger id="parentId">
-                    <SelectValue placeholder="Ninguna (Raíz)" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    <SelectItem value="NONE">Ninguna (Raíz)</SelectItem>
-                    {getParentOptions(editingAccount?.id).map(opt => (
-                      <SelectItem key={opt.id} value={opt.id}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => setFormData(p => ({ ...p, parentId: v === 'NONE' ? undefined : v }))}
+                  placeholder="Ninguna (Raíz)"
+                  searchPlaceholder="Buscar por nombre o código..."
+                  emptyMessage="Sin cuentas coincidentes"
+                  className="h-8"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="currency">Moneda</Label>
