@@ -858,7 +858,7 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>{canPerform('PURCHASES_RECEIPTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
               <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoria de la Recepcion" />
               {canPerform('PURCHASES_RECEIPTS', 'delete') && (() => {
                 const st = String(row.status||'').toUpperCase();

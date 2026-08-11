@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, FileInput, Download, FileText, FileDown, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, Pencil, Download, FileText, FileDown, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
@@ -1680,7 +1680,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}><CheckCircle2 className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><FileInput className="size-4" /></Button>
+                <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><Pencil className="size-4" /></Button>
               )}
               <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadOrderPdf(row)}><FileDown className="size-4" /></Button>
               {String(row.status || '').toUpperCase() !== 'CANCELLED' && String(row.status || '').toUpperCase() !== 'REJECTED' && canPerform('PURCHASES_ORDERS', 'delete') && (

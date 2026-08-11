@@ -78,6 +78,9 @@ export const contabilidadService = {
   generateIrDeclaration: (year: number) => api.post<any>(`/accounting/fiscal-reports/ir/${year}`, {}),
   generateInssPayroll: (month: number, year: number) => api.post<any>(`/accounting/fiscal-reports/inss/${month}/${year}`, {}),
   generateInatecPayroll: (month: number, year: number) => api.post<any>(`/accounting/fiscal-reports/inatec/${month}/${year}`, {}),
+  registerFiscalReportBackup: (data: { type: string; year: number; month?: number | null; fileUri: string; fileName?: string; actaUri?: string | null; actaFileName?: string | null; submittedAt?: string | null; notes?: string | null }) =>
+    api.post<any>('/accounting/fiscal-reports/backup', data),
+  deleteFiscalReport: (id: string) => api.delete<any>(`/accounting/fiscal-reports/${id}`),
 
   // Libro Mayor
   getLedger: (params?: { accountId?: string; dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
@@ -151,4 +154,18 @@ export const contabilidadService = {
   updateTaxCatalogEntry: (id: string, data: any) => api.put<any>(`/accounting/tax-catalog/${id}`, data),
   deleteTaxCatalogEntry: (id: string) => api.delete(`/accounting/tax-catalog/${id}`),
   seedDefaultTaxCatalog: () => api.post<any>('/accounting/tax-catalog/seed', {}),
+
+  // Auditoría de Facturas
+  getInvoiceAuditList: (params: { kind: 'SALE' | 'PURCHASE'; search?: string; auditStatus?: string; page?: number; pageSize?: number; dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
+    api.get<any>('/accounting/invoices/audit', { params, signal }),
+  auditInvoices: (data: { kind: 'SALE' | 'PURCHASE'; invoiceIds: string[]; observations?: string }) =>
+    api.post<any>('/accounting/invoices/audit', data),
+  getInvoiceAuditHistory: (params: { kind?: 'SALE' | 'PURCHASE'; action?: string; search?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+    api.get<any>('/accounting/invoices/audit/history', { params, signal }),
+  sendToCorrect: (data: { kind: 'SALE' | 'PURCHASE'; invoiceIds: string[]; observations?: string }) =>
+    api.post<any>('/accounting/invoices/audit/send-to-correct', data),
+  cancelAuditedInvoice: (data: { kind: 'SALE' | 'PURCHASE'; invoiceId: string; reason?: string }) =>
+    api.post<any>('/accounting/invoices/audit/cancel', data),
+  registerReissue: (data: { kind: 'SALE' | 'PURCHASE'; invoiceId: string; newInvoiceId: string; observations?: string }) =>
+    api.post<any>('/accounting/invoices/audit/reissue', data),
 };

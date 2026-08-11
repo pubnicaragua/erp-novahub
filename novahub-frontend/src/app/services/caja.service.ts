@@ -247,6 +247,18 @@ export const cajaService = {
   updateRegisterAccess: (id: string, assignments: { userId: string; closureMode: CashClosureMode; canRead?: boolean; canWrite?: boolean }[]) =>
     api.put<{ success: boolean }>(`/caja/registers/${id}/access`, { assignments }),
 
+  getCashNorms: () =>
+    api.get<any>('/caja/settings/cash-norms'),
+
+  updateCashNorms: (norms: any) =>
+    api.put<any>('/caja/settings/cash-norms', norms),
+
+  getAutoCloseConfig: () =>
+    api.get<any>('/caja/settings/auto-close'),
+
+  updateAutoCloseConfig: (config: any) =>
+    api.put<any>('/caja/settings/auto-close', config),
+
   getProducts: async (search?: string, warehouseId?: string) => {
     const params: any = {};
     if (search) params.search = search;

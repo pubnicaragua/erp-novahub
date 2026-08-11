@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, Ban, ChevronLeft, FileDown, History, Loader2
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, Eye, Trash2, Ban, ChevronLeft, FileDown, History, Loader2, X
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -466,6 +466,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           total: Number(localDoc.total || 0),
           status: emitir ? 'PENDING' : 'DRAFT',
           paymentMethod: localDoc.paymentMethod || 'CASH',
+          paymentDetails: (localDoc as any).paymentDetails || undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
           sellerEmployeeId: localDoc.sellerEmployeeId || undefined,
@@ -751,6 +752,28 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     placeholder="Seleccionar Cliente"
                     disabled={isInvoiceLocked}
                   />
+                  {(() => {
+                    const creditCustomer = customers.find((c) => c.id === localDoc?.customerId);
+                    if (!creditCustomer) return null;
+                    const creditLimit = Number(creditCustomer.creditLimit || 0);
+                    const currentBalance = Number(creditCustomer.balance || 0);
+                    const projected = currentBalance + Number(localDoc?.total || 0);
+                    const overLimit = creditLimit > 0 && projected > creditLimit;
+                    const creditDays = creditCustomer.creditDays != null ? Number(creditCustomer.creditDays) : 0;
+                    if (creditLimit <= 0 && creditDays <= 0) return null;
+                    return (
+                      <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-bold ${overLimit ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-border/60 bg-muted/20 text-muted-foreground'}`}>
+                        <span className="flex items-center gap-1.5">
+                          {overLimit && <AlertTriangle className="size-3 shrink-0" />}
+                          {creditLimit > 0 ? (
+                            <>Saldo deudor: <span className="font-mono">{formatConvertedAmount(currentBalance, baseCurrency)}</span> de <span className="font-mono">{formatConvertedAmount(creditLimit, baseCurrency)}</span> · Esta factura proyecta <span className="font-mono">{formatConvertedAmount(projected, baseCurrency)}</span>{overLimit && ' — excede el límite, no se podrá emitir'}</>
+                          ) : null}
+                          {creditDays > 0 && (creditLimit > 0 ? ' · ' : '')}
+                          {creditDays > 0 && <>Plazo de crédito: <span className="font-mono">{creditDays} días</span></>}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
@@ -837,6 +860,49 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                       <option value="TRANSFER">Transferencia</option>
                       <option value="CHECK">Cheque</option>
                     </select>
+                    {localDoc?.paymentMethod === 'TRANSFER' && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cuentas de destino (pueden ser varias)</p>
+                        {(((localDoc as any).paymentDetails?.transfers) || []).map((t: any, idx: number) => (
+                          <div key={idx} className="flex flex-col gap-1.5 rounded-lg border border-border/40 bg-muted/20 p-1.5">
+                            <div className="grid grid-cols-[1fr_auto] gap-1.5">
+                              <Input className="h-7 w-full text-xs" placeholder="Banco (ej. BANPRO)" value={t.bank || ''} disabled={isInvoiceLocked} onChange={(e) => { const transfers = [...(((localDoc as any).paymentDetails?.transfers) || [])]; transfers[idx] = { ...transfers[idx], bank: e.target.value }; setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), transfers } } as any); }} />
+                              <Button type="button" variant="ghost" size="icon" className="size-7 self-center text-rose-500" disabled={isInvoiceLocked} onClick={() => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), transfers: (((localDoc as any).paymentDetails?.transfers) || []).filter((_: any, i: number) => i !== idx) } } as any)}><X className="size-3.5" /></Button>
+                            </div>
+                            <Input className="h-7 w-full text-xs font-mono" placeholder="N.º de cuenta (destino)" value={t.accountNumber || ''} disabled={isInvoiceLocked} onChange={(e) => { const transfers = [...(((localDoc as any).paymentDetails?.transfers) || [])]; transfers[idx] = { ...transfers[idx], accountNumber: e.target.value }; setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), transfers } } as any); }} />
+                          </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] font-bold" disabled={isInvoiceLocked} onClick={() => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), transfers: [...(((localDoc as any).paymentDetails?.transfers) || []), { bank: '', accountNumber: '' }] } } as any)}><Plus className="size-3.5 mr-1" /> Agregar cuenta</Button>
+                      </div>
+                    )}
+                    {localDoc?.paymentMethod === 'CHECK' && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cheques recibidos</p>
+                        {(((localDoc as any).paymentDetails?.checks) || []).map((c: any, idx: number) => (
+                          <div key={idx} className="flex flex-col gap-1.5 rounded-lg border border-border/40 bg-muted/20 p-1.5">
+                            <div className="grid grid-cols-[1fr_auto] gap-1.5">
+                              <Input className="h-7 w-full text-xs font-mono" placeholder="N.º de cheque" value={c.checkNumber || ''} disabled={isInvoiceLocked} onChange={(e) => { const checks = [...(((localDoc as any).paymentDetails?.checks) || [])]; checks[idx] = { ...checks[idx], checkNumber: e.target.value }; setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), checks } } as any); }} />
+                              <Button type="button" variant="ghost" size="icon" className="size-7 self-center text-rose-500" disabled={isInvoiceLocked} onClick={() => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), checks: (((localDoc as any).paymentDetails?.checks) || []).filter((_: any, i: number) => i !== idx) } } as any)}><X className="size-3.5" /></Button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <Input className="h-7 w-full text-xs" placeholder="Banco de origen" value={c.bank || ''} disabled={isInvoiceLocked} onChange={(e) => { const checks = [...(((localDoc as any).paymentDetails?.checks) || [])]; checks[idx] = { ...checks[idx], bank: e.target.value }; setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), checks } } as any); }} />
+                              <Input className="h-7 w-full text-xs" placeholder="Titular / a nombre de" value={c.holder || ''} disabled={isInvoiceLocked} onChange={(e) => { const checks = [...(((localDoc as any).paymentDetails?.checks) || [])]; checks[idx] = { ...checks[idx], holder: e.target.value }; setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), checks } } as any); }} />
+                            </div>
+                          </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] font-bold" disabled={isInvoiceLocked} onClick={() => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), checks: [...(((localDoc as any).paymentDetails?.checks) || []), { checkNumber: '', bank: '', holder: '' }] } } as any)}><Plus className="size-3.5 mr-1" /> Agregar cheque</Button>
+                      </div>
+                    )}
+                    {localDoc?.paymentMethod === 'CARD' && (
+                      <div className="mt-2 space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Datos de la tarjeta (sin fecha de vencimiento ni CVC)</p>
+                        <Input className="h-7 text-xs font-mono" placeholder="Número de tarjeta" value={((localDoc as any).paymentDetails?.card?.cardNumber) || ''} disabled={isInvoiceLocked} onChange={(e) => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), card: { ...((localDoc as any).paymentDetails?.card || {}), cardNumber: e.target.value } } } as any)} />
+                        <div className="grid grid-cols-2 gap-1">
+                          <Input className="h-7 text-xs" placeholder="Banco / emisor" value={((localDoc as any).paymentDetails?.card?.bank) || ''} disabled={isInvoiceLocked} onChange={(e) => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), card: { ...((localDoc as any).paymentDetails?.card || {}), bank: e.target.value } } } as any)} />
+                          <Input className="h-7 text-xs" placeholder="Titular" value={((localDoc as any).paymentDetails?.card?.holder) || ''} disabled={isInvoiceLocked} onChange={(e) => setLocalDoc({ ...localDoc, paymentDetails: { ...((localDoc as any).paymentDetails || {}), card: { ...((localDoc as any).paymentDetails?.card || {}), holder: e.target.value } } } as any)} />
+                        </div>
+                      </div>
+                    )}
                   </div>
               </div>
             </CardContent>

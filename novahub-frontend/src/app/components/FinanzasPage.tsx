@@ -18,6 +18,7 @@ import { FinanceReceivablesView } from './finanzas/FinanceReceivablesView';
 import { FinancePayablesView } from './finanzas/FinancePayablesView';
 import { FinanceCalendarView } from './finanzas/FinanceCalendarView';
 import { FinanceGeneralBalanceView } from './finanzas/FinanceGeneralBalanceView';
+import { FinanceLossesView } from './finanzas/FinanceLossesView';
 import { accountsService, incomeService, expensesService, recurringExpensesService, recurringIncomesService } from '../services/finanzas.service';
 import { contabilidadService } from '../services/contabilidad.service';
 import { toast } from 'sonner';
@@ -86,6 +87,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     'calendario-financiero': 'calendario',
     'analisis-ingresos-gastos': 'analisis',
     'balance-general': 'balance-general',
+    'perdidas': 'perdidas',
   };
   
   const [activeTab, setActiveTab] = useState(() => activeSubModule ? (subModuleToTab[activeSubModule] || 'resumen') : 'resumen');
@@ -411,6 +413,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD' },
     { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE' },
     { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE' },
+    { id: 'perdidas', label: 'Pérdidas', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
   ];
 
   return (
@@ -612,6 +615,12 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
               <TabsContent value="balance-general" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceGeneralBalanceView incomes={fIncomes} expenses={fExpenses} accounts={fAccounts} />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="perdidas" className="m-0" asChild>
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                  <FinanceLossesView />
                 </motion.div>
               </TabsContent>
             </>

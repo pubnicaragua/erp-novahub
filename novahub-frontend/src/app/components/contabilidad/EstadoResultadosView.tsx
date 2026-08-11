@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { Search, RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
@@ -30,10 +30,20 @@ interface PnLData {
 }
 
 export function EstadoResultadosView() {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const toLocalDate = (value: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  };
+  const initialFrom = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return toLocalDate(d);
+  };
+  const [dateFrom, setDateFrom] = useState(initialFrom);
+  const [dateTo, setDateTo] = useState(() => toLocalDate(new Date()));
   const [showPreviousYear, setShowPreviousYear] = useState(false);
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const query = useAccountingQuery<PnLData | null>(
     ['profit-loss', dateFrom, dateTo, showPreviousYear],
     async (signal) => {
@@ -95,8 +105,17 @@ export function EstadoResultadosView() {
     setExpandedAccountId(current => current === account.accountId ? null : account.accountId);
   };
 
-  const renderSection = (title: string, accounts: PnLAccount[], total: number, totalPrev: number, color: string) => (
-    <div className="mb-6">
+  const filterAccounts = (accounts: PnLAccount[]) => {
+    if (!searchTerm.trim()) return accounts;
+    const term = searchTerm.trim().toLowerCase();
+    return accounts.filter(a =>
+      a.cuenta.toLowerCase().includes(term) || a.codigo.toLowerCase().includes(term),
+    );
+  };
+
+  const renderSection = (title: string, accounts: PnLAccount[], total: number, totalPrev: number, color: string) => {
+    const visibleAccounts = filterAccounts(accounts);
+    return (    <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", color)}>
         {title}
       </div>
@@ -116,7 +135,11 @@ export function EstadoResultadosView() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {accounts.flatMap((acc, i) => {
+          {visibleAccounts.length === 0 ? (
+            <TableRow><TableCell colSpan={showPreviousYear ? 5 : 3} className="py-6 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</TableCell></TableRow>
+          ) : (
+          <>
+          {visibleAccounts.flatMap((acc, i) => {
             const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
             const isExpanded = expandedAccountId === acc.accountId;
             return [
@@ -163,6 +186,8 @@ export function EstadoResultadosView() {
               ] : []),
             ];
           })}
+          </>
+          )}
           <TableRow className="bg-muted/50 font-bold border-t-2 border-border">
             <TableCell colSpan={2} className="text-sm uppercase tracking-wider">Total {title}</TableCell>
             <TableCell className={cn("text-right font-mono text-sm", total >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(total)}</TableCell>
@@ -177,7 +202,10 @@ export function EstadoResultadosView() {
       </Table>
       </div>
       <div className="space-y-2 p-3 md:hidden">
-        {accounts.map((acc, i) => {
+        {visibleAccounts.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</p>
+        ) : (
+        visibleAccounts.map((acc, i) => {
           const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
           const isExpanded = expandedAccountId === acc.accountId;
           return (
@@ -217,7 +245,8 @@ export function EstadoResultadosView() {
               )}
             </div>
           );
-        })}
+        })
+        )}
         <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 font-bold">
           <span className="text-xs uppercase tracking-wider">Total {title}</span>
           <div className="text-right">
@@ -228,6 +257,7 @@ export function EstadoResultadosView() {
       </div>
     </div>
   );
+  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -249,6 +279,15 @@ export function EstadoResultadosView() {
             <label htmlFor="prev-year" className="text-[10px] font-black uppercase tracking-widest text-foreground cursor-pointer select-none">
               Comparar año anterior
             </label>
+          </div>
+          <div className="relative mt-5">
+            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cuenta por nombre o código..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setExpandedAccountId(null); }}
+              className="h-9 w-full pl-8 text-xs sm:w-[240px]"
+            />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">

@@ -27,6 +27,9 @@ import {
   Copy,
   RefreshCcw,
   X,
+  FileDown,
+  TrendingUp,
+  Banknote,
 } from 'lucide-react';
 
 import {
@@ -67,7 +70,9 @@ import {
   creditNotesService,
 } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
+import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { toast } from 'sonner';
 import type { Customer, Invoice } from '../../types';
 
@@ -162,6 +167,7 @@ export function CustomerDetailDrawer({
   customerSnapshot,
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -297,6 +303,24 @@ export function CustomerDetailDrawer({
 
   const creditLimit = Number(customer?.creditLimit ?? 0);
   const balance = Number(customer?.balance ?? 0);
+  const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
+
+  const toBaseValue = (value: number, currency?: string, exchangeRate?: number) => {
+    const amount = Number(value || 0);
+    const rate = Number(exchangeRate || 1);
+    return String(currency || baseCurrency).toUpperCase() === baseCurrency
+      ? amount
+      : baseCurrency === 'NIO'
+        ? amount * rate
+        : amount / Math.max(rate, 0.000001);
+  };
+  const cashTotal = invoices
+    .filter((inv) => String(inv.status || '').toUpperCase() === 'PAID')
+    .reduce((sum, inv) => sum + toBaseValue(inv.total, inv.currency, inv.exchangeRate), 0);
+  const creditOutstanding = invoices
+    .filter((inv) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
+    .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
+  const creditUsagePct = creditLimit > 0 ? Math.min(100, (balance / creditLimit) * 100) : 0;
 
   const createPortalLink = async () => {
     if (!customer?.id) return;
@@ -402,6 +426,51 @@ export function CustomerDetailDrawer({
                 </div>
 
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+                      <CreditCard className="size-4 text-primary" /> Crédito del Cliente
+                    </h3>
+                    <Badge variant="outline" className="border-none bg-primary/10 text-[9px] font-black text-primary uppercase tracking-widest">
+                      Plazo: {creditDays > 0 ? `${creditDays} días` : 'Contado'}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo deudor actual</p>
+                      <p className={`mt-1 font-mono text-sm font-black ${balance > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{formatConvertedAmount(balance, baseCurrency)}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">De contado (pagado)</p>
+                      <p className="mt-1 font-mono text-sm font-black text-foreground">{formatConvertedAmount(cashTotal, baseCurrency)}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">En crédito (pendiente)</p>
+                      <p className={`mt-1 font-mono text-sm font-black ${creditOutstanding > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{formatConvertedAmount(creditOutstanding, baseCurrency)}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</p>
+                      <p className="mt-1 font-mono text-sm font-black text-primary">{formatConvertedAmount(creditLimit, baseCurrency)}</p>
+                    </div>
+                  </div>
+                  {creditLimit > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground">
+                        <span className="uppercase tracking-widest">Uso del crédito</span>
+                        <span className={`font-mono ${creditUsagePct >= 90 ? 'text-destructive' : creditUsagePct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{creditUsagePct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted/40">
+                        <div className={`h-full rounded-full transition-all ${creditUsagePct >= 90 ? 'bg-destructive' : creditUsagePct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${creditUsagePct}%` }} />
+                      </div>
+                      {creditUsagePct >= 100 && (
+                        <p className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-[10px] font-bold text-destructive">
+                          <AlertCircle className="size-3" /> Límite alcanzado: no se puede emitir más crédito hasta registrar pagos.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </Card>
+
+                <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
                   <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
                     <MapPin className="size-4 text-primary" /> Contacto y Ubicación
                   </h3>
@@ -436,6 +505,7 @@ export function CustomerDetailDrawer({
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label="Plazo de Crédito" value={creditDays > 0 ? `${creditDays} días` : 'Contado (0 días)'} icon={Clock} mono />
                     <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
                   </div>
@@ -523,7 +593,7 @@ export function CustomerDetailDrawer({
                     ))}
                   </div>
                   {selectedInvoice && (
-                    <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} />
+                    <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />
                   )}
                   </>
                 )}
@@ -660,10 +730,25 @@ interface InvoiceInlineDetailProps {
   invoice: Invoice;
   onClose: () => void;
   formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
+  tenantName?: string;
 }
 
-function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDetailProps) {
+function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: InvoiceInlineDetailProps) {
   const statusInfo = getInvoiceStatusInfo(invoice.status);
+  const handleDownloadPdf = async () => {
+    const pdfToastId = toast.loading('Generando PDF de la factura...');
+    try {
+      await generateEstimatePDF({
+        estimate: invoice as any,
+        tenantName: tenantName || 'Empresa',
+        formatAmount: formatAmount as any,
+        documentType: 'invoice' as any,
+      });
+      toast.success('PDF descargado', { id: pdfToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+    }
+  };
   return (
     <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
@@ -674,9 +759,14 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDe
           </div>
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{invoice.number}</p>
         </div>
-        <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
-          <X className="size-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" title="Descargar detalle de la factura en PDF" aria-label="Descargar detalle de la factura en PDF" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={handleDownloadPdf}>
+            <FileDown className="size-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -685,6 +775,52 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount }: InvoiceInlineDe
         <InfoField label="Total" value={formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)} icon={DollarSign} mono />
         <InfoField label="Saldo pendiente" value={formatAmount(Number(invoice.balance || 0), invoice.currency, invoice.exchangeRate)} icon={CreditCard} mono />
       </div>
+
+      {(invoice.paymentMethod || (invoice as any).paymentDetails) && (
+        <div className="mt-4 rounded-xl border border-border/50 bg-muted/20 p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            <Banknote className="size-3" /> Forma de cobro: <span className="text-foreground uppercase">{invoice.paymentMethod || '—'}</span>
+          </p>
+          {(() => {
+            const details = (invoice as any).paymentDetails;
+            if (!details) return null;
+            if (invoice.paymentMethod === 'TRANSFER' && Array.isArray(details.transfers) && details.transfers.length > 0) {
+              return (
+                <div className="mt-2 space-y-1">
+                  {details.transfers.map((t: any, i: number) => (
+                    <p key={i} className="text-xs font-mono text-muted-foreground">
+                      {t.bank ? `${t.bank} · ` : ''}Cuenta: <span className="font-bold text-foreground">{t.accountNumber || '—'}</span>
+                    </p>
+                  ))}
+                </div>
+              );
+            }
+            if (invoice.paymentMethod === 'CHECK' && Array.isArray(details.checks) && details.checks.length > 0) {
+              return (
+                <div className="mt-2 space-y-1">
+                  {details.checks.map((c: any, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground">
+                      Cheque <span className="font-mono font-bold text-foreground">{c.checkNumber || '—'}</span>
+                      {c.bank ? ` · ${c.bank}` : ''}
+                      {c.holder ? ` · ${c.holder}` : ''}
+                    </p>
+                  ))}
+                </div>
+              );
+            }
+            if (invoice.paymentMethod === 'CARD' && details.card) {
+              return (
+                <p className="mt-2 text-xs font-mono text-muted-foreground">
+                  Tarjeta: <span className="font-bold text-foreground">{details.card.cardNumber || '—'}</span>
+                  {details.card.bank ? ` · ${details.card.bank}` : ''}
+                  {details.card.holder ? ` · ${details.card.holder}` : ''}
+                </p>
+              );
+            }
+            return null;
+          })()}
+        </div>
+      )}
 
       <div className="mt-5 overflow-hidden rounded-xl border border-border/50 bg-background/40">
         <Table>

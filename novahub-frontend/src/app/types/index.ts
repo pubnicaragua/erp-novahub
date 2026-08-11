@@ -104,6 +104,7 @@ export interface Customer {
   contactEmail?: string;
   contactPhone?: string;
   creditLimit: number;
+  creditDays?: number | null;
   balance: number;
   status: EntityStatus;
   notes?: string;

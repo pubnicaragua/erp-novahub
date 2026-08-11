@@ -105,4 +105,25 @@ export const inventoryService = {
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
   importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
   deleteProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
+
+  // ==================== AUDITORÍAS (INVENTARIO SELECTIVO) ====================
+  getAudits: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/audits', { params: filters as any, signal }),
+  getAudit: (id: string) => api.get<any>(`/inventory/audits/${id}`),
+  createAudit: (data: {
+    auditDate: string;
+    warehouseId?: string | null;
+    supervisorId?: string | null;
+    supervisorName?: string | null;
+    stockKeeperId?: string | null;
+    stockKeeperName?: string | null;
+    notes?: string | null;
+    actaUri?: string | null;
+    actaFileName?: string | null;
+    items?: { productId: string; code: string; name: string; systemStock: number; countedStock: number; difference: number }[];
+  }) => api.post<any>('/inventory/audits', data),
+  deleteAudit: (id: string) => api.delete<any>(`/inventory/audits/${id}`),
+
+  // ==================== PÉRDIDAS ====================
+  getLosses: (filters?: ApiFilters & { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
+    api.get<PaginatedResponse<any>>('/inventory/losses', { params: filters as any, signal }),
 };

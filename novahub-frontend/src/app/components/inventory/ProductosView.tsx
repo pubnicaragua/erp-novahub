@@ -1138,7 +1138,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const isSaving = savingIds.has(product.id);
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
-        <TableCell className="w-10 align-top pt-4">
+        <TableCell className="w-10 align-top pt-3">
           <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
             {selectedIds.has(product.id)
               ? <SquareCheckBig className="size-4 text-primary" />
@@ -1186,7 +1186,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 size="sm"
                 className={`h-5 text-[8px] uppercase tracking-wider px-1.5 w-full ${product.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
                 onClick={() => handleUpdateField(product.id, 'trackSerialNumbers', !product.trackSerialNumbers)}
-                disabled={isSaving || !isServiceView}
+                disabled={isSaving}
               >
                 IMEI {product.trackSerialNumbers ? 'Activo' : 'Inactivo'}
               </Button>}
@@ -1198,7 +1198,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <Select 
               value={product.categoryId} 
               onValueChange={(v) => handleUpdateField(product.id, 'categoryId', v)}
-              disabled={isSaving || !isServiceView}
+              disabled={isSaving}
             >
               <SelectTrigger className="h-8 w-full min-w-0 text-xs">
                 <SelectValue placeholder="Categoría" />
@@ -1216,7 +1216,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 size="sm"
                 className="h-6 text-[9px] uppercase tracking-wider text-muted-foreground hover:text-primary px-2"
               onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }}
-                disabled={isSaving || !isServiceView}
+                disabled={isSaving}
               >
                 <Plus className="size-3 mr-1" />
                 Categoría
@@ -1228,7 +1228,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <Select 
             value={product.unit || 'unidad'} 
             onValueChange={(v) => handleUpdateField(product.id, 'unit', v)}
-            disabled={isSaving || !isServiceView}
+            disabled={isSaving}
           >
             <SelectTrigger className="h-8 w-full min-w-0 text-xs">
               <SelectValue placeholder="Unidad" />
@@ -1255,7 +1255,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             onChange={(e) => handleUpdateField(product.id, 'minStock', Math.max(0, Number(e.target.value) || 0))}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 min-w-0 w-full text-right text-xs"
-            disabled={isSaving || !isServiceView}
+            disabled={isSaving}
           />
         </TableCell>}
         {!isServiceView && <TableCell className="w-20 align-top pt-3">
@@ -1326,6 +1326,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     </Select>
                   </div>
                 ))}
+                <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-lg bg-muted/30 px-2 py-1">
+                  {allocations
+                    .map((alloc) => warehouses.find((warehouse: any) => warehouse.id === alloc.warehouseId)?.name)
+                    .filter(Boolean)
+                    .map((warehouseName, index) => (
+                      <Badge key={`${warehouseName}-${index}`} variant="secondary" className="max-w-full truncate text-[9px] bg-muted/50 font-medium">
+                        {warehouseName}
+                      </Badge>
+                    ))}
+                  {!allocations.some((alloc) => warehouses.some((warehouse: any) => warehouse.id === alloc.warehouseId)) && (
+                    <span className="text-[10px] text-muted-foreground">-</span>
+                  )}
+                </div>
                 <div className="pt-1">
                   <Button
                     type="button"
@@ -1343,21 +1356,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             );
           })()}
         </TableCell>}
-        {!isServiceView && <TableCell className="w-28 align-top pt-3">
-          <div className="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-lg bg-muted/30 px-2 py-1">
-            {(product.initialAllocations || [])
-              .map((alloc) => warehouses.find((warehouse: any) => warehouse.id === alloc.warehouseId)?.name)
-              .filter(Boolean)
-              .map((warehouseName, index) => (
-                <Badge key={`${warehouseName}-${index}`} variant="secondary" className="max-w-full truncate text-[9px] bg-muted/50 font-medium">
-                  {warehouseName}
-                </Badge>
-              ))}
-            {!(product.initialAllocations || []).some((alloc) => warehouses.some((warehouse: any) => warehouse.id === alloc.warehouseId)) && (
-              <span className="text-[10px] text-muted-foreground">-</span>
-            )}
-          </div>
-        </TableCell>}
         {!isServiceView && <TableCell className="w-24 align-top pt-3 text-right">
           {(() => {
             const allocations = product.initialAllocations || [];
@@ -1373,7 +1371,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       disabled
                       aria-label="Stock no editable"
                       title="El stock se administra mediante movimientos y ajustes de inventario"
-                      className="h-7 text-xs text-right w-full cursor-not-allowed border-none bg-transparent opacity-60 shadow-none"
+                      className="h-8 text-xs text-right w-full cursor-not-allowed border-none bg-transparent opacity-60 shadow-none"
                       placeholder="0"
                     />
                   </div>
@@ -1417,7 +1415,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             onChange={(e) => handleUpdateField(product.id, 'costPrice', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, product.id)}
             className="h-8 min-w-0 w-full text-right text-xs"
-            disabled={isSaving || !isServiceView}
+            disabled={isSaving}
           />
         </TableCell>}
         <TableCell className="w-24 text-right align-top pt-3">

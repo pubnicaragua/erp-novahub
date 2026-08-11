@@ -144,78 +144,80 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
             </Button>
           </DialogHeader>
           
-          <div className="py-4 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-4">
             {cajasLoading ? (
               <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
             ) : (
-              <div className="sales-responsive-table rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/20">
-                      <th className="px-4 py-3 text-left font-semibold">Código</th>
-                      <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                      <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
-                      <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
-                      <th className="px-4 py-3 text-left font-semibold">Estado</th>
-                      <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {cajasList.map((caja) => {
-                      const sucursal = sucursalesList.find(s => s.id === caja.branchId);
-                      return (
-                      <tr key={caja.id} className="hover:bg-muted/10">
-                        <td className="px-4 py-3 font-medium">{caja.code}</td>
-                        <td className="px-4 py-3">{caja.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
-                            {caja.isActive ? 'Activa' : 'Inactiva'}
-                          </Badge>
-                        </td>
-                         <td data-actions-column="compact" className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handleManageAccess(caja)}>
-                              <Users className="size-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => {
-                              onOpenChange(false);
-                              setCajaForm({
-                                id: caja.id,
-                                name: caja.name,
-                                code: caja.code,
-                                location: caja.location || '',
-                                branchId: caja.branchId,
-                                isActive: caja.isActive !== false,
-                              });
-                              setIsCajaFormOpen(true);
-                            }}>
-                              <Edit2 className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
-                              title={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
-                              aria-label={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
-                              onClick={() => void toggleCajaStatus(caja)}
-                            >
-                              <Ban className="size-4" />
-                            </Button>
-                          </div>
-                        </td>
+              <div className="py-4">
+                <div className="sales-responsive-table rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20">
+                        <th className="px-4 py-3 text-left font-semibold">Código</th>
+                        <th className="px-4 py-3 text-left font-semibold">Nombre</th>
+                        <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
+                        <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
+                        <th className="px-4 py-3 text-left font-semibold">Estado</th>
+                        <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
                       </tr>
-                    )})}
-                    {cajasList.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                          No hay cajas creadas. Haz clic en "Nueva Caja" para empezar.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {cajasList.map((caja) => {
+                        const sucursal = sucursalesList.find(s => s.id === caja.branchId);
+                        return (
+                        <tr key={caja.id} className="hover:bg-muted/10">
+                          <td className="px-4 py-3 font-medium">{caja.code}</td>
+                          <td className="px-4 py-3">{caja.name}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
+                              {caja.isActive ? 'Activa' : 'Inactiva'}
+                            </Badge>
+                          </td>
+                           <td data-actions-column="compact" className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button variant="ghost" size="icon" title="Gestionar accesos" onClick={() => handleManageAccess(caja)}>
+                                <Users className="size-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" title="Editar caja" onClick={() => {
+                                onOpenChange(false);
+                                setCajaForm({
+                                  id: caja.id,
+                                  name: caja.name,
+                                  code: caja.code,
+                                  location: caja.location || '',
+                                  branchId: caja.branchId,
+                                  isActive: caja.isActive !== false,
+                                });
+                                setIsCajaFormOpen(true);
+                              }}>
+                                <Edit2 className="size-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                                title={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
+                                aria-label={caja.isActive ? 'Inhabilitar caja' : 'Habilitar caja'}
+                                onClick={() => void toggleCajaStatus(caja)}
+                              >
+                                <Ban className="size-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )})}
+                      {cajasList.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                            No hay cajas creadas. Haz clic en "Nueva Caja" para empezar.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

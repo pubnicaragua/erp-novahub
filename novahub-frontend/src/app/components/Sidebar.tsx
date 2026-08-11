@@ -66,6 +66,8 @@ import {
   TicketIcon,
   BriefcaseBusiness,
   Tags,
+  ClipboardCheck,
+  TrendingDown,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -149,6 +151,8 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
   ajustes: ['INVENTORY_ADJUSTMENTS'],
+  auditorias: ['INVENTORY_ADJUSTMENTS'],
+  perdidas: ['INVENTORY_ADJUSTMENTS', 'FINANCIAL_EXPENSES'],
   movimientos: ['INVENTORY_MOVEMENTS'],
   // Notificaciones
   alertas: ['NOTIFICATIONS_ALERTS'],
@@ -233,6 +237,8 @@ const menuItems: MenuItem[] = [
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },
+      { id: 'auditorias', label: 'Auditorías', icon: <ClipboardCheck className="size-4" /> },
+      { id: 'perdidas', label: 'Pérdidas', icon: <TrendingDown className="size-4" /> },
       { id: 'movimientos', label: 'Movimientos', icon: <History className="size-4" /> },
     ]
   },
@@ -252,6 +258,7 @@ const menuItems: MenuItem[] = [
       { id: 'calendario-financiero', label: 'Calendario Financiero', icon: <CalendarClock className="size-4" /> },
       { id: 'analisis-ingresos-gastos', label: 'Análisis de ingresos y gastos', icon: <BarChart3 className="size-4" /> },
       { id: 'balance-general', label: 'Balance General', icon: <Landmark className="size-4" /> },
+      { id: 'perdidas', label: 'Pérdidas', icon: <TrendingDown className="size-4" /> },
     ]
   },
   {
@@ -273,6 +280,7 @@ const menuItems: MenuItem[] = [
       { id: 'conciliacion', label: 'Conciliación bancaria', icon: <Landmark className="size-4" /> },
       { id: 'periodos', label: 'Períodos contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
+      { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: <ClipboardCheck className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },

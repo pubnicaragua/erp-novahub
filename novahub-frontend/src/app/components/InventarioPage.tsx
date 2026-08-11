@@ -10,7 +10,9 @@ import {
   RefreshCw,
   BriefcaseBusiness,
   Settings2,
-  AlertTriangle
+  AlertTriangle,
+  ClipboardCheck,
+  TrendingDown
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -25,6 +27,8 @@ import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
 import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
+import { InventoryAuditsView } from './inventory/InventoryAuditsView';
+import { InventoryLossesView } from './inventory/InventoryLossesView';
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
@@ -38,6 +42,8 @@ const INVENTORY_SECTIONS = [
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
+  { id: 'auditorias',      label: 'Auditorías',      icon: ClipboardCheck, requiredModules: ['INVENTORY_ADJUSTMENTS'] },
+  { id: 'perdidas',        label: 'Pérdidas',        icon: TrendingDown, requiredModules: ['INVENTORY_ADJUSTMENTS'] },
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
   { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_WAREHOUSES'] },
 ];
@@ -123,7 +129,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-catalog', tenantKey],
     queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', page: 1, pageSize: 200 }, signal),
-    enabled: Boolean(user) && ['transferencias', 'ajustes'].includes(activeTab),
+    enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
@@ -148,6 +154,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     queryKey: ['inventory', 'adjustments', tenantKey, pageFor('ajustes').page, pageFor('ajustes').pageSize, searchFor('ajustes'), statusFor('ajustes')],
     queryFn: ({ signal }) => inventoryService.getAdjustments({ page: pageFor('ajustes').page, pageSize: pageFor('ajustes').pageSize, search: searchFor('ajustes'), status: statusFor('ajustes') }, signal),
     enabled: Boolean(user) && activeTab === 'ajustes',
+  });
+  const auditsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'audits', tenantKey, pageFor('auditorias').page, pageFor('auditorias').pageSize, searchFor('auditorias')],
+    queryFn: ({ signal }) => inventoryService.getAudits({ page: pageFor('auditorias').page, pageSize: pageFor('auditorias').pageSize, search: searchFor('auditorias') }, signal),
+    enabled: Boolean(user) && activeTab === 'auditorias',
   });
   const seriesQuery = useQuery({
     ...commonQueryOptions,
@@ -181,6 +193,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     serviceCategories: categories.filter((category: any) => category.type === 'SERVICE'),
     transfers: toList(transfersQuery.data),
     adjustments: toList(adjustmentsQuery.data),
+    audits: toList(auditsQuery.data),
     lots: [],
     series: toList(seriesQuery.data),
     movements: toList(movementsQuery.data),
@@ -192,6 +205,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...(categoriesQuery.isEnabled ? [categoriesQuery] : []),
     ...(transfersQuery.isEnabled ? [transfersQuery] : []),
     ...(adjustmentsQuery.isEnabled ? [adjustmentsQuery] : []),
+    ...(auditsQuery.isEnabled ? [auditsQuery] : []),
     ...(seriesQuery.isEnabled ? [seriesQuery] : []),
     ...(movementsQuery.isEnabled ? [movementsQuery] : []),
   ];
@@ -211,6 +225,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productsPagination = makePagination(productSection, productsQuery);
   const transfersPagination = makePagination('transferencias', transfersQuery);
   const adjustmentsPagination = makePagination('ajustes', adjustmentsQuery);
+  const auditsPagination = makePagination('auditorias', auditsQuery);
   const movementsPagination = makePagination('movimientos', movementsQuery);
   const loading = activeQueries.some((query) => query.isPending && !query.data);
   const refreshing = activeQueries.some((query) => query.isFetching) && !loading;
@@ -490,6 +505,32 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <ConfiguracionInventarioView isSidebarCollapsed={isSidebarCollapsed} />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="auditorias" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <InventoryAuditsView
+                    audits={data.audits}
+                    warehouses={data.warehouses}
+                    products={data.products}
+                    onRefresh={() => fetchData()}
+                    pagination={auditsPagination}
+                  />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="perdidas" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <InventoryLossesView
+                    warehouses={data.warehouses}
+                  />
                 </motion.div>
               </TabsContent>
             </>
