@@ -83,7 +83,7 @@ function getSavedDarkMode() {
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
-  const { unreadCount, markAsRead, notifications } = useNotifications();
+  const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -476,9 +476,20 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open && unreadCount > 0) {
+              void markAllAsRead();
+            }
+          }}
+        >
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative text-muted-foreground hover:text-foreground"
+              aria-label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+            >
               <Bell className="size-5" />
               {unreadCount > 0 && (
                 <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center rounded-full p-0 text-[10px]">
@@ -494,18 +505,18 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="flex flex-col gap-1 p-2 max-h-[300px] overflow-y-auto">
-              {unreadCount > 0 ? (
-                notifications.filter(n => !n.read).slice(0, 5).map((n) => (
+              {notifications.length > 0 ? (
+                notifications.slice(0, 5).map((n) => (
                   <DropdownMenuItem 
                     key={n.id} 
-                    className="flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0" 
+                    className={`flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0 ${n.read ? 'opacity-75' : ''}`}
                     onClick={() => {
                       void markAsRead(n.id);
                       navigateToNotification(n);
                     }}
                   >
                     <div className="flex items-center gap-2">
-                       <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                       <span className={`h-2 w-2 rounded-full shrink-0 ${n.read ? 'bg-muted-foreground/40' : 'bg-primary'}`} />
                        <span className="font-medium text-sm line-clamp-1">{n.title}</span>
                     </div>
                     <span className="text-xs text-muted-foreground ml-4 line-clamp-2">
@@ -520,9 +531,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                   Sin notificaciones nuevas.
                 </DropdownMenuItem>
               )}
-              {unreadCount > 5 && (
+              {notifications.length > 5 && (
                  <DropdownMenuItem className="py-2 justify-center text-xs text-primary font-medium" onClick={() => onNavigate('notificaciones')}>
-                    Ver {unreadCount - 5} más
+                    Ver {notifications.length - 5} más
                  </DropdownMenuItem>
               )}
             </div>

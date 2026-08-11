@@ -57,6 +57,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [movementFilters, setMovementFilters] = useState({ type: 'all', warehouseId: 'all' });
   const [productFilters, setProductFilters] = useState<Record<string, { categoryIds: string[]; warehouseIds: string[] }>>({});
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
+  const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' } | null>(null);
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({ ...current, [section]: { ...pageFor(section), page: Math.max(1, page) } }));
@@ -78,6 +79,23 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
     return () => window.clearTimeout(timer);
   }, [searchState]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (detail?.module !== 'inventario' || detail?.subModule !== 'productos') return;
+      setActiveTab('productos');
+      onSubModuleChange?.('productos');
+      setProductTarget({
+        id: detail.productId || detail.targetId || undefined,
+        code: detail.productCode || undefined,
+        stockFilter: detail.stockFilter === 'out' ? 'out' : detail.stockFilter === 'low' ? 'low' : 'all',
+      });
+      if (detail.productCode) updateSearch('productos', String(detail.productCode));
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, [onSubModuleChange]);
 
   const toList = (value: any) => value?.data || (Array.isArray(value) ? value : []);
   const commonQueryOptions = {
@@ -372,6 +390,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     onSearchChange={(value) => updateSearch('productos', value)}
                     onCategoryChange={(value) => updateProductFilters('productos', 'categoryIds', value)}
                     onWarehouseChange={(value) => updateProductFilters('productos', 'warehouseIds', value)}
+                    targetProductId={productTarget?.id}
+                    initialStockFilter={productTarget?.stockFilter}
+                    onClearTargetProduct={() => setProductTarget(null)}
                   />
                 </motion.div>
               </TabsContent>

@@ -138,8 +138,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingApproveManagement) return;
     const mgmt = pendingApproveManagement;
     setActionLoading(mgmt.id);
-    try { await purchaseManagementService.approve(mgmt.id); toast.success('Gestión aprobada'); setPendingApproveManagement(null); onRefresh(); }
-    catch (e: any) { toast.error(e?.message || 'Error al aprobar'); }
+    const approveToastId = toast.loading('Aprobando gestión de compra...');
+    try { await purchaseManagementService.approve(mgmt.id); toast.success('Gestión aprobada', { id: approveToastId }); setPendingApproveManagement(null); onRefresh(); }
+    catch (e: any) { toast.error(e?.message || 'Error al aprobar', { id: approveToastId }); }
     finally { setActionLoading(null); }
   };
 
@@ -151,8 +152,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingRejectManagement) return;
     const mgmt = pendingRejectManagement;
     setActionLoading(mgmt.id);
-    try { await purchaseManagementService.reject(mgmt.id, rejectReason || undefined); toast.success('Gestión rechazada'); setPendingRejectManagement(null); onRefresh(); }
-    catch (e: any) { toast.error(e?.message || 'Error al rechazar'); }
+    const rejectToastId = toast.loading('Rechazando gestión de compra...');
+    try { await purchaseManagementService.reject(mgmt.id, rejectReason || undefined); toast.success('Gestión rechazada', { id: rejectToastId }); setPendingRejectManagement(null); onRefresh(); }
+    catch (e: any) { toast.error(e?.message || 'Error al rechazar', { id: rejectToastId }); }
     finally { setActionLoading(null); }
   };
 
@@ -164,12 +166,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     if (!pendingConvertManagement) return;
     const mgmt = pendingConvertManagement;
     setActionLoading(mgmt.id);
+    const convertToastId = toast.loading('Generando orden de compra desde la gestión...');
     try {
       const order = await purchaseManagementService.convertToOrder(mgmt.id);
-      toast.success(`Orden de compra #${order.number} generada`);
+      toast.success(`Orden de compra #${order.number} generada`, { id: convertToastId });
       setPendingConvertManagement(null);
       onRefresh();
-    } catch (e: any) { toast.error(e?.message || 'Error al convertir'); }
+    } catch (e: any) { toast.error(e?.message || 'Error al convertir', { id: convertToastId }); }
     finally { setActionLoading(null); }
   };
 
@@ -263,19 +266,20 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       return;
     }
     setActionLoading(req.id);
+    const requestToastId = toast.loading(action === 'approve' ? 'Aprobando solicitud y generando orden de compra...' : 'Anulando solicitud de compra...');
     try {
       if (action === 'approve') {
         await purchaseOrdersService.create(buildOrderFromRequest(req, approvalSupplierId));
-        toast.success(`${req.number} aprobada y enviada a órdenes de compra`);
+        toast.success(`${req.number} aprobada y enviada a órdenes de compra`, { id: requestToastId });
       } else {
         await purchaseRequestsService.changeStatus(req.id, 'CANCELLED');
-        toast.success(`${req.number} → Anulada`);
+        toast.success(`${req.number} → Anulada`, { id: requestToastId });
       }
       setPendingRequestAction(null);
       setApprovalSupplierId('');
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || `Error al ${action === 'approve' ? 'aprobar y enviar' : 'anular'} la solicitud`);
+      toast.error(e?.response?.data?.message || e?.message || `Error al ${action === 'approve' ? 'aprobar y enviar' : 'anular'} la solicitud`, { id: requestToastId });
     }
     finally { setActionLoading(null); }
   };
@@ -284,15 +288,16 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     formatConvertedAmount(Number(amount || 0), (currency || displayCurrency) as any, rate ?? globalRate);
 
   const handleDownloadRequestPdf = async (request: PurchaseRequest) => {
+    const pdfToastId = toast.loading('Generando PDF de la solicitud de compra...');
     try {
       await generatePurchaseRequestPDF({
         request,
         tenantName: user?.tenantName || 'Nova Hub',
         formatAmount: (amount, currency, rate) => formatRequestAmount(amount, currency, rate),
       });
-      toast.success('PDF descargado');
+      toast.success('PDF descargado', { id: pdfToastId });
     } catch (e: any) {
-      toast.error(e?.message || 'No se pudo generar el PDF');
+      toast.error(e?.message || 'No se pudo generar el PDF', { id: pdfToastId });
     }
   };
 

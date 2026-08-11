@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, FileText, Send, Ban, Trash2, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -15,23 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '../ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../ui/table';
 import { Combobox } from '../ui/Combobox';
 import { cn } from '../ui/utils';
 import type { JournalEntry } from '../../types';
@@ -49,14 +32,6 @@ const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'o
   VOIDED: 'destructive',
 };
 
-type JournalLineInput = {
-  id: string;
-  accountId: string;
-  debit: number;
-  credit: number;
-  description: string;
-};
-
 function formatCurrency(n: number): string {
   return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
@@ -69,10 +44,6 @@ function formatAccountingDate(value?: string | Date | null): string {
     return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString('es-NI');
   }
   return new Date(raw).toLocaleDateString('es-NI');
-}
-
-function emptyLine(): JournalLineInput {
-  return { id: crypto.randomUUID(), accountId: '', debit: 0, credit: 0, description: '' };
 }
 
 export function DiarioView() {
@@ -88,21 +59,12 @@ export function DiarioView() {
   const [journalPage, setJournalPage] = useState(1);
   const journalPageSize = 10000;
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(filterSearch.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [filterSearch]);
-
-  const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10));
-  const [formDescription, setFormDescription] = useState('');
-  const [formLines, setFormLines] = useState<JournalLineInput[]>([emptyLine()]);
-  const [formRefType, setFormRefType] = useState('');
-  const [formRefId, setFormRefId] = useState('');
-  const [formCostCenter, setFormCostCenter] = useState('');
 
   const journalParams = useMemo(() => ({
     ...(filterStatus && filterStatus !== 'ALL' ? { status: filterStatus } : {}),
@@ -133,7 +95,6 @@ export function DiarioView() {
     return flatten(accountsQuery.data || []);
   }, [accountsQuery.data]);
   const loadJournals = () => journalsQuery.refetch();
-  const loadAccounts = () => accountsQuery.refetch();
 
   const accountOptions = accounts
     .filter((account) => account.isActive && account.allowManualEntry !== false && account.acceptsPostings !== false)
@@ -144,63 +105,6 @@ export function DiarioView() {
     }));
 
   const refTypeOptions = REFERENCE_TYPES.map((r) => ({ label: r.label, value: r.value }));
-
-  function handleAddLine() {
-    setFormLines((prev) => [...prev, emptyLine()]);
-  }
-
-  function handleRemoveLine(id: string) {
-    setFormLines((prev) => (prev.length > 1 ? prev.filter((l) => l.id !== id) : prev));
-  }
-
-  function handleLineChange(id: string, field: keyof JournalLineInput, value: string | number) {
-    setFormLines((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, [field]: value } : l))
-    );
-  }
-
-  const totalDebits = formLines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
-  const totalCredits = formLines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
-  const balanced = Math.abs(totalDebits - totalCredits) < 0.01;
-  const canSave = formDescription.trim() && formLines.some((l) => l.accountId) && balanced && totalDebits > 0;
-
-  async function handleCreateJournal() {
-    if (!canSave || submitting) return;
-    setSubmitting(true);
-    try {
-      const payload = {
-        date: formDate,
-        description: formDescription,
-        lines: formLines.map((l) => ({
-          accountId: l.accountId,
-          debit: Number(l.debit) || 0,
-          credit: Number(l.credit) || 0,
-          description: l.description || undefined,
-        })),
-        referenceType: formRefType || undefined,
-        referenceId: formRefId || undefined,
-        costCenterId: formCostCenter || undefined,
-      };
-      await contabilidadService.createJournal(payload);
-      toast.success('Asiento creado exitosamente');
-      setCreateOpen(false);
-      resetForm();
-      loadJournals();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al crear asiento');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function resetForm() {
-    setFormDate(new Date().toISOString().slice(0, 10));
-    setFormDescription('');
-    setFormLines([emptyLine()]);
-    setFormRefType('');
-    setFormRefId('');
-    setFormCostCenter('');
-  }
 
   async function handlePost(journal: JournalEntry) {
     try {
@@ -284,180 +188,6 @@ export function DiarioView() {
             Registro cronológico de todos los asientos contables
           </p>
         </div>
-        {canPerform('ACCOUNTING_JOURNAL', 'create') && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="size-4" />
-                Nuevo Asiento
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Nuevo Asiento Contable</DialogTitle>
-              <DialogDescription>
-                Ingresa los datos del asiento. Los débitos deben ser igual a los créditos.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="journal-date">Fecha</Label>
-                <Input
-                  id="journal-date"
-                  type="date"
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="journal-desc">Descripción</Label>
-                <Input
-                  id="journal-desc"
-                  placeholder="Descripción del asiento"
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo Referencia</Label>
-                <Combobox
-                  options={refTypeOptions}
-                  value={formRefType}
-                  onChange={setFormRefType}
-                  placeholder="Seleccionar tipo..."
-                  emptyMessage="Sin resultados"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="journal-ref">ID Referencia</Label>
-                <Input
-                  id="journal-ref"
-                  placeholder="ID del documento origen"
-                  value={formRefId}
-                  onChange={(e) => setFormRefId(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Centro de Costo</Label>
-                <Combobox
-                  options={[]}
-                  value={formCostCenter}
-                  onChange={setFormCostCenter}
-                  placeholder="Opcional..."
-                  emptyMessage="Sin resultados"
-                />
-              </div>
-            </div>
-
-            <Separator className="my-2" />
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Líneas del Asiento</Label>
-                <Button variant="outline" size="sm" onClick={handleAddLine} className="gap-1">
-                  <Plus className="size-3.5" />
-                  Agregar Línea
-                </Button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[180px]">Cuenta</TableHead>
-                      <TableHead className="w-[120px] text-right">Débito</TableHead>
-                      <TableHead className="w-[120px] text-right">Crédito</TableHead>
-                      <TableHead className="min-w-[160px]">Descripción</TableHead>
-                      <TableHead className="w-[40px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {formLines.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell>
-                          <Combobox
-                            options={accountOptions}
-                            value={line.accountId}
-                            onChange={(v) => handleLineChange(line.id, 'accountId', v)}
-                            placeholder="Buscar cuenta..."
-                            emptyMessage="Sin resultados"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={line.debit || ''}
-                            onChange={(e) => handleLineChange(line.id, 'debit', e.target.value === '' ? 0 : Number(e.target.value))}
-                            className="text-right h-8 text-xs"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={line.credit || ''}
-                            onChange={(e) => handleLineChange(line.id, 'credit', e.target.value === '' ? 0 : Number(e.target.value))}
-                            className="text-right h-8 text-xs"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            placeholder="Descripción (opcional)"
-                            value={line.description}
-                            onChange={(e) => handleLineChange(line.id, 'description', e.target.value)}
-                            className="h-8 text-xs"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-destructive hover:text-destructive"
-                            disabled={formLines.length <= 1}
-                            onClick={() => handleRemoveLine(line.id)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Totals */}
-              <div className="flex items-center justify-end gap-6 text-sm font-medium pt-2 border-t">
-                <span className="flex items-center gap-2">
-                  Total Débitos:
-                  <span className="tabular-nums">{formatCurrency(totalDebits)}</span>
-                </span>
-                <span className="flex items-center gap-2">
-                  Total Créditos:
-                  <span className="tabular-nums">{formatCurrency(totalCredits)}</span>
-                </span>
-                <span className={cn('flex items-center gap-2', balanced ? 'text-emerald-500' : 'text-destructive')}>
-                  {balanced ? '✓ Balanceado' : `✗ Diferencia: ${formatCurrency(Math.abs(totalDebits - totalCredits))}`}
-                </span>
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => { setCreateOpen(false); resetForm(); }}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateJournal} disabled={!canSave || submitting}>
-                {submitting ? 'Guardando...' : 'Crear Asiento'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        )}
       </div>
 
       {/* Filters */}
@@ -589,7 +319,7 @@ export function DiarioView() {
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <FileText className="size-12 mb-3 opacity-30" />
               <p className="text-sm font-medium">No hay asientos contables</p>
-              <p className="text-xs mt-1">Crea un nuevo asiento para comenzar</p>
+              <p className="text-xs mt-1">Los asientos se generan automáticamente desde los módulos operativos</p>
             </div>
           ) : (
             <>

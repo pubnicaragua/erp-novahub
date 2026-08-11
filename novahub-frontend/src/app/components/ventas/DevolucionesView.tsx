@@ -135,6 +135,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   };
 
   const handleExportPDF = async (row: SalesReturn) => {
+    const pdfToastId = toast.loading('Generando PDF de la devolución...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
       await generateEstimatePDF({
@@ -143,16 +144,17 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         formatAmount: formatConvertedAmount,
         documentType: 'return',
       });
-      toast.success('PDF generado exitosamente');
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
+      toast.success('PDF generado exitosamente', { id: pdfToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
   const handleApprove = async (id: string) => {
+    const approveToastId = toast.loading('Aprobando devolución...');
     try {
       await salesReturnsService.approve(id);
-      toast.success('Devolución aprobada');
+      toast.success('Devolución aprobada', { id: approveToastId });
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar', { id: approveToastId }); }
   };
 
   // Get invoices for selected customer
@@ -335,7 +337,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         </div>
         <EditableDataTable data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
+          onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} devolución${ids.length === 1 ? '' : 'es'}...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminados', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           actions={(row) => (
@@ -363,13 +365,14 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         loading={deleteLoading}
         onConfirm={async () => {
           if (!pendingDeleteId) return;
+          const deleteToastId = toast.loading('Eliminando devolución...');
           try {
             setDeleteLoading(true);
             await salesReturnsService.delete(pendingDeleteId);
-            toast.success('Registro eliminado');
+            toast.success('Registro eliminado', { id: deleteToastId });
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.message || 'Error al eliminar');
+            toast.error(error?.message || 'Error al eliminar', { id: deleteToastId });
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);

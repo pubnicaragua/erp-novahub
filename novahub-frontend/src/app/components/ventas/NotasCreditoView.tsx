@@ -129,14 +129,16 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
   };
 
   const handleIssue = async (id: string) => {
+    const issueToastId = toast.loading('Emitiendo nota de crédito...');
     try {
       await creditNotesService.issue(id);
-      toast.success('Nota de crédito emitida — Balance del cliente actualizado');
+      toast.success('Nota de crédito emitida — Balance del cliente actualizado', { id: issueToastId });
       setEditingId(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al emitir nota de crédito'); }
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al emitir nota de crédito', { id: issueToastId }); }
   };
 
   const handleExportPDF = async (row: CreditNote) => {
+    const pdfToastId = toast.loading('Generando PDF de la nota de crédito...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
       await generateEstimatePDF({
@@ -145,8 +147,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
         formatAmount: formatConvertedAmount,
         documentType: 'credit-note',
       });
-      toast.success('PDF generado exitosamente');
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
+      toast.success('PDF generado exitosamente', { id: pdfToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
   const getCustomerName = (cn: CreditNote) => cn.customer?.name || customers.find(c => c.id === cn.customerId)?.name || 'Cliente';
@@ -320,7 +322,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
         </div>
         <EditableDataTable data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error'); } }}
+          onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           actions={(row) => (
@@ -348,13 +350,14 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
         loading={deleteLoading}
         onConfirm={async () => {
           if (!pendingDeleteId) return;
+          const deleteToastId = toast.loading('Eliminando nota de crédito...');
           try {
             setDeleteLoading(true);
             await creditNotesService.delete(pendingDeleteId);
-            toast.success('Registro eliminado');
+            toast.success('Registro eliminado', { id: deleteToastId });
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.message || 'Error al eliminar');
+            toast.error(error?.message || 'Error al eliminar', { id: deleteToastId });
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);

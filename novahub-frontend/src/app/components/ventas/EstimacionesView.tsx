@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, FileDown, Eye, Trash2, Ban, ChevronLeft, MessageCircle
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, FileDown, Eye, Trash2, Ban, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -27,6 +28,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -89,6 +91,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       return;
     }
     setConvertingId(estimate.id);
+    const conversionToastId = toast.loading('Generando orden de venta desde la cotización...');
     try {
       if (currentStatus === 'DRAFT') {
         await estimatesService.update(estimate.id, {
@@ -113,11 +116,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         } as Partial<Estimate>);
       }
       const order = await estimatesService.convertToOrder(estimate.id);
-      toast.success('Cotización enviada a Orden de Venta');
+      toast.success('Cotización enviada a Orden de Venta', { id: conversionToastId });
       onConvertedToOrder?.(order.id);
       await onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización', { id: conversionToastId });
     } finally {
       setConvertingId(null);
     }
@@ -170,25 +173,26 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         return;
       }
     }
+    const saveToastId = toast.loading(status === 'SENT' ? 'Enviando cotización...' : 'Guardando cotización...');
     try {
       await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
       setEditingId(null);
-      toast.success(status === 'SENT' ? 'Cotización enviada' : 'Cotización guardada como borrador');
-    } catch {
-      // handleUpdate already shows the error
+      toast.success(status === 'SENT' ? 'Cotización enviada' : 'Cotización guardada como borrador', { id: saveToastId });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la cotización', { id: saveToastId });
     }
   };
 
-  const getCustomerPhone = (): string | null => {
-    if (!localDoc?.customerId) return null;
-    const customer = customers.find((c) => c.id === localDoc.customerId);
-    return customer?.phone || null;
+  const getCustomerPhone = (estimate: Estimate | null = localDoc): string | null => {
+    if (!estimate) return null;
+    return resolveCustomerPhone(estimate.customerId, estimate.customer, customers);
   };
 
-  const handleWhatsApp = async () => {
-    const phone = getCustomerPhone();
+  const handleWhatsApp = async (estimateOverride?: Estimate) => {
+    const estimate = estimateOverride || localDoc;
+    const phone = getCustomerPhone(estimate);
     if (!phone) {
-      toast.error('El cliente no tiene número de teléfono registrado');
+      toast.error('El cliente no tiene un número asociado para enviar la cotización por WhatsApp');
       return;
     }
 
@@ -196,28 +200,28 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     let securePortalUrl: string | null = null;
     let publicPdfUrl: string | null = null;
 
-    if (localDoc) {
-      const currentCustomer = customers.find((c) => c.id === localDoc.customerId) || localDoc.customer;
+    const preparingToastId = estimate ? toast.loading('Generando PDF y preparando enlaces seguros...') : undefined;
+    if (estimate) {
+      const currentCustomer = customers.find((c) => c.id === estimate.customerId) || estimate.customer;
       try {
-        toast.info('Generando PDF y preparando enlaces seguros...');
-        if (localDoc.customerId) {
+        if (estimate.customerId) {
           const [documentLink, portalLink] = await Promise.all([
-            publicAccessService.createDocumentLink({ customerId: localDoc.customerId, documentType: 'estimate', documentId: localDoc.id, allowPrint: true, allowDownload: true, allowRelated: true }),
-            publicAccessService.createPortalLink({ customerId: localDoc.customerId }),
+            publicAccessService.createDocumentLink({ customerId: estimate.customerId, documentType: 'estimate', documentId: estimate.id, allowPrint: true, allowDownload: true, allowRelated: true }),
+            publicAccessService.createPortalLink({ customerId: estimate.customerId }),
           ]);
           secureDocumentUrl = publicLinkUrl(documentLink.path);
           securePortalUrl = publicLinkUrl(portalLink.path);
         }
         if (!secureDocumentUrl) {
           const { blob } = await generateEstimatePDF({
-            estimate: { ...localDoc, customer: currentCustomer },
+            estimate: { ...estimate, customer: currentCustomer },
             tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
             tenantLogo: themeConfig?.logo,
             formatAmount: formatConvertedAmount,
             save: true,
           });
           // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
-          const fileName = `${localDoc.number || 'Cotizacion'}_${Date.now()}.pdf`;
+          const fileName = `${estimate.number || 'Cotizacion'}_${Date.now()}.pdf`;
           const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
           const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
           if (uploaded?.url) publicPdfUrl = uploaded.url;
@@ -229,10 +233,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
     const digits = phone.replace(/\D/g, '');
     const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
-    const customerName = localDoc?.customer?.name || customers.find((c) => c.id === localDoc?.customerId)?.name || '';
-    const totalFormatted = formatConvertedAmount(Number(localDoc?.total || 0), localDoc?.currency || 'NIO');
+    const customerName = estimate?.customer?.name || customers.find((c) => c.id === estimate?.customerId)?.name || '';
+    const totalFormatted = `${estimate?.currency === 'USD' ? 'US$' : 'C$'}${formatSalesAmount(estimate?.total)}`;
 
-    let message = `Hola ${customerName}, te compartimos la cotización ${localDoc?.number || ''} por un total de ${totalFormatted}.`;
+    let message = `Hola ${customerName}, te compartimos la cotización ${estimate?.number || ''} por un total de ${totalFormatted}.`;
     if (secureDocumentUrl) {
       message += `\n\nPodés consultar la cotización de forma segura aquí:\n${secureDocumentUrl}`;
       if (securePortalUrl) message += `\n\nTambién podés consultar tu historial y saldo en el portal del cliente:\n${securePortalUrl}`;
@@ -246,9 +250,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
 
     if (publicPdfUrl) {
-      toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!');
+      toast.success('¡Enlace público del PDF generado e incluido en el mensaje de WhatsApp!', preparingToastId ? { id: preparingToastId } : undefined);
     } else {
-      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { duration: 5000 });
+      toast.success('PDF descargado. ¡Se abrió WhatsApp para que lo adjuntes!', { ...(preparingToastId ? { id: preparingToastId } : {}), duration: 5000 });
     }
   };
 
@@ -427,8 +431,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
           <div className="flex items-center gap-3">
             {localDoc?.customerId && (
-              <Button variant="outline" onClick={handleWhatsApp} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
-                <MessageCircle className="size-3.5" /> WhatsApp
+              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+                <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
             {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED', 'REJECTED'].includes(String(localDoc?.status || '').toUpperCase()) && (
@@ -482,7 +486,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   <Input type="date" defaultValue={typeof localDoc?.expiryDate === 'string' && localDoc.expiryDate.includes('T') ? localDoc.expiryDate.split('T')[0] : localDoc?.expiryDate || ''} onBlur={(e) => handleUpdate(localDoc!.id, { expiryDate: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Moneda de la cotización</p>
                     <Select value={localDoc?.currency || 'NIO'} onValueChange={(currency) => {
                       const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
                       const previousCurrency = localDoc?.currency || 'NIO';
@@ -821,12 +825,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           columns={columns}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setEditingId(row.id)}
-          actionsWidth="w-52"
+          actionsWidth="w-56"
           fitContent
           layoutMode={layoutMode}
           showHorizontalControls
           actions={(row) => (
             <>
+              <WhatsAppActionButton
+                phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                documentLabel="cotización"
+                onSend={() => handleWhatsApp(row)}
+              />
               {canPerform('SALES_ORDERS', 'create') &&
                 ['DRAFT', 'SENT'].includes(String(row.status || '').toUpperCase()) && (
                 <Button
@@ -882,14 +891,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         loading={cancelLoading}
         onConfirm={async () => {
           if (!pendingCancelId) return;
+          const cancelToastId = toast.loading('Cancelando cotización...');
           try {
             setCancelLoading(true);
             await estimatesService.update(pendingCancelId, { status: 'CANCELLED' as any });
-            toast.success('Cotización cancelada');
+            toast.success('Cotización cancelada', { id: cancelToastId });
             setEditingId(null);
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar la cotización');
+            toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar la cotización', { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

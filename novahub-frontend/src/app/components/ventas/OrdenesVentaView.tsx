@@ -18,6 +18,8 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { storageService } from '../../services/storage.service';
+import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { FileDown } from 'lucide-react';
@@ -27,6 +29,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -148,18 +151,77 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       return;
     }
     setInvoicingOrderId(order.id);
+    const invoiceToastId = toast.loading('Generando factura desde la orden de venta...');
     try {
       const currentStatus = String(orderForConversion.status || '').toUpperCase();
       if (!['CONFIRMED', 'SHIPPED'].includes(currentStatus)) {
         await salesOrdersService.update(order.id, { status: 'CONFIRMED' as any });
       }
       await onGenerateInvoice({ ...orderForConversion, status: 'confirmed' as any });
+      toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
       await onRefresh();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la factura');
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la factura', { id: invoiceToastId });
     } finally {
       setInvoicingOrderId(null);
     }
+  };
+
+  const handleWhatsApp = async (order: SalesOrder) => {
+    const phone = resolveCustomerPhone(order.customerId, order.customer, customers);
+    if (!phone) {
+      toast.error('El cliente no tiene un número asociado para enviar la orden de venta por WhatsApp');
+      return;
+    }
+
+    const customer = order.customer || customers.find((entry) => entry.id === order.customerId);
+    let secureDocumentUrl: string | null = null;
+    let securePortalUrl: string | null = null;
+    let publicPdfUrl: string | null = null;
+
+    const preparingToastId = toast.loading('Generando PDF y preparando el mensaje...');
+    try {
+      if (order.customerId) {
+        const [documentLink, portalLink] = await Promise.all([
+          publicAccessService.createDocumentLink({ customerId: order.customerId, documentType: 'sales-order', documentId: order.id, allowPrint: true, allowDownload: true, allowRelated: true }),
+          publicAccessService.createPortalLink({ customerId: order.customerId }),
+        ]);
+        secureDocumentUrl = publicLinkUrl(documentLink.path);
+        securePortalUrl = publicLinkUrl(portalLink.path);
+      }
+
+      if (!secureDocumentUrl) {
+        const { blob } = await generateEstimatePDF({
+          estimate: { ...order, customer },
+          tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+          tenantLogo: themeConfig?.logo,
+          formatAmount,
+          documentType: 'order',
+          save: true,
+        });
+        const pdfFile = new File([blob], `${order.number || 'OrdenVenta'}_${Date.now()}.pdf`, { type: 'application/pdf' });
+        const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'ordenes-venta' });
+        if (uploaded?.url) publicPdfUrl = uploaded.url;
+      }
+    } catch (error) {
+      console.warn('No se pudo generar enlace seguro de la orden, usando modo estándar:', error);
+    }
+
+    const digits = phone.replace(/\D/g, '');
+    const phoneWithCode = digits.length === 8 ? `505${digits}` : (digits.startsWith('505') ? digits : `505${digits}`);
+    const totalFormatted = `${order.currency === 'USD' ? 'US$' : 'C$'}${formatSalesAmount(order.total)}`;
+    let message = `Hola ${customer?.name || ''}, te compartimos la orden de venta ${order.number || ''} por un total de ${totalFormatted}.`;
+    if (secureDocumentUrl) {
+      message += `\n\nPodés consultar la orden de forma segura aquí:\n${secureDocumentUrl}`;
+      if (securePortalUrl) message += `\n\nTambién podés consultar tu historial y saldo en el portal del cliente:\n${securePortalUrl}`;
+    } else if (publicPdfUrl) {
+      message += `\n\nPodés ver o descargar la orden en PDF desde este enlace:\n${publicPdfUrl}`;
+    } else {
+      message += ' Adjunto encontrarás el documento PDF con todos los detalles.';
+    }
+
+    window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(message)}`, '_blank');
+    toast.success('¡Se abrió WhatsApp con la orden de venta preparada!', { id: preparingToastId });
   };
 
   // NOTE: intentionally NOT listening to data changes here.
@@ -249,12 +311,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         }
       }
     }
+    const saveToastId = toast.loading(status === 'CONFIRMED' ? 'Confirmando orden de venta...' : 'Guardando orden de venta...');
     try {
       await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
       setEditingId(null);
-      toast.success(status === 'CONFIRMED' ? 'Orden confirmada' : 'Orden guardada como borrador');
-    } catch {
-      // handleUpdate already shows the error
+      toast.success(status === 'CONFIRMED' ? 'Orden confirmada' : 'Orden guardada como borrador', { id: saveToastId });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la orden de venta', { id: saveToastId });
     }
   };
 
@@ -1024,16 +1087,21 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           data={filtered}
           pagination={pagination}
           showHorizontalControls
-          actionsWidth="w-44"
+          actionsWidth="w-56"
           fitContent
           columns={visibleColumns}
           layoutMode={layoutMode}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setEditingId(row.id)}
           isLoading={loading}
-          actions={(row) => (
-            <div className="flex min-w-max items-center justify-end gap-2 pr-1">
-                {canPerform('SALES_INVOICES', 'create') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
+           actions={(row) => (
+             <div className="flex min-w-max items-center justify-end gap-2 pr-1">
+                <WhatsAppActionButton
+                  phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                  documentLabel="orden de venta"
+                  onSend={() => handleWhatsApp(row)}
+                />
+                 {canPerform('SALES_INVOICES', 'create') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
                     title="Aprobar y enviar a Factura" 
@@ -1118,15 +1186,16 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         loading={cancelLoading}
         onConfirm={async () => {
           if (!pendingCancelId) return;
+          const cancelToastId = toast.loading('Cancelando orden de venta...');
           try {
             setCancelLoading(true);
             await salesOrdersService.update(pendingCancelId, { status: 'cancelled' });
-            toast.success('Orden cancelada');
+            toast.success('Orden cancelada', { id: cancelToastId });
             if (editingId === pendingCancelId) setEditingId(null);
             await onRefresh();
           } catch (error: any) {
             const message = error?.response?.data?.message || error?.message || 'Error al cancelar la orden';
-            toast.error(Array.isArray(message) ? message.join(', ') : message);
+            toast.error(Array.isArray(message) ? message.join(', ') : message, { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

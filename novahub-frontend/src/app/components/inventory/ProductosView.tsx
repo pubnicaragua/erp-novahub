@@ -59,6 +59,9 @@ interface ProductosViewProps {
   onWarehouseChange?: (value: string[]) => void;
   itemType?: 'PRODUCT' | 'SERVICE';
   isSidebarCollapsed?: boolean;
+  targetProductId?: string | null;
+  initialStockFilter?: 'all' | 'available' | 'low' | 'out';
+  onClearTargetProduct?: () => void;
 }
 
 interface EditingProduct {
@@ -241,7 +244,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, onClearTargetProduct }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
@@ -263,7 +266,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
-  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
@@ -314,6 +318,21 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    if (initialStockFilter) setStockFilter(initialStockFilter);
+  }, [initialStockFilter]);
+
+  useEffect(() => {
+    if (!targetProductId) return;
+    const target = products.find((product: any) => product.id === targetProductId);
+    if (!target) return;
+    setHighlightedProductId(targetProductId);
+    setProductDetail(target);
+    onClearTargetProduct?.();
+    const timeout = window.setTimeout(() => setHighlightedProductId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [targetProductId, products, onClearTargetProduct]);
+
   // ─── Solicitud de compra desde inventario ─────────────────────────────────────
   const [solicitudOpen, setSolicitudOpen] = useState(false);
   const [solicitudProducts, setSolicitudProducts] = useState<Array<{
@@ -328,6 +347,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [solicitudEmployees, setSolicitudEmployees] = useState<any[]>([]);
   const [solicitudEmployeeId, setSolicitudEmployeeId] = useState('');
   const [solicitudEmployeesLoading, setSolicitudEmployeesLoading] = useState(false);
+  const [solicitudProductSearch, setSolicitudProductSearch] = useState('');
+  const [solicitudCatalogProducts, setSolicitudCatalogProducts] = useState<any[]>([]);
+  const [solicitudCatalogLoading, setSolicitudCatalogLoading] = useState(false);
 
   const loadSolicitudEmployees = async () => {
     if (solicitudEmployees.length > 0) return;
@@ -344,6 +366,42 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       setSolicitudEmployeesLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!solicitudOpen) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSolicitudCatalogLoading(true);
+      try {
+        const response = await inventoryService.getProducts({
+          type: 'PRODUCT',
+          page: 1,
+          pageSize: 200,
+          search: solicitudProductSearch.trim() || undefined,
+          includeInactive: false,
+        }, controller.signal);
+        if (controller.signal.aborted) return;
+        const list = Array.isArray(response) ? response : ((response as any)?.data || []);
+        setSolicitudCatalogProducts(list.filter((product: any) =>
+          String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
+        ));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error('Error loading products for purchase request:', error);
+        setSolicitudCatalogProducts(products.filter((product: any) =>
+          String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
+        ));
+      } finally {
+        if (!controller.signal.aborted) setSolicitudCatalogLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [products, solicitudOpen, solicitudProductSearch]);
 
   const buildSolicitudItems = (list: any[]) => list.map((p: any) => {
     const minStock = Number(p.minStock ?? 0);
@@ -364,13 +422,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       String(p.itemType || p.type || 'PRODUCT').toUpperCase() === 'PRODUCT' &&
       Number(p.stock ?? 0) <= (Number(p.minStock ?? 0) > 0 ? Number(p.minStock) : 2),
     );
-    if (lowStock.length === 0) { toast.info('No hay productos con stock bajo'); return; }
     loadSolicitudEmployees();
     setSolicitudProducts(buildSolicitudItems(lowStock));
     setSolicitudWarehouseId('');
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
     setSolicitudPriority('NORMAL');
+    setSolicitudProductSearch('');
     setSolicitudOpen(true);
   };
 
@@ -383,6 +441,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
     setSolicitudPriority('NORMAL');
+    setSolicitudProductSearch('');
     setSolicitudOpen(true);
   };
 
@@ -390,6 +449,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setSolicitudProducts(prev => prev.map(item => item.productId === productId
       ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
       : item));
+  };
+
+  const addSolicitudProduct = (product: any) => {
+    const item = buildSolicitudItems([product])[0];
+    if (!item) return;
+    setSolicitudProducts(prev => prev.some(existing => existing.productId === item.productId)
+      ? prev
+      : [...prev, item]);
+  };
+
+  const removeSolicitudProduct = (productId: string) => {
+    setSolicitudProducts(prev => prev.filter(item => item.productId !== productId));
   };
 
   const handleCreateSolicitud = async () => {
@@ -1836,12 +1907,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </Button>}
           {!isServiceView && <Button
             size="sm"
-            variant="outline"
-            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
-            onClick={openLowStockSolicitud}
+            className="h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:w-auto"
+            onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}
+            aria-label={selectedIds.size > 0 ? `Solicitar compra de ${selectedIds.size} productos` : 'Abrir solicitudes de compra'}
           >
             <PackageSearch className="size-4 mr-2" />
-            Solicitudes
+            {selectedIds.size > 0 ? `Solicitar Compra (${selectedIds.size})` : 'Solicitudes'}
           </Button>}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
             <>
@@ -1860,16 +1931,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 <Plus className="size-4" /> Agregar servicio
               </Button>
             </>
-          )}
-          {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              className="h-9 min-w-0 w-full rounded-lg bg-amber-600 px-3 font-black text-[10px] uppercase tracking-widest text-white hover:bg-amber-700 sm:w-auto"
-              onClick={openSelectedSolicitud}
-            >
-              <Package className="size-4 mr-2" />
-              Solicitar Compra ({selectedIds.size})
-            </Button>
           )}
         </div>
       </div>
@@ -1893,7 +1954,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
-            <Card key={product.id} className="min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm" onClick={() => setProductDetail(product)}>
+            <Card key={product.id} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => setProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
                 <button
                   type="button"
@@ -2034,7 +2095,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                  return (
                    <TableRow 
                       key={product.id} 
-                      className="group hover:bg-muted/30 cursor-pointer"
+                      className={`group hover:bg-muted/30 cursor-pointer ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-inset ring-primary/60' : ''}`}
                       onClick={() => setProductDetail(product)}
                       onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
                      >
@@ -2735,6 +2796,74 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 </Select>
               </div>
             </div>
+            <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <label htmlFor="solicitud-product-search" className="text-xs font-black uppercase tracking-wide">Agregar productos</label>
+                  <p className="text-[11px] text-muted-foreground">Busca por nombre o código y agrégalos a la solicitud.</p>
+                </div>
+                <Badge variant="secondary" className="w-fit text-[10px]">{solicitudCatalogProducts.length} resultados</Badge>
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="solicitud-product-search"
+                  value={solicitudProductSearch}
+                  onChange={(event) => setSolicitudProductSearch(event.target.value)}
+                  placeholder="Buscar producto por nombre o código..."
+                  className="h-10 bg-background pl-9 pr-9"
+                  disabled={solicitudCreating}
+                  autoComplete="off"
+                />
+                {solicitudProductSearch && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setSolicitudProductSearch('')}
+                    aria-label="Limpiar búsqueda de productos"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-background/70 p-1">
+                {solicitudCatalogLoading ? (
+                  <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" /> Buscando productos...
+                  </div>
+                ) : solicitudCatalogProducts.length > 0 ? (
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {solicitudCatalogProducts.map((product: any) => {
+                      const isAdded = solicitudProducts.some(item => item.productId === product.id);
+                      return (
+                        <div key={product.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-muted/50">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold">{product.name}</p>
+                            <p className="truncate font-mono text-[10px] text-muted-foreground">
+                              {product.code || 'Sin código'} · Stock: {Number(product.stock ?? 0)}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant={isAdded ? 'secondary' : 'outline'}
+                            size="sm"
+                            className="h-8 shrink-0 gap-1 px-2 text-[10px] font-bold"
+                            onClick={() => addSolicitudProduct(product)}
+                            disabled={isAdded || solicitudCreating}
+                            aria-label={isAdded ? `${product.name} ya agregado` : `Agregar ${product.name}`}
+                          >
+                            {isAdded ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                            {isAdded ? 'Agregado' : 'Agregar'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="px-3 py-6 text-center text-xs text-muted-foreground">No se encontraron productos.</p>
+                )}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold">Productos</label>
@@ -2749,6 +2878,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                         <TableHead className="font-black text-[10px] uppercase text-right">Stock</TableHead>
                         <TableHead className="font-black text-[10px] uppercase text-right">Min</TableHead>
                         <TableHead className="font-black text-[10px] uppercase text-right w-28">Cantidad a solicitar</TableHead>
+                        <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2763,6 +2893,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                           <TableCell className="text-right">
                             <Input type="number" min={1} className="h-8 w-24 ml-auto text-right text-xs" value={item.quantity}
                               onChange={(e) => updateSolicitudQuantity(item.productId, Number(e.target.value))} disabled={solicitudCreating} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => removeSolicitudProduct(item.productId)}
+                              disabled={solicitudCreating}
+                              aria-label={`Quitar ${item.productName}`}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}

@@ -93,17 +93,18 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
   const handleStatusAction = async (row: SupplierCredit) => {
     const status = String(row.status || '').toUpperCase();
+    const statusToastId = toast.loading(status === 'DRAFT' ? 'Emitiendo crédito de proveedor...' : 'Aplicando crédito de proveedor...');
     try {
       if (status === 'DRAFT') {
         await vendorCreditsService.issue(row.id);
-        toast.success('Crédito emitido');
+        toast.success('Crédito emitido', { id: statusToastId });
       } else if (status === 'ISSUED') {
         await vendorCreditsService.apply(row.id, { paymentMethod: 'OTHER' });
-        toast.success('Crédito aplicado');
+        toast.success('Crédito aplicado', { id: statusToastId });
       }
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del crédito');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del crédito', { id: statusToastId });
     }
   };
 
@@ -112,6 +113,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando crédito de proveedor...' : 'Guardando crédito de proveedor...');
     try {
       const creditCurrency = localDoc.currency || displayCurrency;
       const creditRate = creditCurrency === baseCurrency
@@ -126,29 +128,30 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       };
       if (editingId === 'NEW') {
         await vendorCreditsService.create(finalDoc as any);
-        toast.success('Crédito registrado exitosamente');
+        toast.success('Crédito registrado exitosamente', { id: saveToastId });
       } else {
         await vendorCreditsService.update(editingId!, finalDoc as any);
-        toast.success('Crédito guardado');
+        toast.success('Crédito guardado', { id: saveToastId });
       }
       openEditor(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar'); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar', { id: saveToastId });
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
     setDeleteLoading(true);
+    const deleteToastId = toast.loading('Eliminando crédito de proveedor...');
     try {
       await vendorCreditsService.delete(pendingDeleteId);
-      toast.success('Crédito eliminado exitosamente');
+      toast.success('Crédito eliminado exitosamente', { id: deleteToastId });
       setPendingDeleteId(null);
       openEditor(null);
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error al eliminar');
+      toast.error(error?.response?.data?.message || 'Error al eliminar', { id: deleteToastId });
     } finally {
       setDeleteLoading(false);
     }

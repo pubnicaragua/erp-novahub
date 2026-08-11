@@ -1,22 +1,64 @@
 "use client";
 
-import { Ban, BadgeCheck, FilePlus2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Ban, CalendarDays, CheckCircle2, FileDown, History, Info, UserRound } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
 import { cn } from '../../ui/utils';
+import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
 
-const statusOpts = [
-  { label: 'Borrador',   value: 'DRAFT',     color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',   value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Cancelada',  value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
-];
+const STATUS_META: Record<string, { label: string; className: string }> = {
+  PENDING: { label: 'Pendiente', className: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  DRAFT: { label: 'Pendiente', className: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  APPROVED: { label: 'Aprobada', className: 'border-primary/20 bg-primary/10 text-primary' },
+  CANCELLED: { label: 'Rechazada', className: 'border-destructive/20 bg-destructive/10 text-destructive' },
+  REJECTED: { label: 'Rechazada', className: 'border-destructive/20 bg-destructive/10 text-destructive' },
+};
 
-const fm = (n: number | string | undefined | null) =>
-  new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
+const ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Creación',
+  UPDATE: 'Actualización',
+  DELETE: 'Eliminación',
+  STATUS_CHANGE: 'Cambio de estado',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Pendiente',
+  PENDING: 'Pendiente',
+  APPROVED: 'Aprobada',
+  CANCELLED: 'Rechazada',
+  REJECTED: 'Rechazada',
+};
+
+const HISTORY_KEY_LABELS: Record<string, string> = {
+  number: 'Número',
+  status: 'Estado',
+  from: 'Estado anterior',
+  to: 'Estado nuevo',
+  reason: 'Motivo',
+  invoiceNumber: 'Factura',
+  invoiceStatus: 'Estado de la factura',
+  purchaseOrderId: 'Orden de compra',
+  origin: 'Origen',
+};
+
+const HISTORY_VALUE_LABELS: Record<string, string> = {
+  ...STATUS_LABELS,
+  PURCHASE_REQUEST: 'Desde solicitud de compra',
+  PURCHASE_ORDER: 'Desde orden de compra',
+};
+
+const formatAmount = (value: unknown) => new Intl.NumberFormat('es-NI', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+}).format(Number(value || 0));
+
+const formatDate = (value: unknown) => value
+  ? new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium' }).format(new Date(String(value)))
+  : '—';
 
 interface PurchaseOrderPreviewDialogProps {
   open: boolean;
@@ -28,120 +70,221 @@ interface PurchaseOrderPreviewDialogProps {
   onClose: () => void;
   onApprove: (id: string) => void;
   onCancel: (id: string) => void;
-  onGenerateInvoice?: () => void;
+  onDownloadPdf?: () => void;
 }
 
 export function PurchaseOrderPreviewDialog({
-  open, order, suppliers, canApprove, canCancel, approving = false, onClose, onApprove, onCancel, onGenerateInvoice,
+  open,
+  order,
+  suppliers,
+  canApprove,
+  canCancel,
+  approving = false,
+  onClose,
+  onApprove,
+  onCancel,
+  onDownloadPdf,
 }: PurchaseOrderPreviewDialogProps) {
-  const supplier = suppliers?.find((s) => s.id === order?.supplierId);
-  const status = (order?.status || '').toUpperCase();
-  const statusMeta = statusOpts.find((o) => o.value === status);
-  const isCancelled = status === 'CANCELLED';
-  const canApproveState = ['DRAFT', 'PENDING'].includes(status);
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const status = String(order?.status || 'PENDING').toUpperCase();
+  const normalizedStatus = status === 'DRAFT' ? 'PENDING' : status;
+  const statusMeta = STATUS_META[normalizedStatus] || STATUS_META.PENDING;
+  const supplier = order?.supplier || suppliers?.find((item) => item.id === order?.supplierId);
   const items = order?.items || [];
+  const canApproveState = ['DRAFT', 'PENDING'].includes(status);
+  const isRejected = ['CANCELLED', 'REJECTED'].includes(status);
+  const currency = String(order?.currency || 'NIO').toUpperCase();
+  const currencyPrefix = currency === 'USD' ? '$' : currency === 'NIO' ? 'C$' : currency;
+
+  const originLabel = useMemo(() => {
+    if (order?.purchaseRequestId || order?.purchaseRequestNumber) {
+      return `Desde solicitud de compra${order.purchaseRequestNumber ? ` · ${order.purchaseRequestNumber}` : ''}`;
+    }
+    return 'Creada directamente como orden de compra';
+  }, [order?.purchaseRequestId, order?.purchaseRequestNumber]);
+
+  useEffect(() => {
+    if (!open || !order?.id) {
+      setHistory([]);
+      return;
+    }
+
+    let active = true;
+    setHistoryLoading(true);
+    api.get<any[]>(`/audit/entity/PURCHASE_ORDER/${order.id}`)
+      .then((result) => {
+        if (active) setHistory(Array.isArray(result) ? result : []);
+      })
+      .catch(() => {
+        if (active) setHistory([]);
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [open, order?.id]);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-black uppercase tracking-tight">Vista Previa de Orden</DialogTitle>
-          <DialogDescription className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {order?.number ? `Orden ${order.number}` : 'Orden de Compra'} · {supplier?.name || 'Sin proveedor'}
-              {order?.purchaseRequestNumber ? ` · Solicitud ${order.purchaseRequestNumber}` : ''}
-            </span>
-            {statusMeta && (
-              <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', statusMeta.color)}>
-                {statusMeta.label}
-              </Badge>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
+      <SheetContent side="right" className="w-full gap-0 border-l border-border/50 bg-background p-0 sm:max-w-2xl">
+        {order && (
+          <>
+            <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
+              <div className="flex items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                  <CheckCircle2 className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <SheetTitle className="flex flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
+                    Orden {order.number || 'de compra'}
+                    <Badge variant="outline" className={cn('text-[10px] font-black uppercase', statusMeta.className)}>
+                      {statusMeta.label}
+                    </Badge>
+                  </SheetTitle>
+                  <SheetDescription className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span>{supplier?.name || 'Sin proveedor'}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatDate(order.date)}</span>
+                  </SheetDescription>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">{originLabel}</Badge>
+                {order.requestedBy && <span>Solicitada por {order.requestedBy}</span>}
+              </div>
+            </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/50">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="h-9">Código</TableHead>
-                <TableHead className="h-9">Nombre</TableHead>
-                <TableHead className="h-9 text-right">Cant.</TableHead>
-                <TableHead className="h-9 text-right">P. Unit.</TableHead>
-                <TableHead className="h-9 text-right">Subtotal</TableHead>
-                <TableHead className="h-9 text-right">IVA</TableHead>
-                <TableHead className="h-9 text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Sin ítems
-                  </TableCell>
-                </TableRow>
-              ) : items.map((it: any, i: number) => {
-                const total = Number(it.total ?? (Number(it.quantity || 0) * Number(it.unitPrice || 0)));
-                const tax = Number(it.taxAmount ?? 0);
-                const subtotal = Number(it.taxBase ?? total - tax);
-                return (
-                  <TableRow key={it.id ?? i}>
-                    <TableCell className="font-mono text-[11px]">{it.code || '—'}</TableCell>
-                    <TableCell className="text-xs">{it.name || it.description || '—'}</TableCell>
-                    <TableCell className="text-right text-xs">{Number(it.quantity || 0)}</TableCell>
-                    <TableCell className="text-right text-xs">{fm(it.unitPrice)}</TableCell>
-                    <TableCell className="text-right text-xs">{fm(subtotal)}</TableCell>
-                    <TableCell className="text-right text-xs">{fm(tax)}</TableCell>
-                    <TableCell className="text-right text-xs font-black">{fm(total)}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span>
+                  <p className="mt-1 break-words font-semibold">{supplier?.name || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Fecha</span>
+                  <p className="mt-1 font-medium">{formatDate(order.date)}</p>
+                </div>
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Entrega</span>
+                  <p className="mt-1 font-medium">{formatDate(order.expectedDelivery)}</p>
+                </div>
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Moneda</span>
+                  <p className="mt-1 font-medium">{currency}</p>
+                </div>
+              </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-3">
-          <div className="text-xs text-muted-foreground">
-            {isCancelled
-              ? 'Esta orden está anulada y no puede procesarse.'
-              : status === 'APPROVED'
-                ? 'Esta orden está aprobada y puede generar una factura de proveedor.'
-              : 'Confirme la acción a realizar sobre la orden.'}
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm font-black uppercase tracking-widest">
-            <span className="text-muted-foreground">Subtotal <span className="text-foreground">{fm(order?.subtotal)}</span></span>
-            <span className="text-muted-foreground">IVA <span className="text-foreground">{fm(order?.taxAmount)}</span></span>
-            <span className="text-muted-foreground">Retención <span className="text-foreground">{fm(order?.withholdingTotal)}</span></span>
-            <span className="text-muted-foreground">Total <span className="text-primary text-lg">{fm(order?.total)}</span></span>
-          </div>
-        </div>
+              <section className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalle de artículos</h4>
+                  <Badge variant="outline" className="text-[10px]">{items.length} artículos</Badge>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-border/50">
+                  <div className="max-w-full overflow-x-auto">
+                    <Table className="min-w-[650px]">
+                      <TableHeader>
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableHead className="text-[10px] uppercase">Código</TableHead>
+                          <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Cant.</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">P. unitario</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Subtotal</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">IVA</TableHead>
+                          <TableHead className="text-right text-[10px] uppercase">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay artículos registrados.</TableCell></TableRow>
+                        ) : items.map((item: any, index: number) => {
+                          const lineTotal = Number(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice || 0));
+                          const tax = Number(item.taxAmount ?? 0);
+                          const subtotal = Number(item.taxBase ?? lineTotal - tax);
+                          return (
+                            <TableRow key={item.id || index}>
+                              <TableCell className="font-mono text-[11px]">{item.code || '—'}</TableCell>
+                              <TableCell className="max-w-[220px] whitespace-normal break-words text-xs">{item.name || item.description || '—'}</TableCell>
+                              <TableCell className="text-right text-xs">{Number(item.quantity || 0)}</TableCell>
+                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(item.unitPrice)}</TableCell>
+                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(subtotal)}</TableCell>
+                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(tax)}</TableCell>
+                              <TableCell className="text-right text-xs font-black">{currencyPrefix} {formatAmount(lineTotal)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </section>
 
-        <DialogFooter className="mt-4 flex-wrap gap-2">
-          {onGenerateInvoice && status === 'APPROVED' && (
-            <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={onGenerateInvoice}>
-              <FilePlus2 className="mr-2 size-3.5" /> Generar factura
-            </Button>
-          )}
-          {canCancel && !isCancelled && (
-            <Button variant="outline" className="border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => order?.id && onCancel(order.id)}>
-              <Ban className="mr-2 size-3.5" />
-              Anular orden
-            </Button>
-          )}
-          {canApprove && canApproveState && (
-            <Button className="rounded-xl bg-emerald-500 shadow-xl shadow-emerald-500/20 text-white font-black uppercase text-[10px] tracking-widest px-6 disabled:opacity-50"
-              disabled={approving}
-              onClick={() => order?.id && onApprove(order.id)}>
-              <BadgeCheck className="mr-2 size-3.5" />
-              {approving ? 'Aprobando…' : 'Aprobar'}
-            </Button>
-          )}
-          <Button variant="outline" onClick={onClose} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-            Cerrar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm sm:grid-cols-4">
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Subtotal</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.subtotal)}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">IVA</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.taxAmount)}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Retención</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.withholdingTotal)}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Total</span><p className="mt-1 font-mono text-lg font-black text-primary">{currencyPrefix} {formatAmount(order.total)}</p></div>
+              </div>
+
+              {order.notes && <p className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm text-muted-foreground">Notas: {order.notes}</p>}
+
+              <section className="space-y-3 border-t border-border/50 pt-5">
+                <div className="flex items-center gap-2">
+                  <History className="size-4 text-primary" />
+                  <h4 className="text-xs font-black uppercase tracking-widest text-primary">Historial de cambios</h4>
+                </div>
+                {historyLoading ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-4 text-xs text-muted-foreground"><span className="size-3 animate-spin rounded-full border-2 border-primary/30 border-t-primary" /> Cargando historial…</div>
+                ) : history.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/50 bg-muted/10 p-4 text-xs text-muted-foreground">No hay cambios registrados para esta orden.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {history.map((entry) => {
+                      const details = typeof entry.details === 'string' ? (() => { try { return JSON.parse(entry.details); } catch { return null; } })() : entry.details;
+                      return (
+                        <div key={entry.id} className="relative border-l-2 border-primary/20 pl-4">
+                          <span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary ring-4 ring-background" />
+                          <div className="rounded-xl border border-border/50 bg-card p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[9px] font-black uppercase text-primary">{ACTION_LABELS[entry.action] || 'Actividad'}</Badge>
+                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><CalendarDays className="size-3" /> {formatDate(entry.createdAt)}</span>
+                            </div>
+                            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold"><UserRound className="size-3.5 text-muted-foreground" /> {entry.user?.name || 'Sistema'}</p>
+                            {details && <p className="mt-2 flex items-start gap-1.5 break-words text-[11px] text-muted-foreground"><Info className="mt-0.5 size-3 shrink-0" /> {Object.entries(details).map(([key, value]) => `${HISTORY_KEY_LABELS[key] || key}: ${HISTORY_VALUE_LABELS[String(value)] || String(value)}`).join(' · ')}</p>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6">
+              <div className="flex w-full flex-wrap justify-end gap-2">
+                {onDownloadPdf && (
+                  <Button variant="outline" className="gap-2 rounded-xl text-xs font-black uppercase tracking-wider" onClick={onDownloadPdf}>
+                    <FileDown className="size-4" /> Descargar PDF
+                  </Button>
+                )}
+                {canCancel && !isRejected && (
+                  <Button variant="outline" className="gap-2 rounded-xl border-destructive/40 text-xs font-black uppercase tracking-wider text-destructive hover:bg-destructive/10" onClick={() => order.id && onCancel(order.id)}>
+                    <Ban className="size-4" /> Rechazar
+                  </Button>
+                )}
+                {canApprove && canApproveState && (
+                  <Button className="gap-2 rounded-xl bg-primary px-5 text-xs font-black uppercase tracking-wider text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90" disabled={approving} onClick={() => order.id && onApprove(order.id)}>
+                    <CheckCircle2 className="size-4" /> {approving ? 'Aprobando…' : 'Aprobar'}
+                  </Button>
+                )}
+                <Button variant="outline" className="rounded-xl text-xs font-black uppercase tracking-wider" onClick={onClose}>Cerrar</Button>
+              </div>
+            </SheetFooter>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

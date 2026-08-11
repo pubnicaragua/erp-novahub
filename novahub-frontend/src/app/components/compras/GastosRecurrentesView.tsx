@@ -102,33 +102,36 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringExpense>) => {
-    try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); } 
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+    const updateToastId = toast.loading('Guardando cambios en el gasto recurrente...');
+    try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado', { id: updateToastId }); onRefresh(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleStatusAction = async (row: RecurringExpense) => {
     const current = String(row.status || '').toUpperCase();
     const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando gasto recurrente...' : 'Pausando gasto recurrente...');
     try {
       await recurringExpensesService.update(row.id, { status } as any);
-      toast.success(status === 'ACTIVE' ? 'Gasto recurrente activado' : 'Gasto recurrente pausado');
+      toast.success(status === 'ACTIVE' ? 'Gasto recurrente activado' : 'Gasto recurrente pausado', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: statusToastId });
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
     setDeleteLoading(true);
+    const deleteToastId = toast.loading('Eliminando gasto recurrente...');
     try {
       await recurringExpensesService.delete(pendingDeleteId);
-      toast.success('Gasto recurrente eliminado correctamente');
+      toast.success('Gasto recurrente eliminado correctamente', { id: deleteToastId });
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) openEditor(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
     } finally {
       setDeleteLoading(false);
     }
@@ -148,18 +151,19 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     delete (cleanedDoc as any).account;
     delete (cleanedDoc as any).supplier;
 
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando gasto recurrente...' : 'Guardando gasto recurrente...');
     try {
       if (editingId === 'NEW') {
         await recurringExpensesService.create(cleanedDoc as any);
-        toast.success('Gasto recurrente configurado');
+        toast.success('Gasto recurrente configurado', { id: saveToastId });
       } else {
         await recurringExpensesService.update(editingId!, cleanedDoc as any);
-        toast.success('Gasto recurrente actualizado');
+        toast.success('Gasto recurrente actualizado', { id: saveToastId });
       }
       openEditor(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto recurrente'); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto recurrente', { id: saveToastId });
     }
   };
 
@@ -361,15 +365,16 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
+            const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await recurringExpensesService.delete(id as string);
               }
-              toast.success('Elementos eliminados');
+              toast.success('Elementos eliminados', { id: deleteToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
             }
           } : undefined}
           actions={(row) => (

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, Ban, ChevronLeft, FileDown, History, MessageCircle, Loader2
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, Eye, Trash2, Ban, ChevronLeft, FileDown, History, Loader2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -29,6 +30,7 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -131,23 +133,25 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return customer?.priceListId || (customer as any)?.priceList?.id || null;
   };
 
-  const getCustomerPhone = (): string | null => {
-    if (!localDoc?.customerId) return null;
-    const customer = customers.find((c: any) => c.id === localDoc.customerId);
-    return customer?.phone || null;
+  const getCustomerPhone = (invoice: Invoice | null = localDoc): string | null => {
+    if (!invoice) return null;
+    return resolveCustomerPhone(invoice.customerId, invoice.customer, customers);
   };
 
-  const handleWhatsApp = async () => {
-    const phone = getCustomerPhone();
-    if (!phone) { toast.error('El cliente no tiene número de teléfono registrado'); return; }
+  const handleWhatsApp = async (invoiceOverride?: Invoice) => {
+    const invoice = invoiceOverride || localDoc;
+    const phone = getCustomerPhone(invoice);
+    if (!phone) { toast.error('El cliente no tiene un número asociado para enviar la factura por WhatsApp'); return; }
+    const whatsappToastId = toast.loading('Preparando factura para WhatsApp...');
     const digits = phone.replace(/\D/g, '');
     const phoneWithCode = digits.length === 8 ? '505' + digits : (digits.startsWith('505') ? digits : '505' + digits);
-    let message = `Hola ${localDoc?.customer?.name || ''}, te compartimos la factura ${localDoc?.number} por un total de ${localDoc?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(localDoc?.total)}.`;
+    const customerName = invoice?.customer?.name || customers.find((entry) => entry.id === invoice?.customerId)?.name || '';
+    let message = `Hola ${customerName}, te compartimos la factura ${invoice?.number} por un total de ${invoice?.currency === 'USD' ? '$' : 'C$'}${formatSalesAmount(invoice?.total)}.`;
     try {
-      if (localDoc?.customerId && localDoc?.id) {
+      if (invoice?.customerId && invoice?.id) {
         const [documentLink, portalLink] = await Promise.all([
-          publicAccessService.createDocumentLink({ customerId: localDoc.customerId, documentType: 'invoice', documentId: localDoc.id, allowPrint: true, allowDownload: true, allowRelated: true }),
-          publicAccessService.createPortalLink({ customerId: localDoc.customerId }),
+          publicAccessService.createDocumentLink({ customerId: invoice.customerId, documentType: 'invoice', documentId: invoice.id, allowPrint: true, allowDownload: true, allowRelated: true }),
+          publicAccessService.createPortalLink({ customerId: invoice.customerId }),
         ]);
         message += `\n\nPodés consultar la factura de forma segura aquí:\n${publicLinkUrl(documentLink.path)}`;
         message += `\n\nPortal del cliente (historial y saldo):\n${publicLinkUrl(portalLink.path)}`;
@@ -160,6 +164,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
     const text = encodeURIComponent(message);
     window.open(`https://wa.me/${phoneWithCode}?text=${text}`, '_blank');
+    toast.success('Factura preparada y WhatsApp abierto', { id: whatsappToastId });
   };
 
   const isSerialTracked = (product: any) =>
@@ -296,6 +301,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('La factura no tiene saldo pendiente');
       return;
     }
+    const payToastId = toast.loading(`Registrando pago de factura ${invoice.number}...`);
     try {
       setPayingInvoiceId(invoice.id);
       if (invoiceStatus === 'DRAFT') {
@@ -323,12 +329,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         setLocalDoc(null);
       }
 
-      toast.success(`Factura ${invoice.number} marcada como pagada y enviada a finanzas y contabilidad`);
+      toast.success(`Factura ${invoice.number} marcada como pagada y enviada a finanzas y contabilidad`, { id: payToastId });
       await onRefresh();
     } catch (e: any) {
       console.error('Error al pagar factura:', e);
       const msg = e.response?.data?.message || e.message || 'No se pudo registrar el pago';
-      toast.error(Array.isArray(msg) ? msg[0] : msg);
+      toast.error(Array.isArray(msg) ? msg[0] : msg, { id: payToastId });
     } finally {
       setPayingInvoiceId(null);
     }
@@ -431,8 +437,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const baseNotes = String(localDoc.notes || '').split('\n[SERIALES]\n')[0];
     const finalNotes = `${baseNotes}${serialNotes}`.trim();
 
+    const saveToastId = toast.loading(emitir ? 'Emitiendo factura...' : (isCreating ? 'Guardando factura como borrador...' : 'Guardando factura...'));
     try {
-      const saveToastId = isCreating ? toast.loading(emitir ? 'Emitiendo factura...' : 'Guardando factura como borrador...') : undefined;
       if (isCreating) {
         await invoicesService.create({
           customerId: localDoc.customerId,
@@ -483,7 +489,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       onRefresh();
     } catch (e: any) {
       const msg = e.response?.data?.message;
-      toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`);
+      toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`, { id: saveToastId });
     }
   };
 
@@ -695,8 +701,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
           <div className="flex items-center gap-3">
             {!isCreating && localDoc?.customerId && (
-              <Button variant="outline" onClick={handleWhatsApp} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
-                <MessageCircle className="size-3.5" /> WhatsApp
+              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+                <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
             {!isInvoiceLocked && ((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
@@ -1192,29 +1198,40 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           pagination={pagination}
         columns={columns}
         showHorizontalControls
-        actionsWidth="w-52"
+        actionsWidth="w-64"
         fitContent
         layoutMode={layoutMode}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
           onRowClick={(row) => setEditingId(row.id)}
         onBulkDelete={async (ids) => {
-            await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
-            toast.success(`${ids.length} Facturas anuladas`);
-            onRefresh();
+            const bulkCancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'}...`);
+            try {
+              await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
+              toast.success(`${ids.length} Facturas anuladas`, { id: bulkCancelToastId });
+              onRefresh();
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.message || 'No se pudieron anular las facturas', { id: bulkCancelToastId });
+            }
           }}
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
               <div className="flex min-w-max items-center justify-end gap-2 pr-1">
+                <WhatsAppActionButton
+                  phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                  documentLabel="factura"
+                  onSend={() => handleWhatsApp(row)}
+                />
                 <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   void (async () => {
+                    const pdfToastId = toast.loading('Generando PDF de la factura...');
                     try {
                       await generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any });
-                      toast.success('PDF descargado');
+                      toast.success('PDF descargado', { id: pdfToastId });
                     } catch (error: any) {
-                      toast.error(error?.message || 'No se pudo descargar el PDF');
+                      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
                     }
                   })();
                 }}><FileDown className="size-4 text-muted-foreground" /></Button>
@@ -1246,15 +1263,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         disabled={!cancelReason.trim()}
         onConfirm={async () => {
           if (!pendingCancelId || !cancelReason.trim()) return;
+          const cancelToastId = toast.loading('Anulando factura...');
           try {
             setCancelLoading(true);
             await invoicesService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Factura anulada');
+            toast.success('Factura anulada', { id: cancelToastId });
             setEditingId(null);
             setIsCreating(false);
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'Error al anular factura');
+            toast.error(error?.response?.data?.message || error?.message || 'Error al anular factura', { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

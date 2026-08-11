@@ -19,7 +19,6 @@ export const contabilidadService = {
   getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
     api.get<any>('/accounting/journals', { params, signal }),
   getJournal: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/journals/${id}`, { signal }),
-  createJournal: (data: any) => api.post<any>('/accounting/journals', data),
   updateJournal: (id: string, data: any) => api.put<any>(`/accounting/journals/${id}`, data),
   postJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/post`, {}),
   voidJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/void`, {}),

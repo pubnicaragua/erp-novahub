@@ -44,7 +44,6 @@ export const recurringIncomesService = {
 export const journalEntriesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<JournalEntry>>('/financials/journals', { params: filters as any, signal }),
   getById: (id: string) => api.get<JournalEntry>(`/financials/journals/${id}`),
-  create: (data: Partial<JournalEntry>) => api.post<JournalEntry>('/financials/journals', data),
   post: (id: string) => api.patch<JournalEntry>(`/financials/journals/${id}/post`, {}),
 };
 

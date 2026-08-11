@@ -21,10 +21,11 @@ export const purchaseOrdersService = {
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>) => api.post<PurchaseOrder>('/purchases/orders', data),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
-  approve: (id: string) => api.patch<PurchaseOrder>(`/purchases/orders/${id}/approve`, {}),
+  approve: (id: string) => api.patch<{ order: PurchaseOrder; invoice: SupplierInvoice }>(`/purchases/orders/${id}/approve`, {}),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/cancel`, { reason }),
+  reject: (id: string, reason?: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/reject`, { reason }),
   convertToReceipt: (id: string) => api.post<PurchaseReceipt>(`/purchases/orders/${id}/convert-to-receipt`, {}),
 };
 

@@ -109,6 +109,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
 
   const [ordersPrefilter, setOrdersPrefilter] = useState<string | undefined>(undefined);
+  const [targetRecord, setTargetRecord] = useState<{ section: string; id: string } | null>(null);
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({
@@ -139,6 +140,11 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     setActiveSection('facturas-prov');
   };
 
+  const handleApprovedOrderInvoice = () => {
+    setStatusState((current) => ({ ...current, 'facturas-prov': 'PENDING' }));
+    setActiveSection('facturas-prov');
+  };
+
   const handleRegisterPaymentFromInvoice = (draft: any) => {
     setDraftPaymentFromInvoice(draft);
     setActiveSection('pagos');
@@ -151,11 +157,20 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as any;
-      if (detail?.module === 'compras' && detail?.subModule === 'ordenes-compra' && detail?.filter === 'TO_APPROVE') {
+      if (detail?.module !== 'compras') return;
+      if (detail?.subModule === 'ordenes-compra' && detail?.filter === 'TO_APPROVE') {
         setActiveSection('ordenes');
         setStatusState((s) => ({ ...s, ordenes: 'ALL' }));
         setOrdersPrefilter('TO_APPROVE');
+        return;
       }
+      const section = normalize(detail?.subModule);
+      if (!COMPRAS_SECTIONS.some((item) => item.id === section)) return;
+      setActiveSection(section);
+      const targetId = String(detail?.targetId || '').trim();
+      const number = String(detail?.number || '').trim();
+      setTargetRecord(targetId ? { section, id: targetId } : null);
+      if (number) updateSearch(section, number);
     };
     window.addEventListener('navigate-module', handler);
     return () => window.removeEventListener('navigate-module', handler);
@@ -492,12 +507,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
                     {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                    {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToInvoice={handleApprovedOrderInvoice} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                     {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onConvertToInvoice={handleConvertToInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-prov' && (
                      <FacturasProveedorView
                        {...commonProps}
                        purchaseAlert={purchaseAlert || undefined}
+                       targetId={targetRecord?.section === 'facturas-prov' ? targetRecord.id : null}
+                       onClearTargetId={() => setTargetRecord(null)}
                        supplierCatalog={supplierCatalog}
                        accountCatalog={chartAccountCatalog}
                        data={filteredData.facturasProv}
@@ -514,6 +531,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     <PagosRealizadosView
                       {...commonProps}
                       supplierCatalog={supplierCatalog}
+                      targetId={targetRecord?.section === 'pagos' ? targetRecord.id : null}
+                      onClearTargetId={() => setTargetRecord(null)}
                       data={filteredData.pagos}
                       supplierInvoices={invoiceCatalog}
                       draftPaymentFromInvoice={draftPaymentFromInvoice}

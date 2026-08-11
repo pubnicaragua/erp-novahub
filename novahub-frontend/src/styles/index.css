@@ -2,6 +2,37 @@
 @import './tailwind.css';
 @import './theme.css';
 
+/*
+ * Readability baseline for every ERP module.
+ * Low-opacity muted utilities remain part of the visual hierarchy, but no
+ * longer make labels, details or empty-state copy disappear in either theme.
+ */
+[class~="text-muted-foreground/20"] {
+  color: color-mix(in oklch, var(--foreground) 68%, transparent) !important;
+}
+
+[class~="text-muted-foreground/30"] {
+  color: color-mix(in oklch, var(--foreground) 72%, transparent) !important;
+}
+
+[class~="text-muted-foreground/40"] {
+  color: color-mix(in oklch, var(--foreground) 76%, transparent) !important;
+}
+
+[class~="text-muted-foreground/50"] {
+  color: color-mix(in oklch, var(--foreground) 80%, transparent) !important;
+}
+[class~="text-muted-foreground/60"] {
+  color: color-mix(in oklch, var(--foreground) 84%, transparent) !important;
+}
+
+[class~="text-foreground/20"],
+[class~="text-foreground/30"],
+[class~="text-foreground/40"],
+[class~="text-foreground/50"] {
+  color: color-mix(in oklch, var(--foreground) 80%, transparent) !important;
+}
+
 /* Sales module responsive guardrails. Keep layouts within the viewport and
    let dense data wrap instead of creating a second horizontal scrollbar. */
 .sales-module,

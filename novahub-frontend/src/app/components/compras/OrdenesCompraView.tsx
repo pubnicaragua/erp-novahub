@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, TrendingDown, ChevronLeft, FileInput, FilePlus2, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, FileInput, Download, FileText, FileDown, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
@@ -28,7 +28,6 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseOrderPreviewDialog } from './ui/PurchaseOrderPreviewDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
@@ -47,10 +46,12 @@ interface Props {
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
   purchaseAlert?: PurchaseAlertDetail;
+  targetId?: string | null;
+  onClearTargetId?: () => void;
   initialStatus?: string;
   prefillDoc?: Partial<PurchaseOrder> | null;
   onPrefillHandled?: () => void;
-  onConvertToInvoice?: (draft: any) => void;
+  onApprovedToInvoice?: (invoice?: any) => void;
 }
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -186,10 +187,9 @@ const normalizeImportDate = (value: unknown) => {
 };
 
 const statusOpts = [
-  { label: 'Borrador',   value: 'DRAFT',      color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Cancelada',  value: 'CANCELLED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-primary/10 text-primary' },
+  { label: 'Rechazada',  value: 'CANCELLED',  color: 'bg-destructive/10 text-destructive' },
 ];
 
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
@@ -224,9 +224,9 @@ const getProductListFromResponse = (response: any): any[] => (
 
 const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, initialStatus, prefillDoc, onPrefillHandled, onConvertToInvoice }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToInvoice }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -236,10 +236,16 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
+
+  useEffect(() => {
+    if (!targetId || !data.some((order) => order.id === targetId)) return;
+    setHighlightedAlertId(targetId);
+    setEditingId(targetId);
+    onClearTargetId?.();
+  }, [targetId, data, onClearTargetId]);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [pendingBulkCancelIds, setPendingBulkCancelIds] = useState<string[]>([]);
   const [previewOrder, setPreviewOrder] = useState<Partial<PurchaseOrder> | null>(null);
-  const [approveConfirmId, setApproveConfirmId] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -649,9 +655,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
+    const orderStatus = String(o.status || '').toUpperCase();
     if (statusFilter === 'TO_APPROVE') {
-      if (!['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase())) return false;
-    } else if (statusFilter !== 'ALL' && (o.status || '').toUpperCase() !== statusFilter) {
+      if (!['PENDING', 'DRAFT'].includes(orderStatus)) return false;
+    } else if (statusFilter === 'CANCELLED' && !['CANCELLED', 'REJECTED'].includes(orderStatus)) {
+      return false;
+    } else if (statusFilter !== 'ALL' && statusFilter !== 'CANCELLED' && orderStatus !== statusFilter) {
       return false;
     }
     if (!normalizedSearchTerm) return true;
@@ -697,23 +706,25 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-foreground" />
       ) },
     { key: 'status',   header: 'Estado',    width: '120px',
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+      render: (val) => { const raw = String(val || '').toUpperCase(); const o = statusOpts.find(x => x.value === (raw === 'DRAFT' ? 'PENDING' : raw)); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || 'Pendiente'}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
-    try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    const updateToastId = toast.loading('Guardando cambios en la orden de compra...');
+    try { await purchaseOrdersService.update(id as string, updates); toast.success('Orden actualizada', { id: updateToastId }); onRefresh(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed'); }
   };
 
   const handleCancelConfirm = async () => {
     const cancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
     if (cancelIds.length === 0 || !cancelReason.trim()) return;
     setCancelLoading(true);
+    const cancelToastId = toast.loading(cancelIds.length === 1 ? 'Rechazando orden de compra...' : `Rechazando ${cancelIds.length} órdenes de compra...`);
     try {
       for (const id of cancelIds) {
-        await purchaseOrdersService.cancel(id, cancelReason.trim());
+        await purchaseOrdersService.reject(id, cancelReason.trim());
       }
-      toast.success(cancelIds.length === 1 ? 'Orden de compra anulada' : `${cancelIds.length} órdenes de compra anuladas`);
+      toast.success(cancelIds.length === 1 ? 'Orden de compra rechazada' : `${cancelIds.length} órdenes de compra rechazadas`, { id: cancelToastId });
       setPendingCancelId(null);
       setPendingBulkCancelIds([]);
       setCancelReason('');
@@ -721,86 +732,44 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       if (editingId && cancelIds.includes(editingId)) setEditingId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
     } finally {
       setCancelLoading(false);
     }
   };
 
-  const handleApproveConfirm = async () => {
-    if (!approveConfirmId) return;
+  const handleApproveOrder = async (orderId: string) => {
     setApproving(true);
+    const approveToastId = toast.loading('Aprobando orden de compra y generando factura pendiente...');
     try {
-      await purchaseOrdersService.approve(approveConfirmId);
-      toast.success('Orden de compra aprobada');
-      setApproveConfirmId(null);
+      const result = await purchaseOrdersService.approve(orderId) as any;
+      toast.success(result?.invoice?.number
+        ? `Orden aprobada. Factura ${result.invoice.number} creada como pendiente.`
+        : 'Orden de compra aprobada', { id: approveToastId });
       setPreviewOrder(null);
-      if (editingId === approveConfirmId) setEditingId(null);
+      if (editingId === orderId) setEditingId(null);
+      onApprovedToInvoice?.(result?.invoice);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar', { id: approveToastId });
     } finally {
       setApproving(false);
     }
   };
 
-  const handleGenerateInvoiceFromOrder = (order: Partial<PurchaseOrder>) => {
-    if (String(order.status || '').toUpperCase() !== 'APPROVED') {
-      return toast.error('La factura solo puede generarse desde una orden aprobada.');
+  const handleDownloadOrderPdf = async (order: Partial<PurchaseOrder>) => {
+    const pdfToastId = toast.loading('Generando PDF de la orden de compra...');
+    try {
+      await generatePurchaseOrderPDF({
+        order,
+        tenantName: user?.tenantName || 'Nova Hub',
+        formatAmount: (amount: number, currency?: string, rate?: number) =>
+          formatConvertedAmount(Number(amount || 0), currency || (order.currency as any) || displayCurrency, rate || order.exchangeRate || globalRate),
+      });
+      toast.success('PDF descargado', { id: pdfToastId });
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo generar el PDF', { id: pdfToastId });
     }
-    if (!order.id || !order.supplierId) {
-      return toast.error('La orden no tiene los datos necesarios para generar la factura.');
-    }
-
-    const items = (order.items || []).map((item: any) => {
-      const quantity = Math.trunc(Number(item.quantity || 0));
-      const unitPrice = Number(item.unitPrice || 0);
-      const taxType = String(item.taxType || 'GRAVADO').toUpperCase();
-      const taxRate = isTaxExempt(taxType) ? 0 : Number(item.taxRate || 15);
-      const taxBase = isTaxExempt(taxType) ? 0 : Number(item.taxBase ?? quantity * unitPrice);
-      const taxAmount = isTaxExempt(taxType) ? 0 : Number(item.taxAmount ?? (taxBase * taxRate) / 100);
-      const withholdingType = String(item.withholdingType || 'NONE').toUpperCase();
-      const withholdingRate = withholdingType === 'NONE' ? 0 : Number(item.withholdingRate || 0);
-      const withholdingBase = withholdingType === 'NONE' ? 0 : Number(item.withholdingBase ?? quantity * unitPrice);
-      return {
-        description: item.description || item.name || '',
-        quantity,
-        unitPrice,
-        productId: item.productId || null,
-        taxType,
-        taxRate,
-        taxBase,
-        taxAmount,
-        withholdingType,
-        withholdingRate,
-        withholdingBase,
-        accountId: item.accountId || null,
-        costCenterId: item.costCenterId || null,
-        total: Number(item.total ?? quantity * unitPrice),
-      };
-    });
-    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const taxAmount = items.reduce((sum, item) => sum + item.taxAmount, 0);
-    const withholdingBase = items.reduce((sum, item) => sum + item.withholdingBase, 0);
-    const withholdingTotal = items.reduce((sum, item) => sum + (item.withholdingBase * item.withholdingRate) / 100, 0);
-
-    onConvertToInvoice?.({
-      supplierId: order.supplierId,
-      purchaseOrderId: order.id,
-      date: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-      currency: order.currency || displayCurrency,
-      exchangeRate: order.exchangeRate || globalRate,
-      status: 'PENDING',
-      items,
-      subtotal: Number(order.subtotal ?? subtotal),
-      taxAmount: Number(order.taxAmount ?? taxAmount),
-      withholdingBase: Number(order.withholdingBase ?? withholdingBase),
-      withholdingTotal: Number(order.withholdingTotal ?? withholdingTotal),
-      total: Number(order.total ?? subtotal + taxAmount - withholdingTotal),
-    });
-    setPreviewOrder(null);
-    toast.success('Orden aprobada disponible para generar factura', { position: 'bottom-right' });
   };
 
   const handleSaveDoc = async (newStatus: 'DRAFT' | 'PENDING' = 'PENDING') => {
@@ -848,21 +817,27 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       })),
     };
 
+    const saveToastId = toast.loading(editingId === 'NEW'
+      ? (statusToSave === 'DRAFT' ? 'Guardando orden de compra como borrador...' : 'Registrando orden de compra...')
+      : 'Guardando orden de compra...');
     if (evidenceFiles.length > 0) {
       const uploaded: { url: string; name: string; type: string; size: number }[] = [];
       for (const file of evidenceFiles) {
         const isImage = file.type.startsWith('image/');
         if (isImage && file.size > MAX_EVIDENCE_IMAGE_BYTES) {
-          return toast.error(`La imagen "${file.name}" es muy pesada. Máximo 2MB`);
+          toast.error(`La imagen "${file.name}" es muy pesada. Máximo 2MB`, { id: saveToastId });
+          return;
         }
         if (!isImage && file.size > MAX_EVIDENCE_FILE_BYTES) {
-          return toast.error(`El archivo "${file.name}" es muy pesado. Máximo 10MB`);
+          toast.error(`El archivo "${file.name}" es muy pesado. Máximo 10MB`, { id: saveToastId });
+          return;
         }
         try {
           const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: 'ordenes' });
           uploaded.push({ url: evidence.uri, name: file.name, type: file.type, size: file.size });
         } catch {
-          return toast.error(`No se pudo procesar el archivo "${file.name}"`);
+          toast.error(`No se pudo procesar el archivo "${file.name}"`, { id: saveToastId });
+          return;
         }
       }
       cleanedDoc.evidenceFiles = uploaded;
@@ -880,10 +855,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED', undefined, created.supplierId);
           } catch { /* la solicitud se podrá aprobar manualmente */ }
         }
-        toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada como pendiente');
+        toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada como pendiente', { id: saveToastId });
       } else {
         await purchaseOrdersService.update(editingId!, cleanedDoc);
-        toast.success('Orden guardada');
+        toast.success('Orden guardada', { id: saveToastId });
       }
       setEditingId(null);
       setEvidenceFiles([]);
@@ -891,9 +866,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     } catch (e: any) {
       const msg = e?.response?.data?.message || e?.message || '';
       if (msg.toLowerCase().includes('no existe') || e?.response?.status === 404) {
-        toast.error('Uno de los productos seleccionados ya no está disponible o fue eliminado. Verifica los ítems e intenta de nuevo.');
+        toast.error('Uno de los productos seleccionados ya no está disponible o fue eliminado. Verifica los ítems e intenta de nuevo.', { id: saveToastId });
       } else {
-        toast.error(msg || 'Error al guardar la orden de compra');
+        toast.error(msg || 'Error al guardar la orden de compra', { id: saveToastId });
       }
     }
   };
@@ -1078,7 +1053,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const isNew = editingId === 'NEW';
     const currentStatus = String(localDoc.status || 'DRAFT').toUpperCase();
     const canApproveCurrent = !isNew && ['DRAFT', 'PENDING'].includes(currentStatus);
-    const canEditOrderItems = isNew ? canPerform('PURCHASES_ORDERS', 'create') : canPerform('PURCHASES_ORDERS', 'edit');
+    const canEditOrderItems = isNew
+      ? canPerform('PURCHASES_ORDERS', 'create')
+      : canPerform('PURCHASES_ORDERS', 'edit') && ['DRAFT', 'PENDING'].includes(currentStatus);
     const isItemMasterFieldDisabled = (item: any) => Boolean(item.productId) || !canEditOrderItems;
     const financialTotals = calculateTotals((localDoc.items || []) as any[]);
     
@@ -1113,25 +1090,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                  <Button
                    variant="outline"
                    className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-                   onClick={() => generatePurchaseOrderPDF({
-                     order: localDoc,
-                     tenantName: user?.tenantName || 'Nova Hub',
-                     formatAmount: (amount: number, currency?: string, rate?: number) =>
-                       formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                   })}
+                   onClick={() => void handleDownloadOrderPdf(localDoc)}
                  >
-                   <Download className="size-3 mr-2" /> Exportar PDF
+                   <Download className="size-3 mr-2" /> Descargar PDF
                  </Button>
                </>
              )}
-              {!isNew && currentStatus !== 'CANCELLED' && canPerform('PURCHASES_ORDERS', 'delete') && (
-                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+              {!isNew && !['CANCELLED', 'REJECTED'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'delete') && (
+                 <Button variant="outline" className="rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10 font-black uppercase text-[10px] tracking-widest px-4"
                    onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
-                   <Ban className="size-3 mr-2" /> Anular
+                   <Ban className="size-3 mr-2" /> Rechazar
                  </Button>
               )}
             {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'edit') && (
-              <Button variant="outline" onClick={() => setApproveConfirmId(editingId)} className="rounded-xl border-emerald-500/50 text-emerald-600 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4">
+              <Button variant="outline" onClick={() => setPreviewOrder(localDoc)} className="rounded-xl border-primary/40 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4">
                 <CheckCircle2 className="size-3 mr-2" /> Aprobar
               </Button>
             )}
@@ -1155,7 +1127,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 </Button>
               </>
             )}
-            {!isNew && !['DRAFT', 'CANCELLED'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
+            {!isNew && currentStatus === 'PENDING' && canPerform('PURCHASES_ORDERS', 'edit') && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
@@ -1621,20 +1593,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <ConfirmDialog
           open={Boolean(pendingCancelId || pendingBulkCancelIds.length > 0)}
           onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingBulkCancelIds([]); setCancelReason(''); } }}
-          title={pendingBulkCancelIds.length > 0 ? 'Anular órdenes de compra' : 'Anular Orden de Compra'}
-          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán anuladas. No se podrán recibir ni facturar. Esta acción no se puede deshacer.` : 'La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer.'}
-          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Anular órdenes' : 'Anular Orden'}
+          title={pendingBulkCancelIds.length > 0 ? 'Rechazar órdenes de compra' : 'Rechazar orden de compra'}
+          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán rechazadas. No se podrán recibir ni facturar.` : 'La orden quedará rechazada y no se podrá recibir ni facturar.'}
+          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Rechazar órdenes' : 'Rechazar orden'}
           variant="destructive"
           loading={cancelLoading}
           disabled={!cancelReason.trim()}
           onConfirm={handleCancelConfirm}
         >
           <div className="mt-4">
-            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de rechazo *</label>
             <textarea
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
               rows={3}
-              placeholder="Ej: Cancelada por el proveedor, error en productos..."
+              placeholder="Ej: proveedor no autorizado, error en productos..."
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
             />
@@ -1649,42 +1621,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
-          onApprove={(id) => setApproveConfirmId(id)}
+          onApprove={handleApproveOrder}
           onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
-          onGenerateInvoice={() => previewOrder && handleGenerateInvoiceFromOrder(previewOrder)}
-        />
-        <ConfirmDialog
-          open={!!approveConfirmId}
-          onOpenChange={(open) => { if (!open) setApproveConfirmId(null); }}
-          title="Aprobar Orden de Compra"
-          description="La orden quedará aprobada y podrá ser recibida. ¿Desea continuar?"
-          confirmLabel="Aprobar Orden"
-          variant="default"
-          loading={approving}
-          onConfirm={handleApproveConfirm}
+          onDownloadPdf={() => previewOrder && void handleDownloadOrderPdf(previewOrder)}
         />
       </div>
     );
   }
 
-  const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
-    ? convertCurrentAmount(amount, currency)
-    : convertAmount(amount, currency, rate || globalRate);
-  const totalAmountInDisplayCurrency = data.reduce(
-    (acc, order) => acc + toDisplayAmount(Number((order as any).total ?? (order as any).baseTotal ?? 0), order.currency, order.exchangeRate),
-    0,
-  );
   const kpis = [
-    { title: 'Total Ordenes',   value: data.length,                                                                     icon: ClipboardList, color: 'text-blue-500',    bg: 'bg-blue-500/10',    filter: 'ALL' },
-    { title: 'Por Aprobar',     value: data.filter(o => ['PENDING','DRAFT'].includes((o.status||'').toUpperCase())).length, icon: Clock, color: 'text-amber-500',  bg: 'bg-amber-500/10',    filter: 'TO_APPROVE' },
-    { title: 'Aprobadas',       value: data.filter(o => (o.status||'').toUpperCase() === 'APPROVED').length,             icon: CheckCircle2,  color: 'text-emerald-500', bg: 'bg-emerald-500/10',  filter: 'APPROVED' },
-    {
-      title: `Monto Total (${displayCurrency}${valuationModeSuffix})`,
-      value: formatCurrentAmount(totalAmountInDisplayCurrency, displayCurrency),
-      icon: TrendingDown,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10',
-    },
+    { title: 'Total órdenes', value: data.length, icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
+    { title: 'Pendientes', value: data.filter(o => ['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase())).length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', filter: 'TO_APPROVE' },
+    { title: 'Aprobadas', value: data.filter(o => (o.status || '').toUpperCase() === 'APPROVED').length, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
+    { title: 'Rechazadas', value: data.filter(o => ['CANCELLED', 'REJECTED'].includes((o.status || '').toUpperCase())).length, icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10', filter: 'CANCELLED' },
   ];
 
   return (
@@ -1718,21 +1667,24 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           actions={(row) => (
             <div className="flex gap-1">
               <Button
-                title="Vista previa"
+                title="Ver detalle"
+                aria-label="Ver detalle de la orden"
                 variant="ghost"
                 size="icon"
-                className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
                 onClick={() => setPreviewOrder(row)}
               >
-                <FileInput className="size-4" />
+                <Eye className="size-4" />
               </Button>
-              <Button title={canPerform('PURCHASES_ORDERS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              {String(row.status || '').toUpperCase() === 'APPROVED' && onConvertToInvoice && (
-                <Button title="Generar factura desde orden aprobada" aria-label="Generar factura desde orden aprobada" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleGenerateInvoiceFromOrder(row)}><FilePlus2 className="size-4" /></Button>
+              {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}><CheckCircle2 className="size-4" /></Button>
               )}
-              <PurchaseAuditButton entity="PURCHASE_ORDER" entityId={row.id} title="Auditoria de la Orden" />
-              {String(row.status || '').toUpperCase() !== 'CANCELLED' && canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Anular orden" aria-label="Anular orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
+              {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><FileInput className="size-4" /></Button>
+              )}
+              <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadOrderPdf(row)}><FileDown className="size-4" /></Button>
+              {String(row.status || '').toUpperCase() !== 'CANCELLED' && String(row.status || '').toUpperCase() !== 'REJECTED' && canPerform('PURCHASES_ORDERS', 'delete') && (
+                <Button title="Rechazar orden" aria-label="Rechazar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -1740,20 +1692,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <ConfirmDialog
           open={Boolean(pendingCancelId || pendingBulkCancelIds.length > 0)}
           onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingBulkCancelIds([]); setCancelReason(''); } }}
-          title={pendingBulkCancelIds.length > 0 ? 'Anular órdenes de compra' : 'Anular Orden de Compra'}
-          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán anuladas. No se podrán recibir ni facturar. Esta acción no se puede deshacer.` : 'La orden quedará cancelada. No se podrá recibir ni facturar. Esta acción no se puede deshacer.'}
-          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Anular órdenes' : 'Anular Orden'}
+          title={pendingBulkCancelIds.length > 0 ? 'Rechazar órdenes de compra' : 'Rechazar orden de compra'}
+          description={pendingBulkCancelIds.length > 0 ? `${pendingBulkCancelIds.length} órdenes quedarán rechazadas. No se podrán recibir ni facturar.` : 'La orden quedará rechazada y no se podrá recibir ni facturar.'}
+          confirmLabel={pendingBulkCancelIds.length > 0 ? 'Rechazar órdenes' : 'Rechazar orden'}
           variant="destructive"
           loading={cancelLoading}
           disabled={!cancelReason.trim()}
           onConfirm={handleCancelConfirm}
         >
           <div className="mt-4">
-            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
+            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de rechazo *</label>
             <textarea
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
               rows={3}
-              placeholder="Ej: Cancelada por el proveedor, error en productos..."
+              placeholder="Ej: proveedor no autorizado, error en productos..."
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
             />
@@ -1768,19 +1720,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
-          onApprove={(id) => setApproveConfirmId(id)}
+          onApprove={handleApproveOrder}
           onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
-          onGenerateInvoice={() => previewOrder && handleGenerateInvoiceFromOrder(previewOrder)}
-        />
-        <ConfirmDialog
-          open={!!approveConfirmId}
-          onOpenChange={(open) => { if (!open) setApproveConfirmId(null); }}
-          title="Aprobar Orden de Compra"
-          description="La orden quedará aprobada y podrá ser recibida. ¿Desea continuar?"
-          confirmLabel="Aprobar Orden"
-          variant="default"
-          loading={approving}
-          onConfirm={handleApproveConfirm}
+          onDownloadPdf={() => previewOrder && void handleDownloadOrderPdf(previewOrder)}
         />
 
         <Dialog open={false} onOpenChange={setImportIntroOpen}>

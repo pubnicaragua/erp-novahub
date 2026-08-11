@@ -80,6 +80,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
     'cuentas-cobrar': 'cuentas-cobrar',
     'cuentas-pagar': 'cuentas-pagar',
     'ingresos': 'ingresos', 
+    'gastos': 'gastos',
     'egresos': 'gastos', 
     'movimientos-recurrentes': 'recurrentes',
     'calendario-financiero': 'calendario',
@@ -91,6 +92,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [activePreset, setActivePreset] = useState<string>('');
+  const [targetFinanceId, setTargetFinanceId] = useState<{ tab: 'ingresos' | 'gastos'; id: string } | null>(null);
 
   const applyPreset = (label: string, days: number) => {
     setActivePreset(label);
@@ -253,6 +255,16 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
       }
     }
   }, [activeSubModule, activeTab]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (detail?.module !== 'finanzas' || !['ingresos', 'gastos'].includes(detail?.subModule) || !detail?.targetId) return;
+      setTargetFinanceId({ tab: detail.subModule, id: String(detail.targetId) });
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, []);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -430,16 +442,16 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
 
       {/* Filter bar */}
       <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">
-        <CalendarDays className="col-span-2 size-4 text-muted-foreground sm:col-span-1" />
+        <CalendarDays className="col-span-2 size-5 text-primary sm:col-span-1" aria-hidden="true" />
         {PERIOD_PRESETS.map(p => (
           <button key={p.label} onClick={() => applyPreset(p.label, p.days)}
-            className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all sm:px-3 ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
+            className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all sm:px-3 ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-foreground/80 hover:bg-muted'}`}>
             {p.label}
           </button>
         ))}
         <div className="hidden h-5 w-px bg-border mx-1 sm:block" />
-        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Desde" />
-        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-8 min-w-0 w-full text-xs sm:w-36" placeholder="Hasta" />
+        <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActivePreset(''); }} className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44" placeholder="Desde" aria-label="Fecha desde" />
+        <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActivePreset(''); }} className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44" placeholder="Hasta" aria-label="Fecha hasta" />
         {(dateFrom || dateTo || activePreset) && (
           <button onClick={clearFilters} className="col-span-2 justify-self-start rounded-lg p-1.5 text-muted-foreground hover:bg-muted sm:col-span-1" title="Limpiar filtros"><X className="size-3.5" /></button>
         )}
@@ -510,6 +522,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
                     canDelete={false}
+                    targetItemId={targetFinanceId?.tab === 'ingresos' ? targetFinanceId.id : null}
+                    onClearTargetItem={() => setTargetFinanceId(null)}
                   />
                 </motion.div>
               </TabsContent>
@@ -532,6 +546,8 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_EXPENSES', 'edit')}
                     canDelete={false}
+                    targetItemId={targetFinanceId?.tab === 'gastos' ? targetFinanceId.id : null}
+                    onClearTargetItem={() => setTargetFinanceId(null)}
                   />
                 </motion.div>
               </TabsContent>

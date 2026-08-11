@@ -116,12 +116,12 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                 <span className="mb-1 inline-flex w-fit items-center rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Indicador</span>
                 <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Gastos Totales</p>
                 <p className="text-2xl font-black mt-1">{formatCurrency(kpis.totalExpenses)}</p>
-                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                <p className="text-[10px] text-foreground/70 mt-1 flex items-center gap-1">
                   <ArrowUpRight className="size-3" /> Gastos del período
                 </p>
               </div>
               <div className="p-2 bg-slate-500/10 rounded-xl ring-1 ring-slate-500/15">
-                <TrendingDown className="size-5 text-slate-600" />
+                <TrendingDown className="size-5 text-foreground/70" />
               </div>
             </div>
           </CardContent>
@@ -231,8 +231,8 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
               {/* Sin Venta */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Boxes className="size-4 text-slate-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Sin Venta</span>
+                  <Boxes className="size-4 text-foreground/70" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-foreground/70">Sin Venta</span>
                   <span className="text-[9px] font-bold text-muted-foreground ml-auto">STOCK PARADO</span>
                 </div>
                 <div className="space-y-2">

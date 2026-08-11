@@ -6,7 +6,6 @@ import {
   RotateCcw, CreditCard, FileOutput, FileMinus,
   ShoppingCart, BarChart3, Vault, Calculator, Coins, Tags
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
@@ -132,6 +131,41 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     setDateFilters((current) => ({ ...current, [section]: { dateFrom, dateTo } }));
     updatePage(section, 1);
   };
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as any;
+      if (detail?.module !== 'ventas') return;
+
+      const section = detail.subModule;
+      if (section === 'control-caja') {
+        setControlCajaTargetParams({
+          registerId: detail.registerId || undefined,
+          section: detail.section === 'session' ? 'session' : 'history',
+        });
+        setActiveSection('control-caja');
+        onSubModuleChange?.('control-caja');
+        return;
+      }
+
+      if (!SALES_SECTIONS.some((item) => item.id === section)) return;
+      setActiveSection(section);
+      onSubModuleChange?.(section);
+
+      const number = String(detail.number || '').trim();
+      if (section === 'facturas') {
+        setTargetInvoiceId(detail.invoiceId || detail.targetId || null);
+        if (number) updateSearch('facturas', number);
+      } else if (section === 'ordenes-venta') {
+        setTargetOrderId(detail.orderId || detail.targetId || null);
+        if (number) updateSearch('ordenes-venta', number);
+      } else if (section === 'pagos-recibidos' && number) {
+        updateSearch('pagos-recibidos', number);
+      }
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, [onSubModuleChange]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
     return () => window.clearTimeout(timer);
@@ -307,7 +341,6 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   }, [queryClient]);
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
-    toast.info('Enviando orden a Facturación...');
     const invoice = await salesOrdersService.convertToInvoice(order.id, {
       ...(order.accountId ? { accountId: order.accountId } : {}),
       ...(order.sellerEmployeeId ? { sellerEmployeeId: order.sellerEmployeeId } : {}),

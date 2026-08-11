@@ -115,6 +115,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   };
 
   const handleExportPDF = async (row: PaymentReceived) => {
+    const pdfToastId = toast.loading('Generando comprobante de pago...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
       await generateEstimatePDF({
@@ -123,8 +124,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         formatAmount: formatConvertedAmount,
         documentType: 'payment',
       });
-      toast.success('PDF generado exitosamente');
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
+      toast.success('PDF generado exitosamente', { id: pdfToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
   // Invoices filtered by selected customer
@@ -307,7 +308,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         </div>
         <EditableDataTable data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular'); } }}
+          onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           actions={(row) => (
@@ -332,13 +333,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         disabled={!cancelReason.trim()}
         onConfirm={async () => {
           if (!pendingCancelId || !cancelReason.trim()) return;
+          const cancelToastId = toast.loading('Anulando pago recibido...');
           try {
             setCancelLoading(true);
             await paymentsService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Pago anulado');
+            toast.success('Pago anulado', { id: cancelToastId });
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'Error al anular pago');
+            toast.error(error?.response?.data?.message || error?.message || 'Error al anular pago', { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

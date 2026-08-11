@@ -716,6 +716,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     }
     submittingRef.current = true;
     setSubmitting(true);
+    const submitToastId = toast.loading(confirmedDuplicate ? 'Emitiendo factura...' : 'Verificando y preparando la factura...');
     try {
       const checkoutPayload = {
         registerId: selectedRegisterId,
@@ -743,6 +744,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         if (duplicateCheck.matches?.length) {
           setDuplicateMatches(duplicateCheck.matches);
           checkoutIdempotencyKey.current = null;
+          toast.info('Se requiere confirmar la posible venta duplicada', { id: submitToastId });
           return;
         }
       }
@@ -762,7 +764,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         queryClient.invalidateQueries({ queryKey: ['accounting'] }),
       ]);
 
-      toast.success('Factura emitida exitosamente');
+      toast.success('Factura emitida exitosamente', { id: submitToastId });
       setCreatedInvoice(created);
       setCreatedPaymentLines([...payments]);
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
@@ -791,9 +793,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       if ((error as any)?.code === 'POTENTIAL_DUPLICATE_SALE' && Array.isArray(errorData?.matches)) {
         setDuplicateMatches(errorData.matches);
         checkoutIdempotencyKey.current = null;
+        toast.info('Se requiere confirmar la posible venta duplicada', { id: submitToastId });
         return;
       }
-      toast.error(getErrorMessage(error, 'Error al emitir factura'));
+      toast.error(getErrorMessage(error, 'Error al emitir factura'), { id: submitToastId });
     } finally {
       submittingRef.current = false;
       setSubmitting(false);

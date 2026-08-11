@@ -253,10 +253,11 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
     }
     setImporting(true);
     setImportResult(null);
+    const importToastId = toast.loading('Importando gastos...');
     try {
       const rows = await parseExpensesCsv(importFile);
       if (rows.length === 0) {
-        toast.error('El archivo no contiene filas para importar');
+        toast.error('El archivo no contiene filas para importar', { id: importToastId });
         return;
       }
 
@@ -323,9 +324,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
 
       setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
       if (created > 0) onRefresh();
-      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
+      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`, { id: importToastId });
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`, { id: importToastId });
     } finally {
       setImporting(false);
     }
@@ -352,32 +353,35 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
-    try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado'); onRefresh(); }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
+    const updateToastId = toast.loading('Guardando cambios en el gasto...');
+    try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado', { id: updateToastId }); onRefresh(); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
   };
 
   const handleStatusAction = async (row: Expense, status: 'APPROVED' | 'PAID' | 'REJECTED') => {
+    const labels = { APPROVED: 'Gasto aprobado', PAID: 'Gasto marcado como pagado', REJECTED: 'Gasto rechazado' };
+    const statusToastId = toast.loading(status === 'APPROVED' ? 'Aprobando gasto...' : status === 'PAID' ? 'Marcando gasto como pagado...' : 'Rechazando gasto...');
     try {
       await expensesService.update(row.id, { status } as any);
-      const labels = { APPROVED: 'Gasto aprobado', PAID: 'Gasto marcado como pagado', REJECTED: 'Gasto rechazado' };
-      toast.success(labels[status]);
+      toast.success(labels[status], { id: statusToastId });
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del gasto');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del gasto', { id: statusToastId });
     }
   };
 
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
     setDeleteLoading(true);
+    const deleteToastId = toast.loading('Eliminando gasto...');
     try {
       await expensesService.delete(pendingDeleteId);
-      toast.success('Gasto eliminado correctamente');
+      toast.success('Gasto eliminado correctamente', { id: deleteToastId });
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
     } finally {
       setDeleteLoading(false);
     }
@@ -418,19 +422,20 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
       }
     }
 
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando gasto...' : 'Guardando gasto...');
     try {
       if (editingId === 'NEW') {
         await expensesService.create(cleanedDoc as any);
-        toast.success('Gasto registrado');
+        toast.success('Gasto registrado', { id: saveToastId });
       } else {
         await expensesService.update(editingId!, cleanedDoc as any);
-        toast.success('Gasto guardado');
+        toast.success('Gasto guardado', { id: saveToastId });
       }
       setEditingId(null);
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el gasto', { id: saveToastId });
     }
   };
 
@@ -811,15 +816,16 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
+            const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await expensesService.delete(id as string);
               }
-              toast.success('Elementos eliminados');
+              toast.success('Elementos eliminados', { id: deleteToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
             }
           } : undefined}
           actions={(row) => (

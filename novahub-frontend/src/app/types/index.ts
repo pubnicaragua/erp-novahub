@@ -498,7 +498,7 @@ export interface PurchaseOrder {
   updatedAt: string;
 }
 
-export type PurchaseOrderStatus = 'draft' | 'pending' | 'approved' | 'cancelled' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'CANCELLED';
+export type PurchaseOrderStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export interface PurchaseOrderItem {
   id: string;

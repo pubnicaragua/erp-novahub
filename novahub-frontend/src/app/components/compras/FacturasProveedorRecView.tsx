@@ -105,12 +105,13 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
   const handleStatusAction = async (row: RecurringSupplierInvoice) => {
     const current = String((row as any).status || '').toUpperCase();
     const status = current === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const statusToastId = toast.loading(status === 'ACTIVE' ? 'Activando factura recurrente...' : 'Pausando factura recurrente...');
     try {
       await recurringSupplierInvoicesService.update(row.id, { status } as any);
-      toast.success(status === 'ACTIVE' ? 'Factura recurrente activada' : 'Factura recurrente pausada');
+      toast.success(status === 'ACTIVE' ? 'Factura recurrente activada' : 'Factura recurrente pausada', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: statusToastId });
     }
   };
 
@@ -118,19 +119,20 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     if (!localDoc?.nextInvoiceDate) return toast.error('Debe configurar la próxima fecha de factura');
 
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando factura recurrente...' : 'Guardando factura recurrente...');
     try {
       const finalDoc = { ...localDoc, total: localDoc.total || (localDoc as any).amount || 0 };
       if (editingId === 'NEW') {
         await recurringSupplierInvoicesService.create(finalDoc as any);
-        toast.success('Factura recurrente creada');
+        toast.success('Factura recurrente creada', { id: saveToastId });
       } else {
         await recurringSupplierInvoicesService.update(editingId!, finalDoc as any);
-        toast.success('Factura recurrente guardada');
+        toast.success('Factura recurrente guardada', { id: saveToastId });
       }
       openEditor(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura recurrente'); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura recurrente', { id: saveToastId });
     }
   };
 
@@ -360,14 +362,15 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           description="¿Estás seguro de eliminar esta factura recurrente? No se generarán más facturas automáticamente."
           onConfirm={async () => {
             if (!pendingDeleteId) return;
+            const deleteToastId = toast.loading('Eliminando factura recurrente...');
             setDeleteLoading(true);
             try {
                await recurringSupplierInvoicesService.delete(pendingDeleteId);
-               toast.success('Eliminado');
+               toast.success('Eliminado', { id: deleteToastId });
                setPendingDeleteId(null);
                openEditor(null);
                onRefresh();
-             } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); }
+             } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); }
             finally { setDeleteLoading(false); }
           }}
         />
@@ -418,15 +421,16 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
+            const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await recurringSupplierInvoicesService.delete(id as string);
               }
-              toast.success('Elementos eliminados');
+              toast.success('Elementos eliminados', { id: deleteToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
             }
           } : undefined}
           actions={(row) => (

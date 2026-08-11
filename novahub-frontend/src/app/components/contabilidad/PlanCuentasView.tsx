@@ -405,20 +405,30 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const parseImportFile = async () => {
     if (!importFile) { toast.error('Selecciona un archivo Excel'); return null; }
     try {
-      let csvRows: string[][];
       const fileName = importFile.name.toLowerCase();
 
       if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) { toast.error('El archivo debe ser Excel (.xlsx o .xls)'); return null; }
       const buffer = await importFile.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
-      csvRows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
-
-      const nonEmpty = csvRows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
-      if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return null; }
-      const headers = (nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase());
-      const rows = nonEmpty.slice(1).map(cols => {
+      const sheetCandidates = workbook.SheetNames.map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
+        const rows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
+        const nonEmpty = rows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
+        const headers = (nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase().replace(/^\uFEFF/, ''));
+        return {
+          sheetName,
+          nonEmpty,
+          hasAccountHeaders: headers.includes('codigo') && headers.includes('nombre'),
+        };
+      });
+      const selectedSheet = sheetCandidates.find(candidate => candidate.nonEmpty.length >= 2 && candidate.hasAccountHeaders);
+      if (!selectedSheet) {
+        toast.error('El archivo no contiene una hoja con encabezados de cuentas (codigo y nombre)');
+        return null;
+      }
+      const headers = (selectedSheet.nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase().replace(/^\uFEFF/, ''));
+      const rows = selectedSheet.nonEmpty.slice(1).map(cols => {
         const row: Record<string, string> = {};
         headers.forEach((header, index) => { row[header] = String(cols[index] ?? '').trim(); });
         return row;
@@ -448,7 +458,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         });
       }
 
-      return { valid, errors, fileName: importFile.name };
+      return { valid, errors, fileName: `${importFile.name} · Hoja: ${selectedSheet.sheetName}` };
     } catch (e: any) {
       toast.error(e?.message || 'Error al leer el archivo');
       return null;
@@ -630,6 +640,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <AccountImportPreview
         rows={importPreviewRows}
         errors={importPreviewErrors}
+        existingAccountCodes={flatList.map((account) => account.code)}
         fileName={importFileName}
         isSidebarCollapsed={isSidebarCollapsed}
         importing={importing}

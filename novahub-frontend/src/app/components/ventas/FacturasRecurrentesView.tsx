@@ -191,17 +191,18 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   };
 
   const toggleStatus = async (row: RecurringInvoice) => {
+    const statusToastId = toast.loading((row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausando factura recurrente...' : 'Reanudando factura recurrente...');
     try {
       if ((row.status||'').toUpperCase() === 'ACTIVE') {
         await recurringInvoicesService.pause(row.id);
-        toast.success('Factura recurrente pausada');
+        toast.success('Factura recurrente pausada', { id: statusToastId });
       } else {
         await recurringInvoicesService.resume(row.id);
-        toast.success('Factura recurrente reanudada');
+        toast.success('Factura recurrente reanudada', { id: statusToastId });
       }
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado', { id: statusToastId });
     }
   };
 
@@ -229,6 +230,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
 
   // Sync currency from topbar
   const handleExportPDF = async (row: RecurringInvoice) => {
+    const pdfToastId = toast.loading('Generando PDF de la factura recurrente...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
       await generateRecurringInvoicePDF({
@@ -236,8 +238,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         tenantName,
         formatAmount: formatConvertedAmount,
       });
-      toast.success('PDF generado exitosamente');
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF'); }
+      toast.success('PDF generado exitosamente', { id: pdfToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
   const recalcTotals = (items: any[], mode = pricingMode, rates = localRates) => {
@@ -339,6 +341,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           nextInvoiceDate: calculatedNextInvoiceDate,
           items: normalizedItems,
         } as any);
+        toast.success('Factura recurrente actualizada', { id: saveToastId });
       }
       setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
@@ -656,7 +659,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         </div>
         <EditableDataTable data={filtered}
           pagination={pagination}
-          onBulkDelete={async (ids) => { try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}
+          onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           actions={(row) => (
@@ -687,18 +690,19 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               loading={deleteLoading}
               onConfirm={async () => {
                 if (!pendingDeleteId) return;
+                const deleteToastId = toast.loading('Eliminando factura recurrente...');
                 try {
                   setDeleteLoading(true);
                   await recurringInvoicesService.delete(pendingDeleteId);
-                  toast.success('Factura recurrente eliminada');
+                  toast.success('Factura recurrente eliminada', { id: deleteToastId });
                   setEditingId(null);
                   onRefresh();
                 } catch (error: any) {
                    const msg = error?.response?.data?.message || error?.message || '';
                   if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-                    toast.error('No se puede eliminar: tiene dependencias en el sistema.');
+                    toast.error('No se puede eliminar: tiene dependencias en el sistema.', { id: deleteToastId });
                   } else {
-                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`);
+                    toast.error(`Error al eliminar: ${msg || 'Error desconocido'}`, { id: deleteToastId });
                   }
                 } finally {
                   setDeleteLoading(false);

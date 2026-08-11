@@ -81,7 +81,7 @@ export function Combobox({
               ? options.find((option) => option.value === value)?.label
               : placeholder}
           </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-foreground/70" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
@@ -123,7 +123,7 @@ export function Combobox({
                   <div className="flex flex-col">
                     <span>{option.label}</span>
                     {option.description && (
-                      <span className="text-[9px] text-muted-foreground">{option.description}</span>
+                      <span className="text-[9px] text-foreground/70">{option.description}</span>
                     )}
                   </div>
                 </CommandItem>

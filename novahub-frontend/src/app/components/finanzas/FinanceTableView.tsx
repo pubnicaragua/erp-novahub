@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
@@ -50,6 +50,8 @@ interface FinanceTableViewProps {
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  targetItemId?: string | null;
+  onClearTargetItem?: () => void;
 }
 
 export function FinanceTableView({
@@ -63,7 +65,9 @@ export function FinanceTableView({
   loading,
   canCreate = true,
   canEdit = true,
-  canDelete = true
+  canDelete = true,
+  targetItemId,
+  onClearTargetItem,
 }: FinanceTableViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -81,6 +85,15 @@ export function FinanceTableView({
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
+
+  useEffect(() => {
+    if (!targetItemId) return;
+    const target = data.find((item) => item.id === targetItemId);
+    if (!target) return;
+    setItemBeingEdited(target);
+    setIsEditModalOpen(true);
+    onClearTargetItem?.();
+  }, [targetItemId, data, onClearTargetItem]);
 
   // Edit Modal State (Mobile/Alternative Desktop)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);

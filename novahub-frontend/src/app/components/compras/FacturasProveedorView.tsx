@@ -40,6 +40,8 @@ interface Props {
   onSearchChange?: (value: string) => void;
   onStatusChange?: (value: string) => void;
   purchaseAlert?: PurchaseAlertDetail;
+  targetId?: string | null;
+  onClearTargetId?: () => void;
 }
 
 const statusOpts = [
@@ -66,7 +68,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
 }
 
-export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert }: Props) {
+export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const {
     exchangeRate: globalRate,
@@ -91,6 +93,13 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
+
+  useEffect(() => {
+    if (!targetId || !data.some((invoice) => invoice.id === targetId)) return;
+    setHighlightedAlertId(targetId);
+    setEditingId(targetId);
+    onClearTargetId?.();
+  }, [targetId, data, onClearTargetId]);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -220,21 +229,23 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       toast.error('No se puede registrar pago en facturas de proveedores inactivos');
       return;
     }
+    const updateToastId = toast.loading('Guardando cambios en la factura de proveedor...');
     try {
       const updatedResponse = await billsService.update(id as string, updates);
       const updatedInvoice = (updatedResponse as any)?.data || updatedResponse;
-      toast.success('Factura actualizada');
+      toast.success('Factura actualizada', { id: updateToastId });
       onRefresh();
     }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); }
   };
 
   const handleCancelConfirm = async () => {
     if (!pendingCancelId || !cancelReason.trim()) return;
     setCancelLoading(true);
+    const cancelToastId = toast.loading('Anulando factura de proveedor...');
     try {
       await billsService.cancel(pendingCancelId, cancelReason.trim());
-      toast.success('Factura de proveedor anulada');
+      toast.success('Factura de proveedor anulada', { id: cancelToastId });
       setPendingCancelId(null);
       setCancelReason('');
       if (editingId === pendingCancelId) {
@@ -243,7 +254,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       }
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al anular factura');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al anular factura', { id: cancelToastId });
     } finally {
       setCancelLoading(false);
     }
@@ -259,6 +270,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       return toast.error('No se puede registrar pago en facturas de proveedores inactivos');
     }
     
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando factura de proveedor...' : 'Guardando factura de proveedor...');
     try {
       const docToSave: any = {
         ...localDoc,
@@ -293,13 +305,15 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         if (docToSave.purchaseOrderId) {
           const duplicateForOrder = data.some((inv) => inv.purchaseOrderId === docToSave.purchaseOrderId);
           if (duplicateForOrder) {
-            return toast.error('Ya existe una factura para esta orden de compra');
+            toast.error('Ya existe una factura para esta orden de compra', { id: saveToastId });
+            return;
           }
         }
         if (docToSave.purchaseReceiptId) {
           const duplicateForReceipt = data.some((inv) => inv.purchaseReceiptId === docToSave.purchaseReceiptId);
           if (duplicateForReceipt) {
-            return toast.error('Ya existe una factura para esta recepción');
+            toast.error('Ya existe una factura para esta recepción', { id: saveToastId });
+            return;
           }
         }
 
@@ -307,18 +321,18 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         const created = (createdResponse as any)?.data || createdResponse;
         if (attachmentFiles.length > 0 && created?.id) await uploadInvoiceAttachments(String(created.id));
         
-        toast.success('Factura creada exitosamente');
+        toast.success('Factura creada exitosamente', { id: saveToastId });
         openEditor(null);
         setLocalDoc(null);
       } else {
         const updatedResponse = await billsService.update(editingId!, docToSave);
         if (attachmentFiles.length > 0 && editingId) await uploadInvoiceAttachments(String(editingId));
-        toast.success('Factura guardada');
+        toast.success('Factura guardada', { id: saveToastId });
       }
       onRefresh();
       setAttachmentFiles([]);
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la factura', { id: saveToastId });
     }
   };
 
@@ -772,15 +786,16 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
+            const cancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'} de proveedor...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await billsService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Facturas anuladas');
+              toast.success('Facturas anuladas', { id: cancelToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
             }
           } : undefined}
           actions={(row) => (

@@ -32,6 +32,8 @@ interface Props {
   onDraftConsumed?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
+  targetId?: string | null;
+  onClearTargetId?: () => void;
 }
 
 const methodOpts = [
@@ -42,11 +44,12 @@ const methodOpts = [
   { label: 'Otro',            value: 'OTHER' },
 ];
 
-export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange }: Props) {
+export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
+  const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [bills, setBills] = useState<SupplierInvoice[]>([]);
@@ -57,6 +60,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [isMixed, setIsMixed] = useState(false);
+
+  useEffect(() => {
+    if (!targetId || !data.some((payment) => payment.id === targetId)) return;
+    setHighlightedTargetId(targetId);
+    setEditingId(targetId);
+    onClearTargetId?.();
+    const timeout = window.setTimeout(() => setHighlightedTargetId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [targetId, data, onClearTargetId]);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
@@ -170,14 +182,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
+    const updateToastId = toast.loading('Guardando cambios en el pago...');
     try {
       const payload = { ...updates } as any;
       if (payload.method) payload.method = normalizeMethod(payload.method);
       await paymentsService.update(id as string, payload);
-      toast.success('Pago actualizado');
+      toast.success('Pago actualizado', { id: updateToastId });
       onRefresh();
     }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed'); }
   };
 
   const handleSaveDoc = async () => {
@@ -185,6 +198,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando pago a proveedor...' : 'Guardando pago a proveedor...');
     try {
       const payload = {
         ...localDoc,
@@ -203,15 +217,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       }
       if (editingId === 'NEW') {
         const created = await paymentsService.create(payload);
-        toast.success('Pago registrado exitosamente');
+        toast.success('Pago registrado exitosamente', { id: saveToastId });
       } else {
         await paymentsService.update(editingId!, payload);
-        toast.success('Pago guardado');
+        toast.success('Pago guardado', { id: saveToastId });
       }
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
-        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar'); 
+        toast.error(e?.response?.data?.message || e?.message || 'Error al registrar', { id: saveToastId });
     }
   };
 
@@ -506,17 +520,18 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
              )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} bulkAction="cancel"
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
+            const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
                 await paymentsService.cancel(id as string, 'Anulación masiva');
               }
-              toast.success('Pagos anulados');
+              toast.success('Pagos anulados', { id: cancelToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
             }
           } : undefined}
            actions={(row) => (
@@ -526,13 +541,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                  variant="ghost"
                  size="icon"
                  className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                 onClick={() => generateExpensePDF({
-                   expense: toExpensePayload(row, row.supplier?.name),
-                   tenantName: user?.tenantName || 'Nova Hub',
-                   targetKey: 'compras.payment-made',
-                   formatAmount: (amount: number, currency?: string, rate?: number) =>
-                     formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
-                 })}
+                 onClick={() => void (async () => {
+                   const pdfToastId = toast.loading('Generando comprobante de pago...');
+                   try {
+                     await generateExpensePDF({
+                       expense: toExpensePayload(row, row.supplier?.name),
+                       tenantName: user?.tenantName || 'Nova Hub',
+                       targetKey: 'compras.payment-made',
+                       formatAmount: (amount: number, currency?: string, rate?: number) =>
+                         formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
+                     });
+                     toast.success('Comprobante generado', { id: pdfToastId });
+                   } catch (error: any) {
+                     toast.error(error?.message || 'No se pudo generar el comprobante', { id: pdfToastId });
+                   }
+                 })()}
                >
                  <Download className="size-4" />
                </Button>
@@ -556,14 +579,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         disabled={!cancelReason.trim()}
         onConfirm={async () => {
           if (!pendingCancelId || !cancelReason.trim()) return;
+          const cancelToastId = toast.loading('Anulando pago a proveedor...');
           try {
             setCancelLoading(true);
             await paymentsService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Pago anulado');
+            toast.success('Pago anulado', { id: cancelToastId });
             setEditingId(null);
             onRefresh();
           } catch (e: any) {
-            toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
+            toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

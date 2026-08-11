@@ -1,4 +1,6 @@
-import { BellRing } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BellRing, Check } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
@@ -29,24 +31,61 @@ interface PurchaseAlertsButtonProps {
 }
 
 export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButtonProps) {
-  const message = alert.count > 0
-    ? `Hay ${alert.count} ${alert.count === 1 ? alert.singularLabel : alert.label.toLowerCase()}`
+  const { user } = useAuth();
+  const storageKey = `erp-purchase-alerts:${user?.tenantId || 'current'}:${user?.id || 'current'}:${encodeURIComponent(alert.label)}`;
+  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      return new Set(Array.isArray(stored) ? stored.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  const currentAlertIds = useMemo(() => new Set(alert.items.map((item) => item.id)), [alert.items]);
+  const unreadItems = alert.items.filter((item) => !readAlertIds.has(item.id));
+  const unreadCount = unreadItems.length;
+
+  useEffect(() => {
+    setReadAlertIds((previous) => {
+      const next = new Set(Array.from(previous).filter((id) => currentAlertIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [currentAlertIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(readAlertIds)));
+    } catch {
+      // La lectura local es opcional; el contador sigue funcionando en memoria.
+    }
+  }, [readAlertIds, storageKey]);
+
+  const markCurrentAlertsAsRead = () => {
+    if (alert.items.length === 0) return;
+    setReadAlertIds((previous) => new Set([...previous, ...currentAlertIds]));
+  };
+
+  const message = alert.items.length > 0
+    ? unreadCount > 0
+      ? `Hay ${unreadCount} ${unreadCount === 1 ? alert.singularLabel : alert.label.toLowerCase()} sin leer`
+      : 'Todas las novedades fueron revisadas'
     : `No hay ${alert.label.toLowerCase()}`;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => { if (open) markCurrentAlertsAsRead(); }}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
           size="icon"
           className="relative size-10 shrink-0 rounded-xl border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-          aria-label={alert.label}
+          aria-label={unreadCount > 0 ? `${alert.label}, ${unreadCount} sin leer` : alert.label}
           title={alert.label}
         >
           <BellRing className="size-4" />
-          {alert.count > 0 && (
+          {unreadCount > 0 && (
             <Badge className="absolute -right-1 -top-1 h-5 min-w-5 justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
-              {alert.count > 99 ? '99+' : alert.count}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
           )}
         </Button>
@@ -69,12 +108,16 @@ export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButt
           {alert.items.length > 0 && (
             <div className="max-h-64 space-y-1 overflow-y-auto px-1 pb-1">
               {alert.items.map((item) => (
-                <DropdownMenuItem
-                  key={item.id}
-                  className="items-start gap-2 rounded-lg px-3 py-2"
-                  onSelect={() => onItemSelect?.(item.id)}
-                >
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
+                  <DropdownMenuItem
+                    key={item.id}
+                    className="items-start gap-2 rounded-lg px-3 py-2"
+                    onSelect={() => onItemSelect?.(item.id)}
+                  >
+                  {readAlertIds.has(item.id) ? (
+                    <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
+                  )}
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-bold text-foreground">{item.label}</span>
                     {item.detail && <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{item.detail}</span>}

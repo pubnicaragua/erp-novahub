@@ -29,7 +29,7 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-500' },
@@ -47,7 +47,7 @@ const incidenciaIcons: Record<string, any> = {
   incidencia: AlertTriangle,
 };
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange, purchaseAlert }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -60,6 +60,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
+
+  useEffect(() => {
+    if (!targetId || !data.some((receipt) => receipt.id === targetId)) return;
+    setHighlightedAlertId(targetId);
+    setEditingId(targetId);
+    onClearTargetId?.();
+  }, [targetId, data, onClearTargetId]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -138,6 +145,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseReceipt>) => {
+    let updateToastId: string | number | undefined;
     try {
       const currentReceipt = data.find((x) => x.id === id);
       const previousStatus = String(currentReceipt?.status || '').toUpperCase();
@@ -160,6 +168,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           return;
         }
       }
+      updateToastId = toast.loading('Actualizando recepción y sincronizando inventario...');
       const updatedResponse = await purchaseReceiptsService.update(id as string, updates);
       const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
       const nextStatus = String(updatedReceipt?.status || updates.status || previousStatus).toUpperCase();
@@ -175,11 +184,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           toast.warning(`Recepción actualizada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
         }
       }
-      toast.success('Recepción actualizada');
+      toast.success('Recepción actualizada', updateToastId ? { id: updateToastId } : undefined);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     }
-    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed'); }
+    catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', updateToastId ? { id: updateToastId } : undefined); throw new Error('Update failed'); }
   };
 
   const findProductByCode = async (code: string): Promise<any> => {
@@ -333,7 +342,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         return;
       }
     }
-    
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepción de compra...' : 'Guardando recepción de compra...');
     try {
       if (editingId === 'NEW') {
         const createdResponse = await purchaseReceiptsService.create(localDoc as any);
@@ -351,7 +360,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             toast.warning(`Recepción creada, pero no se pudo sincronizar inventario: ${syncError?.message || syncError?.response?.data?.message || 'Error de sincronización'}`);
           }
         }
-        toast.success('Recepción creada');
+        toast.success('Recepción creada', { id: saveToastId });
       } else {
         const currentReceipt = data.find((x) => x.id === editingId);
         const previousStatus = String(currentReceipt?.status || '').toUpperCase();
@@ -371,13 +380,13 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
             toast.warning(`Recepción guardada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
           }
         }
-        toast.success('Recepción guardada');
+        toast.success('Recepción guardada', { id: saveToastId });
       }
       setEditingId(null);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción');
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción', { id: saveToastId });
     }
   };
 
@@ -829,6 +838,7 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId}
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
+            const deleteToastId = toast.loading(`Eliminando ${ids.length} recepción${ids.length === 1 ? '' : 'es'}...`);
             try {
               for (const id of ids) {
                 if (String(id).startsWith('new-')) continue;
@@ -840,10 +850,10 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                 }
                 await purchaseReceiptsService.delete(id as string);
               }
-              toast.success('Elementos eliminados');
+              toast.success('Elementos eliminados', { id: deleteToastId });
               onRefresh();
             } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+              toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
             }
           } : undefined}
           actions={(row) => (
@@ -874,13 +884,14 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
         loading={deleteLoading}
         onConfirm={async () => {
           if (!pendingDeleteId) return;
+          const deleteToastId = toast.loading('Eliminando recepción...');
           try {
             setDeleteLoading(true);
             await purchaseReceiptsService.delete(pendingDeleteId);
-            toast.success('Registro eliminado');
+            toast.success('Registro eliminado', { id: deleteToastId });
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.message || 'Error al eliminar');
+            toast.error(error?.message || 'Error al eliminar', { id: deleteToastId });
           } finally {
             setDeleteLoading(false);
             setPendingDeleteId(null);

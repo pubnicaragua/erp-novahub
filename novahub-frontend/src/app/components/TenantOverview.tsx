@@ -4,7 +4,7 @@ import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle,
   TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
-  FileDown, ClipboardCheck,
+  FileDown, ClipboardCheck, CalendarDays,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -77,6 +77,33 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const { user } = useAuth();
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
+
+  const navigateWithTarget = useCallback((module: Module, detail?: Record<string, unknown>) => {
+    onNavigate?.(module);
+    if (!detail) return;
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('navigate-module', {
+        detail: { module, ...detail },
+      }));
+    }, 100);
+  }, [onNavigate]);
+
+  const navigateToTransaction = useCallback((transaction: any) => {
+    const destination = transaction?.destination || {
+      module: transaction?.transactionType === 'PURCHASE_ORDER' || transaction?.transactionType === 'PURCHASE_INVOICE' || transaction?.transactionType === 'PURCHASE_PAYMENT' ? 'compras' : 'ventas',
+      subModule: transaction?.transactionType === 'PURCHASE_ORDER' ? 'ordenes-compra' : transaction?.transactionType === 'PURCHASE_INVOICE' ? 'facturas-proveedor' : transaction?.transactionType === 'PURCHASE_PAYMENT' ? 'pagos-realizados' : 'facturas',
+      id: transaction?.id,
+      number: transaction?.number,
+    };
+    const detail: Record<string, unknown> = {
+      subModule: destination.subModule,
+      targetId: destination.id,
+      number: destination.number,
+    };
+    if (destination.subModule === 'facturas') detail.invoiceId = destination.id;
+    if (destination.subModule === 'ordenes-venta') detail.orderId = destination.id;
+    navigateWithTarget(destination.module as Module, detail);
+  }, [navigateWithTarget]);
 
   const loadDataRef = useRef<() => void>();
   const mountedRef = useRef(true);
@@ -326,15 +353,15 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text('Factura', 24, y);
-        doc.text('Caja', 60, y);
+        doc.text('Origen', 60, y);
         doc.text('Cliente', 95, y);
         doc.text('Monto', 140, y);
         doc.text('IVA', 170, y);
         y += 5;
         doc.setFont('helvetica', 'normal');
-        for (const tx of transactions.slice(0, 10)) {
+        for (const tx of transactions.slice(0, 20)) {
           doc.text(tx.number || 'FAC-???', 24, y);
-          doc.text(tx.register?.name || '-', 60, y);
+          doc.text((tx.origin || tx.register?.name || '-').substring(0, 24), 60, y);
           doc.text((tx.customer || 'Cliente General').substring(0, 20), 95, y);
           doc.text(fmt(tx.total || 0), 140, y);
           doc.text(tx.hasIVA ? '15%' : 'Exento', 170, y);
@@ -458,7 +485,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               <span className="text-foreground border-b-[3px] border-primary pb-0.5 inline-block transform rotate-1">necesita.</span>
             </span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-3 max-w-xl">
+          <p className="text-sm text-foreground/75 mt-3 max-w-xl">
             Supervisa el rendimiento en tiempo real, descubre nuevas oportunidades y toma decisiones estratégicas con nuestra visión analítica de 360°.
           </p>
         </div>
@@ -478,11 +505,17 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
           </Select>
           {period === 'custom' && (
             <div className="flex items-center gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="h-8 rounded-xl border border-border/50 bg-card px-3 text-xs font-bold" />
-              <span className="text-[10px] text-muted-foreground">a</span>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="h-8 rounded-xl border border-border/50 bg-card px-3 text-xs font-bold" />
+              <label className="relative block">
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                  aria-label="Fecha desde" className="h-9 w-[170px] rounded-xl border border-border/60 bg-card px-3 pr-10 text-xs font-bold text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 [&::-webkit-calendar-picker-indicator]:opacity-0" />
+                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-primary" />
+              </label>
+              <span className="text-[10px] font-bold text-foreground/70">a</span>
+              <label className="relative block">
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                  aria-label="Fecha hasta" className="h-9 w-[170px] rounded-xl border border-border/60 bg-card px-3 pr-10 text-xs font-bold text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 [&::-webkit-calendar-picker-indicator]:opacity-0" />
+                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-primary" />
+              </label>
             </div>
           )}
           {setupSummary && !setupSummary.isComplete && (
@@ -544,8 +577,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         </motion.div>
       ) : (
         <>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 text-center md:text-left">
-            Filtrar Caja / Período: <span className="text-foreground/60">{periodLabel}</span>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/75 text-center md:text-left">
+            Período: <span className="text-foreground">{periodLabel}</span>
           </p>
 
           {/* KPIs - dark diffused tech */}
@@ -562,19 +595,19 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                     <div className={`absolute -top-8 -right-8 size-24 rounded-full blur-2xl opacity-40 pointer-events-none ${kpi.iconBg}`} />
                     <CardContent className="p-4 relative z-10">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{kpi.label}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-foreground/80">{kpi.label}</span>
                         <div className={`size-8 items-center justify-center rounded-lg ${kpi.iconBg} flex`}>
                           <Icon className={`size-4 ${kpi.accent}`} />
                         </div>
                       </div>
                       <p className="text-2xl font-black tracking-tighter tabular-nums text-foreground">{kpi.value}</p>
                       {kpi.extra && (
-                        <p className={`text-[11px] font-bold mt-1 ${kpi.extra.color || 'text-muted-foreground'}`}>
+                        <p className={`text-[11px] font-bold mt-1 ${kpi.extra.color || 'text-foreground/75'}`}>
                           {kpi.extra.text}
                         </p>
                       )}
                       {!kpi.extra && <div className="h-[18px]" />}
-                      <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                      <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-foreground/65 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
                         <span>Ver detalle</span>
                         <ArrowUpRight className="size-3" />
                       </div>
@@ -592,10 +625,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                 <BarChart3 className="size-4 text-primary" />
                 <h2 className="text-base font-black uppercase tracking-tight">Rendimiento de Productos en Caja</h2>
               </div>
-              <p className="text-[10px] text-muted-foreground/40 font-medium mb-3 ml-6">Monitoreo por volumen de ventas, margen de utilidad ganada e inventario sin salida.</p>
+              <p className="text-[10px] text-foreground/70 font-medium mb-3 ml-6">Monitoreo por volumen de ventas, margen de utilidad ganada e inventario sin salida.</p>
               <div className="mb-3 flex items-center gap-2">
                 <div className="h-px flex-1 bg-gradient-to-r from-border/0 via-border/60 to-border/0" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Análisis en Tiempo Real</span>
+                <span className="rounded-full border border-primary/25 bg-primary/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary">Análisis en Tiempo Real</span>
                 <div className="h-px flex-1 bg-gradient-to-r from-border/0 via-border/60 to-border/0" />
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -608,16 +641,16 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                       </div>
                       <span className="text-xs font-black uppercase tracking-wider text-foreground">Más Vendidos</span>
                     </div>
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Unid.</span>
+                    <span className="text-[9px] font-bold text-foreground/70 uppercase">Unid.</span>
                   </div>
                   <CardContent className="p-0">
                     {(perf.topSelling || []).length === 0 ? (
-                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Sin ventas</p>
+                      <p className="text-xs text-foreground/65 italic py-6 text-center font-medium">Sin ventas</p>
                     ) : (perf.topSelling || []).slice(0, 5).map((p: any, i: number) => (
                       <div key={p.productId || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold truncate">{p.name}</p>
-                          <p className="text-[10px] text-muted-foreground/50">Total: {fmt(p.totalRevenue || 0)}</p>
+                          <p className="text-[10px] text-foreground/70">Total: {fmt(p.totalRevenue || 0)}</p>
                         </div>
                         <span className="text-[10px] font-black tabular-nums text-emerald-500 ml-3 shrink-0">{p.totalQty || 0} uds</span>
                       </div>
@@ -634,11 +667,11 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                       </div>
                       <span className="text-xs font-black uppercase tracking-wider text-foreground">Mayor Utilidad</span>
                     </div>
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Ganancia</span>
+                    <span className="text-[9px] font-bold text-foreground/70 uppercase">Ganancia</span>
                   </div>
                   <CardContent className="p-0">
                     {(perf.topMargin || []).length === 0 ? (
-                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Sin datos</p>
+                      <p className="text-xs text-foreground/65 italic py-6 text-center font-medium">Sin datos</p>
                     ) : (perf.topMargin || []).slice(0, 5).map((p: any, i: number) => (
                       <div key={p.productId || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
                         <div className="min-w-0 flex-1">
@@ -660,16 +693,16 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                       </div>
                       <span className="text-xs font-black uppercase tracking-wider text-foreground">Sin Venta</span>
                     </div>
-                    <span className="text-[9px] font-bold text-muted-foreground uppercase">Stock Parado</span>
+                    <span className="text-[9px] font-bold text-foreground/70 uppercase">Stock Parado</span>
                   </div>
                   <CardContent className="p-0">
                     {(perf.noSaleProducts || []).length === 0 ? (
-                      <p className="text-xs text-muted-foreground/40 italic py-6 text-center font-medium">Todos venden</p>
+                      <p className="text-xs text-foreground/65 italic py-6 text-center font-medium">Todos venden</p>
                     ) : (perf.noSaleProducts || []).slice(0, 5).map((p: any, i: number) => (
                       <div key={p.id || i} className="px-4 py-2.5 border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors flex items-center justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold truncate">{p.name}</p>
-                          <p className="text-[10px] text-muted-foreground/50">{p.daysWithoutSale ? `${p.daysWithoutSale} días sin salida` : 'Sin salidas'}</p>
+                          <p className="text-[10px] text-foreground/70">{p.daysWithoutSale ? `${p.daysWithoutSale} días sin salida` : 'Sin salidas'}</p>
                         </div>
                         <span className="text-[10px] font-black tabular-nums text-rose-400 ml-3 shrink-0">{p.currentStock || 0} stck</span>
                       </div>
@@ -689,13 +722,18 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                     <Receipt className="size-4 text-primary" />
                     <div>
                       <CardTitle className="text-sm font-black uppercase tracking-tight">Transacciones Recientes</CardTitle>
-                      <p className="text-[10px] text-muted-foreground/50 font-medium">Últimas facturas procesadas.</p>
+                      <p className="text-[10px] text-foreground/70 font-medium">Últimos movimientos registrados.</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('ventas')}
-                    className="hover:bg-primary/5 border-border/50 rounded-lg font-black uppercase text-[10px] tracking-widest">
-                    Ver Historial <ArrowUpRight className="ml-1 size-3" />
-                  </Button>
+                  <Select onValueChange={(value) => navigateWithTarget('finanzas', { subModule: value })}>
+                    <SelectTrigger className="h-8 w-auto min-w-[125px] rounded-lg border-border/50 bg-background px-2.5 text-[10px] font-black uppercase tracking-widest">
+                      <SelectValue placeholder="Ver historial" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ingresos">Ingresos</SelectItem>
+                      <SelectItem value="gastos">Gastos</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -703,18 +741,21 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                   <Table>
                     <TableHeader className="bg-muted/30">
                       <TableRow className="border-border/40 hover:bg-transparent">
-                        <TableHead className="font-black py-2.5 pl-5 uppercase text-[10px] tracking-widest">Factura</TableHead>
-                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Caja</TableHead>
-                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Cliente</TableHead>
+                        <TableHead className="font-black py-2.5 pl-5 uppercase text-[10px] tracking-widest">Documento</TableHead>
+                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Origen</TableHead>
+                        <TableHead className="font-black py-2.5 uppercase text-[10px] tracking-widest">Cliente / Proveedor</TableHead>
                         <TableHead className="font-black py-2.5 text-right uppercase text-[10px] tracking-widest">Monto</TableHead>
                         <TableHead className="font-black py-2.5 text-center pr-5 uppercase text-[10px] tracking-widest">IVA</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.slice(0, 10).map((tx: any, i: number) => (
-                        <TableRow key={tx.id || i} className="border-border/30 hover:bg-muted/30 transition-colors cursor-pointer group" onClick={() => onNavigate?.('ventas')}>
+                      {transactions.slice(0, 20).map((tx: any, i: number) => (
+                        <TableRow key={`${tx.transactionType || 'transaction'}-${tx.id || i}`} className="border-border/30 hover:bg-muted/30 transition-colors cursor-pointer group" onClick={() => navigateToTransaction(tx)}>
                           <TableCell className="font-black pl-5 text-xs group-hover:text-primary transition-colors">{tx.number || `FAC-${String(i + 1).padStart(3, '0')}`}</TableCell>
-                          <TableCell className="text-xs font-bold flex items-center gap-1.5 py-2.5"><Store className="size-3 text-muted-foreground/40" />{tx.register?.name || '—'}</TableCell>
+                          <TableCell className="text-xs font-bold py-2.5">
+                            <div className="flex items-center gap-1.5"><Store className="size-3 text-primary/75" />{tx.origin || tx.register?.name || 'FACTURA DE VENTA'}</div>
+                            {tx.originDetail && <span className="ml-[18px] text-[9px] font-medium text-foreground/70">{tx.originDetail}</span>}
+                          </TableCell>
                           <TableCell className="text-xs font-bold text-foreground/70">{tx.customer || 'Cliente General'}</TableCell>
                           <TableCell className="text-right text-xs tabular-nums">
                             <CurrencyValuationAmount
@@ -728,7 +769,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                             {tx.hasIVA ? (
                               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black px-2 py-0.5">15%</Badge>
                             ) : (
-                              <Badge variant="outline" className="bg-muted/20 text-muted-foreground border-border/30 text-[9px] font-black px-2 py-0.5">EXENTO</Badge>
+                              <Badge variant="outline" className="bg-muted/20 text-foreground/75 border-border/30 text-[9px] font-black px-2 py-0.5">EXENTO</Badge>
                             )}
                           </TableCell>
                         </TableRow>
@@ -745,9 +786,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
             {registers.length > 0 && (
               <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
                 <CardHeader className="pb-2 px-5 pt-4">
-                  <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
-                    <BarChart3 className="size-4 text-primary" /> Ventas por Cajas
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
+                      <BarChart3 className="size-4 text-primary" /> Ventas por Cajas
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-[9px] font-black uppercase tracking-widest" onClick={() => navigateWithTarget('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>
+                      Ver todo <ArrowUpRight className="ml-1 size-3" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="px-5 pb-4 space-y-3">
                   {(() => {
@@ -755,10 +801,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                     return registers.map((r: any, i: number) => {
                       const pct = maxTotal > 0 ? ((r.total || 0) / maxTotal) * 100 : 0;
                       return (
-                        <div key={r.registerId || i} className="cursor-pointer group" onClick={() => onNavigate?.('ventas')}>
+                        <div key={r.registerId || i} className="cursor-pointer group" onClick={() => navigateWithTarget('ventas', { subModule: 'control-caja', section: 'history', registerId: r.registerId })}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2 min-w-0">
-                              <Store className="size-3 text-muted-foreground/40 shrink-0 group-hover:text-primary transition-colors" />
+                              <Store className="size-3 text-primary/70 shrink-0 group-hover:text-primary transition-colors" />
                               <span className="text-xs font-bold truncate group-hover:text-primary transition-colors">{r.registerName || `Caja ${r.registerCode}`}</span>
                             </div>
                             <span className="text-xs font-black tabular-nums">{fmt(r.total || 0)}</span>
@@ -787,17 +833,17 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               <Card className="rounded-2xl border-border/40 bg-card/80 backdrop-blur-sm shadow-sm">
                 <CardHeader className="pb-2 px-5 pt-4">
                   <CardTitle className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
-                    <Package className="size-4 text-amber-500" /> Alertas de Inventario POS
+                    <Package className="size-4 text-amber-500" /> Alertas de Inventario
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-5 pb-4 space-y-1.5">
                   {alerts.slice(0, 6).map((a: any, i: number) => (
-                    <div key={a.productId || i} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer group" onClick={() => onNavigate?.('inventario')}>
+                    <div key={a.productId || i} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer group" onClick={() => navigateWithTarget('inventario', { subModule: 'productos', productId: a.productId, productCode: a.code, stockFilter: a.status === 'SIN_STOCK' ? 'out' : 'low' })}>
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className={`size-2 shrink-0 rounded-full ${a.status === 'SIN_STOCK' ? 'bg-rose-500' : a.status === 'STOCK_BAJO' ? 'bg-amber-500' : 'bg-orange-500'}`} />
                         <div className="min-w-0">
                           <p className="text-xs font-bold truncate group-hover:text-primary transition-colors">{a.name}</p>
-                          <p className="text-[10px] text-muted-foreground/50 font-medium">{a.status === 'SIN_STOCK' ? 'Agotado' : a.status === 'STOCK_BAJO' ? `Stock Bajo (${a.currentStock})` : `Reordenar (${a.currentStock})`}</p>
+                          <p className="text-[10px] text-foreground/70 font-medium">{a.status === 'SIN_STOCK' ? 'Agotado' : a.status === 'STOCK_BAJO' ? `Stock Bajo (${a.currentStock})` : `Reordenar (${a.currentStock})`}</p>
                         </div>
                       </div>
                       <Badge className={`text-[9px] font-black uppercase tracking-widest border-none px-2 py-0.5 ${statusStyles[a.status] || 'bg-muted/10 text-muted-foreground'}`}>
