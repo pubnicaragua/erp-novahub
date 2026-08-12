@@ -6,6 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 
 export type EmployeeImportRow = {
   sourceRow: number;
@@ -97,6 +100,7 @@ export function EmployeeImportPreview({
   onConfirm,
   onDone,
 }: EmployeeImportPreviewProps) {
+  useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [departmentRowIndex, setDepartmentRowIndex] = useState<number | null>(null);
@@ -124,12 +128,6 @@ export function EmployeeImportPreview({
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar empleados</h1>
             <p className="mt-1 max-w-4xl text-sm text-muted-foreground">Corrige cada fila antes de importarla. El departamento y el puesto se validan juntos; los empleados que estén en un departamento vendedor podrán utilizarse para comisiones.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <Badge variant="outline">{rows.length} registros</Badge>
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">{validRows} válidos</Badge>
-            <Badge variant="outline" className={warningRows ? 'border-amber-500/30 text-amber-600' : ''}>{warningRows} avisos</Badge>
-            <Badge variant="outline" className={errorRows ? 'border-rose-500/30 text-rose-600' : ''}>{errorRows} errores</Badge>
-          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
@@ -140,6 +138,8 @@ export function EmployeeImportPreview({
             {(errorRows || warningRows) > 0 && <Button type="button" variant="outline" size="sm" onClick={onDownloadErrors} disabled={importing}><Download className="size-3.5" /> Descargar incidencias</Button>}
           </div>
         </div>
+
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="empleados" />
 
         <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
           <Building2 className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -220,23 +220,19 @@ export function EmployeeImportPreview({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
-          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} empleados`}</Button>
+          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
       </div>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Confirmar importación de empleados</DialogTitle><DialogDescription>Se crearán hasta {validRows} empleados. Las filas con errores se omitirán y el sistema reportará cualquier conflicto que ocurra al guardar. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Confirmar importación de empleados</DialogTitle><DialogDescription>Se importarán {validRows} empleados válidos y se omitirán {errorRows} con errores. Los {warningRows} avisos se conservarán como información y el sistema reportará cualquier conflicto adicional al guardar. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
           <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importing} onOpenChange={() => undefined}>
-        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-          <div className="flex flex-col items-center gap-5 py-5 text-center"><div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5"><div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" /><span className="text-xl font-black text-primary">{progress}%</span></div><div><DialogTitle className="text-xl">Importando empleados</DialogTitle><DialogDescription className="mt-2">Guardando las filas válidas y conservando el detalle de las incidencias.</DialogDescription></div><div className="h-3 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(progress, 3)}%` }} /></div></div>
-        </DialogContent>
-      </Dialog>
+      <ImportProgressOverlay open={importing} progress={progress} title="Importando empleados" description="Guardando las filas válidas y conservando el detalle de las incidencias." />
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
         <DialogContent className="max-w-lg">

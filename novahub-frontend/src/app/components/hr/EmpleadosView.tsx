@@ -18,6 +18,7 @@ import { cn } from '../ui/utils';
 import { Textarea } from '../ui/textarea';
 import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRow } from './EmployeeImportPreview';
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
@@ -57,6 +58,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<EmployeeImportResult | null>(null);
   const [pendingImportDepartmentRow, setPendingImportDepartmentRow] = useState<number | null>(null);
   const [pendingImportPositionRow, setPendingImportPositionRow] = useState<number | null>(null);
@@ -548,7 +551,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
   const readEmployeeImportFile = async (file: File) => {
     try {
       if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Selecciona un archivo Excel o CSV válido');
-      const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
       const sheetName = workbook.SheetNames.find((name) => normalizeImportHeader(name) === 'empleados') || workbook.SheetNames[0];
       const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
@@ -576,6 +580,24 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     } catch (error: any) {
       setImportFileName(''); setImportRows([]); toast.error(error?.message || 'No se pudo leer el archivo');
     }
+  };
+
+  const handleOpenImportPreview = () => {
+    if (!importRows.length || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewProgress(20);
+    setImportOpen(false);
+    window.setTimeout(() => {
+      setPreviewProgress(65);
+      window.setTimeout(() => {
+        setPreviewProgress(100);
+        window.setTimeout(() => {
+          setImportPreviewOpen(true);
+          setPreviewLoading(false);
+          setPreviewProgress(0);
+        }, 120);
+      }, 120);
+    }, 40);
   };
 
   const updateEmployeeImportRow = (index: number, field: string, value: string | number) => {
@@ -840,6 +862,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
   return (
     <div className="space-y-4">
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando los datos y preparando los empleados para revisión." />
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2 flex-1">
@@ -1270,7 +1293,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); }} />{importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos laborales.</li><li>Carga el archivo y abre la previsualización.</li><li>Corrige los errores; crea departamentos o puestos faltantes desde la misma fila.</li><li>Confirma escribiendo IMPORTAR. Las filas válidas se guardan aunque otras tengan incidencias.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importRows.length > 0 && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar empleados</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 

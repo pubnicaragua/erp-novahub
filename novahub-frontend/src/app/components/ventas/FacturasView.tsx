@@ -296,6 +296,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   const handlePayInvoice = async (invoice: Invoice, closeDetail = false) => {
+    if (!canPerform('SALES_INVOICES', 'approve') || !canPerform('SALES_PAYMENTS', 'create') || !canPerform('SALES_PAYMENTS', 'approve')) {
+      toast.error('No tienes permisos para aprobar y registrar el pago de esta factura');
+      return;
+    }
     const invoiceStatus = String(invoice.status || '').toUpperCase();
     if (invoiceStatus === 'PAID') return;
     if (!['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE'].includes(invoiceStatus)) {
@@ -1313,7 +1317,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   })();
                 }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
-                {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
+                {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                   getInvoiceBalance(row) > 0 && (
                   <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>
