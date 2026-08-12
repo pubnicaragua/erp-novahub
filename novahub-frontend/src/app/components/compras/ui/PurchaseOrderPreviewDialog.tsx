@@ -173,7 +173,8 @@ export function PurchaseOrderPreviewDialog({
                 </div>
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Moneda</span>
-                  <p className="mt-1 font-medium">{currency}</p>
+                  <p className="mt-1 font-medium">{currency === 'USD' ? 'USD · Dólares' : 'NIO · Córdobas'}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Tasa: <span className="font-bold text-foreground">{currency === 'NIO' ? '1.00' : Number(order.exchangeRate || 1).toFixed(2)} NIO/USD</span></p>
                 </div>
               </div>
 

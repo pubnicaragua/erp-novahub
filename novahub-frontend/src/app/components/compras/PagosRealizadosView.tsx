@@ -5,7 +5,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { paymentsService } from '../../services/compras.service';
+import { paymentsService, supplierInvoicesService } from '../../services/compras.service';
+import { storageService } from '../../services/storage.service';
 import type { PaymentMade, Supplier, SupplierInvoice } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -60,6 +61,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [isMixed, setIsMixed] = useState(false);
+  const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (!targetId || !data.some((payment) => payment.id === targetId)) return;
@@ -97,6 +99,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   useEffect(() => {
     if (editingId) {
       setIsMixed(false);
+      setPaymentEvidenceFiles([]);
       if (editingId === 'NEW') {
          const prefilled = draftPaymentFromInvoice || {};
          setLocalDoc({
@@ -117,6 +120,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
        }
     } else {
       setLocalDoc(null);
+      setPaymentEvidenceFiles([]);
     }
   }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
 
@@ -193,10 +197,41 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed'); }
   };
 
+  const uploadPaymentEvidence = async (invoiceId: string, paymentId: string, paymentReference?: string) => {
+    for (const file of paymentEvidenceFiles) {
+      const isImage = file.type.startsWith('image/');
+      const extension = file.name.toLowerCase().split('.').pop() || '';
+      const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
+      if (!isImage && !isDocument) throw new Error(`El archivo ${file.name} debe ser una imagen o un documento compatible.`);
+      const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
+      if (file.size > maxSize) throw new Error(`El archivo ${file.name} supera el límite permitido.`);
+
+      const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `pagos/${paymentId}` });
+      await supplierInvoicesService.addAttachment(invoiceId, {
+        fileName: `Pago-${paymentReference || paymentId}-${file.name}`,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        fileUrl: uploaded.uri,
+      });
+    }
+  };
+
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    if (!String(localDoc.reference || '').trim()) return toast.error('Ingrese el número de referencia del pago');
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
+    if (paymentEvidenceFiles.length > 0 && !localDoc.supplierInvoiceId) {
+      return toast.error('Seleccione una factura de proveedor para asociar las evidencias del pago');
+    }
+    for (const file of paymentEvidenceFiles) {
+      const extension = file.name.toLowerCase().split('.').pop() || '';
+      const isImage = file.type.startsWith('image/');
+      const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
+      const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
+      if (!isImage && !isDocument) return toast.error(`El archivo ${file.name} debe ser una imagen o un documento compatible`);
+      if (file.size > maxSize) return toast.error(`El archivo ${file.name} supera el límite permitido`);
+    }
     
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando pago a proveedor...' : 'Guardando pago a proveedor...');
     try {
@@ -215,13 +250,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         delete payload.amountNio;
         delete payload.amountUsd;
       }
+      let savedPayment: PaymentMade;
       if (editingId === 'NEW') {
-        const created = await paymentsService.create(payload);
-        toast.success('Pago registrado exitosamente', { id: saveToastId });
+        savedPayment = await paymentsService.create(payload);
       } else {
-        await paymentsService.update(editingId!, payload);
-        toast.success('Pago guardado', { id: saveToastId });
+        savedPayment = await paymentsService.update(editingId!, payload);
       }
+
+      let evidenceError = '';
+      if (paymentEvidenceFiles.length > 0 && payload.supplierInvoiceId) {
+        try {
+          await uploadPaymentEvidence(String(payload.supplierInvoiceId), String(savedPayment.id), String(payload.reference || savedPayment.number || savedPayment.id));
+        } catch (e: any) {
+          evidenceError = e?.response?.data?.message || e?.message || 'No se pudieron adjuntar las evidencias.';
+        }
+      }
+      toast.success(editingId === 'NEW' ? 'Pago registrado exitosamente' : 'Pago guardado', { id: saveToastId });
+      if (evidenceError) toast.error(`El pago quedó registrado, pero ${evidenceError.toLowerCase()}`);
+      setPaymentEvidenceFiles([]);
       setEditingId(null);
       onRefresh();
     } catch (e: any) { 
@@ -349,6 +395,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       className="h-8 text-xs font-mono" 
                       placeholder="Ej. TRANSF-001" 
                     />
+                  </div>
+                  <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                    <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Evidencias del pago</p>
+                        <p className="text-[10px] text-muted-foreground">Comprobante en imagen o documento (PDF, DOCX, XLSX). Se asociará a la factura seleccionada.</p>
+                      </div>
+                      {!localDoc.supplierInvoiceId && <Badge variant="outline" className="w-fit border-amber-500/30 bg-amber-500/10 text-amber-600">Seleccione una factura</Badge>}
+                    </div>
+                    <Input
+                      type="file"
+                      multiple
+                      accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      disabled={(isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')) || !localDoc.supplierInvoiceId}
+                      onChange={(event) => setPaymentEvidenceFiles(Array.from(event.target.files || []))}
+                      className="h-10 bg-background text-xs"
+                    />
+                    {paymentEvidenceFiles.length > 0 && <p className="mt-1 truncate text-[10px] text-muted-foreground">Archivos seleccionados: {paymentEvidenceFiles.map((file) => file.name).join(', ')}</p>}
                   </div>
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Notas ADicionales</p>

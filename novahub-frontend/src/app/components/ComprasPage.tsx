@@ -96,7 +96,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
-  const [draftPaymentFromInvoice, setDraftPaymentFromInvoice] = useState<any>(null);
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
   const purchasesStaleTime = 15_000;
@@ -138,11 +137,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
 
   const handleApprovedOrderReceipt = () => {
     setActiveSection('recepciones');
-  };
-
-  const handleRegisterPaymentFromInvoice = (draft: any) => {
-    setDraftPaymentFromInvoice(draft);
-    setActiveSection('pagos');
   };
 
   useEffect(() => {
@@ -488,7 +482,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                      {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onRegisterPaymentFromReceipt={handleRegisterPaymentFromInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                       {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView
@@ -498,8 +492,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                       onClearTargetId={() => setTargetRecord(null)}
                       data={filteredData.pagos}
                       supplierInvoices={invoiceCatalog}
-                      draftPaymentFromInvoice={draftPaymentFromInvoice}
-                      onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
                       pagination={pagination.pagos}
                       onSearchChange={(value) => updateSearch('pagos', value)}
                     />

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BellRing, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { notificationsService } from '../../services/notifications.service';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
@@ -49,15 +50,48 @@ export function PurchaseAlertsButton({
 }: PurchaseAlertsButtonProps) {
   const { user } = useAuth();
   const storageKey = `${storageNamespace}:${user?.tenantId || 'current'}:${user?.id || 'current'}:${encodeURIComponent(alert.label)}`;
+  const viewNamespace = `${storageNamespace}:${alert.label}`;
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => readStoredAlertIds(storageKey));
   const unreadItems = alert.items.filter((item) => !readAlertIds.has(item.id));
   const unreadCount = unreadItems.length;
 
+  const markItemsAsRead = useCallback((ids: string[]) => {
+    const normalizedIds = [...new Set(ids.map(String).map((id) => id.trim()).filter(Boolean))];
+    if (normalizedIds.length === 0) return;
+
+    setReadAlertIds((previous) => new Set([...previous, ...normalizedIds]));
+    if (user?.id) {
+      void notificationsService.markViewAlertsRead(viewNamespace, normalizedIds).catch(() => {
+        // localStorage mantiene la experiencia si el servidor está temporalmente fuera de línea.
+      });
+    }
+  }, [user?.id, viewNamespace]);
+
   // La lectura se conserva aunque el registro deje de estar pendiente y luego
   // vuelva a aparecer en la consulta. Así no se presenta otra vez como nuevo.
   useEffect(() => {
-    setReadAlertIds(readStoredAlertIds(storageKey));
-  }, [storageKey]);
+    let cancelled = false;
+    const storedIds = readStoredAlertIds(storageKey);
+    setReadAlertIds(storedIds);
+
+    if (!user?.id) return () => { cancelled = true; };
+
+    void notificationsService.getViewAlertReadIds(viewNamespace)
+      .then((serverIds) => {
+        if (cancelled) return;
+        const serverSet = new Set(serverIds);
+        const localOnlyIds = [...storedIds].filter((id) => !serverSet.has(id));
+        // Une el resultado del servidor con el estado actual para no revertir
+        // una lectura que el usuario haya hecho mientras esta consulta cargaba.
+        setReadAlertIds((previous) => new Set([...previous, ...serverIds]));
+        if (localOnlyIds.length > 0) {
+          void notificationsService.markViewAlertsRead(viewNamespace, localOnlyIds).catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => { cancelled = true; };
+  }, [storageKey, user?.id, viewNamespace]);
 
   useEffect(() => {
     try {
@@ -68,12 +102,11 @@ export function PurchaseAlertsButton({
   }, [readAlertIds, storageKey]);
 
   const markCurrentAlertsAsRead = () => {
-    if (alert.items.length === 0) return;
-    setReadAlertIds((previous) => new Set([...previous, ...alert.items.map((item) => item.id)]));
+    markItemsAsRead(alert.items.map((item) => item.id));
   };
 
   const handleItemSelect = (id: string) => {
-    setReadAlertIds((previous) => new Set([...previous, id]));
+    markItemsAsRead([id]);
     onItemSelect?.(id);
   };
 

@@ -7,12 +7,12 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { Switch } from '../ui/switch';
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
 import { purchaseOrdersService, purchaseRequestsService } from '../../services/compras.service';
 import { inventoryService } from '../../services/inventario.service';
+import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
 import type { PurchaseOrder, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
@@ -21,7 +21,10 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -60,16 +63,20 @@ const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 type PurchaseImportRow = {
   sku: string;
   productId?: string;
+  skuResolution?: 'LINK_EXISTING' | 'MANUAL';
   description: string;
   category: string;
   categoryId?: string;
   quantity: string | number;
   unitPrice: string | number;
   taxType: string;
+  taxBase?: string | number;
   taxRate: string | number;
+  taxAmount?: number;
   withholdingType: string;
+  withholdingBase?: string | number;
   withholdingRate: string | number;
-  accountId: string;
+  withholdingTotal?: number;
   currentStock?: number;
   _hasError?: boolean;
   _errorMessage?: string;
@@ -79,36 +86,154 @@ type PurchaseImportRow = {
   _skuMessage?: string;
 };
 
+type ImportCatalogOption = {
+  id?: string;
+  code: string;
+  name: string;
+  rate: number;
+  baseCalculation?: string;
+  isActive?: boolean;
+};
+
+const getCurrencyLabel = (currency?: string) => {
+  const normalized = String(currency || 'NIO').toUpperCase();
+  return normalized === 'USD' ? 'USD · Dólares' : 'NIO · Córdobas';
+};
+
+const getCurrencySymbol = (currency?: string) => String(currency || 'NIO').toUpperCase() === 'USD' ? '$' : 'C$';
+
+const normalizePurchaseCurrency = (currency?: string): 'NIO' | 'USD' => String(currency || 'NIO').toUpperCase() === 'USD' ? 'USD' : 'NIO';
+
+const convertPurchaseAmount = (amount: unknown, fromCurrency: string, toCurrency: string, rate: number) => {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || normalizePurchaseCurrency(fromCurrency) === normalizePurchaseCurrency(toCurrency)) return Number.isFinite(value) ? value : 0;
+  const safeRate = Number(rate) > 0 ? Number(rate) : 36.5;
+  return normalizePurchaseCurrency(fromCurrency) === 'USD' ? value * safeRate : value / safeRate;
+};
+
+const FALLBACK_IMPORT_TAX_OPTIONS: ImportCatalogOption[] = [
+  { code: 'GRAVADO', name: 'IVA gravado', rate: 15 },
+  { code: 'EXENTO', name: 'IVA exento', rate: 0 },
+  { code: 'EXONERADO', name: 'IVA exonerado', rate: 0 },
+  { code: 'NO_GRAVADO', name: 'IVA no gravado', rate: 0 },
+  { code: 'NO_SUJETO', name: 'IVA no sujeto', rate: 0 },
+  { code: 'TASA_ESPECIAL', name: 'IVA tasa especial', rate: 7 },
+  { code: 'ISC_APLICABLE', name: 'ISC aplicable', rate: 0 },
+];
+
+const FALLBACK_IMPORT_WITHHOLDING_OPTIONS: ImportCatalogOption[] = [
+  { code: 'IR_BIENES_1', name: 'IR bienes 1%', rate: 1 },
+  { code: 'IR_BIENES_2', name: 'IR bienes 2%', rate: 2 },
+  { code: 'IR_3', name: 'IR 3%', rate: 3 },
+  { code: 'IR_SERVICIOS_2', name: 'IR servicios 2%', rate: 2 },
+  { code: 'IR_HONORARIOS_10', name: 'IR honorarios 10%', rate: 10 },
+  { code: 'IR_ALQUILERES_15', name: 'IR alquileres 15%', rate: 15 },
+  { code: 'IR_OTROS_20', name: 'IR otros 20%', rate: 20 },
+  { code: 'IR_5', name: 'IR 5%', rate: 5 },
+  { code: 'IR_10', name: 'IR 10%', rate: 10 },
+  { code: 'IR_15', name: 'IR 15%', rate: 15 },
+  { code: 'IR_20', name: 'IR 20%', rate: 20 },
+  { code: 'IR_25', name: 'IR 25%', rate: 25 },
+  { code: 'IVA_RET_1', name: 'IVA retención 1%', rate: 1 },
+  { code: 'IVA_RET_2', name: 'IVA retención 2%', rate: 2 },
+  { code: 'IVA_RET_3', name: 'IVA retención 3%', rate: 3 },
+  { code: 'IVA_RET_4', name: 'IVA retención 4%', rate: 4 },
+  { code: 'IVA_RET_5', name: 'IVA retención 5%', rate: 5 },
+];
+
 interface PurchaseImportPreviewProps {
   rows: PurchaseImportRow[];
   fileName: string;
   isSidebarCollapsed?: boolean;
   importing: boolean;
   progress: number;
+  currency: string;
+  importCurrency: string;
+  conversionRate?: number;
+  categoryOptions: any[];
+  exchangeRate?: number;
+  taxOptions: ImportCatalogOption[];
+  withholdingOptions: ImportCatalogOption[];
   onRowUpdate: (index: number, field: keyof PurchaseImportRow, value: any) => void;
+  onCategoryChange: (index: number, categoryId: string, categoryName?: string) => void;
+  onCreateCategory: (name: string) => Promise<any>;
+  onImportCurrencyChange: (currency: string) => void;
   onDownloadErrors: () => void;
   onConfirm: () => void;
   onBack: () => void;
 }
 
-function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, onRowUpdate, onDownloadErrors, onConfirm, onBack }: PurchaseImportPreviewProps) {
+function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, importing, progress, currency, importCurrency, conversionRate, categoryOptions, exchangeRate, taxOptions, withholdingOptions, onRowUpdate, onCategoryChange, onCreateCategory, onImportCurrencyChange, onDownloadErrors, onConfirm, onBack }: PurchaseImportPreviewProps) {
+  useImportPreviewLayout();
   const validRows = rows.filter((row) => !row._hasError).length;
+  const errorRows = rows.filter((row) => row._hasError).length;
+  const warningRows = rows.filter((row) => !row._hasError && row._hasWarning).length;
   const issueRows = rows.filter((row) => row._hasError || row._hasWarning).length;
+  const currencyCode = String(currency || 'NIO').toUpperCase();
+  const importCurrencyCode = String(importCurrency || currencyCode).toUpperCase();
+  const currencySymbol = getCurrencySymbol(currencyCode);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categoryRowIndex, setCategoryRowIndex] = useState<number | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
+  const openCategoryDialog = (index: number, initialName: string) => {
+    setCategoryRowIndex(index);
+    setNewCategoryName(initialName.trim());
+    setCategoryDialogOpen(true);
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error('El nombre de la categoría es requerido');
+      return;
+    }
+    if (categoryOptions.some((category: any) => String(category.name || '').trim().toLowerCase() === name.toLowerCase())) {
+      toast.error('Esa categoría ya existe; selecciónala en la fila');
+      return;
+    }
+    setCreatingCategory(true);
+    try {
+      const created = await onCreateCategory(name);
+      if (categoryRowIndex !== null && created?.id) onCategoryChange(categoryRowIndex, String(created.id), String(created.name || name));
+      toast.success(`Categoría "${created?.name || name}" creada y asignada`);
+      setCategoryDialogOpen(false);
+      setNewCategoryName('');
+      setCategoryRowIndex(null);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo crear la categoría');
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
 
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
-      <div className="flex min-h-0 flex-1 flex-col gap-5">
+    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+      <div className="flex min-h-full flex-col gap-5">
         <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación de ítems</p>
             <h2 className="mt-1 text-2xl font-black tracking-tight">Previsualizar productos</h2>
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los productos antes de agregarlos a esta orden de compra.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{rows.length} artículos</Badge>
-            <Badge variant="outline" className="border-primary/40 text-primary">Se agregarán a la orden actual</Badge>
-            <Badge variant="outline" className="text-emerald-600">{validRows} válidos</Badge>
-            {issueRows > 0 && <Badge variant="outline" className="text-amber-500">{issueRows} con incidencias</Badge>}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-sm">
+            <span className="font-black uppercase tracking-wider text-primary">Moneda de la orden</span>
+            <Badge variant="outline" className="border-primary/30 bg-background font-black text-primary">{getCurrencyLabel(currencyCode)}</Badge>
+            <span className="text-muted-foreground">Tasa: <b className="text-foreground">{currencyCode === 'NIO' ? '1.00' : Number(exchangeRate || 1).toFixed(2)} NIO/USD</b></span>
+            <span className="h-4 w-px bg-primary/20" />
+            <label className="font-black uppercase tracking-wider text-primary" htmlFor="purchase-import-currency">Moneda del archivo</label>
+            <select
+              id="purchase-import-currency"
+              value={importCurrencyCode}
+              onChange={(event) => onImportCurrencyChange(event.target.value)}
+              disabled={importing}
+              className="h-8 rounded-lg border-2 border-primary/25 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
+            >
+              <option value="NIO">NIO · Córdobas</option>
+              <option value="USD">USD · Dólares</option>
+            </select>
+            {importCurrencyCode !== currencyCode && <span className="text-muted-foreground">Se convirtió a {currencyCode} · tasa {Number(conversionRate || exchangeRate || 1).toFixed(2)} NIO/USD</span>}
           </div>
         </div>
 
@@ -122,41 +247,79 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           </Button>
         </div>
 
-        <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1500px]">
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
+
+        <HorizontalTableScroller className="h-[clamp(500px,65vh,760px)] min-h-[500px] flex-none" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+          <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
               <TableRow>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-36 text-[10px] uppercase">SKU</TableHead>
+                <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
                 <TableHead className="min-w-[240px] text-[10px] uppercase">Descripción</TableHead>
                 <TableHead className="w-40 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Stock actual</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Cantidad</TableHead>
-                <TableHead className="w-32 text-right text-[10px] uppercase">Precio unitario</TableHead>
-                <TableHead className="w-28 text-[10px] uppercase">Tipo IVA</TableHead>
+                <TableHead className="w-32 text-right text-[10px] uppercase">Precio unitario ({currencySymbol})</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase">Tipo IVA</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Base IVA ({currencySymbol})</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">IVA %</TableHead>
-                <TableHead className="w-32 text-[10px] uppercase">Retención</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Monto IVA ({currencySymbol})</TableHead>
+                <TableHead className="w-40 text-[10px] uppercase">Retención</TableHead>
+                <TableHead className="w-28 text-right text-[10px] uppercase">Base ret. ({currencySymbol})</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Ret. %</TableHead>
-                <TableHead className="min-w-[270px] text-[10px] uppercase">Validación / vínculo</TableHead>
+                <TableHead className="w-32 text-right text-[10px] uppercase">Monto ret. ({currencySymbol})</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row, index) => (
-                <TableRow key={`${row.sku || 'sin-sku'}-${index}`} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+              {rows.map((row, index) => {
+                const tax = calcItemTax(row);
+                const withholding = calcItemWithholding(row);
+                const taxValue = String(row.taxType || 'GRAVADO').toUpperCase();
+                const withholdingValue = String(row.withholdingType || 'NONE').toUpperCase();
+                const taxOptionExists = taxOptions.some((option) => option.code === taxValue);
+                const withholdingOptionExists = withholdingOptions.some((option) => option.code === withholdingValue);
+                const skuLinked = row._skuStatus === 'found' && row.skuResolution !== 'MANUAL';
+
+                const matchingCategory = categoryOptions.find((category: any) => String(category.id) === String(row.categoryId))
+                  || categoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
+                const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
+
+                return (
+                <TableRow key={`${row.sku || 'sin-sku'}-${index}`} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} /></TableCell>
+                  <TableCell className="p-1 align-top text-xs"><div className="flex min-w-[280px] flex-col gap-1"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo (requiere SKU libre)</option></select>}</div></TableCell>
                   <TableCell className="min-w-[240px] p-1"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`h-8 w-full text-xs ${!row.description ? 'border-red-500' : ''}`} /></TableCell>
-                  <TableCell className="p-1"><Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={`h-8 text-xs ${!row.category ? 'border-red-500' : ''}`} /></TableCell>
+                  <TableCell className="p-1 align-top">
+                    <div className="flex min-w-[250px] items-center gap-1">
+                      <select
+                        aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`}
+                        value={categoryValue}
+                        onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)}
+                        className={cn('h-8 min-w-0 flex-1 rounded-md border-2 bg-background px-2 text-xs shadow-sm outline-none focus:border-primary', row._hasError ? 'border-red-500' : matchingCategory ? 'border-border' : 'border-amber-500/70 text-amber-700')}
+                      >
+                        <option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>
+                        {categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                      </select>
+                      <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg border-2 border-amber-500/50 p-0 text-amber-600 shadow-sm" title="Crear esta categoría" aria-label={`Crear categoría para ${row.sku || `fila ${index + 1}`}`} onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>
+                    </div>
+                    {row._errorMessage?.includes('Categoría') && <p className="mt-1 text-[10px] font-semibold text-red-500">Selecciona una categoría o créala con +</p>}
+                  </TableCell>
                   <TableCell className="p-1 text-right text-xs font-black text-primary">{row.currentStock ?? '—'}</TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><select value={row.taxType} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="GRAVADO">Gravado</option><option value="EXENTO">Exento</option><option value="NO_GRAVADO">No gravado</option></select></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.taxRate} onChange={(event) => onRowUpdate(index, 'taxRate', event.target.value)} className="h-8 text-right text-xs" disabled={row.taxType !== 'GRAVADO'} /></TableCell>
-                  <TableCell className="p-1"><Input value={row.withholdingType} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.withholdingRate} onChange={(event) => onRowUpdate(index, 'withholdingRate', event.target.value)} className="h-8 text-right text-xs" disabled={String(row.withholdingType).toUpperCase() === 'NONE'} /></TableCell>
-                  <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className="h-8 border-2 border-border bg-background text-right text-xs shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className="h-8 border-2 border-primary/30 bg-background text-right text-xs shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="">Seleccionar IVA</option>{taxValue && !taxOptionExists && <option value={taxValue}>{taxValue}</option>}{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
+                  <TableCell className="p-1"><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" value={tax.taxRate} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1 text-right text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</TableCell>
+                  <TableCell className="p-1"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="NONE">Sin retención</option>{withholdingValue !== 'NONE' && !withholdingOptionExists && <option value={withholdingValue}>{withholdingValue}</option>}{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></TableCell>
+                  <TableCell className="p-1"><Input type="number" value={withholdingValue === 'NONE' ? 0 : withholding.withholdingBase} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1"><Input type="number" value={withholding.withholdingRate} readOnly aria-readonly="true" tabIndex={-1} className="h-8 border-2 border-border/70 bg-muted/35 text-right text-xs text-muted-foreground shadow-sm" /></TableCell>
+                  <TableCell className="p-1 text-right text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </HorizontalTableScroller>
@@ -164,27 +327,31 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
-          <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Agregando... ${progress}%` : `Agregar ${validRows} productos`}</Button>
+          <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Agregando... ${progress}%` : `Agregar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
       </div>
+      <Dialog open={categoryDialogOpen} onOpenChange={(open) => { if (!creatingCategory) setCategoryDialogOpen(open); }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Crear categoría</DialogTitle>
+            <DialogDescription>La nueva categoría se asignará al producto seleccionado y estará disponible para las demás filas.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="new-purchase-import-category" className="text-xs font-black uppercase tracking-wider text-foreground">Nombre de categoría</label>
+            <Input id="new-purchase-import-category" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Ej. Tecnología" autoFocus disabled={creatingCategory} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)} disabled={creatingCategory}>Cancelar</Button>
+            <Button onClick={() => void handleCreateCategory()} disabled={creatingCategory || !newCategoryName.trim()}>{creatingCategory ? 'Creando...' : 'Crear y asignar'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ImportProgressOverlay open={importing} progress={progress} title="Agregando productos" description="Validando y agregando los ítems válidos a la orden de compra. No cierres esta ventana." />
     </div>
   );
 }
 
-const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
-
-const normalizeImportDate = (value: unknown) => {
-  if (value === undefined || value === null || String(value).trim() === '') return '';
-  if (typeof value === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
-  }
-  const raw = String(value).trim();
-  const slashDate = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (slashDate) return `${slashDate[3]}-${slashDate[2].padStart(2, '0')}-${slashDate[1].padStart(2, '0')}`;
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
-};
+const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 
 const statusOpts = [
   { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
@@ -195,15 +362,38 @@ const statusOpts = [
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
   const tt = (item.taxType || 'GRAVADO').toUpperCase();
   if (isTaxExempt(tt)) return { taxBase: 0, taxRate: 0, taxAmount: 0 };
-  const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-  const taxRate = Number(item.taxRate) || 15;
-  const taxBase = Number(item.taxBase) || lineTotal;
+  const quantity = Number(item.quantity);
+  const unitPrice = Number(item.unitPrice);
+  const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
+  const hasTaxRate = item.taxRate !== '' && item.taxRate !== null && item.taxRate !== undefined && Number.isFinite(Number(item.taxRate));
+  const taxRate = hasTaxRate ? Math.max(0, Number(item.taxRate)) : (['GRAVADO', 'GRAVADO_15', 'IVA_GRAVADO_15'].includes(tt) ? 15 : 0);
+  const configuredBase = Number(item.taxBase);
+  const taxBase = Number.isFinite(configuredBase) && configuredBase > 0 ? configuredBase : lineTotal;
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
+}
+
+const DEFAULT_ORDER_WITHHOLDING_RATES: Record<string, number> = {
+  IR_1: 1, IR_2: 2, IR_5: 5, IR_10: 10, IR_15: 15, IR_20: 20, IR_25: 25,
+  IVA_1: 1, IVA_2: 2, IVA_3: 3, IVA_4: 4, IVA_5: 5,
+  IR_BIENES_1: 1, IR_BIENES_2: 2, IR_SERVICIOS_2: 2,
+  IR_HONORARIOS_10: 10, IR_ALQUILERES_15: 15, IR_OTROS_20: 20,
+};
+
+function calcItemWithholding(item: any): { withholdingBase: number; withholdingRate: number; withholdingTotal: number } {
+  const type = String(item.withholdingType || 'NONE').toUpperCase();
+  if (type === 'NONE') return { withholdingBase: 0, withholdingRate: 0, withholdingTotal: 0 };
+  const quantity = Number(item.quantity);
+  const unitPrice = Number(item.unitPrice);
+  const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
+  const configuredBase = Number(item.withholdingBase);
+  const withholdingBase = Number.isFinite(configuredBase) && configuredBase > 0 ? configuredBase : lineTotal;
+  const hasWithholdingRate = item.withholdingRate !== '' && item.withholdingRate !== null && item.withholdingRate !== undefined && Number.isFinite(Number(item.withholdingRate));
+  const withholdingRate = hasWithholdingRate ? Math.max(0, Number(item.withholdingRate)) : (DEFAULT_ORDER_WITHHOLDING_RATES[type] || 0);
+  return { withholdingBase, withholdingRate, withholdingTotal: withholdingBase * withholdingRate / 100 };
 }
 
 const LINKED_PRODUCT_LOCKED_FIELDS = new Set([
   'code', 'name', 'description', 'category', 'categoryId', 'stock', 'currentStock', 'stockApplies',
-  'unitPrice',
 ]);
 
 const formatInputNumber = (value: unknown) => {
@@ -246,12 +436,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [pendingBulkCancelIds, setPendingBulkCancelIds] = useState<string[]>([]);
   const [previewOrder, setPreviewOrder] = useState<Partial<PurchaseOrder> | null>(null);
+  const [pendingApproveOrder, setPendingApproveOrder] = useState<Partial<PurchaseOrder> | null>(null);
   const [approving, setApproving] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [taxOptions, setTaxOptions] = useState<ImportCatalogOption[]>(FALLBACK_IMPORT_TAX_OPTIONS);
+  const [withholdingOptions, setWithholdingOptions] = useState<ImportCatalogOption[]>(FALLBACK_IMPORT_WITHHOLDING_OPTIONS);
   
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -262,8 +455,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importData, setImportData] = useState<PurchaseImportRow[]>([]);
+  const [importCurrency, setImportCurrency] = useState<'NIO' | 'USD'>(normalizePurchaseCurrency(displayCurrency));
+  const [importDataCurrency, setImportDataCurrency] = useState<'NIO' | 'USD'>(normalizePurchaseCurrency(displayCurrency));
   const [importFileName, setImportFileName] = useState('');
   const [importProcessing, setImportProcessing] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
@@ -275,6 +472,37 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     setProducts(productCatalog);
     setCategories(productCategories);
   }, [supplierCatalog, productCatalog, productCategories]);
+
+  useEffect(() => {
+    if (!importModalOpen && !importPreviewOpen) return;
+    let active = true;
+    const readCatalog = (response: any, fallback: ImportCatalogOption[]) => {
+      const entries = (Array.isArray(response) ? response : response?.data || [])
+        .filter((entry: any) => entry?.code)
+        .map((entry: any) => ({
+          id: entry.id,
+          code: String(entry.code).trim().toUpperCase(),
+          name: String(entry.name || entry.code).trim(),
+          rate: Number(entry.rate || 0),
+          baseCalculation: entry.baseCalculation,
+          isActive: entry.isActive !== false,
+        }));
+      return entries.length > 0 ? entries : fallback;
+    };
+
+    Promise.all([
+      contabilidadService.getTaxCatalog('TAX'),
+      contabilidadService.getTaxCatalog('WITHHOLDING'),
+    ]).then(([taxResponse, withholdingResponse]) => {
+      if (!active) return;
+      setTaxOptions(readCatalog(taxResponse, FALLBACK_IMPORT_TAX_OPTIONS));
+      setWithholdingOptions(readCatalog(withholdingResponse, FALLBACK_IMPORT_WITHHOLDING_OPTIONS));
+    }).catch(() => {
+      // Los valores de respaldo mantienen la previsualización operativa si el catálogo no responde.
+    });
+
+    return () => { active = false; };
+  }, [importModalOpen, importPreviewOpen]);
 
   useEffect(() => {
     if (initialStatus) setStatusFilter(initialStatus);
@@ -289,55 +517,102 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products) => {
     const skuCounts = new Map<string, number>();
     const existingOrderSkus = new Set(((localDoc?.items || []) as any[]).map((item) => String(item.code || item.sku || '').trim().toLowerCase()).filter(Boolean));
+    const validTaxCodes = new Set([...FALLBACK_IMPORT_TAX_OPTIONS, ...taxOptions].map((option) => option.code));
+    const validWithholdingCodes = new Set(['NONE', ...FALLBACK_IMPORT_WITHHOLDING_OPTIONS, ...withholdingOptions].map((option: any) => typeof option === 'string' ? option : option.code));
     rows.forEach((row) => {
       const sku = String(row.sku || '').trim().toLowerCase();
       if (sku) skuCounts.set(sku, (skuCounts.get(sku) || 0) + 1);
     });
 
-    return rows.map((sourceRow) => {
+    return rows.map((sourceRow): PurchaseImportRow => {
       const row = { ...sourceRow };
       const sku = String(row.sku || '').trim();
       const product = findImportProduct(sku, catalog);
+      const forceManualSku = row.skuResolution === 'MANUAL';
+      const linkedProduct = forceManualSku ? undefined : product;
       const quantity = Number(row.quantity);
       const importedUnitPrice = Number(row.unitPrice);
-      const productCost = Number(product?.costPrice ?? product?.cost ?? product?.lastPurchasePrice ?? 0);
-      const unitPrice = product && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
-      const taxRate = Number(row.taxRate || 0);
-      const withholdingRate = Number(row.withholdingRate || 0);
+      const productCost = Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? linkedProduct?.lastPurchasePrice ?? 0);
+      const unitPrice = linkedProduct && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
+      const taxType = String(row.taxType || 'GRAVADO').toUpperCase();
+      const withholdingType = String(row.withholdingType || 'NONE').toUpperCase();
+      const taxOption = taxOptions.find((option) => option.code === taxType);
+      const withholdingOption = withholdingOptions.find((option) => option.code === withholdingType);
+      const categoryName = String(row.category || linkedProduct?.category?.name || linkedProduct?.category || '').trim();
+      const categoryByName = categories.find((category: any) => String(category.name || '').trim().toLowerCase() === categoryName.toLowerCase());
+      const resolvedCategoryId = String(row.categoryId || linkedProduct?.categoryId || linkedProduct?.category?.id || categoryByName?.id || '').trim();
+      // La tasa no se toma del archivo: siempre la gobierna la opción fiscal
+      // seleccionada en el catálogo para evitar que una fila altere la regla.
+      const taxRate = isTaxExempt(taxType) ? 0 : (taxOption?.rate ?? (['GRAVADO', 'GRAVADO_15', 'IVA_GRAVADO_15'].includes(taxType) ? 15 : 0));
+      const withholdingRate = withholdingType === 'NONE' ? 0 : (withholdingOption?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[withholdingType] ?? 0);
+      const lineTotal = Number.isFinite(quantity) && Number.isFinite(unitPrice) ? Math.max(0, quantity) * Math.max(0, unitPrice) : 0;
+      const taxBase = isTaxExempt(taxType) ? 0 : lineTotal;
+      const withholdingBase = withholdingType === 'NONE' ? 0 : lineTotal;
       const errors = [
         !sku ? 'SKU requerido' : existingOrderSkus.has(sku.toLowerCase()) ? 'SKU ya está en esta orden' : skuCounts.get(sku.toLowerCase())! > 1 ? 'SKU duplicado en el archivo' : '',
-        !String(row.description || '').trim() && !product ? 'Descripción requerida para SKU no encontrado' : '',
-        !String(row.category || product?.category?.name || product?.category || '').trim() ? 'Categoría requerida' : '',
+        product && forceManualSku && normalizeProductCode(product) === sku.toLowerCase() ? 'Este SKU ya está usado; escribe otro SKU para crear un producto nuevo' : '',
+        !String(row.description || '').trim() && !linkedProduct ? 'Descripción requerida para SKU no encontrado' : '',
+        !categoryName ? 'Categoría requerida' : !resolvedCategoryId ? 'Categoría no encontrada; selecciona una existente o créala' : '',
         !Number.isFinite(quantity) || quantity <= 0 ? 'Cantidad debe ser mayor que cero' : '',
         !Number.isFinite(unitPrice) || unitPrice < 0 ? 'Precio unitario inválido' : '',
-        !['GRAVADO', 'EXENTO', 'NO_GRAVADO'].includes(String(row.taxType || '').toUpperCase()) ? 'Tipo de IVA inválido' : '',
-        !Number.isFinite(taxRate) || taxRate < 0 ? 'Tasa de IVA inválida' : '',
-        !Number.isFinite(withholdingRate) || withholdingRate < 0 ? 'Tasa de retención inválida' : '',
+        !validTaxCodes.has(taxType) ? 'Tipo de IVA inválido; selecciona una opción del catálogo' : '',
+        !validWithholdingCodes.has(withholdingType) ? 'Retención inválida; selecciona una opción del catálogo' : '',
       ].filter(Boolean);
       const warningParts = [
-        sku && !product ? 'SKU no encontrado en inventario; se importará como artículo manual' : '',
+        sku && !product && !forceManualSku ? 'SKU no encontrado en inventario; se agregará como producto nuevo al recepcionar' : '',
+        sku && !product && forceManualSku ? 'SKU libre; se agregará como producto nuevo al recepcionar' : '',
+        sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
       ].filter(Boolean);
 
       return {
         ...row,
-        sku: product?.code || sku,
-        productId: product?.id,
-        currentStock: product?.stock != null ? Number(product.stock) : product?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
-        description: String(row.description || product?.name || '').trim(),
-        category: String(row.category || product?.category?.name || product?.category || '').trim(),
-        categoryId: product?.categoryId || (product?.category?.id ? product.category.id : ''),
+        sku: linkedProduct?.code || sku,
+        productId: linkedProduct?.id,
+        currentStock: linkedProduct?.stock != null ? Number(linkedProduct.stock) : linkedProduct?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
+        description: String(row.description || linkedProduct?.name || '').trim(),
+        category: categoryName,
+        categoryId: resolvedCategoryId,
         unitPrice,
-        taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
-        withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
+        taxType,
+        taxBase,
+        taxRate,
+        taxAmount: taxBase * taxRate / 100,
+        withholdingType,
+        withholdingBase,
+        withholdingRate,
+        withholdingTotal: withholdingBase * withholdingRate / 100,
         _hasError: errors.length > 0,
         _errorMessage: errors[0],
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
-        _skuStatus: skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined,
-        _skuMessage: product ? `SKU existente · vinculado a: ${product.name || product.code || sku}` : sku ? 'SKU no encontrado en inventario' : '',
+        _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
+        _skuMessage: product ? (forceManualSku ? `SKU existente · escribe otro SKU para crear un producto nuevo: ${product.name || product.code || sku}` : `SKU existente · vinculado a: ${product.name || product.code || sku}`) : sku ? 'SKU no encontrado en inventario · se agregará como producto nuevo al recepcionar' : '',
       };
     });
-  }, [localDoc?.items, products]);
+  }, [categories, localDoc?.items, products, taxOptions, withholdingOptions]);
+
+  // La carga de catálogos puede terminar después de leer el archivo. En ese
+  // caso una fila puede mostrar una categoría válida pero conservar el error
+  // calculado cuando todavía no existían las opciones. Revalidamos sin esperar
+  // otra edición del usuario y solo actualizamos el estado si cambió algo.
+  useEffect(() => {
+    if ((!importModalOpen && !importPreviewOpen) || importData.length === 0) return;
+    setImportData((current) => {
+      const refreshed = validateImportRows(current);
+      const changed = refreshed.some((row, index) => {
+        const previous = current[index];
+        return row._hasError !== previous?._hasError
+          || row._errorMessage !== previous?._errorMessage
+          || row._hasWarning !== previous?._hasWarning
+          || row._warningMessage !== previous?._warningMessage
+          || row._skuStatus !== previous?._skuStatus
+          || row.categoryId !== previous?.categoryId
+          || row.taxRate !== previous?.taxRate
+          || row.withholdingRate !== previous?.withholdingRate;
+      });
+      return changed ? refreshed : current;
+    });
+  }, [categories, importData.length, importModalOpen, importPreviewOpen, taxOptions, validateImportRows, withholdingOptions]);
 
   const resolveImportProducts = useCallback(async (rows: PurchaseImportRow[]) => {
     const catalog = [...products];
@@ -348,23 +623,24 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     ));
     const remoteProducts: any[] = [];
 
-    for (let start = 0; start < unresolvedSkus.length; start += 8) {
-      const batch = unresolvedSkus.slice(start, start + 8);
-      const matches = await Promise.all(batch.map(async (sku) => {
-        try {
-          const response = await inventoryService.getProducts({
-            type: 'PRODUCT',
-            search: sku,
-            page: 1,
-            pageSize: 200,
-            includeInactive: true,
-          });
-          return getProductListFromResponse(response).find((product) => normalizeProductCode(product) === sku.toLowerCase());
-        } catch {
-          return undefined;
-        }
-      }));
-      remoteProducts.push(...matches.filter(Boolean));
+    // El endpoint permite resolver varios SKU exactos en una sola consulta. Se
+    // fragmenta para no exceder límites de URL de proxies o servidores.
+    for (let start = 0; start < unresolvedSkus.length; start += 100) {
+      const batch = unresolvedSkus.slice(start, start + 100);
+      try {
+        const response = await inventoryService.getProducts({
+          type: 'PRODUCT',
+          codes: batch.join(','),
+          page: 1,
+          pageSize: 5000,
+          report: true,
+          includeInactive: true,
+        });
+        remoteProducts.push(...getProductListFromResponse(response).filter((product) => batch.some((sku) => normalizeProductCode(product) === sku.toLowerCase())));
+      } catch {
+        // Si la resolución masiva falla, las filas quedan como manuales y la
+        // persona puede corregirlas en la previsualización sin perder la carga.
+      }
     }
 
     if (remoteProducts.length > 0) {
@@ -379,11 +655,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
-    const headers = ['SKU', 'Descripción', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Tasa IVA', 'Retención', 'Tasa retención', 'Cuenta contable'];
+    const headers = ['SKU', 'Descripción', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
     const exampleProduct = products[0];
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), 'GRAVADO', 15, 'NONE', 0, ''],
+      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), taxOptions[0]?.code || 'GRAVADO', '', taxOptions[0]?.rate ?? 15, 'NONE', '', 0],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(13, Math.min(30, header.length + 3)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -391,11 +667,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ['Cada fila representa un artículo que se agregará a la orden de compra actualmente abierta. Esta carga no crea órdenes nuevas.'],
       ['Campo', 'Regla'],
       ['SKU', 'Obligatorio. Si existe en el inventario, se vinculará automáticamente; si se repite en el archivo se marcará como error.'],
-      ['Descripción / Categoría', 'Si el SKU existe, se completan desde inventario cuando estén vacíos. Para un SKU no encontrado, ambos campos son obligatorios y se importará como artículo manual.'],
+      ['Descripción / Categoría', 'Si el SKU existe, se completan desde inventario cuando estén vacíos. Para un SKU no encontrado, ambos campos son obligatorios y se agregará como producto nuevo al recepcionar.'],
       ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
-      ['Tipo IVA / Tasa IVA', 'Usa GRAVADO, EXENTO o NO_GRAVADO. La tasa solo aplica a GRAVADO.'],
-      ['Retención / Tasa retención', 'Usa NONE si no aplica; de lo contrario indica el código de retención y su porcentaje.'],
-      ['Cuenta contable', 'Opcional. Puedes completarla con el identificador de la cuenta si la orden requiere esa asociación.'],
+      ['Tipo IVA / Base IVA / Tasa IVA', 'Usa una opción del catálogo de IVA. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
+      ['Retención / Base retención / Tasa retención', 'Usa NONE si no aplica; de lo contrario selecciona una retención del catálogo. La base y la tasa se calculan automáticamente y no son editables.'],
+      ['Cuentas contables', 'No se solicitan por producto. El asiento utiliza las cuentas configuradas en Contabilidad > Configuración para el evento de compra pagada.'],
       ['Previsualización', 'La carga no modifica la orden inmediatamente. Corrige los errores y confirma para agregar los ítems.'],
     ]);
     guide['!cols'] = [{ wch: 34 }, { wch: 115 }];
@@ -404,7 +680,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
     XLSX.writeFile(workbook, 'plantilla_importacion_ordenes_compra.xlsx');
     toast.success('Plantilla de órdenes descargada');
-  }, [products]);
+  }, [products, taxOptions]);
 
   const handlePurchaseImportFile = useCallback((file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -422,16 +698,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           if (raw.length < 2) throw new Error('El archivo está vacío o no tiene datos');
           const headers = raw[0].map(normalizeImportHeader);
           const fieldAliases: Record<string, string[]> = {
-            sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code'],
+            sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code', 'product code'],
             description: ['descripcion', 'descripción', 'description', 'nombre', 'producto'],
             category: ['categoria', 'categoría', 'category'],
             quantity: ['cantidad', 'quantity', 'qty'],
             unitPrice: ['precio unitario', 'precio', 'unit price', 'cost price'],
-            taxType: ['tipo iva', 'iva', 'tax type'],
+            taxType: ['tipo iva', 'tipo de iva', 'iva', 'tax type'],
+            taxBase: ['base iva', 'base de iva', 'tax base'],
             taxRate: ['tasa iva', 'tasa de iva', 'tax rate'],
-            withholdingType: ['retencion', 'retención', 'tipo retencion', 'withholding'],
+            withholdingType: ['retencion', 'retención', 'tipo retencion', 'tipo de retencion', 'withholding'],
+            withholdingBase: ['base retencion', 'base de retencion', 'withholding base'],
             withholdingRate: ['tasa retencion', 'tasa de retencion', 'withholding rate'],
-            accountId: ['cuenta contable', 'cuenta', 'account id'],
           };
           const columnMap: Record<string, number> = {};
           Object.entries(fieldAliases).forEach(([key, candidates]) => {
@@ -453,15 +730,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               quantity: number(row, 'quantity', 0),
               unitPrice: number(row, 'unitPrice', 0),
               taxType: text(row, 'taxType', 'GRAVADO').toUpperCase(),
-              taxRate: number(row, 'taxRate', 15),
+              taxBase: number(row, 'taxBase', ''),
+              taxRate: number(row, 'taxRate', ''),
               withholdingType: text(row, 'withholdingType', 'NONE').toUpperCase(),
-              withholdingRate: number(row, 'withholdingRate', 0),
-              accountId: text(row, 'accountId'),
+              withholdingBase: number(row, 'withholdingBase', ''),
+              withholdingRate: number(row, 'withholdingRate', ''),
               currentStock: undefined,
-            } as PurchaseImportRow));
+          } as PurchaseImportRow));
           if (!parsed.length) throw new Error('No se encontraron filas con datos');
           const importCatalog = await resolveImportProducts(parsed);
           setImportData(validateImportRows(parsed, importCatalog));
+          setImportDataCurrency(importCurrency);
           setImportFileName(file.name);
           setImportProgress(0);
           toast.success(`${parsed.length} artículo(s) encontrados`);
@@ -477,11 +756,117 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       toast.error('No se pudo leer el archivo seleccionado');
     };
     reader.readAsArrayBuffer(file);
-  }, [resolveImportProducts, validateImportRows]);
+  }, [importCurrency, resolveImportProducts, validateImportRows]);
+
+  const handleOpenPurchaseImportPreview = useCallback(() => {
+    if (previewLoading || importProcessing || importing || importData.length === 0) return;
+    const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency);
+    if (importDataCurrency !== orderCurrency) {
+      setImportData((current) => validateImportRows(current.map((row) => ({
+        ...row,
+        unitPrice: Number(convertPurchaseAmount(row.unitPrice, importDataCurrency, orderCurrency, globalRate).toFixed(6)),
+        taxBase: '',
+        withholdingBase: '',
+      }))));
+      setImportDataCurrency(orderCurrency);
+    }
+    setPreviewLoading(true);
+    setPreviewProgress(20);
+    setImportModalOpen(false);
+    window.setTimeout(() => {
+      setPreviewProgress(65);
+      window.setTimeout(() => {
+        setPreviewProgress(100);
+        window.setTimeout(() => {
+          setImportPreviewOpen(true);
+          window.requestAnimationFrame(() => {
+            setPreviewLoading(false);
+            setPreviewProgress(0);
+          });
+        }, 120);
+      }, 120);
+    }, 40);
+  }, [displayCurrency, globalRate, importData.length, importDataCurrency, importProcessing, importing, localDoc?.currency, previewLoading, validateImportRows]);
 
   const handlePurchaseImportRowUpdate = (index: number, field: keyof PurchaseImportRow, value: any) => {
-    setImportData((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row)));
+    setImportData((current) => validateImportRows(current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row;
+      const nextRow = { ...row, [field]: value } as PurchaseImportRow;
+      const lineTotal = Number(nextRow.quantity || 0) * Number(nextRow.unitPrice || 0);
+      if (field === 'taxType') {
+        const selected = taxOptions.find((option) => option.code === String(value || '').toUpperCase());
+        nextRow.taxRate = selected?.rate ?? (isTaxExempt(String(value || '').toUpperCase()) ? 0 : 15);
+        nextRow.taxBase = isTaxExempt(String(value || '').toUpperCase()) ? 0 : lineTotal;
+      }
+      if (field === 'withholdingType') {
+        const normalized = String(value || 'NONE').toUpperCase();
+        const selected = withholdingOptions.find((option) => option.code === normalized);
+        nextRow.withholdingRate = normalized === 'NONE' ? 0 : (selected?.rate ?? DEFAULT_ORDER_WITHHOLDING_RATES[normalized] ?? 0);
+        nextRow.withholdingBase = normalized === 'NONE' ? 0 : lineTotal;
+      }
+      if (field === 'quantity' || field === 'unitPrice') {
+        nextRow.taxBase = isTaxExempt(String(nextRow.taxType || 'GRAVADO').toUpperCase()) ? 0 : lineTotal;
+        nextRow.withholdingBase = String(nextRow.withholdingType || 'NONE').toUpperCase() === 'NONE' ? 0 : lineTotal;
+      }
+      return nextRow;
+    })));
   };
+
+  const handlePurchaseImportCategoryChange = useCallback((index: number, categoryId: string, categoryName?: string) => {
+    setImportData((current) => validateImportRows(current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row;
+      const selected = categories.find((category: any) => String(category.id) === String(categoryId));
+      return {
+        ...row,
+        categoryId: selected?.id || '',
+        category: selected?.name || categoryName || '',
+      };
+    })));
+  }, [categories, validateImportRows]);
+
+  const handleCreatePurchaseImportCategory = useCallback(async (name: string) => {
+    const response = await inventoryService.createCategory({
+      name: name.trim(),
+      type: localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT',
+    });
+    const created = ((response as any)?.data || response || {}) as any;
+    const createdCategory = {
+      ...created,
+      id: created.id || `purchase-import-category-${Date.now()}`,
+      name: created.name || name.trim(),
+      type: created.type || (localDoc?.purchaseType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'),
+    };
+    setCategories((current) => [...current.filter((category: any) => String(category.id) !== String(createdCategory.id)), createdCategory]);
+    return createdCategory;
+  }, [localDoc?.purchaseType]);
+
+  const handlePurchaseImportCurrencyChange = useCallback((nextCurrency: string) => {
+    const next = normalizePurchaseCurrency(nextCurrency);
+    const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency);
+    setImportCurrency(next);
+
+    // En la previsualización las filas ya están expresadas en la moneda de la
+    // orden. Cambiar el selector allí solo cambia la moneda de origen mostrada;
+    // al volver a la carga se hará la conversión de ida y vuelta sin alterar
+    // los precios editados.
+    if (importPreviewOpen) return;
+
+    if (importData.length > 0 && importDataCurrency !== next) {
+      setImportData((current) => validateImportRows(current.map((row) => ({
+        ...row,
+        unitPrice: Number(convertPurchaseAmount(row.unitPrice, importDataCurrency, next, globalRate).toFixed(6)),
+        taxBase: '',
+        withholdingBase: '',
+      }))));
+      setImportDataCurrency(next);
+    } else if (importData.length === 0) {
+      setImportDataCurrency(next);
+    }
+
+    if (next !== orderCurrency) {
+      toast.info(`La importación se convertirá a ${getCurrencyLabel(orderCurrency)} al previsualizar`);
+    }
+  }, [displayCurrency, globalRate, importData.length, importDataCurrency, importPreviewOpen, localDoc?.currency, validateImportRows]);
 
   const handleDownloadPurchaseImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
@@ -490,6 +875,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       Categoría: row.category,
       Cantidad: row.quantity,
       'Precio unitario': row.unitPrice,
+      'Tipo IVA': row.taxType,
+      'Base IVA': row.taxBase,
+      'Tasa IVA': row.taxRate,
+      Retención: row.withholdingType,
+      'Base retención': row.withholdingBase,
+      'Tasa retención': row.withholdingRate,
       Clasificación: row._hasError ? 'Error' : 'Advertencia',
       Detalle: row._errorMessage || row._warningMessage || row._skuMessage || 'Revisar fila',
     }));
@@ -515,30 +906,36 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const skipped = importData.length - validRows.length;
     setImporting(true);
     setImportProgress(15);
-    const importedItems = validRows.map((row) => ({
-      id: `import-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      productId: row.productId || '',
-      code: row.sku,
-      name: row.description || row.sku,
-      description: row.description || row.sku,
-      category: row.category,
-      categoryId: row.categoryId
-        || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase())?.id
-        || '',
-      stockApplies: String(localDoc.purchaseType || 'INVENTORY').toUpperCase() !== 'SERVICE',
-      currentStock: row.currentStock,
-      quantity: Number(row.quantity),
-      unitPrice: Number(row.unitPrice),
-      taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
-      taxRate: String(row.taxType || '').toUpperCase() === 'GRAVADO' ? Number(row.taxRate || 0) : 0,
-      taxBase: String(row.taxType || '').toUpperCase() === 'GRAVADO' ? Number(row.quantity) * Number(row.unitPrice) : 0,
-      taxAmount: String(row.taxType || '').toUpperCase() === 'GRAVADO' ? (Number(row.quantity) * Number(row.unitPrice) * Number(row.taxRate || 0)) / 100 : 0,
-      withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
-      withholdingRate: String(row.withholdingType || 'NONE').toUpperCase() === 'NONE' ? 0 : Number(row.withholdingRate || 0),
-      withholdingBase: String(row.withholdingType || 'NONE').toUpperCase() === 'NONE' ? 0 : Number(row.quantity) * Number(row.unitPrice),
-      accountId: row.accountId || '',
-      total: Number(row.quantity) * Number(row.unitPrice),
-    }));
+    const importedItems = validRows.map((row) => {
+      const tax = calcItemTax(row);
+      const withholding = calcItemWithholding(row);
+      const quantity = Number(row.quantity);
+      const unitPrice = Number(row.unitPrice);
+      return {
+        id: `import-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        productId: row.productId || '',
+        code: row.sku,
+        name: row.description || row.sku,
+        description: row.description || row.sku,
+        category: row.category,
+        categoryId: row.categoryId
+          || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase())?.id
+          || '',
+        stockApplies: String(localDoc.purchaseType || 'INVENTORY').toUpperCase() !== 'SERVICE',
+        currentStock: row.currentStock,
+        quantity,
+        unitPrice,
+        taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
+        taxRate: Number(tax.taxRate.toFixed(2)),
+        taxBase: Number(tax.taxBase.toFixed(2)),
+        taxAmount: Number(tax.taxAmount.toFixed(2)),
+        withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
+        withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
+        withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
+        withholdingTotal: Number(withholding.withholdingTotal.toFixed(2)),
+        total: Number((quantity * unitPrice).toFixed(2)),
+      };
+    });
     const currentItems = (localDoc.items || []) as any[];
     const combinedItems = [...currentItems, ...importedItems];
     const totals = calculateTotals(combinedItems);
@@ -566,7 +963,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             date: new Date().toISOString(),
             expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
             currency: displayCurrency,
-            exchangeRate: globalRate,
+            exchangeRate: displayCurrency === 'NIO' ? 1 : globalRate,
             status: 'DRAFT',
             purchaseType: 'INVENTORY',
             requestedBy: 'Admin',
@@ -585,7 +982,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             date: new Date().toISOString(),
             expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
             currency: displayCurrency,
-            exchangeRate: globalRate,
+            exchangeRate: displayCurrency === 'NIO' ? 1 : globalRate,
             status: 'DRAFT',
             purchaseType: 'INVENTORY',
             requestedBy: 'Admin',
@@ -601,14 +998,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         }
       } else {
          const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+         if (found) {
+           const cloned = JSON.parse(JSON.stringify(found));
+           const orderCurrency = normalizePurchaseCurrency(cloned.currency || displayCurrency);
+           cloned.currency = orderCurrency;
+           cloned.exchangeRate = orderCurrency === 'NIO' ? 1 : (Number(cloned.exchangeRate) > 1 ? Number(cloned.exchangeRate) : globalRate);
+           setLocalDoc(cloned);
+         } else {
+           setLocalDoc(null);
+         }
       }
       setEvidenceFiles([]);
     } else {
       setLocalDoc(null);
       setEvidenceFiles([]);
     }
-  }, [editingId, data, globalRate]);
+  }, [editingId, data, displayCurrency, globalRate]);
 
   useEffect(() => {
     if (prefillDoc) {
@@ -701,6 +1106,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Fecha',     width: '110px',
       render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+    { key: 'currency', header: 'Moneda', width: '100px',
+      render: (val, row) => <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] font-black text-primary">{String(val || row.currency || 'NIO').toUpperCase()}</Badge> },
     { key: 'total',    header: 'Total',     width: '130px',
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-foreground" />
@@ -746,6 +1153,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       toast.success(result?.receipt?.number
         ? `Orden aprobada. Recepción ${result.receipt.number} preparada.`
         : 'Orden de compra aprobada', { id: approveToastId });
+      setPendingApproveOrder(null);
       setPreviewOrder(null);
       if (editingId === orderId) setEditingId(null);
       onApprovedToReceipt?.(result?.receipt);
@@ -779,14 +1187,41 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     if ((localDoc.items || []).some((it: any) => !String(it.code || '').trim() || !String(it.name || '').trim())) {
       return toast.error('Cada ítem requiere código y nombre');
     }
+    if ((localDoc.items || []).some((it: any) => !String(it.category || '').trim())) {
+      return toast.error('Cada producto debe tener una categoría. Selecciónala o créala antes de guardar.');
+    }
 
-    const calculatedTotals = calculateTotals((localDoc.items || []) as any[]);
+    const normalizedItems = (localDoc.items || []).map((it: any) => {
+      const quantity = Math.max(0, Math.trunc(Number(it.quantity || 0)));
+      const unitPrice = Math.max(0, Number(it.unitPrice || 0));
+      const taxType = it.taxType || 'GRAVADO';
+      const tax = calcItemTax({ ...it, quantity, unitPrice, taxType });
+      const withholding = calcItemWithholding({ ...it, quantity, unitPrice });
+      return {
+        ...it,
+        quantity,
+        unitPrice,
+        taxType,
+        taxRate: Number(tax.taxRate.toFixed(2)),
+        taxBase: Number(tax.taxBase.toFixed(2)),
+        taxAmount: Number(tax.taxAmount.toFixed(2)),
+        withholdingType: it.withholdingType || 'NONE',
+        withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
+        withholdingBase: Number(withholding.withholdingBase.toFixed(2)),
+        total: Number((quantity * unitPrice).toFixed(2)),
+      };
+    });
+    const calculatedTotals = calculateTotals(normalizedItems as any[]);
     const currentOrderStatus = String(localDoc.status || 'PENDING').toUpperCase();
     const statusToSave = editingId === 'NEW'
       ? newStatus
       : (['DRAFT', 'PENDING'].includes(newStatus) && currentOrderStatus !== 'APPROVED' ? newStatus : currentOrderStatus);
+    const orderCurrency = normalizePurchaseCurrency(localDoc.currency || displayCurrency);
+    const orderExchangeRate = orderCurrency === 'NIO' ? 1 : (Number(localDoc.exchangeRate) > 0 ? Number(localDoc.exchangeRate) : globalRate);
     const cleanedDoc: any = {
       ...localDoc,
+      currency: orderCurrency,
+      exchangeRate: orderExchangeRate,
       status: statusToSave,
       isService: localDoc.purchaseType === 'SERVICE',
       purchaseRequestId: localDoc.purchaseRequestId || null,
@@ -798,14 +1233,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       withholdingTotal: Number(calculatedTotals.withholdingTotal || 0),
       withholdingBase: Number(calculatedTotals.withholdingBase || 0),
       total: Number(calculatedTotals.total || 0),
-      items: (localDoc.items || []).map((it: any) => ({
+      items: normalizedItems.map((it: any) => ({
         ...it,
         description: it.description || it.name || '',
         quantity: Math.trunc(Number(it.quantity || 0)),
         unitPrice: Number(it.unitPrice || 0),
         taxType: it.taxType || 'GRAVADO',
-        taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
-        taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
+        taxRate: Number(it.taxRate || 0),
+        taxBase: Number(it.taxBase || 0),
         taxAmount: Number(it.taxAmount || 0),
         withholdingType: it.withholdingType || 'NONE',
         withholdingRate: Number(it.withholdingRate || 0),
@@ -882,23 +1317,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const calculateTotals = (items: any[]) => {
     const subtotal = items.reduce((acc, it) => acc + (Number(it.quantity||0) * Number(it.unitPrice||0)), 0);
-    const taxAmount = items.reduce((acc, it) => {
-      return acc + calcItemTax(it).taxAmount;
-    }, 0);
-    const withholdingTotal = items.reduce((acc, it) => {
-      const wt = (it.withholdingType || 'NONE').toUpperCase();
-      if (wt === 'NONE') return acc + 0;
-      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
-      const base = Number(it.withholdingBase) || lineTotal;
-      const rate = Number(it.withholdingRate) || 0;
-      return acc + (base * rate / 100);
-    }, 0);
-    const withholdingBase = items.reduce((acc, it) => {
-      const wt = (it.withholdingType || 'NONE').toUpperCase();
-      if (wt === 'NONE') return acc + 0;
-      const lineTotal = Number(it.quantity||0) * Number(it.unitPrice||0);
-      return acc + (Number(it.withholdingBase) || lineTotal);
-    }, 0);
+    const taxAmount = items.reduce((acc, it) => acc + calcItemTax(it).taxAmount, 0);
+    const withholdingTotal = items.reduce((acc, it) => acc + calcItemWithholding(it).withholdingTotal, 0);
+    const withholdingBase = items.reduce((acc, it) => acc + calcItemWithholding(it).withholdingBase, 0);
     const total = subtotal + taxAmount - withholdingTotal;
     return { subtotal, taxAmount, withholdingTotal, withholdingBase, total };
   };
@@ -930,14 +1351,18 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           newItems[idx].taxAmount = 0;
         } else {
           const tax = calcItemTax(newItems[idx]);
-        newItems[idx].taxRate = Number(tax.taxRate.toFixed(2));
-        newItems[idx].taxBase = Number(tax.taxBase.toFixed(2));
-        newItems[idx].taxAmount = Number(tax.taxAmount.toFixed(2));
+          newItems[idx].taxRate = Number(tax.taxRate.toFixed(2));
+          newItems[idx].taxBase = Number(tax.taxBase.toFixed(2));
+          newItems[idx].taxAmount = Number(tax.taxAmount.toFixed(2));
         }
         const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
         if (wt === 'NONE') {
           newItems[idx].withholdingRate = 0;
           newItems[idx].withholdingBase = 0;
+        } else {
+          const withholding = calcItemWithholding(newItems[idx]);
+          newItems[idx].withholdingRate = Number(withholding.withholdingRate.toFixed(2));
+          newItems[idx].withholdingBase = Number(withholding.withholdingBase.toFixed(2));
         }
         newItems[idx].total = Number(sub.toFixed(2));
       }
@@ -990,16 +1415,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     recalculateTotals(newItems);
   };
 
-  const handleServiceToggle = (checked: boolean) => {
-    if (!localDoc) return;
-    const updatedItems = (localDoc.items || []).map((item: any) => ({
-      ...item,
-      stockApplies: checked ? false : !!item.stockApplies,
-      stock: checked ? undefined : item.stock,
-    }));
-    setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: checked ? 'SERVICE' : 'INVENTORY', items: updatedItems } : prev);
-  };
-
   const recalculateTotals = (items: any[]) => {
     const totals = calculateTotals(items);
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
@@ -1014,12 +1429,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           isSidebarCollapsed={isSidebarCollapsed}
           importing={importing}
           progress={importProgress}
+          currency={normalizePurchaseCurrency(localDoc?.currency || displayCurrency)}
+          importCurrency={importCurrency}
+          conversionRate={globalRate}
+          categoryOptions={categories}
+          exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+          taxOptions={taxOptions}
+          withholdingOptions={withholdingOptions}
           onRowUpdate={handlePurchaseImportRowUpdate}
+          onCategoryChange={handlePurchaseImportCategoryChange}
+          onCreateCategory={handleCreatePurchaseImportCategory}
+          onImportCurrencyChange={handlePurchaseImportCurrencyChange}
           onDownloadErrors={handleDownloadPurchaseImportErrors}
           onConfirm={handlePurchaseImportConfirm}
           onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
         />
-        <Dialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+        <Dialog open={importConfirmOpen && !importing} onOpenChange={setImportConfirmOpen}>
           <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Agregar productos a la orden</DialogTitle>
@@ -1045,6 +1470,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             <DialogFooter><Button className="w-full" onClick={() => setImportResults(null)}>Volver a la orden</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+        <ImportProgressOverlay
+          open={previewLoading}
+          progress={previewProgress}
+          title="Preparando previsualización"
+          description="Validando los productos y resolviendo sus vínculos con inventario."
+        />
       </>
     );
   }
@@ -1052,6 +1483,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = String(localDoc.status || 'DRAFT').toUpperCase();
+    const orderCurrency = normalizePurchaseCurrency(localDoc.currency || displayCurrency);
+    const orderCurrencySymbol = getCurrencySymbol(orderCurrency);
+    const equivalentCurrency = orderCurrency === 'USD' ? 'NIO' : 'USD';
+    const equivalentCurrencySymbol = getCurrencySymbol(equivalentCurrency);
+    const conversionRate = Number(globalRate) > 0 ? Number(globalRate) : 36.5;
+    const convertToEquivalent = (amount: number) => orderCurrency === 'USD'
+      ? Number(amount || 0) * conversionRate
+      : Number(amount || 0) / conversionRate;
+    const formatFinancialAmount = (amount: number) => `${orderCurrencySymbol} ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const renderEquivalent = (amount: number, negative = false) => (
+      <span className="block text-[9px] font-medium tabular-nums text-muted-foreground">
+        ≈ {negative ? '-' : ''}{equivalentCurrencySymbol} {Math.abs(convertToEquivalent(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {equivalentCurrency}
+      </span>
+    );
     const canApproveCurrent = !isNew && ['DRAFT', 'PENDING'].includes(currentStatus);
     const canEditOrderItems = isNew
       ? canPerform('PURCHASES_ORDERS', 'create')
@@ -1075,6 +1520,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     Desde solicitud · {localDoc.purchaseRequestNumber}
                   </Badge>
                 )}
+                <Badge variant="outline" className="border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[8px] font-black uppercase text-primary">
+                  Moneda: {String(localDoc.currency || displayCurrency).toUpperCase()}
+                </Badge>
               </div>
             </div>
           </div>
@@ -1103,7 +1551,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                  </Button>
               )}
             {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'approve') && (
-              <Button variant="outline" onClick={() => setPreviewOrder(localDoc)} className="rounded-xl border-primary/40 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4">
+              <Button variant="outline" onClick={() => setPendingApproveOrder(localDoc)} className="rounded-xl border-primary/40 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4">
                 <CheckCircle2 className="size-3 mr-2" /> Aprobar
               </Button>
             )}
@@ -1128,7 +1576,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               </>
             )}
             {!isNew && currentStatus === 'PENDING' && canPerform('PURCHASES_ORDERS', 'edit') && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              <Button onClick={() => handleSaveDoc()} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar
               </Button>
             )}
@@ -1185,16 +1633,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-foreground mb-1">Moneda</p>
+                  <p className="text-[10px] text-foreground mb-1">Moneda de la orden</p>
                   <select 
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                    value={localDoc.currency || 'NIO'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                    value={normalizePurchaseCurrency(localDoc.currency || displayCurrency)}
+                    onChange={(e) => {
+                      const currency = e.target.value as any;
+                      setLocalDoc({ ...localDoc, currency, exchangeRate: currency === 'NIO' ? 1 : globalRate });
+                    }}
+                    className="h-9 w-full rounded-lg border-2 border-border/80 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
                   >
-                    <option value="NIO">NIO (Cordobas)</option>
-                    <option value="USD">USD (Dolares)</option>
+                    <option value="NIO">NIO · Córdobas</option>
+                    <option value="USD">USD · Dólares</option>
                   </select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Global: <span className="font-bold text-foreground">{getCurrencyLabel(displayCurrency)}</span> · Tasa aplicada: <span className="font-bold text-foreground">{normalizePurchaseCurrency(localDoc.currency || displayCurrency) === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)} NIO/USD</span></p>
                 </div>
                 <div>
                     <p className="text-[10px] text-foreground mb-1">Tipo de Compra</p>
@@ -1211,7 +1663,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: pt, items: updatedItems } : prev);
                         }
                       }}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                      className="h-9 w-full rounded-lg border-2 border-border/80 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
                     >
                       <option value="INVENTORY">Inventario</option>
                       <option value="ASSET">Activo Fijo</option>
@@ -1277,16 +1729,25 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Resumen Financiero</p>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                   <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.subtotal || 0).toLocaleString()}</span>
+                  <span className="text-muted-foreground">Subtotal costo</span>
+                   <span className="text-right font-bold tabular-nums">
+                     {formatFinancialAmount(financialTotals.subtotal)}
+                     {renderEquivalent(financialTotals.subtotal)}
+                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IVA</span>
-                   <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.taxAmount || 0).toLocaleString()}</span>
+                   <span className="text-right font-bold tabular-nums text-rose-500">
+                     {formatFinancialAmount(financialTotals.taxAmount)}
+                     {renderEquivalent(financialTotals.taxAmount)}
+                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Retenciones</span>
-                   <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.withholdingTotal || 0).toLocaleString()}</span>
+                   <span className="text-right font-bold tabular-nums text-amber-500">
+                     -{formatFinancialAmount(financialTotals.withholdingTotal)}
+                     {renderEquivalent(financialTotals.withholdingTotal, true)}
+                   </span>
                 </div>
                 <div className="border-t pt-3 border-border/50">
                   <p className="text-[10px] text-foreground mb-2 font-bold uppercase tracking-widest">Impuestos por línea</p>
@@ -1298,8 +1759,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black uppercase text-xs tracking-widest">Total</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
-                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(financialTotals.total || 0).toLocaleString()}
-                      {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(financialTotals.total || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
+                      {formatFinancialAmount(financialTotals.total)}
+                      <span className="mt-1 block text-[10px] font-bold text-muted-foreground">{renderEquivalent(financialTotals.total)}</span>
                   </span>
                 </div>
               </div>
@@ -1327,7 +1788,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             
             <div className="space-y-3">
               {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} className="group relative min-w-0 rounded-2xl border border-border/40 bg-background/60 p-4 space-y-3 backdrop-blur-sm transition-all duration-200 hover:border-primary/30 hover:shadow-md">
+                <div key={item.id || idx} className="group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200 hover:border-primary/50 hover:shadow-md">
                   {/* Selector acotado: queda en la cabecera y no consume una fila completa. */}
                   <div className="flex min-w-0 flex-col gap-3 border-b border-border/30 pb-3 sm:flex-row sm:items-end sm:justify-between">
                     <div className="min-w-0 flex-1">
@@ -1341,7 +1802,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         )}
                       </p>
                       <p className="mt-1 text-[10px] font-medium text-foreground/70">
-                        {item.productId ? 'Desvincula el producto para editar este ítem manualmente.' : 'Sin vincular · puedes completar todos los datos.'}
+                        {item.productId ? 'Desvincula el producto para editar este ítem manualmente.' : 'Sin vincular · se creará como producto nuevo al recepcionar.'}
                       </p>
                     </div>
                     <div className="flex min-w-0 w-full items-end gap-2 sm:w-auto sm:max-w-[34rem] sm:flex-1">
@@ -1349,7 +1810,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         <Combobox
                           disabled={!canEditOrderItems}
                           options={[
-                            { label: 'Sin vincular (ítem manual)', value: '__none__', description: 'Ingresar datos manualmente' },
+                            { label: 'Producto nuevo al recepcionar', value: '__none__', description: 'Se creará desde los datos de esta línea' },
                             ...products.filter(Boolean).map((p: any) => ({
                               label: p.name || 'Producto',
                               value: String(p.id),
@@ -1450,7 +1911,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     <div className="col-span-2 min-w-0">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio</p>
                       <Input
-                        disabled={isItemMasterFieldDisabled(item)}
+                        disabled={!canEditOrderItems}
                         type="number"
                         min="0"
                         step="0.01"
@@ -1472,31 +1933,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                       onItemChange={(field, value) => handleItemChange(idx, field, value)}
                       lineTotal={Number(item.quantity || 0) * Number(item.unitPrice || 0)}
                       disabled={!canEditOrderItems}
+                      calculatedFieldsReadOnly
                     />
                   </div>
 
-                  {/* Subtotal + tax info footer */}
-                  <div className="flex items-center justify-end gap-4 pt-1 border-t border-border/30">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-foreground">Subtotal</span>
+                  {/* Costo de la línea + impuestos + retención + total final */}
+                  <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-border/50 pt-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-foreground">Subtotal costo</span>
                     <span className="text-sm font-black tabular-nums">
                       {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.quantity * item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    {item.taxType && !isTaxExempt(item.taxType) && item.taxType !== '' && (
-                      <>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/60">IVA</span>
-                        <span className="text-xs font-black tabular-nums text-rose-500">
-                          {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(item.taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </>
-                    )}
-                    {item.withholdingType !== 'NONE' && (
-                      <>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/60">Ret.</span>
-                        <span className="text-xs font-black tabular-nums text-amber-500">
-                          -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity||0) * Number(item.unitPrice||0)) * (Number(item.withholdingRate||0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </>
-                    )}
+                    <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/70">IVA</span>
+                    <span className="text-xs font-black tabular-nums text-rose-500">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemTax(item).taxAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-500/70">Retención</span>
+                    <span className="text-xs font-black tabular-nums text-amber-500">
+                      -{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(calcItemWithholding(item).withholdingTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="border-l border-border/70 pl-4 text-[9px] font-black uppercase tracking-widest text-primary">Total</span>
+                    <span className="text-sm font-black tabular-nums text-primary">
+                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number((Number(item.quantity || 0) * Number(item.unitPrice || 0) + calcItemTax(item).taxAmount - calcItemWithholding(item).withholdingTotal) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1528,7 +1986,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             </div>
             <DialogFooter className="flex-wrap gap-2">
               <Button variant="outline" onClick={handleDownloadPurchaseTemplate}><Download className="mr-2 size-4" /> Descargar plantilla</Button>
-              <Button onClick={() => { setImportIntroOpen(false); setImportModalOpen(true); }}><Upload className="mr-2 size-4" /> Continuar con la carga</Button>
+              <Button onClick={() => { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); setImportIntroOpen(false); setImportModalOpen(true); }}><Upload className="mr-2 size-4" /> Continuar con la carga</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1536,7 +1994,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <Dialog open={importModalOpen} onOpenChange={(open) => {
           if (importing || importProcessing) return;
           setImportModalOpen(open);
-          if (!open) { setImportData([]); setImportFileName(''); setImportProgress(0); }
+          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
             <DialogHeader>
@@ -1544,9 +2002,32 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               <DialogDescription>Selecciona un Excel o CSV. Los productos se agregarán a la orden solo después de revisar la previsualización.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div className="grid gap-3 rounded-xl border-2 border-primary/20 bg-primary/5 p-3 text-xs sm:grid-cols-2">
+                <div>
+                  <p className="font-black uppercase tracking-widest text-primary">Moneda de la orden</p>
+                  <p className="mt-1 text-muted-foreground">Es la moneda final que se agregará a los productos.</p>
+                  <Badge variant="outline" className="mt-2 border-primary/30 bg-background px-3 py-1 font-black text-primary">
+                    {getCurrencyLabel(String(localDoc?.currency || displayCurrency))}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border-2 border-primary/25 bg-background/80 p-2 shadow-sm">
+                  <label htmlFor="purchase-import-file-currency" className="font-black uppercase tracking-widest text-primary">Moneda del archivo</label>
+                  <select
+                    id="purchase-import-file-currency"
+                    value={importCurrency}
+                    onChange={(event) => handlePurchaseImportCurrencyChange(event.target.value)}
+                    disabled={importProcessing}
+                    className="mt-2 h-9 w-full rounded-md border-2 border-border bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
+                  >
+                    <option value="NIO">NIO · Córdobas</option>
+                    <option value="USD">USD · Dólares</option>
+                  </select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Si es diferente, se convertirá automáticamente usando {Number(globalRate || 36.5).toFixed(2)} NIO/USD.</p>
+                </div>
+              </div>
               <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground">
                 <p className="font-black uppercase tracking-widest text-foreground">Validación de SKU</p>
-                <p className="mt-2">Un SKU encontrado en Inventario se vinculará al producto y mostrará su existencia. Un SKU desconocido quedará como artículo manual y se marcará como advertencia.</p>
+                <p className="mt-2">Un SKU encontrado en Inventario se vinculará al producto y mostrará su existencia. Un SKU desconocido se agregará como producto nuevo al recepcionar y se marcará como advertencia.</p>
                 <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={handleDownloadPurchaseTemplate}><Download className="size-4" /> Descargar plantilla y guía</Button>
               </div>
               <div className="space-y-2">
@@ -1557,12 +2038,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             </div>
             <DialogFooter className="flex-wrap">
               <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importProcessing}>Cerrar</Button>
-              {importFileName && <Button onClick={() => { setImportModalOpen(false); setImportPreviewOpen(true); }} disabled={importProcessing || importData.length === 0}><Check className="mr-2 size-4" /> Previsualizar productos</Button>}
+              {importFileName && <Button onClick={handleOpenPurchaseImportPreview} disabled={importProcessing || importData.length === 0 || previewLoading}><Check className="mr-2 size-4" /> Previsualizar productos</Button>}
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+        <Dialog open={importConfirmOpen && !importing} onOpenChange={setImportConfirmOpen}>
           <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Agregar productos a la orden</DialogTitle>
@@ -1613,11 +2094,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           </div>
         </ConfirmDialog>
 
+        <ConfirmDialog
+          open={Boolean(pendingApproveOrder)}
+          onOpenChange={(open) => { if (!open && !approving) setPendingApproveOrder(null); }}
+          title="¿Aprobar orden de compra?"
+          description="Al aprobarla, la orden pasará a estado Aprobada y se generará una recepción pendiente vinculada para registrar las cantidades entregadas."
+          confirmLabel="Sí, aprobar orden"
+          variant="default"
+          loading={approving}
+          closeOnConfirm={false}
+          onConfirm={() => pendingApproveOrder?.id ? handleApproveOrder(pendingApproveOrder.id) : Promise.resolve()}
+        >
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-left text-xs text-muted-foreground">
+            <p className="font-black uppercase tracking-wider text-primary">{pendingApproveOrder?.number || 'Orden de compra'}</p>
+            <p className="mt-1">Después podrás abrir la recepción pendiente, indicar lo recibido y procesar el inventario.</p>
+          </div>
+        </ConfirmDialog>
+
         <PurchaseOrderPreviewDialog
           open={!!previewOrder}
           order={previewOrder}
           suppliers={supplierCatalog}
-          canApprove={canPerform('PURCHASES_ORDERS', 'approve')}
+          canApprove={false}
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
@@ -1677,7 +2175,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Eye className="size-4" />
               </Button>
               {canPerform('PURCHASES_ORDERS', 'approve') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}><CheckCircle2 className="size-4" /></Button>
+                <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPendingApproveOrder(row)}><CheckCircle2 className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><Pencil className="size-4" /></Button>
@@ -1712,11 +2210,28 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           </div>
         </ConfirmDialog>
 
+        <ConfirmDialog
+          open={Boolean(pendingApproveOrder)}
+          onOpenChange={(open) => { if (!open && !approving) setPendingApproveOrder(null); }}
+          title="¿Aprobar orden de compra?"
+          description="Al aprobarla, la orden pasará a estado Aprobada y se generará una recepción pendiente vinculada para registrar las cantidades entregadas."
+          confirmLabel="Sí, aprobar orden"
+          variant="default"
+          loading={approving}
+          closeOnConfirm={false}
+          onConfirm={() => pendingApproveOrder?.id ? handleApproveOrder(pendingApproveOrder.id) : Promise.resolve()}
+        >
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-left text-xs text-muted-foreground">
+            <p className="font-black uppercase tracking-wider text-primary">{pendingApproveOrder?.number || 'Orden de compra'}</p>
+            <p className="mt-1">Después podrás abrir la recepción pendiente, indicar lo recibido y procesar el inventario.</p>
+          </div>
+        </ConfirmDialog>
+
         <PurchaseOrderPreviewDialog
           open={!!previewOrder}
           order={previewOrder}
           suppliers={supplierCatalog}
-          canApprove={canPerform('PURCHASES_ORDERS', 'approve')}
+          canApprove={false}
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
@@ -1738,14 +2253,14 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   <li>Descarga la plantilla con sus dos hojas: órdenes y guía de llenado.</li>
                   <li>Usa una fila por artículo; repite el número de orden para agrupar varios artículos.</li>
                   <li>Carga el archivo y corrige los errores en la previsualización.</li>
-                  <li>Los SKU encontrados se vinculan al inventario; los no encontrados se muestran como advertencia y quedan manuales.</li>
+                  <li>Los SKU encontrados se vinculan al inventario; los no encontrados se muestran como advertencia y se crearán como productos nuevos al recepcionar.</li>
                 </ol>
               </div>
               <p className="text-xs text-muted-foreground">La importación crea órdenes en estado Borrador. Las filas con errores no se crearán.</p>
             </div>
             <DialogFooter className="flex-wrap gap-2">
               <Button variant="outline" onClick={handleDownloadPurchaseTemplate}><Download className="mr-2 size-4" /> Descargar plantilla</Button>
-              <Button onClick={() => { setImportIntroOpen(false); setImportModalOpen(true); }}><Upload className="mr-2 size-4" /> Continuar con la carga</Button>
+              <Button onClick={() => { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); setImportIntroOpen(false); setImportModalOpen(true); }}><Upload className="mr-2 size-4" /> Continuar con la carga</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1753,7 +2268,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <Dialog open={false} onOpenChange={(open) => {
           if (importing || importProcessing) return;
           setImportModalOpen(open);
-          if (!open) { setImportData([]); setImportFileName(''); setImportProgress(0); }
+          if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
             <DialogHeader>
@@ -1774,7 +2289,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             </div>
             <DialogFooter className="flex-wrap">
               <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importProcessing}>Cerrar</Button>
-              {importFileName && <Button onClick={() => { setImportModalOpen(false); setImportPreviewOpen(true); }} disabled={importProcessing || importData.length === 0}><Check className="mr-2 size-4" /> Previsualizar importación</Button>}
+              {importFileName && <Button onClick={handleOpenPurchaseImportPreview} disabled={importProcessing || importData.length === 0 || previewLoading}><Check className="mr-2 size-4" /> Previsualizar importación</Button>}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1808,6 +2323,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             <DialogFooter><Button className="w-full" onClick={() => setImportResults(null)}>Continuar a órdenes de compra</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ImportProgressOverlay
+          open={previewLoading}
+          progress={previewProgress}
+          title="Preparando previsualización"
+          description="Leyendo el archivo, validando los productos y resolviendo sus vínculos con inventario."
+        />
       </div>
     </div>
   );
