@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Trash2, Ban, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FileDown, Info
+  FileStack, Plus, Search, Eye, Pencil, Trash2, Ban, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FileDown, Info
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -800,7 +800,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_INVOICES', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
               {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && (
                 <Button
                   title="Registrar Pago"

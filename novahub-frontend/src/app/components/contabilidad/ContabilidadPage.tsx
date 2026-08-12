@@ -4,7 +4,7 @@ import {
   DollarSign, Landmark, Calendar, FileBarChart,
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
   Database, GitBranch, ChevronDown, X, Settings2,
-  ArrowLeftRight,
+  ArrowLeftRight, ClipboardCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
@@ -27,6 +27,7 @@ import { ConfiguracionContableView } from './ConfiguracionContableView';
 import { CategoriasGastosView } from './CategoriasGastosView';
 import { BudgetItemsView } from './BudgetItemsView';
 import { DiferenciasCambiariasView } from './DiferenciasCambiariasView';
+import { InvoiceAuditView } from './InvoiceAuditView';
 import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,6 +45,7 @@ const SECTIONS = [
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
   { id: 'periodos', label: 'Períodos Contables', icon: Calendar },
   { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: FileBarChart },
+  { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: ClipboardCheck },
   { id: 'presupuestos', label: 'Presupuestos', icon: Wallet },
   { id: 'categorias-gastos', label: 'Categorías Gastos', icon: Tag },
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
@@ -225,6 +227,20 @@ const HELP_DATA: Record<string, {
       { q: '¿Qué es la retención de IR?', a: 'El agente de retención descuenta un porcentaje del pago al proveedor y lo entrega a la DGI. Se registra como crédito fiscal del proveedor.' },
     ],
   },
+  'auditoria-facturas': {
+    description: 'El contador selecciona múltiples facturas de venta o compra y audita su proceso: se valida automáticamente que las líneas sumen al subtotal, que el IVA, retenciones y totales sean correctos, que el saldo pendiente cuadre con los pagos y que el cliente/proveedor esté registrado. El resultado (aprobada o con anomalías) queda registrado con fecha y usuario.',
+    model: 'Invoice / SupplierInvoice + InvoiceAudit',
+    relationships: [
+      { parent: 'InvoiceAudit', child: 'Invoice', relation: 'invoiceId → id (auditoría de factura de venta, kind = SALE)' },
+      { parent: 'InvoiceAudit', child: 'SupplierInvoice', relation: 'invoiceId → id (auditoría de factura de compra, kind = PURCHASE)' },
+      { parent: 'InvoiceAudit', child: 'User', relation: 'auditedById → id (usuario contador que auditó)' },
+    ],
+    faq: [
+      { q: '¿Qué valida la auditoría?', a: 'Líneas vs subtotal, IVA (y retenciones en compras), total, saldo pendiente vs pagos y existencia del cliente/proveedor. Cada chequeo muestra el detalle esperado vs registrado.' },
+      { q: '¿Puedo re-auditar una factura?', a: 'Sí. Cada auditoría reemplaza el resultado anterior y queda registrada la fecha y el usuario que la realizó.' },
+      { q: '¿Qué significa "Con anomalías"?', a: 'Al menos un chequeo no cuadró (diferencia mayor a 0.02). La factura queda marcada para revisión; el detalle indica exactamente qué no cuadra.' },
+    ],
+  },
   'configuracion': {
     description: 'Configuración global del módulo contable. Define parámetros como moneda por defecto, tasa de IVA, mapeo de cuentas para asientos automáticos e importación de catálogos por industria.',
     model: 'AccountingConfig (JSON) + Account (catálogo)',
@@ -380,6 +396,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'conciliacion' && <ConciliacionView />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
+                  {activeSection === 'auditoria-facturas' && <InvoiceAuditView />}
                   {activeSection === 'presupuestos' && <BudgetItemsView />}
                   {activeSection === 'categorias-gastos' && <CategoriasGastosView />}
                   {activeSection === 'configuracion' && <ConfiguracionContableView />}

@@ -19,9 +19,11 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
   
   const defaultForm = {
     name: '',
+    type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'COMPANY',
     email: '',
     phone: '',
     identificationNumber: '',
+    ruc: '',
     address: '',
     city: '',
     country: '',
@@ -40,10 +42,18 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
       toast.error('El nombre del cliente es obligatorio');
       return;
     }
+    if (form.type === 'COMPANY' && !form.ruc.trim()) {
+      toast.error('El RUC es obligatorio cuando el cliente es una empresa');
+      return;
+    }
 
     setIsSaving(true);
     try {
-      await customersService.create(form);
+      await customersService.create({
+        ...form,
+        taxId: form.type === 'INDIVIDUAL' ? form.identificationNumber.trim() || undefined : undefined,
+        ruc: form.type === 'COMPANY' ? form.ruc.trim() : undefined,
+      });
       toast.success('Cliente registrado exitosamente');
       setForm(defaultForm);
       onSuccess();
@@ -85,17 +95,18 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="identification" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
-                  Identificación
+                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
+                  Tipo de cliente *
                 </Label>
-                <Input
-                  id="identification"
-                  value={form.identificationNumber}
-                  onChange={e => handleUpdate('identificationNumber', e.target.value)}
-                  placeholder="RUC / Cédula"
-                  className="h-10 rounded-xl"
+                <select
+                  value={form.type}
+                  onChange={e => handleUpdate('type', e.target.value)}
                   disabled={isSaving}
-                />
+                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="INDIVIDUAL">Particular</option>
+                  <option value="COMPANY">Empresa</option>
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="phone" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
@@ -111,6 +122,36 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                 />
               </div>
             </div>
+
+            {form.type === 'COMPANY' ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="ruc" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
+                  RUC *
+                </Label>
+                <Input
+                  id="ruc"
+                  value={form.ruc}
+                  onChange={e => handleUpdate('ruc', e.target.value)}
+                  placeholder="J0000000000001"
+                  className="h-10 rounded-xl"
+                  disabled={isSaving}
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="identification" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
+                  Cédula
+                </Label>
+                <Input
+                  id="identification"
+                  value={form.identificationNumber}
+                  onChange={e => handleUpdate('identificationNumber', e.target.value)}
+                  placeholder="001-010190-1000A"
+                  className="h-10 rounded-xl"
+                  disabled={isSaving}
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">

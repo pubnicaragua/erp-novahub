@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp, Download
+  FileBarChart, FileText, Receipt, Users, Building2, Eye, ChevronDown, ChevronUp,
+  Upload, Download, Trash2, Paperclip, FileSpreadsheet, Clock,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -19,9 +20,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
-import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -35,53 +36,170 @@ const statusLabels: Record<string, string> = {
   SUBMITTED: 'Presentado',
 };
 
-const reportTypeInfo: Record<string, { label: string; icon: any; desc: string }> = {
-  IVA: { label: 'Declaración IVA', icon: Receipt, desc: 'Genera la declaración mensual del Impuesto al Valor Agregado (IVA). Requiere mes y año.' },
-  IR: { label: 'Declaración IR', icon: FileText, desc: 'Genera la declaración anual del Impuesto sobre la Renta (IR). Requiere el año fiscal.' },
-  INSS: { label: 'Planilla INSS', icon: Users, desc: 'Genera la planilla mensual del Instituto Nicaragüense de Seguridad Social (INSS).' },
-  INATEC: { label: 'Planilla INATEC', icon: Building2, desc: 'Genera la planilla mensual del Instituto Nacional Tecnológico (INATEC).' },
+const reportTypeInfo: Record<string, { label: string; icon: any; desc: string; color: string }> = {
+  IVA: { label: 'Declaración IVA', icon: Receipt, desc: 'Registra el respaldo de la declaración mensual de IVA enviada a la DGI.', color: 'bg-blue-500/10 text-blue-500' },
+  IR: { label: 'Declaración IR', icon: FileText, desc: 'Registra el respaldo de la declaración anual de IR enviada.', color: 'bg-emerald-500/10 text-emerald-500' },
+  INSS: { label: 'Planilla INSS', icon: Users, desc: 'Registra el respaldo de la planilla mensual enviada al INSS.', color: 'bg-amber-500/10 text-amber-500' },
+  INATEC: { label: 'Planilla INATEC', icon: Building2, desc: 'Registra el respaldo de la planilla mensual enviada al INATEC.', color: 'bg-purple-500/10 text-purple-500' },
 };
+
+const REPORT_TYPES = ['IVA', 'IR', 'INSS', 'INATEC'];
+
+// El enum de la BD usa IVA_DECLARATION/IR_DECLARATION/INSS_PAYROLL/INATEC_PAYROLL;
+// se normaliza a la clave corta para los labels e iconos.
+const ENUM_TO_KEY: Record<string, string> = {
+  IVA_DECLARATION: 'IVA',
+  IR_DECLARATION: 'IR',
+  INSS_PAYROLL: 'INSS',
+  INATEC_PAYROLL: 'INATEC',
+};
+
+const reportTypeKey = (raw: string) => ENUM_TO_KEY[String(raw || '').toUpperCase()] || raw;
+
+const ACCEPTED_EXTENSIONS = ['application/pdf', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+
+const MONTHS = [
+  { value: '1', label: 'Enero' }, { value: '2', label: 'Febrero' },
+  { value: '3', label: 'Marzo' }, { value: '4', label: 'Abril' },
+  { value: '5', label: 'Mayo' }, { value: '6', label: 'Junio' },
+  { value: '7', label: 'Julio' }, { value: '8', label: 'Agosto' },
+  { value: '9', label: 'Septiembre' }, { value: '10', label: 'Octubre' },
+  { value: '11', label: 'Noviembre' }, { value: '12', label: 'Diciembre' },
+];
+
+interface BackupForm {
+  month: string;
+  year: string;
+  submittedAt: string;
+  file: File | null;
+  acta: File | null;
+  notes: string;
+}
+
+function toLocalDateTime(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function createInitialForm(): BackupForm {
+  return {
+    month: '1',
+    year: String(new Date().getFullYear()),
+    submittedAt: toLocalDateTime(new Date()),
+    file: null,
+    acta: null,
+    notes: '',
+  };
+}
+
+const isAllowedBackupFile = (file: File): boolean =>
+  ACCEPTED_EXTENSIONS.includes(file.type) || /\.(pdf|xlsx|xls)$/i.test(file.name);
 
 export function ReportesFiscalesView() {
   const queryClient = useQueryClient();
   const [expandedGenerate, setExpandedGenerate] = useState(true);
   const [showMeta, setShowMeta] = useState<any>(null);
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [forms, setForms] = useState<Record<string, BackupForm>>(() => {
+    const initial: Record<string, BackupForm> = {};
+    REPORT_TYPES.forEach((type) => { initial[type] = createInitialForm(); });
+    return initial;
+  });
 
-  // Generation forms
-  const [ivaForm, setIvaForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
-  const [irForm, setIrForm] = useState({ year: String(new Date().getFullYear()) });
-  const [inssForm, setInssForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
-  const [inatecForm, setInatecForm] = useState({ month: '1', year: String(new Date().getFullYear()) });
-
-  const reportsQuery = useAccountingQuery<any[]>(['fiscal-reports'], async (signal) => accountingList(await contabilidadService.getFiscalReports(signal)));
+  const reportsQuery = useAccountingQuery<any[]>(['fiscal-reports'], async (signal) =>
+    (await contabilidadService.getFiscalReports(signal)) || [],
+  );
   const reports = reportsQuery.data || [];
   const loading = reportsQuery.isLoading || reportsQuery.isFetching;
-  const fetchReports = () => reportsQuery.refetch();
 
-  const handleGenerate = async (type: string, promise: Promise<any>) => {
+  const updateForm = (type: string, patch: Partial<BackupForm>) => {
+    setForms((current) => ({ ...current, [type]: { ...current[type], ...patch } }));
+  };
+
+  const refreshReports = () => {
+    queryClient.invalidateQueries({ queryKey: ['accounting'] });
+  };
+
+  const handleRegisterBackup = async (type: string) => {
+    const form = forms[type];
+    if (!form.file) {
+      toast.error('Adjunta el archivo del reporte (xlsx o pdf) antes de registrar');
+      return;
+    }
+    if (!isAllowedBackupFile(form.file)) {
+      toast.error('El archivo del reporte debe ser xlsx o pdf');
+      return;
+    }
+    if (form.acta && !/\.(pdf|xlsx|xls|png|jpe?g|webp)$/i.test(form.acta.name)) {
+      toast.error('El acta digital debe ser pdf, xlsx o una imagen');
+      return;
+    }
+    if (!Number.isFinite(Number(form.year)) || Number(form.year) < 2000 || Number(form.year) > 2100) {
+      toast.error('Indica un año válido');
+      return;
+    }
+    if (!form.submittedAt) {
+      toast.error('Indica la fecha y hora del envío');
+      return;
+    }
     try {
-      setGenerating(type);
-      await promise;
-      toast.success(`${reportTypeInfo[type]?.label || type} generado exitosamente`);
-      await queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      setUploading(type);
+      const fileUploaded = await storageService.uploadFile('fiscal-reports', form.file, {
+        folder: `fiscal-${type.toLowerCase()}`,
+      });
+      let actaUploaded: { uri: string } | null = null;
+      if (form.acta) {
+        actaUploaded = await storageService.uploadFile('fiscal-reports', form.acta, {
+          folder: `fiscal-${type.toLowerCase()}/actas`,
+        });
+      }
+      await contabilidadService.registerFiscalReportBackup({
+        type,
+        year: Number(form.year),
+        month: type === 'IR' ? null : Number(form.month),
+        fileUri: fileUploaded.uri,
+        fileName: form.file.name,
+        actaUri: actaUploaded?.uri || null,
+        actaFileName: form.acta?.name || null,
+        submittedAt: new Date(form.submittedAt).toISOString(),
+        notes: form.notes.trim() || null,
+      });
+      toast.success(`${reportTypeInfo[type].label} registrada como respaldo`);
+      refreshReports();
+      updateForm(type, { file: null, acta: null, notes: '' });
     } catch (e: any) {
-      toast.error(e?.message || `Error al generar ${type}`);
+      toast.error(e?.message || `Error al registrar el respaldo de ${type}`);
     } finally {
-      setGenerating(null);
+      setUploading(null);
     }
   };
 
-  const months = [
-    { value: '1', label: 'Enero' }, { value: '2', label: 'Febrero' },
-    { value: '3', label: 'Marzo' }, { value: '4', label: 'Abril' },
-    { value: '5', label: 'Mayo' }, { value: '6', label: 'Junio' },
-    { value: '7', label: 'Julio' }, { value: '8', label: 'Agosto' },
-    { value: '9', label: 'Septiembre' }, { value: '10', label: 'Octubre' },
-    { value: '11', label: 'Noviembre' }, { value: '12', label: 'Diciembre' },
-  ];
+  const handleDeleteReport = async (report: any) => {
+    if (!window.confirm('¿Eliminar este respaldo? Los archivos adjuntos también se eliminarán del almacenamiento.')) return;
+    try {
+      const result = await contabilidadService.deleteFiscalReport(report.id);
+      (result?.fileUris || []).forEach((uri: string) => {
+        storageService.deleteFile(uri).catch(() => undefined);
+      });
+      toast.success('Respaldo eliminado');
+      refreshReports();
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo eliminar el respaldo');
+    }
+  };
 
-  const formatReportType = (type: string) => reportTypeInfo[type]?.label || type;
+  const openStoredFile = async (uri?: string | null) => {
+    if (!uri) return;
+    try {
+      const url = await storageService.resolveUrl(uri);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo abrir el archivo');
+    }
+  };
+
+  const formatReportType = (type: string) => reportTypeInfo[reportTypeKey(type)]?.label || type;
+  const monthLabel = (month: any) => MONTHS.find((m) => m.value === String(month))?.label || month;
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
@@ -89,7 +207,7 @@ export function ReportesFiscalesView() {
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Reportes Fiscales</h2>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">
-            {reports.length} reporte(s) generado(s)
+            Respaldos de declaraciones enviadas · {reports.length} registro(s)
           </p>
         </div>
         <Button
@@ -98,148 +216,114 @@ export function ReportesFiscalesView() {
           className="h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2"
         >
           {expandedGenerate ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          Generar Reporte
+          Registrar Respaldo
         </Button>
       </div>
 
       {expandedGenerate && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500">
-                  <Receipt className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest">Declaración IVA</p>
-                  <p className="text-[9px] text-muted-foreground/60">Impuesto al Valor Agregado</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.IVA.desc}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
-                  <Select value={ivaForm.month} onValueChange={(v) => setIvaForm({ ...ivaForm, month: v })}>
-                    <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m) => <SelectItem key={m.value} value={m.value} className="text-[10px]">{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Año</Label>
-                  <Input type="number" value={ivaForm.year} onChange={(e) => setIvaForm({ ...ivaForm, year: e.target.value })} className="h-8 text-[10px]" />
-                </div>
-              </div>
-              <Button
-                className="w-full h-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-blue-500/20"
-                onClick={() => handleGenerate('IVA', contabilidadService.generateIvaDeclaration(Number(ivaForm.month), Number(ivaForm.year)))}
-                disabled={generating === 'IVA'}
-              >
-                {generating === 'IVA' ? 'Generando...' : 'Generar IVA'}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
-                  <FileText className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest">Declaración IR</p>
-                  <p className="text-[9px] text-muted-foreground/60">Impuesto sobre la Renta</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.IR.desc}</p>
-              <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Año Fiscal</Label>
-                <Input type="number" value={irForm.year} onChange={(e) => setIrForm({ year: e.target.value })} className="h-8 text-[10px]" />
-              </div>
-              <Button
-                className="w-full h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-emerald-500/20"
-                onClick={() => handleGenerate('IR', contabilidadService.generateIrDeclaration(Number(irForm.year)))}
-                disabled={generating === 'IR'}
-              >
-                {generating === 'IR' ? 'Generando...' : 'Generar IR'}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
-                  <Users className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest">Planilla INSS</p>
-                  <p className="text-[9px] text-muted-foreground/60">Seguridad Social</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.INSS.desc}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
-                  <Select value={inssForm.month} onValueChange={(v) => setInssForm({ ...inssForm, month: v })}>
-                    <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m) => <SelectItem key={m.value} value={m.value} className="text-[10px]">{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Año</Label>
-                  <Input type="number" value={inssForm.year} onChange={(e) => setInssForm({ ...inssForm, year: e.target.value })} className="h-8 text-[10px]" />
-                </div>
-              </div>
-              <Button
-                className="w-full h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-amber-500/20"
-                onClick={() => handleGenerate('INSS', contabilidadService.generateInssPayroll(Number(inssForm.month), Number(inssForm.year)))}
-                disabled={generating === 'INSS'}
-              >
-                {generating === 'INSS' ? 'Generando...' : 'Generar INSS'}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
-                  <Building2 className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest">Planilla INATEC</p>
-                  <p className="text-[9px] text-muted-foreground/60">Formación Técnica</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{reportTypeInfo.INATEC.desc}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
-                  <Select value={inatecForm.month} onValueChange={(v) => setInatecForm({ ...inatecForm, month: v })}>
-                    <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m) => <SelectItem key={m.value} value={m.value} className="text-[10px]">{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Año</Label>
-                  <Input type="number" value={inatecForm.year} onChange={(e) => setInatecForm({ ...inatecForm, year: e.target.value })} className="h-8 text-[10px]" />
-                </div>
-              </div>
-              <Button
-                className="w-full h-8 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-purple-500/20"
-                onClick={() => handleGenerate('INATEC', contabilidadService.generateInatecPayroll(Number(inatecForm.month), Number(inatecForm.year)))}
-                disabled={generating === 'INATEC'}
-              >
-                {generating === 'INATEC' ? 'Generando...' : 'Generar INATEC'}
-              </Button>
-            </CardContent>
-          </Card>
+          {REPORT_TYPES.map((type) => {
+            const info = reportTypeInfo[type];
+            const Icon = info.icon;
+            const form = forms[type];
+            const isIR = type === 'IR';
+            return (
+              <Card key={type} className="rounded-2xl border-border/50">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn('p-2.5 rounded-xl', info.color)}>
+                      <Icon className="size-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest">{info.label}</p>
+                      <p className="text-[9px] text-muted-foreground/60">{isIR ? 'Anual' : 'Mensual'}</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">{info.desc}</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {!isIR && (
+                      <div className="space-y-1.5">
+                        <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mes</Label>
+                        <Select value={form.month} onValueChange={(v) => updateForm(type, { month: v })}>
+                          <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {MONTHS.map((m) => <SelectItem key={m.value} value={m.value} className="text-[10px]">{m.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className={cn('space-y-1.5', isIR && 'col-span-2')}>
+                      <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Año</Label>
+                      <Input type="number" value={form.year} onChange={(e) => updateForm(type, { year: e.target.value })} className="h-8 text-[10px]" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                      <Clock className="size-3" /> Fecha y hora del envío
+                    </Label>
+                    <Input
+                      type="datetime-local"
+                      value={form.submittedAt}
+                      onChange={(e) => updateForm(type, { submittedAt: e.target.value })}
+                      className="h-8 text-[10px]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                      <FileSpreadsheet className="size-3" /> Archivo del reporte (xlsx/pdf)
+                    </Label>
+                    <label className={cn(
+                      'flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 px-3 py-2.5 text-[10px] font-bold transition-all',
+                      form.file ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-600' : 'hover:border-primary/50 hover:bg-muted/30',
+                    )}>
+                      <Upload className="size-3.5" />
+                      <span className="max-w-[180px] truncate">{form.file ? form.file.name : 'Seleccionar archivo'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.xlsx,.xls"
+                        className="hidden"
+                        onChange={(e) => updateForm(type, { file: e.target.files?.[0] || null })}
+                      />
+                    </label>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                      <Paperclip className="size-3" /> Acta digital (opcional)
+                    </Label>
+                    <label className={cn(
+                      'flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 px-3 py-2.5 text-[10px] font-bold transition-all',
+                      form.acta ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-600' : 'hover:border-primary/50 hover:bg-muted/30',
+                    )}>
+                      <Paperclip className="size-3.5" />
+                      <span className="max-w-[180px] truncate">{form.acta ? form.acta.name : 'Adjuntar acta digital'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp"
+                        className="hidden"
+                        onChange={(e) => updateForm(type, { acta: e.target.files?.[0] || null })}
+                      />
+                    </label>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Observaciones</Label>
+                    <Input
+                      value={form.notes}
+                      onChange={(e) => updateForm(type, { notes: e.target.value })}
+                      placeholder="Notas del envío..."
+                      className="h-8 text-[10px]"
+                    />
+                  </div>
+                  <Button
+                    className="w-full h-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-blue-500/20"
+                    onClick={() => handleRegisterBackup(type)}
+                    disabled={uploading !== null}
+                  >
+                    {uploading === type ? 'Subiendo y registrando...' : 'Registrar Respaldo'}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -251,43 +335,73 @@ export function ReportesFiscalesView() {
               <TableRow>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Tipo</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Período</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Año</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Mes</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Monto Total</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Impuesto</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha y hora de envío</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Archivo</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Acta digital</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Generado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Acción</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={9} className="text-center text-xs text-muted-foreground/50 italic py-12">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground/50 italic py-12">Cargando...</TableCell></TableRow>
               ) : reports.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center text-xs text-muted-foreground/50 italic py-12">No hay reportes fiscales generados. Usa las tarjetas de arriba para generar uno.</TableCell></TableRow>
-              ) : reports.map((r) => (
+                <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground/50 italic py-12">No hay respaldos registrados. Usa las tarjetas de arriba para subir los archivos enviados.</TableCell></TableRow>
+              ) : reports.map((r) => {
+                const info = reportTypeInfo[reportTypeKey(r.type as string)];
+                const Icon = info?.icon || FileBarChart;
+                const isBackup = r.status === 'SUBMITTED' && r.fileUri;
+                const submittedDate = r.submittedAt || r.generatedAt || r.createdAt;
+                return (
                 <TableRow key={r.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {(() => {
-                        const info = reportTypeInfo[r.type as string];
-                        const Icon = info?.icon || FileBarChart;
-                        return <Icon className="size-4 text-muted-foreground" />;
-                      })()}
+                      <Icon className="size-4 text-muted-foreground" />
                       <span className="text-xs font-bold">{formatReportType(r.type)}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs">{r.period || 'N/A'}</TableCell>
-                  <TableCell className="text-xs font-mono">{r.year || 'N/A'}</TableCell>
-                  <TableCell className="text-xs">{['IR'].includes(r.type) ? 'Anual' : r.month ? months.find((m) => m.value === String(r.month))?.label || r.month : 'N/A'}</TableCell>
-                  <TableCell className="text-xs tabular-nums text-right">C$ {Number(r.totalAmount || 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-xs tabular-nums text-right">C$ {Number(r.taxAmount || 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-xs">
+                    {r.period || 'N/A'}
+                    {!['IR'].includes(r.type) && r.month ? ` · ${monthLabel(r.month)}` : ''}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {submittedDate ? new Date(submittedDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                  </TableCell>
+                  <TableCell>
+                    {isBackup ? (
+                      <button
+                        type="button"
+                        onClick={() => openStoredFile(r.fileUri)}
+                        title={r.fileName || 'Abrir archivo'}
+                        className="flex max-w-[180px] items-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary/10"
+                      >
+                        <FileSpreadsheet className="size-3.5 shrink-0" />
+                        <span className="truncate">{r.fileName || 'Ver archivo'}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isBackup && r.actaUri ? (
+                      <button
+                        type="button"
+                        onClick={() => openStoredFile(r.actaUri)}
+                        title={r.actaFileName || 'Abrir acta'}
+                        className="flex max-w-[180px] items-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary/10"
+                      >
+                        <Paperclip className="size-3.5 shrink-0" />
+                        <span className="truncate">{r.actaFileName || 'Ver acta'}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5', statusStyles[r.status || 'DRAFT'])}>
                       {statusLabels[r.status || 'DRAFT']}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
@@ -299,44 +413,66 @@ export function ReportesFiscalesView() {
                       >
                         <Eye className="size-4" />
                       </Button>
+                      {isBackup && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
+                          onClick={() => openStoredFile(r.fileUri)}
+                          title="Descargar"
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
-                        onClick={() => {
-                          const rows = [[
-                            'Tipo', 'Período', 'Monto Total', 'Impuesto', 'Estado',
-                            ...Object.keys(r.metadata || {}).filter(k => !['period','month','year'].includes(k))
-                          ]];
-                          const dataRow = [
-                            r.type, r.period, r.totalAmount, r.taxAmount, r.status,
-                            ...Object.keys(r.metadata || {}).filter(k => !['period','month','year'].includes(k)).map(k => r.metadata[k])
-                          ];
-                          rows.push(dataRow);
-                          const ws = XLSX.utils.aoa_to_sheet(rows);
-                          const wb = XLSX.utils.book_new();
-                          XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
-                          XLSX.writeFile(wb, `reporte-${r.type}-${r.period}.xlsx`);
-                          toast.success('Reporte exportado');
-                        }}
-                        title="Exportar Excel"
+                        className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handleDeleteReport(r)}
+                        title="Eliminar"
                       >
-                        <Download className="size-4" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           </div>
           <div className="space-y-2 p-3 md:hidden">
-            {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : reports.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay reportes fiscales generados.</p> : reports.map((r) => (
+            {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : reports.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay respaldos registrados.</p> : reports.map((r) => {
+              const isBackup = r.status === 'SUBMITTED' && r.fileUri;
+              const submittedDate = r.submittedAt || r.generatedAt || r.createdAt;
+              return (
               <div key={r.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
-                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{formatReportType(r.type)}</p><p className="mt-1 text-[10px] text-muted-foreground">{r.period || 'N/A'} · {r.year || 'N/A'}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'DRAFT'])}>{statusLabels[r.status || 'DRAFT']}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Monto total</span><span>C$ {Number(r.totalAmount || 0).toLocaleString()}</span></div><div><span className="block text-muted-foreground">Impuesto</span><span>C$ {Number(r.taxAmount || 0).toLocaleString()}</span></div><div className="col-span-2 flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => setShowMeta(r)}><Eye className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7" onClick={() => { const rows = [['Tipo', 'Período', 'Monto Total', 'Impuesto', 'Estado']]; rows.push([r.type, r.period, r.totalAmount, r.taxAmount, r.status]); const ws = XLSX.utils.aoa_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reporte'); XLSX.writeFile(wb, `reporte-${r.type}-${r.period}.xlsx`); toast.success('Reporte exportado'); }}><Download className="size-4" /></Button></div></div>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-xs font-bold">{formatReportType(r.type)}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">{r.period || 'N/A'} · {submittedDate ? new Date(submittedDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</p>
+                  </div>
+                  <Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'DRAFT'])}>{statusLabels[r.status || 'DRAFT']}</Badge>
+                </div>
+                {(isBackup) && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/20 pt-2">
+                    <button type="button" onClick={() => openStoredFile(r.fileUri)} className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/40 px-2 py-1 text-[10px] font-bold text-primary">
+                      <FileSpreadsheet className="size-3.5" /> {r.fileName || 'Archivo'}
+                    </button>
+                    {r.actaUri && (
+                      <button type="button" onClick={() => openStoredFile(r.actaUri)} className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-background/40 px-2 py-1 text-[10px] font-bold text-primary">
+                        <Paperclip className="size-3.5" /> {r.actaFileName || 'Acta'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="mt-2 flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" className="size-7" onClick={() => setShowMeta(r)}><Eye className="size-4" /></Button>
+                  <Button variant="ghost" size="icon" className="size-7 hover:text-destructive" onClick={() => handleDeleteReport(r)}><Trash2 className="size-4" /></Button>
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -348,11 +484,13 @@ export function ReportesFiscalesView() {
               {showMeta?.type ? formatReportType(showMeta.type) : ''} · {showMeta?.period || ''}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Reporte en estado <strong>{statusLabels[showMeta?.status] || showMeta?.status}</strong>
+              {showMeta?.status === 'SUBMITTED'
+                ? 'Respaldo registrado por el contador con los archivos enviados'
+                : `Reporte en estado <strong>${statusLabels[showMeta?.status] || showMeta?.status}</strong>`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-xl bg-muted/30 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Período</p>
                 <p className="text-sm font-bold">{showMeta?.period || 'N/A'}</p>
@@ -362,14 +500,48 @@ export function ReportesFiscalesView() {
                 <p className="text-sm font-bold">{statusLabels[showMeta?.status] || showMeta?.status}</p>
               </div>
               <div className="rounded-xl bg-muted/30 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Total</p>
-                <p className="text-sm font-bold tabular-nums">C$ {Number(showMeta?.totalAmount || 0).toLocaleString()}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha y hora de envío</p>
+                <p className="text-sm font-bold">
+                  {(showMeta?.submittedAt || showMeta?.generatedAt || showMeta?.createdAt)
+                    ? new Date(showMeta?.submittedAt || showMeta?.generatedAt || showMeta?.createdAt).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })
+                    : 'N/A'}
+                </p>
               </div>
               <div className="rounded-xl bg-muted/30 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Impuesto</p>
-                <p className="text-sm font-bold tabular-nums">C$ {Number(showMeta?.taxAmount || 0).toLocaleString()}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Registrado</p>
+                <p className="text-sm font-bold">
+                  {showMeta?.createdAt ? new Date(showMeta.createdAt).toLocaleDateString('es-NI') : 'N/A'}
+                </p>
               </div>
             </div>
+            {showMeta?.status === 'SUBMITTED' && (
+              <div className="space-y-2">
+                {showMeta?.fileUri && (
+                  <button
+                    type="button"
+                    onClick={() => openStoredFile(showMeta.fileUri)}
+                    className="flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-4 py-3 text-left text-xs font-bold text-primary hover:bg-primary/10"
+                  >
+                    <FileSpreadsheet className="size-4" /> Archivo del reporte: {showMeta?.fileName || 'descargar'}
+                  </button>
+                )}
+                {showMeta?.actaUri && (
+                  <button
+                    type="button"
+                    onClick={() => openStoredFile(showMeta.actaUri)}
+                    className="flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-4 py-3 text-left text-xs font-bold text-primary hover:bg-primary/10"
+                  >
+                    <Paperclip className="size-4" /> Acta digital: {showMeta?.actaFileName || 'descargar'}
+                  </button>
+                )}
+                {showMeta?.metadata?.notes && (
+                  <div className="rounded-xl bg-muted/30 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Observaciones</p>
+                    <p className="mt-1 text-xs">{showMeta.metadata.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
             {showMeta?.metadata && (
               <div className="rounded-xl border border-border/30">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-2">Detalles del cálculo</p>
@@ -381,7 +553,9 @@ export function ReportesFiscalesView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(showMeta.metadata).filter(([k]) => !['period','month'].includes(k)).map(([key, val]: [string, any]) => (
+                    {Object.entries(showMeta.metadata)
+                      .filter(([k]) => !['period', 'month', 'source', 'notes'].includes(k))
+                      .map(([key, val]: [string, any]) => (
                       <tr key={key} className="border-t border-border/10">
                         <td className="px-4 py-1.5 font-medium">{{
                           year: 'Año', netProfit: 'Utilidad Neta', irRate: 'Tasa IR',

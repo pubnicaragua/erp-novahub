@@ -24,6 +24,9 @@ import {
   Activity,
   ChevronRight,
   User as UserIcon,
+  Check,
+  Pencil,
+  Loader2,
 } from 'lucide-react';
 
 import {
@@ -47,6 +50,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Progress } from '../ui/progress';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
+import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import {
   Table,
@@ -60,6 +64,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
+import { toast } from 'sonner';
 
 // ============================================================================
 // Tipos del componente
@@ -195,6 +200,56 @@ export function ProductDetailDrawer({
   const [error, setError] = useState<string | null>(null);
   const [kardexMovements, setKardexMovements] = useState<any[] | null>(null);
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
+  const [levelDrafts, setLevelDrafts] = useState<Record<string, { minStock: string; maxStock: string }>>({});
+  const [savingLevelId, setSavingLevelId] = useState<string | null>(null);
+
+  // Sincroniza los borradores de min/max cuando cambia el detalle del producto
+  useEffect(() => {
+    const levels = Array.isArray(detail?.stockLevels) ? detail.stockLevels : [];
+    const next: Record<string, { minStock: string; maxStock: string }> = {};
+    levels.forEach((level: any) => {
+      if (level.warehouseId) {
+        next[String(level.warehouseId)] = {
+          minStock: level.minStock != null ? String(level.minStock) : '0',
+          maxStock: level.maxStock != null ? String(level.maxStock) : '0',
+        };
+      }
+    });
+    setLevelDrafts(next);
+  }, [detail]);
+
+  const saveLevelMinMax = async (item: { warehouseId: string; variantId?: string | null; quantity: number }) => {
+    const draft = levelDrafts[String(item.warehouseId)];
+    if (!draft) return;
+    const minStock = Math.max(0, Number(draft.minStock) || 0);
+    const maxStock = Math.max(0, Number(draft.maxStock) || 0);
+    if (maxStock > 0 && maxStock < minStock) {
+      toast.error('El máximo no puede ser menor que el mínimo');
+      return;
+    }
+    setSavingLevelId(String(item.warehouseId));
+    try {
+      await inventoryService.updateStockLevel({
+        productId: String(detail?.id || productId),
+        warehouseId: item.warehouseId,
+        variantId: item.variantId || '',
+        quantity: item.quantity,
+        minStock,
+        maxStock,
+      });
+      setDetail((prev: any) => ({
+        ...prev,
+        stockLevels: (prev?.stockLevels || []).map((level: any) =>
+          level.warehouseId === item.warehouseId ? { ...level, minStock, maxStock } : level,
+        ),
+      }));
+      toast.success('Mínimo y máximo actualizados');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudieron actualizar los niveles');
+    } finally {
+      setSavingLevelId(null);
+    }
+  };
 
   // ------------------------------------------------------------------
   // Fetch del detalle completo cuando se abre el drawer
@@ -280,7 +335,7 @@ export function ProductDetailDrawer({
    * Stock por bodega: prioriza stockLevels del detail, fallback sumando movements.
    */
   const stockByWarehouse = useMemo(() => {
-    if (!product) return [] as Array<{ warehouseId: string; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }>;
+    if (!product) return [] as Array<{ warehouseId: string; variantId?: string | null; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }>;
 
     const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
 
@@ -294,6 +349,7 @@ export function ProductDetailDrawer({
             'Sin bodega';
           return {
             warehouseId,
+            variantId: level.variantId || null,
             warehouseName,
             quantity: Number(level.quantity || 0),
             minStock: level.minStock != null ? Number(level.minStock) : undefined,
@@ -669,13 +725,16 @@ export function ProductDetailDrawer({
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Cantidad</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">% del total</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Mín / Máx</TableHead>
+                            <TableHead className="text-[10px] uppercase tracking-widest text-right"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {stockByWarehouse.map((item: { warehouseId: string; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }) => {
+                          {stockByWarehouse.map((item: { warehouseId: string; variantId?: string | null; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }) => {
                             const pct = totalStockByWarehouse > 0
                               ? Math.round((item.quantity / totalStockByWarehouse) * 100)
                               : 0;
+                            const draft = levelDrafts[String(item.warehouseId)];
+                            const isSavingLevel = savingLevelId === String(item.warehouseId);
                             return (
                               <TableRow key={`${item.warehouseId}-${item.warehouseName}`}>
                                 <TableCell>
@@ -697,16 +756,53 @@ export function ProductDetailDrawer({
                                     </span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
-                                  {item.minStock != null || item.maxStock != null
-                                    ? `${item.minStock ?? '—'} / ${item.maxStock ?? '—'}`
-                                    : '—'}
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      value={draft?.minStock ?? (item.minStock != null ? String(item.minStock) : '0')}
+                                      onChange={(e) => setLevelDrafts((prev) => ({ ...prev, [String(item.warehouseId)]: { minStock: e.target.value, maxStock: draft?.maxStock ?? (item.maxStock != null ? String(item.maxStock) : '0') } }))}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
+                                      aria-label={`Stock mínimo en ${item.warehouseName}`}
+                                      title="Stock mínimo editable"
+                                      className="h-8 w-16 min-w-0 text-right text-xs"
+                                    />
+                                    <span className="text-muted-foreground">/</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      value={draft?.maxStock ?? (item.maxStock != null ? String(item.maxStock) : '0')}
+                                      onChange={(e) => setLevelDrafts((prev) => ({ ...prev, [String(item.warehouseId)]: { minStock: draft?.minStock ?? (item.minStock != null ? String(item.minStock) : '0'), maxStock: e.target.value } }))}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
+                                      aria-label={`Stock máximo en ${item.warehouseName}`}
+                                      title="Stock máximo editable"
+                                      className="h-8 w-16 min-w-0 text-right text-xs"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                                    disabled={isSavingLevel}
+                                    title="Guardar mínimo y máximo de esta bodega"
+                                    aria-label={`Guardar niveles de ${item.warehouseName}`}
+                                    onClick={() => void saveLevelMinMax(item)}
+                                  >
+                                    {isSavingLevel ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                                  </Button>
                                 </TableCell>
                               </TableRow>
                             );
                           })}
                         </TableBody>
                       </Table>
+                      <div className="border-t border-border/40 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground">
+                        El stock se administra mediante movimientos y ajustes. El mínimo y el máximo son configurables por bodega (Enter o el botón de guardar para aplicar).
+                      </div>
                     </Card>
                   )}
                 </TabsContent>

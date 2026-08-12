@@ -6,16 +6,18 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Filter, Scale, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Filter, Scale, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { AccountMovementsDetail } from './AccountMovementsDetail';
 
 interface BSAccount {
   accountId: string;
   codigo: string;
   cuenta: string;
+  tipo: string;
   currentAmount: number;
   previousAmount?: number;
 }
@@ -35,6 +37,7 @@ interface BSData {
 export function BalanceGeneralView() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showPreviousYear, setShowPreviousYear] = useState(false);
+  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const query = useAccountingQuery<BSData | null>(
     ['balance-sheet', date, showPreviousYear],
     async (signal) => {
@@ -43,9 +46,10 @@ export function BalanceGeneralView() {
       const curr = raw?.current || raw || {};
       const prev = raw?.previous || null;
       const mapAccounts = (accounts: any[]): BSAccount[] => (accounts || []).map((a: any) => ({
-        accountId: a.code || a.accountId || '',
+        accountId: a.id || '',
         codigo: a.code || '',
         cuenta: a.name || a.cuenta || '',
+        tipo: a.type || '',
         currentAmount: (a.balance || 0) + (a.calculatedBalance || 0),
         previousAmount: undefined,
       }));
@@ -105,10 +109,27 @@ export function BalanceGeneralView() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {accounts.map((acc, i) => (
+          {accounts.flatMap((acc, i) => {
+            const canExpand = Boolean(acc.accountId);
+            const isExpanded = expandedAccountId === acc.accountId;
+            return [
             <TableRow key={acc.accountId || i} className="hover:bg-muted/30 border-border/30">
               <TableCell className="font-mono text-xs">{acc.codigo}</TableCell>
-              <TableCell className="font-medium">{acc.cuenta}</TableCell>
+              <TableCell className="font-medium">
+                {canExpand ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedAccountId(current => current === acc.accountId ? null : acc.accountId)}
+                    aria-expanded={isExpanded}
+                    className="flex min-w-0 items-center gap-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    {isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
+                    <span className="break-words">{acc.cuenta}</span>
+                  </button>
+                ) : (
+                  <span className="break-words">{acc.cuenta}</span>
+                )}
+              </TableCell>
               <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                 {fmt(acc.currentAmount)}
               </TableCell>
@@ -117,8 +138,23 @@ export function BalanceGeneralView() {
                   {acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}
                 </TableCell>
               )}
-            </TableRow>
-          ))}
+            </TableRow>,
+            ...(isExpanded && canExpand ? [
+              <TableRow key={`${acc.accountId}-detail`} className="hover:bg-transparent">
+                <TableCell colSpan={showPreviousYear ? 4 : 3} className="p-0">
+                  <AccountMovementsDetail
+                    accountId={acc.accountId}
+                    codigo={acc.codigo}
+                    cuenta={acc.cuenta}
+                    tipo={acc.tipo}
+                    dateFrom=""
+                    dateTo={date}
+                  />
+                </TableCell>
+              </TableRow>,
+            ] : []),
+            ];
+          })}
           <TableRow className="bg-muted/50 font-bold border-t-2 border-border">
             <TableCell colSpan={2} className="text-sm uppercase tracking-wider">Total {title}</TableCell>
             <TableCell className={cn("text-right font-mono text-sm", total >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(total)}</TableCell>
@@ -130,13 +166,31 @@ export function BalanceGeneralView() {
       </Table>
       </div>
       <div className="space-y-2 p-3 md:hidden">
-        {accounts.map((acc, i) => (
+        {accounts.map((acc, i) => {
+          const canExpand = Boolean(acc.accountId);
+          const isExpanded = expandedAccountId === acc.accountId;
+          return (
           <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
             <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
-                <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
-              </div>
+              {canExpand ? (
+                <button
+                  type="button"
+                  onClick={() => setExpandedAccountId(current => current === acc.accountId ? null : acc.accountId)}
+                  aria-expanded={isExpanded}
+                  className="flex min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  {isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
+                    <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                  </div>
+                </button>
+              ) : (
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
+                  <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                </div>
+              )}
               <span className={cn("shrink-0 text-right font-mono text-sm font-black", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                 {fmt(acc.currentAmount)}
               </span>
@@ -147,8 +201,21 @@ export function BalanceGeneralView() {
                 <span className="font-mono">{acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}</span>
               </div>
             )}
+            {isExpanded && canExpand && (
+              <div className="mt-2">
+                <AccountMovementsDetail
+                  accountId={acc.accountId}
+                  codigo={acc.codigo}
+                  cuenta={acc.cuenta}
+                  tipo={acc.tipo}
+                  dateFrom=""
+                  dateTo={date}
+                />
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
         <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 font-bold">
           <span className="text-xs uppercase tracking-wider">Total {title}</span>
           <div className="text-right">
@@ -192,7 +259,7 @@ export function BalanceGeneralView() {
               <CardTitle className="text-lg font-bold">Balance General</CardTitle>
               {date && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Al {new Date(date).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  Al {new Date(date).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' })} · Haz clic en una cuenta para consultar sus movimientos.
                 </p>
               )}
             </div>

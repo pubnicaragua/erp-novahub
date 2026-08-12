@@ -77,8 +77,15 @@ export function BalanceComprobacionView() {
   const totalCreditos = data.reduce((s, r) => s + r.creditos, 0);
   const totalSaldos = data.reduce((s, r) => s + Math.abs(r.saldo), 0);
   const isBalanced = Math.abs(totalDebitos - totalCreditos) < 0.01;
+  const difference = totalDebitos - totalCreditos;
+  const differenceAbs = Math.abs(difference);
+  const higherSide = difference > 0 ? 'los débitos superan a los créditos' : 'los créditos superan a los débitos';
 
   const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const balanceStatusLabel = isBalanced
+    ? '✓ BALANCEADO — Débitos = Créditos'
+    : `✗ NO BALANCEADO — Diferencia de C$ ${fmt(differenceAbs)} (${higherSide})`;
 
   const toggleAccount = (row: TrialBalanceRow) => {
     setExpandedAccountId(current => current === row.accountId ? null : row.accountId);
@@ -140,7 +147,7 @@ export function BalanceComprobacionView() {
             <td class="text-right">${fmt(totalSaldos)}</td>
           </tr>
           <tr class="total-row"><td colspan="6" class="${isBalanced ? 'balanced' : 'not-balanced'}">
-            ${isBalanced ? '✓ BALANCEADO — Débitos = Créditos' : '✗ NO BALANCEADO — Débitos ≠ Créditos'}
+            ${isBalanced ? '✓ BALANCEADO — Débitos = Créditos' : `✗ NO BALANCEADO — Diferencia de C$ ${fmt(differenceAbs)} (${higherSide})`}
           </td></tr>
         </tfoot>
       </table>
@@ -200,9 +207,9 @@ export function BalanceComprobacionView() {
                 <p className="mt-1 text-xs text-muted-foreground">Haz clic en una cuenta para consultar sus movimientos.</p>
               </div>
             </div>
-            <Badge variant={isBalanced ? "default" : "destructive"} className={cn("gap-1 text-[10px] font-black uppercase tracking-widest", isBalanced && "bg-emerald-600")}>
+            <Badge variant={isBalanced ? "default" : "destructive"} className={cn("gap-1 text-[10px] font-black uppercase tracking-widest", isBalanced && "bg-emerald-600")} title={balanceStatusLabel}>
               {isBalanced ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
-              {isBalanced ? 'Balanceado' : 'No balanceado'}
+              {isBalanced ? 'Balanceado' : `No balanceado · C$ ${fmt(differenceAbs)}`}
             </Badge>
           </div>
         </CardHeader>
@@ -352,6 +359,18 @@ export function BalanceComprobacionView() {
                 {isBalanced ? '✓ BALANCEADO' : '✗ NO BALANCEADO'}
               </span>
             </div>
+            {!isBalanced && (
+              <div className="min-w-0 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] leading-relaxed text-red-600">
+                <span className="block font-black uppercase tracking-wider">
+                  Diferencia: C$ {fmt(differenceAbs)}
+                </span>
+                <span className="block font-medium normal-case">
+                  {difference > 0
+                    ? 'Los débitos superan a los créditos: falta registrar créditos o hay débitos de más.'
+                    : 'Los créditos superan a los débitos: falta registrar débitos o hay créditos de más.'}
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

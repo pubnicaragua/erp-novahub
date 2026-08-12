@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Eye, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, PlayCircle, PauseCircle } from 'lucide-react';
+import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -440,7 +440,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   {String((row as any).status || '').toUpperCase() === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />}
                 </Button>
               )}
-              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
+              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_INVOICES_REC', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
               <PurchaseAuditButton entity="RECURRING_SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura Recurrente" />
               {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>

@@ -243,9 +243,9 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
                     <div key={p.id} className="rounded-xl border border-slate-500/15 bg-slate-500/[0.04] px-3 py-2.5 hover:bg-slate-500/[0.07] transition-colors cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold">{p.name}</span>
-                        <Badge className="bg-rose-100 text-rose-700 border-rose-200 text-[9px]">0 unid</Badge>
+                        <Badge className="bg-rose-100 text-rose-700 border-rose-200 text-[9px]">Stock: {p.stock ?? 0}</Badge>
                       </div>
-                      <p className="text-[10px] text-rose-500 mt-0.5">Sin salidas este período</p>
+                      <p className="text-[10px] text-rose-500 mt-0.5">Sin salidas este período, con stock disponible</p>
                     </div>
                   ))}
                 </div>

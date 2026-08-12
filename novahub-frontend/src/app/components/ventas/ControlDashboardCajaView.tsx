@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
+import { NormasProcedimientosPanel } from './caja/NormasProcedimientosPanel';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
@@ -22,7 +23,7 @@ import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
-type SectionType = 'dashboard' | 'session' | 'history';
+type SectionType = 'dashboard' | 'session' | 'history' | 'normas';
 
 const CASH_CONTROL_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="cash-control-title"]', title: 'Control de Caja', description: 'Esta vista centraliza la apertura, operación, cierre y consulta histórica de las cajas registradoras.', placement: 'bottom' },
@@ -186,6 +187,14 @@ export function ControlDashboardCajaView({
               >
                 Historial de Cajas
               </TabsTrigger>
+              <TabsTrigger 
+                value="normas"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+              >
+                Normas y Procedimientos
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -257,6 +266,10 @@ export function ControlDashboardCajaView({
               />
             )}
           </div>
+        )}
+
+        {activeSection === 'normas' && (
+          <NormasProcedimientosPanel />
         )}
 
         {activeSection === 'history' && (

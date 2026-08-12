@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download, FileDown } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -557,9 +557,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                    }
                  })()}
                >
-                 <Download className="size-4" />
+                 <FileDown className="size-4" />
                </Button>
-               <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+                <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>{canPerform('PURCHASES_PAYMENTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
                <PurchaseAuditButton entity="PAYMENT_MADE" entityId={row.id} title="Auditoria del Pago" />
                {canPerform('PURCHASES_PAYMENTS', 'delete') && (
                 <Button title="Anular pago" aria-label="Anular pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>

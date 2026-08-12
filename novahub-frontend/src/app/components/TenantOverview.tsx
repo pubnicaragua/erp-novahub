@@ -336,7 +336,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         doc.text('Sin Movimiento:', 24, y); y += 5;
         doc.setFont('helvetica', 'normal');
         for (const p of (perf.noSaleProducts || []).slice(0, 5)) {
-          doc.text(`- ${p.name}  (Stock: ${p.currentStock || 0}, ${p.daysWithoutSale || 0} dias sin salida)`, 28, y);
+          doc.text(`- ${p.name}  (Stock: ${p.stock ?? p.currentStock ?? 0}, ${p.daysWithoutSale || 0} dias sin salida)`, 28, y);
           y += 5;
         }
         y += 6;
@@ -704,7 +704,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                           <p className="text-xs font-bold truncate">{p.name}</p>
                           <p className="text-[10px] text-foreground/70">{p.daysWithoutSale ? `${p.daysWithoutSale} días sin salida` : 'Sin salidas'}</p>
                         </div>
-                        <span className="text-[10px] font-black tabular-nums text-rose-400 ml-3 shrink-0">{p.currentStock || 0} stck</span>
+                        <span className="text-[10px] font-black tabular-nums text-rose-400 ml-3 shrink-0">{p.stock ?? p.currentStock ?? 0} stck</span>
                       </div>
                     ))}
                   </CardContent>

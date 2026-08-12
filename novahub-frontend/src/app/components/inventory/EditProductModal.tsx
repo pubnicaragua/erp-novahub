@@ -342,11 +342,11 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 </div>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Mínimo</label>
-                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Min" />
+                  <Input type="number" min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Min" />
                 </div>
                 <div className="col-span-1">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Máximo</label>
-                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Max" />
+                  <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Max" />
                 </div>
               </>
             )}

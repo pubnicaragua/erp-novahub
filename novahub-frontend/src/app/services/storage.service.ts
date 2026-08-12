@@ -13,7 +13,9 @@ export type StoragePurpose =
   | 'legal-documents'
   | 'financing-documents'
   | 'activity-log'
-  | 'task-evidence';
+  | 'task-evidence'
+  | 'fiscal-reports'
+  | 'inventory-audit';
 
 interface PreparedUpload {
   bucket: string;
