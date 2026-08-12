@@ -28,6 +28,8 @@ interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: 
 const emptyDraft = () => ({
   code: '',
   name: '',
+  type: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
+  ruc: '',
   contactName: '',
   email: '',
   phone: '',
@@ -228,6 +230,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('proveedores', 'edit') },
     { key: 'name',        header: 'Nombre',    editable: canPerform('proveedores', 'edit') },
+    { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('proveedores', 'edit'),
+      render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
+    },
+    { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('proveedores', 'edit'),
+      render: (val) => <span className={cn('font-mono text-xs', val ? 'text-foreground' : 'text-muted-foreground/50')}>{val || '—'}</span>
+    },
     { key: 'contactName', header: 'Contacto',  editable: canPerform('proveedores', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
@@ -277,6 +285,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     setDraft({
       code: row.code || '',
       name: row.name || '',
+      type: String(row.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY',
+      ruc: row.ruc || '',
       contactName: row.contactName || '',
       email: row.email || '',
       phone: row.phone || '',
@@ -291,6 +301,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const buildPayload = () => {
     const payload: any = {
       name: draft.name,
+      type: draft.type,
+      ruc: draft.ruc.trim() || undefined,
       contactName: draft.contactName || undefined,
       email: draft.email || undefined,
       phone: draft.phone || undefined,
@@ -306,6 +318,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const handleSave = async () => {
     if (!draft.name.trim()) {
       toast.error('El nombre del proveedor es obligatorio');
+      return;
+    }
+    if (draft.type === 'COMPANY' && !draft.ruc.trim()) {
+      toast.error('El RUC es obligatorio para un proveedor empresa');
       return;
     }
     if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)) {
@@ -468,6 +484,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="PRV-000001" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
@@ -502,6 +520,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><div className="flex h-11 items-center rounded-xl border border-input bg-muted/30 px-3 text-sm text-muted-foreground">{draft.code || '—'}</div></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">

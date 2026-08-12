@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   ClipboardList, Search, Eye, X, AlertTriangle,
-  CheckCircle, FileDown, ThumbsUp, Ban,
+  CheckCircle, FileDown, Send, Ban,
   Building2,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -440,7 +440,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                           </Button>
                           {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
                             <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
-                              <ThumbsUp className={actionIconClass} />
+                              <Send className={actionIconClass} />
                             </Button>
                             {canCancelRequests && <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
                               <Ban className={actionIconClass} />
@@ -512,7 +512,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       </Button>
                       {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
                         <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id} title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra">
-                          <ThumbsUp className={actionIconClass} />
+                          <Send className={actionIconClass} />
                         </Button>
                         {canCancelRequests && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id} title="Anular solicitud" aria-label="Anular solicitud">
                           <Ban className={actionIconClass} />

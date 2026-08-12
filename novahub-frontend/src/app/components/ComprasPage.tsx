@@ -74,7 +74,7 @@ type ComprasData = {
 
 export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageProps) {
   const { user, canPerform } = useAuth();
-  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { isRestricted, accessibleBranches, selectedBranchId } = useBranchScope();
   const normalize = (s?: string) => {
     if (!s) return 'solicitudes';
     const map: Record<string, string> = {
@@ -107,6 +107,10 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
 
   const [ordersPrefilter, setOrdersPrefilter] = useState<string | undefined>(undefined);
   const [targetRecord, setTargetRecord] = useState<{ section: string; id: string } | null>(null);
+  const [expenseDateFilter, setExpenseDateFilter] = useState<{ from?: string; to?: string }>({});
+  const updateExpenseDate = useCallback((from?: string, to?: string) => {
+    setExpenseDateFilter((current) => (current.from === from && current.to === to) ? current : { from, to });
+  }, []);
 
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({
@@ -253,8 +257,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const orderCatalog = useMemo(() => toArr(orderCatalogQuery.data) as any[], [orderCatalogQuery.data]);
   const expensesPage = pageFor('gastos');
   const expensesQuery = useQuery({
-    queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos')],
-    queryFn: ({ signal }) => expensesService.getAll({ page: expensesPage.page, pageSize: expensesPage.pageSize, search: searchFor('gastos') }, signal),
+    queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos'), expenseDateFilter.from, expenseDateFilter.to],
+    queryFn: ({ signal }) => expensesService.getAll({ page: expensesPage.page, pageSize: expensesPage.pageSize, search: searchFor('gastos'), dateFrom: expenseDateFilter.from, dateTo: expenseDateFilter.to }, signal),
     enabled: activeSection === 'gastos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
@@ -269,24 +273,24 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   });
   const ordersPage = pageFor('ordenes');
   const ordersQuery = useQuery({
-    queryKey: ['purchases', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes'), statusFor('ordenes')],
-    queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes'), status: statusFor('ordenes') }, signal),
+    queryKey: ['purchases', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes'), statusFor('ordenes'), selectedBranchId],
+    queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes'), status: statusFor('ordenes'), branchId: selectedBranchId || undefined }, signal),
     enabled: activeSection === 'ordenes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const receiptsPage = pageFor('recepciones');
   const receiptsQuery = useQuery({
-    queryKey: ['purchases', 'receipts', tenantKey, receiptsPage.page, receiptsPage.pageSize, searchFor('recepciones')],
-    queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: receiptsPage.page, pageSize: receiptsPage.pageSize, search: searchFor('recepciones') }, signal),
+    queryKey: ['purchases', 'receipts', tenantKey, receiptsPage.page, receiptsPage.pageSize, searchFor('recepciones'), selectedBranchId],
+    queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: receiptsPage.page, pageSize: receiptsPage.pageSize, search: searchFor('recepciones'), branchId: selectedBranchId || undefined }, signal),
     enabled: activeSection === 'recepciones',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const invoicesCatalogQuery = useQuery({
-    queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200],
-    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
-    enabled: activeSection === 'pagos',
+    queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200, selectedBranchId],
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, branchId: selectedBranchId || undefined }, signal),
+    enabled: ['pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -301,24 +305,24 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   });
   const paymentsPage = pageFor('pagos');
   const paymentsQuery = useQuery({
-    queryKey: ['purchases', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos')],
-    queryFn: ({ signal }) => paymentsMadeService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos') }, signal),
+    queryKey: ['purchases', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos'), selectedBranchId],
+    queryFn: ({ signal }) => paymentsMadeService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos'), branchId: selectedBranchId || undefined }, signal),
     enabled: activeSection === 'pagos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const creditsPage = pageFor('creditos');
   const creditsQuery = useQuery({
-    queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos')],
-    queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos') }, signal),
+    queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos'), selectedBranchId],
+    queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos'), branchId: selectedBranchId || undefined }, signal),
     enabled: activeSection === 'creditos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const requestsPage = pageFor('solicitudes');
   const requestsQuery = useQuery({
-    queryKey: ['purchases', 'requests', tenantKey, requestsPage.page, requestsPage.pageSize, searchFor('solicitudes'), statusFor('solicitudes')],
-    queryFn: ({ signal }) => purchaseRequestsService.getAll({ page: requestsPage.page, pageSize: requestsPage.pageSize, search: searchFor('solicitudes'), status: statusFor('solicitudes') }, signal),
+    queryKey: ['purchases', 'requests', tenantKey, requestsPage.page, requestsPage.pageSize, searchFor('solicitudes'), statusFor('solicitudes'), selectedBranchId],
+    queryFn: ({ signal }) => purchaseRequestsService.getAll({ page: requestsPage.page, pageSize: requestsPage.pageSize, search: searchFor('solicitudes'), status: statusFor('solicitudes'), branchId: selectedBranchId || undefined }, signal),
     enabled: activeSection === 'solicitudes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
@@ -374,15 +378,15 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   };
 
   const filteredData = {
-    proveedores: filterByBranch(data.proveedores),
-    gastos: filterByBranch(data.gastos),
-    gastosRec: filterByBranch(data.gastosRec),
-    ordenes: filterByBranch(data.ordenes),
-    recepciones: filterByBranch(data.recepciones),
-    facturasRec: filterByBranch(data.facturasRec),
-    pagos: filterByBranch(data.pagos),
-    creditos: filterByBranch(data.creditos),
-    solicitudes: filterByBranch(data.solicitudes),
+    proveedores: data.proveedores,
+    gastos: data.gastos,
+    gastosRec: data.gastosRec,
+    ordenes: data.ordenes,
+    recepciones: data.recepciones,
+    facturasRec: data.facturasRec,
+    pagos: data.pagos,
+    creditos: data.creditos,
+    solicitudes: data.solicitudes,
   };
 
   const purchaseAlert = useMemo<PurchaseAlertDetail | null>(() => {
@@ -481,7 +485,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                  >
                     {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} warehouseCatalog={warehouseCatalog} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} />}
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
-                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} />}
+                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
                       {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onRegisterPaymentFromReceipt={handleRegisterPaymentFromInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
@@ -500,7 +504,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                       onSearchChange={(value) => updateSearch('pagos', value)}
                     />
                   )}
-                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
+                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} supplierInvoices={invoiceCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
                  </motion.div>
                );
             })}

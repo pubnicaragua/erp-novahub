@@ -174,9 +174,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
   const isListSection = !['facturacion-caja', 'control-caja'].includes(activeSection);
   const needsCatalogs = isListSection && activeSection !== 'clientes';
-  const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'devoluciones-venta'].includes(activeSection);
+  const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'facturas-recurrentes', 'devoluciones-venta', 'notas-credito'].includes(activeSection);
   const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(activeSection);
   const needsCredits = ['notas-credito', 'pagos-recibidos'].includes(activeSection);
+  const branchFilter = selectedBranchId ? { branchId: selectedBranchId } : {};
   const customersPage = pageFor('clientes');
   const estimatesPage = pageFor('estimaciones');
   const ordersPage = pageFor('ordenes-venta');
@@ -212,44 +213,44 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const estimatesQuery = useQuery({
-    queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones'), estimatesDates.dateFrom, estimatesDates.dateTo],
-    queryFn: ({ signal }) => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates }, signal),
+    queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones'), estimatesDates.dateFrom, estimatesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates, ...branchFilter }, signal),
     enabled: activeSection === 'estimaciones',
     placeholderData: keepPreviousData,
   });
   const ordersQuery = useQuery({
-    queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo],
-    queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), ...ordersDates }, signal),
+    queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), ...ordersDates, ...branchFilter }, signal),
     enabled: activeSection === 'ordenes-venta',
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
-    queryKey: ['sales', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo],
-    queryFn: ({ signal }) => invoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas'), ...invoicesDates }, signal),
+    queryKey: ['sales', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => invoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
     enabled: needsInvoices,
     placeholderData: keepPreviousData,
   });
   const paymentsQuery = useQuery({
-    queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos'), paymentsDates.dateFrom, paymentsDates.dateTo],
-    queryFn: ({ signal }) => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates }, signal),
+    queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos'), paymentsDates.dateFrom, paymentsDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates, ...branchFilter }, signal),
     enabled: activeSection === 'pagos-recibidos',
     placeholderData: keepPreviousData,
   });
   const recurringQuery = useQuery({
-    queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes'), recurringDates.dateFrom, recurringDates.dateTo],
-    queryFn: ({ signal }) => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates }, signal),
+    queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes'), recurringDates.dateFrom, recurringDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates, ...branchFilter }, signal),
     enabled: activeSection === 'facturas-recurrentes',
     placeholderData: keepPreviousData,
   });
   const returnsQuery = useQuery({
-    queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta'), returnsDates.dateFrom, returnsDates.dateTo],
-    queryFn: ({ signal }) => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates }, signal),
+    queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta'), returnsDates.dateFrom, returnsDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates, ...branchFilter }, signal),
     enabled: activeSection === 'devoluciones-venta',
     placeholderData: keepPreviousData,
   });
   const creditNotesQuery = useQuery({
-    queryKey: ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo],
-    queryFn: ({ signal }) => creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates }, signal),
+    queryKey: ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
+    queryFn: ({ signal }) => creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
     enabled: needsCredits,
     placeholderData: keepPreviousData,
   });
@@ -493,7 +494,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               transition={{ duration: 0.2 }}
             >
               {activeSection === 'clientes' && (
-                <ClientesView data={data.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
+                <ClientesView data={filteredData.clientes} loading={loading} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
                 <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />
@@ -540,6 +541,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               )}
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 
+                  branchId={selectedBranchId || undefined}
                   onNavigateToControlCaja={(registerId) => {
                     setControlCajaTargetParams(registerId ? { registerId, section: 'session' } : null);
                     setActiveSection('control-caja');

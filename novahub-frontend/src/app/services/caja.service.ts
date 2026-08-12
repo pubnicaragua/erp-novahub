@@ -259,6 +259,18 @@ export const cajaService = {
   updateAutoCloseConfig: (config: any) =>
     api.put<any>('/caja/settings/auto-close', config),
 
+  getClosureProtocol: () =>
+    api.get<any>('/caja/settings/closure-protocol'),
+
+  updateClosureProtocol: (protocol: any) =>
+    api.put<any>('/caja/settings/closure-protocol', protocol),
+
+  getDeficitCharges: () =>
+    api.get<any[]>('/caja/deficit-charges'),
+
+  updateDeficitCharge: (id: string, dto: { status?: 'PENDING' | 'COLLECTED' | 'WRITTEN_OFF'; responsibleUserId?: string | null; notes?: string }) =>
+    api.patch<any>(`/caja/deficit-charges/${id}`, dto),
+
   getProducts: async (search?: string, warehouseId?: string) => {
     const params: any = {};
     if (search) params.search = search;

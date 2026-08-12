@@ -64,6 +64,8 @@ export const contabilidadService = {
   getReconciliation: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/reconciliations/${id}`, { signal }),
   createReconciliation: (data: any) => api.post<any>('/accounting/reconciliations', data),
   autoMatchReconciliation: (id: string) => api.post<any>(`/accounting/reconciliations/${id}/auto-match`, {}),
+  updateReconciliationItem: (id: string, itemId: string, data: any) => api.patch<any>(`/accounting/reconciliations/${id}/items/${itemId}`, data),
+  addReconciliationItem: (id: string, data: any) => api.post<any>(`/accounting/reconciliations/${id}/items`, data),
   completeReconciliation: (id: string) => api.post<any>(`/accounting/reconciliations/${id}/complete`, {}),
 
   // Períodos

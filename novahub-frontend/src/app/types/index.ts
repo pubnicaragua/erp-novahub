@@ -25,6 +25,7 @@ export interface ApiFilters {
   categoryId?: string;
   type?: string;
   warehouseId?: string;
+  branchId?: string;
   productId?: string;
   supplierId?: string;
   supplierInvoiceId?: string;
@@ -460,7 +461,9 @@ export interface Supplier {
   tenantId: string;
   code: string;
   name: string;
+  type?: 'COMPANY' | 'INDIVIDUAL';
   taxId?: string;
+  ruc?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -713,12 +716,13 @@ export interface SupplierCredit {
   supplierId: string;
   supplier?: Supplier;
   supplierInvoiceId?: string;
+  supplierInvoice?: { id: string; number: string; date?: string; total?: number; status?: string } | null;
   date: string;
   total: number;
   currency?: string;
   exchangeRate?: number;
   baseTotal?: number;
-  status: 'draft' | 'issued' | 'applied' | 'voided';
+  status: 'draft' | 'issued' | 'applied' | 'partial' | 'paid' | 'voided' | 'DRAFT' | 'ISSUED' | 'APPLIED' | 'PARTIAL' | 'PAID' | 'VOIDED';
   reason: string;
   items: SupplierCreditItem[];
   createdAt: string;

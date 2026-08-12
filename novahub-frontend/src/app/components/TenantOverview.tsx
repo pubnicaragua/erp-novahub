@@ -309,8 +309,16 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       }
       y += 6;
 
+      const ensureSpace = (needed: number) => {
+        if (y + needed > 272) {
+          doc.addPage();
+          y = 20;
+        }
+      };
+
       const perf = cajaData?.productPerformance;
       if (perf) {
+        ensureSpace(20);
         doc.setFontSize(13);
         doc.setFont('helvetica', 'bold');
         doc.text('Rendimiento de Productos', 20, y);
@@ -319,23 +327,28 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         doc.setFont('helvetica', 'bold');
         doc.text('Mas Vendidos:', 24, y); y += 5;
         doc.setFont('helvetica', 'normal');
-        for (const p of (perf.topSelling || []).slice(0, 5)) {
+        for (const p of (perf.topSelling || [])) {
+          ensureSpace(5);
           doc.text(`- ${p.name}  (${p.totalQty || 0} uds, ${fmt(p.totalRevenue || 0)})`, 28, y);
           y += 5;
         }
         y += 3;
+        ensureSpace(10);
         doc.setFont('helvetica', 'bold');
         doc.text('Mayor Utilidad:', 24, y); y += 5;
         doc.setFont('helvetica', 'normal');
-        for (const p of (perf.topMargin || []).slice(0, 5)) {
+        for (const p of (perf.topMargin || [])) {
+          ensureSpace(5);
           doc.text(`- ${p.name}  (Margen: ${(p.margin || 0).toFixed(0)}%, Ganancia: ${fmt(p.profit || 0)})`, 28, y);
           y += 5;
         }
         y += 3;
+        ensureSpace(10);
         doc.setFont('helvetica', 'bold');
         doc.text('Sin Movimiento:', 24, y); y += 5;
         doc.setFont('helvetica', 'normal');
-        for (const p of (perf.noSaleProducts || []).slice(0, 5)) {
+        for (const p of (perf.noSaleProducts || [])) {
+          ensureSpace(5);
           doc.text(`- ${p.name}  (Stock: ${p.stock ?? p.currentStock ?? 0}, ${p.daysWithoutSale || 0} dias sin salida)`, 28, y);
           y += 5;
         }
@@ -344,7 +357,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
       const transactions = cajaData?.recentTransactions || [];
       if (transactions.length > 0) {
-        if (y > 240) { doc.addPage(); y = 20; }
+        ensureSpace(24);
         doc.setFontSize(13);
         doc.setFont('helvetica', 'bold');
         doc.text('Transacciones Recientes', 20, y);
@@ -359,7 +372,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         doc.text('IVA', 170, y);
         y += 5;
         doc.setFont('helvetica', 'normal');
-        for (const tx of transactions.slice(0, 20)) {
+        for (const tx of transactions) {
+          ensureSpace(5);
           doc.text(tx.number || 'FAC-???', 24, y);
           doc.text((tx.origin || tx.register?.name || '-').substring(0, 24), 60, y);
           doc.text((tx.customer || 'Cliente General').substring(0, 20), 95, y);

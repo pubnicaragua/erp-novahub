@@ -46,6 +46,10 @@ export function ConciliacionView() {
   const [, setDetailLoading] = useState(false);
   const [autoMatchLoading, setAutoMatchLoading] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
+  const [onlyUnmatched, setOnlyUnmatched] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [addItemLoading, setAddItemLoading] = useState(false);
+  const [addItemForm, setAddItemForm] = useState({ date: new Date().toISOString().split('T')[0], description: '', reference: '', amount: '' });
   const [form, setForm] = useState({
     accountId: '', period: '', startDate: '', endDate: '', startBalance: '', endBalance: '',
   });
@@ -68,7 +72,6 @@ export function ConciliacionView() {
       const res = await queryClient.fetchQuery({
         queryKey: ['accounting', 'reconciliation-detail', id],
         queryFn: ({ signal }) => contabilidadService.getReconciliation(id, signal),
-        staleTime: 5 * 60_000,
       });
       setDetail(res);
       setSelectedId(id);
@@ -134,6 +137,7 @@ export function ConciliacionView() {
       setDetail(res);
       toast.success('Conciliación completada');
       fetchReconciliations();
+      void fetchDetail(detail.id);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al completar');
     } finally {
@@ -147,6 +151,49 @@ export function ConciliacionView() {
       item.id === itemId ? { ...item, matched: checked } : item
     );
     setDetail({ ...detail, items: updatedItems });
+    void persistItem(itemId, { matched: checked });
+  };
+
+  const persistItem = async (itemId: string, patch: any) => {
+    if (!detail) return;
+    try {
+      const updated = await contabilidadService.updateReconciliationItem(detail.id, itemId, patch);
+      setDetail(updated);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar el movimiento');
+      fetchDetail(detail.id);
+    }
+  };
+
+  const handleBankAmountBlur = (item: any) => {
+    const amount = Number(item.bankAmount);
+    const next = Number.isFinite(amount) && amount > 0 ? amount : null;
+    if (next === (item.bankAmount === null || item.bankAmount === undefined ? null : Number(item.bankAmount))) return;
+    void persistItem(item.id, { bankAmount: next });
+  };
+
+  const handleAddItem = async () => {
+    if (!detail) return;
+    if (!addItemForm.description.trim()) return void toast.error('Describe el movimiento del estado de cuenta');
+    const amount = Number(addItemForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
+    try {
+      setAddItemLoading(true);
+      const updated = await contabilidadService.addReconciliationItem(detail.id, {
+        date: addItemForm.date || new Date().toISOString().split('T')[0],
+        description: addItemForm.description.trim(),
+        reference: addItemForm.reference.trim() || undefined,
+        amount,
+      });
+      setDetail(updated);
+      setAddItemOpen(false);
+      setAddItemForm({ date: new Date().toISOString().split('T')[0], description: '', reference: '', amount: '' });
+      toast.success('Movimiento del estado de cuenta agregado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al agregar el movimiento');
+    } finally {
+      setAddItemLoading(false);
+    }
   };
 
   if (selectedId && detail) {
@@ -206,10 +253,35 @@ export function ConciliacionView() {
           </Card>
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Saldos</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Lógica de la conciliación</p>
+              <div className="space-y-2 rounded-xl border border-border/40 bg-muted/10 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <p><span className="font-black text-foreground">1.</span> Cada fila es un movimiento del libro contable de la cuenta.</p>
+                <p><span className="font-black text-foreground">2.</span> Marca <span className="font-bold text-foreground">✓ Conciliado</span> los movimientos que el banco ya registró e indica su <span className="font-bold text-foreground">monto bancario</span>.</p>
+                <p><span className="font-black text-foreground">3.</span> El saldo esperado = saldo inicial + movimientos conciliados.</p>
+                <p><span className="font-black text-foreground">4.</span> La conciliación <span className="font-bold text-emerald-500">cuadra</span> cuando la diferencia contra el saldo final del banco es 0.</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-border/50">
+            <CardContent className="p-6 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Estado del cuadre</p>
+                <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-3 py-1', detail.isBalanced ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')}>
+                  {detail.isBalanced ? 'Cuadrada' : 'Sin cuadrar'}
+                </Badge>
+              </div>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div><p className="text-[10px] text-muted-foreground">Saldo Inicial</p><p className="text-xl font-black tabular-nums">C$ {Number(detail.startBalance || 0).toLocaleString()}</p></div>
-                <div><p className="text-[10px] text-muted-foreground">Saldo Final</p><p className="text-xl font-black tabular-nums">C$ {Number(detail.endBalance || 0).toLocaleString()}</p></div>
+                <div className="rounded-xl border border-border/40 bg-muted/10 p-3"><p className="text-[10px] text-muted-foreground">Saldo Inicial</p><p className="text-lg font-black tabular-nums">C$ {Number(detail.startBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                <div className="rounded-xl border border-border/40 bg-muted/10 p-3"><p className="text-[10px] text-muted-foreground">Conciliados ({detail.matchedCount || 0}/{detail.totalCount || 0})</p><p className="text-lg font-black tabular-nums">{(Number(detail.matchedDebits || 0) - Number(detail.matchedCredits || 0)) >= 0 ? '+' : ''}{(Number(detail.matchedDebits || 0) - Number(detail.matchedCredits || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                <div className="rounded-xl border border-border/40 bg-muted/10 p-3"><p className="text-[10px] text-muted-foreground">Saldo Contable Esperado</p><p className="text-lg font-black tabular-nums text-foreground">C$ {Number(detail.expectedEndBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                <div className="rounded-xl border border-border/40 bg-muted/10 p-3"><p className="text-[10px] text-muted-foreground">Saldo Final del Banco</p><p className="text-lg font-black tabular-nums text-foreground">C$ {Number(detail.bankEndBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                <div className={cn('sm:col-span-2 rounded-xl border p-3', detail.isBalanced ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-rose-500/30 bg-rose-500/5')}>
+                  <p className={cn('text-[10px] font-black uppercase tracking-widest', detail.isBalanced ? 'text-emerald-600' : 'text-rose-600')}>Diferencia</p>
+                  <p className={cn('mt-0.5 text-2xl font-black tabular-nums', detail.isBalanced ? 'text-emerald-600' : 'text-rose-600')}>
+                    {detail.isBalanced ? 'C$ 0.00 ✓' : `C$ ${Number(detail.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{detail.isBalanced ? 'Los movimientos conciliados explican la diferencia entre el libro y el banco.' : 'Revisa los movimientos marcados o el monto bancario para cuadrar la conciliación.'}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -217,7 +289,20 @@ export function ConciliacionView() {
 
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-6">
-            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Movimientos</p>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Movimientos</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-muted/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <Checkbox checked={onlyUnmatched} onCheckedChange={(c) => setOnlyUnmatched(!!c)} disabled={detail.status === 'COMPLETED'} />
+                  Solo sin conciliar
+                </label>
+                {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATION', 'edit') && (
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={() => setAddItemOpen(true)}>
+                    <Plus className="mr-1.5 size-3" /> Movimiento del banco
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -227,27 +312,42 @@ export function ConciliacionView() {
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Referencia</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Débito</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Crédito</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Monto Bancario</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Match</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Monto en el banco</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Conciliado</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Notas</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(detail.items || []).length === 0 && (
+                  {(detail.items || []).filter((item: any) => !onlyUnmatched || !item.matched).length === 0 && (
                     <TableRow><TableCell colSpan={8} className="text-center text-xs text-muted-foreground/50 italic py-8">Sin movimientos registrados</TableCell></TableRow>
                   )}
-                  {(detail.items || []).map((item: any) => (
+                  {(detail.items || []).filter((item: any) => !onlyUnmatched || !item.matched).map((item: any) => (
                     <TableRow key={item.id} className={cn(item.matched && 'bg-emerald-500/5')}>
                       <TableCell className="text-xs font-mono">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell className="text-xs font-medium">{item.description || 'N/A'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{item.reference || 'N/A'}</TableCell>
-                      <TableCell className="text-xs tabular-nums text-right">{Number(item.debit || 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-xs tabular-nums text-right">{Number(item.credit || 0).toLocaleString()}</TableCell>
-                      <TableCell className="text-xs tabular-nums text-right">{Number(item.bankAmount || 0).toLocaleString()}</TableCell>
+                      <TableCell className="text-xs tabular-nums text-right">{Number(item.debit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-xs tabular-nums text-right">{Number(item.credit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.bankAmount ?? ''}
+                          disabled={detail.status === 'COMPLETED' || !canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
+                          onChange={(e) => {
+                            const updatedItems = (detail.items || []).map((i: any) => i.id === item.id ? { ...i, bankAmount: e.target.value === '' ? null : Number(e.target.value) } : i);
+                            setDetail({ ...detail, items: updatedItems });
+                          }}
+                          onBlur={() => handleBankAmountBlur(item)}
+                          placeholder="—"
+                          className="ml-auto h-8 w-28 rounded-lg text-right text-xs tabular-nums"
+                        />
+                      </TableCell>
                       <TableCell className="text-center">
                         <Checkbox
                           checked={!!item.matched}
-                          disabled={!canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
+                          disabled={detail.status === 'COMPLETED' || !canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
                           onCheckedChange={(c) => toggleMatched(item.id, !!c)}
                         />
                       </TableCell>
@@ -259,6 +359,39 @@ export function ConciliacionView() {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={addItemOpen} onOpenChange={setAddItemOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-black uppercase tracking-tight">Movimiento del Estado de Cuenta</DialogTitle>
+              <DialogDescription className="text-xs">Agrega un movimiento que el banco registra y el libro contable no (ej. comisiones bancarias). Aparecerá como pendiente de conciliar.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</Label>
+                <Input type="date" value={addItemForm.date} onChange={(e) => setAddItemForm({ ...addItemForm, date: e.target.value })} className="h-9 text-xs" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto (C$)</Label>
+                <Input type="number" min="0" step="0.01" value={addItemForm.amount} onChange={(e) => setAddItemForm({ ...addItemForm, amount: e.target.value })} placeholder="0.00" className="h-9 text-xs" />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
+                <Input value={addItemForm.description} onChange={(e) => setAddItemForm({ ...addItemForm, description: e.target.value })} placeholder="Ej. Comisión bancaria de julio" className="h-9 text-xs" />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia (opcional)</Label>
+                <Input value={addItemForm.reference} onChange={(e) => setAddItemForm({ ...addItemForm, reference: e.target.value })} placeholder="Ej. Nº de movimiento del banco" className="h-9 text-xs" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddItemOpen(false)} className="rounded-xl text-[10px] font-black uppercase tracking-widest">Cancelar</Button>
+              <Button onClick={handleAddItem} disabled={addItemLoading} className="rounded-xl bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20">
+                <Plus className="size-3 mr-2" /> Agregar Movimiento
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -352,10 +485,10 @@ export function ConciliacionView() {
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+            <DialogHeader>
             <DialogTitle className="text-lg font-black uppercase tracking-tight">Nueva Conciliación Bancaria</DialogTitle>
-            <DialogDescription className="text-xs">Completa los datos para iniciar una conciliación</DialogDescription>
-          </DialogHeader>
+            <DialogDescription className="text-xs">El saldo inicial y final son los del estado de cuenta del banco; los movimientos del período se cargan automáticamente del libro contable de la cuenta.</DialogDescription>
+            </DialogHeader>
           <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
             <div className="col-span-2 space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta Bancaria</Label>

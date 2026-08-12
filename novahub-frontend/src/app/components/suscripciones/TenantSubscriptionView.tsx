@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown, Link2, UserRoundCheck
+  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown, Link2, UserRoundCheck, GitBranch
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -15,6 +15,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { TeamAccessPanel } from './TeamAccessPanel';
 import { DepartmentsView } from './DepartmentsView';
+import { OrgChartView } from './OrgChartView';
 import { SucursalesView } from '../inventory/SucursalesView';
 import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
@@ -88,6 +89,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
   const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = useState(false);
   const [showDepartmentsView, setShowDepartmentsView] = useState(false);
+  const [showOrgChartView, setShowOrgChartView] = useState(false);
   const [showTeamTutorial, setShowTeamTutorial] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [linkingUser, setLinkingUser] = useState<any>(null);
@@ -725,7 +727,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
-          {showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} employees={employees} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} onLinkUserToEmployee={(user) => { setLinkingUser(user); setLinkingEmployeeId(''); }} /> : <>
+          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} employees={employees} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} onLinkUserToEmployee={(user) => { setLinkingUser(user); setLinkingEmployeeId(''); }} /> : <>
             <div className="flex justify-end">
              <div className="flex items-center gap-2">
               {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
@@ -733,6 +735,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               </Button>}
               {canViewUsers && canViewEmployees && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
+              </Button>}
+              {canViewUsers && canViewEmployees && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
+              <GitBranch className="size-4" /> Organigrama
               </Button>}
             </div>
            </div>

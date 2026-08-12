@@ -4,26 +4,34 @@ import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Coins, Settings2, Eye, CircleHelp } from 'lucide-react';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { Coins, Settings2, Eye, CircleHelp, AlertTriangle, CheckCircle2, XCircle, Landmark, ListChecks, Loader2 } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
 import { AperturaCajaStep } from './caja/AperturaCajaStep';
 import { SesionActivaStep } from './caja/SesionActivaStep';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
-import { Button } from '../ui/button';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { NormasProcedimientosPanel } from './caja/NormasProcedimientosPanel';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
-import { getApiErrorMessage } from '../../services/api';
+import { getApiErrorMessage, api } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 
-type SectionType = 'dashboard' | 'session' | 'history' | 'normas';
+type SectionType = 'dashboard' | 'session' | 'history' | 'normas' | 'deficits';
+
+const DEFICIT_STATUS: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: 'PENDIENTE', cls: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
+  COLLECTED: { label: 'COBRADO', cls: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' },
+  WRITTEN_OFF: { label: 'CONDONADO', cls: 'bg-muted/20 text-muted-foreground border-border/40' },
+};
 
 const CASH_CONTROL_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="cash-control-title"]', title: 'Control de Caja', description: 'Esta vista centraliza la apertura, operación, cierre y consulta histórica de las cajas registradoras.', placement: 'bottom' },
@@ -51,6 +59,11 @@ export function ControlDashboardCajaView({
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [initialCajaModalMode, setInitialCajaModalMode] = useState<'create-register' | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
+  const [deficitCharges, setDeficitCharges] = useState<any[]>([]);
+  const [deficitsLoading, setDeficitsLoading] = useState(false);
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
+  const [responsibleDrafts, setResponsibleDrafts] = useState<Record<string, string>>({});
+  const [savingCharge, setSavingCharge] = useState<string | null>(null);
   const cameFromSetupRef = useRef(false);
 
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
@@ -98,6 +111,49 @@ export function ControlDashboardCajaView({
       toast.error(getApiErrorMessage(err, 'Error al cargar historial de caja'));
     }
   }, [selectedRegister]);
+
+  const loadDeficits = useCallback(async () => {
+    try {
+      setDeficitsLoading(true);
+      const [charges, users] = await Promise.all([
+        cajaService.getDeficitCharges(),
+        api.get<any[]>('/users'),
+      ]);
+      setDeficitCharges(Array.isArray(charges) ? charges : (charges?.data || []));
+      setTeamUsers(Array.isArray(users) ? users : ((users as any)?.data || []));
+      const nextDrafts: Record<string, string> = {};
+      for (const charge of (Array.isArray(charges) ? charges : (charges?.data || []))) {
+        nextDrafts[charge.id] = charge.responsibleUserId || '';
+      }
+      setResponsibleDrafts(nextDrafts);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Error al cargar faltantes de caja'));
+    } finally {
+      setDeficitsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSection !== 'deficits') return;
+    const timer = window.setTimeout(loadDeficits, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, loadDeficits]);
+
+  const resolveDeficitCharge = async (chargeId: string, status: 'COLLECTED' | 'WRITTEN_OFF') => {
+    setSavingCharge(chargeId);
+    try {
+      await cajaService.updateDeficitCharge(chargeId, {
+        status,
+        responsibleUserId: responsibleDrafts[chargeId] || undefined,
+      });
+      toast.success(status === 'COLLECTED' ? 'Cobro registrado al responsable' : 'Faltante condonado');
+      await loadDeficits();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Error al resolver el faltante'));
+    } finally {
+      setSavingCharge(null);
+    }
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(loadRegisters, 0);
@@ -195,6 +251,14 @@ export function ControlDashboardCajaView({
               >
                 Normas y Procedimientos
               </TabsTrigger>
+              <TabsTrigger 
+                value="deficits"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+              >
+                Faltantes y Cobros
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -270,6 +334,69 @@ export function ControlDashboardCajaView({
 
         {activeSection === 'normas' && (
           <NormasProcedimientosPanel />
+        )}
+
+        {activeSection === 'deficits' && (
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="size-5 text-amber-500" /> Faltantes de Caja y Cobros</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {deficitsLoading ? (
+                <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
+              ) : deficitCharges.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No hay faltantes registrados. Cuando un cierre quede con diferencia negativa, aparecerá aquí para que la gerencia determine el cobro al responsable.</p>
+              ) : (
+                <div className="space-y-3">
+                  {deficitCharges.map((charge) => {
+                    const status = DEFICIT_STATUS[charge.status] || DEFICIT_STATUS.PENDING;
+                    const pending = charge.status === 'PENDING';
+                    return (
+                      <div key={charge.id} className="rounded-xl border border-border/50 bg-card/50 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none ${status.cls}`}>{status.label}</Badge>
+                              <p className="text-sm font-black">{charge.cashRegister?.name || 'Caja'}</p>
+                              <p className="text-xs text-muted-foreground">· {charge.session?.openedAt ? new Date(charge.session.openedAt).toLocaleString() : ''}</p>
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-4 text-xs">
+                              <span className="font-mono font-bold text-destructive">Faltante C$ {formatSalesAmount(Number(charge.amountNIO || 0))}</span>
+                              <span className="font-mono font-bold text-destructive">$ {formatSalesAmount(Number(charge.amountUSD || 0))}</span>
+                              {charge.responsibleUser && <span className="text-muted-foreground">Responsable: <b>{charge.responsibleUser.name}</b></span>}
+                              {charge.decidedBy && <span className="text-muted-foreground">Resuelto por: <b>{charge.decidedBy.name}</b></span>}
+                              {charge.chargedAt && <span className="text-muted-foreground">{new Date(charge.chargedAt).toLocaleString()}</span>}
+                            </div>
+                            {charge.notes && <p className="mt-1 text-xs text-muted-foreground">{charge.notes}</p>}
+                          </div>
+                          {pending && (
+                            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                              <Select value={responsibleDrafts[charge.id] || ''} onValueChange={(v) => setResponsibleDrafts((current) => ({ ...current, [charge.id]: v }))}>
+                                <SelectTrigger className="h-8 w-full sm:w-56 text-xs">
+                                  <SelectValue placeholder="Responsable (opcional)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {teamUsers.map((user: any) => (
+                                    <SelectItem key={user.id} value={user.id}>{user.name} {user.email ? `· ${user.email}` : ''}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button size="sm" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 text-white" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'COLLECTED')}>
+                                {savingCharge === charge.id ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Cobrar
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest" disabled={savingCharge === charge.id} onClick={() => void resolveDeficitCharge(charge.id, 'WRITTEN_OFF')}>
+                                {savingCharge === charge.id ? <Loader2 className="size-3.5 animate-spin" /> : <XCircle className="size-3.5" />} Condonar
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {activeSection === 'history' && (
@@ -534,6 +661,40 @@ export function ControlDashboardCajaView({
                             )}
                           </div>
                         </div>
+
+                        {(h.depositBankAccountId || (h.protocolData && Object.keys(h.protocolData).length > 0)) && (
+                          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {h.depositBankAccountId && (
+                              <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
+                                <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                                  <Landmark className="size-3.5" /> Depósito a banco del cierre
+                                </p>
+                                <div className="mt-2 space-y-1.5 text-xs">
+                                  <p className="text-muted-foreground">Fondo fijo que quedó en caja</p>
+                                  <p className="font-mono font-bold">C$ {formatSalesAmount(Number(h.keepInCashNIO || 0))} | $ {formatSalesAmount(Number(h.keepInCashUSD || 0))}</p>
+                                  {h.depositJournalEntryId && (
+                                    <p className="text-[10px] text-muted-foreground">Asiento contable generado (DEBE Banco / HABER Caja).</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {h.protocolData && Object.keys(h.protocolData).length > 0 && (
+                              <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                                <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                  <ListChecks className="size-3.5" /> Protocolo de datos del cierre
+                                </p>
+                                <div className="mt-2 space-y-1.5 text-xs">
+                                  {Object.entries(h.protocolData).map(([key, value]) => (
+                                    <div key={key} className="flex items-center justify-between gap-3">
+                                      <span className="capitalize text-muted-foreground">{String(key).replace(/_/g, ' ')}</span>
+                                      <span className="font-bold">{String(value ?? '—')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </AccordionContent>
                     </AccordionItem>
                   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, Calendar as CalendarIcon, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban
+  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban, Lock
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,7 +8,6 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Calendar } from '../ui/calendar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { expensesService } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
@@ -28,10 +27,28 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
-type DateFilterPreset = 'all' | 'last4' | 'last9' | 'month' | 'year' | 'specific';
+type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
+const PAYMENT_SOURCE_LABELS: Record<string, string> = {
+  EFECTIVO: 'Efectivo',
+  CASH: 'Efectivo',
+  BAC: 'BAC',
+  LAFISE: 'LaFise',
+  ATLANTIDA: 'Atlántida',
+  FICOHSA: 'Ficohsa',
+  BANPRO: 'Banpro',
+  BDF: 'BDF',
+  AVANZ: 'Avanz',
+  TRANSFER: 'Transferencia',
+  CHECK: 'Cheque',
+  CARD: 'Tarjeta',
+  BANK: 'Banco',
+  OTHER: 'Otro',
+};
+const paymentSourceLabel = (value?: string | null) => PAYMENT_SOURCE_LABELS[String(value || '').toUpperCase()] || value || '-';
+const toIsoDate = (d: Date) => d.toISOString().split('T')[0];
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -42,7 +59,7 @@ const statusOpts = [
   { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
+export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
@@ -55,7 +72,24 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>({ type: 'none' });
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all');
-  const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
+  const [rangeFrom, setRangeFrom] = useState<string>('');
+  const [rangeTo, setRangeTo] = useState<string>('');
+  const [appliedRange, setAppliedRange] = useState<{ from: string; to: string } | null>(null);
+
+  useEffect(() => {
+    if (datePreset === 'month' || datePreset === 'year') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const from = new Date(today);
+      if (datePreset === 'month') from.setMonth(from.getMonth() - 1);
+      else from.setFullYear(from.getFullYear() - 1);
+      onDateChange?.(toIsoDate(from), toIsoDate(today));
+    } else if (datePreset === 'range') {
+      onDateChange?.(appliedRange?.from, appliedRange?.to);
+    } else {
+      onDateChange?.(undefined, undefined);
+    }
+  }, [datePreset, appliedRange, onDateChange]);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [importOpen, setImportOpen] = useState(false);
@@ -115,46 +149,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
 
   const uniqueCategories = Array.from(new Set(data.map(g => String(g.category || '').toUpperCase()).filter(Boolean)));
 
-  const toDayNumber = (value?: string | null): number | null => {
-    if (!value) return null;
-    const normalized = String(value).includes('T') ? String(value).split('T')[0] : String(value);
-    const date = new Date(`${normalized}T00:00:00`);
-    const time = date.getTime();
-    return Number.isNaN(time) ? null : time;
-  };
-
-  const getPresetRange = (): { from: number | null; to: number | null } => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = today.getTime();
-
-    if (datePreset === 'all') return { from: null, to: null };
-    if (datePreset === 'specific') {
-      const selected = specificDate ? new Date(specificDate.getFullYear(), specificDate.getMonth(), specificDate.getDate()) : null;
-      const value = selected ? selected.getTime() : null;
-      return { from: value, to: value };
-    }
-    if (datePreset === 'month') {
-      const from = new Date(today);
-      from.setMonth(from.getMonth() - 1);
-      return { from: from.getTime(), to: end };
-    }
-    const from = new Date(today);
-    from.setFullYear(from.getFullYear() - 1);
-    return { from: from.getTime(), to: end };
-  };
-
   const filtered = data.filter(g => {
     const matchesSearch =
       (g.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (g.category || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
-
-    const expenseDate = toDayNumber(g.date);
-    const { from: fromDate, to: toDate } = getPresetRange();
-    if (fromDate !== null && (expenseDate === null || expenseDate < fromDate)) return false;
-    if (toDate !== null && (expenseDate === null || expenseDate > toDate)) return false;
 
     if (activeKpiFilter.type === 'pending') return String(g.status || '').toUpperCase() === 'PENDING';
     if (activeKpiFilter.type === 'category') return String(g.category || '').toUpperCase() === activeKpiFilter.category;
@@ -276,7 +276,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
         const currencyRaw = String(row.currency || row.moneda || displayCurrency || 'NIO').trim().toUpperCase();
         const currency = currencyRaw === 'USD' ? 'USD' : 'NIO';
         const paymentSourceRaw = String(row.paymentsource || row.cuentaorigen || 'EFECTIVO').trim().toUpperCase();
-        const paymentSource = paymentSourceOptions.includes(paymentSourceRaw as any) ? paymentSourceRaw : 'EFECTIVO';
+        const paymentSource = paymentSourceOptions.includes(paymentSourceRaw as any) ? paymentSourceRaw : (paymentSourceRaw === 'CASH' ? 'EFECTIVO' : 'EFECTIVO');
         const paidTo = String(row.paidto || row.pagadoa || '').trim();
         const reference = String(row.reference || row.referencia || '').trim();
         const notes = String(row.notes || row.notas || '').trim();
@@ -343,7 +343,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
     { key: 'paymentSource', header: 'Cuenta Origen', width: '130px',
-      render: (val) => <span className="text-xs font-black text-muted-foreground">{val || '-'}</span> },
+      render: (val) => <span className="text-xs font-black text-muted-foreground">{paymentSourceLabel(val)}</span> },
     { key: 'amount',      header: 'Monto',     width: '130px',
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
@@ -353,6 +353,11 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
+    const row = data.find(x => x.id === id);
+    if (row && String(row.status || '').toUpperCase() === 'PAID') {
+      toast.error('El gasto ya está PAGADO y contabilizado; no puede editarse en línea. Ábrelo en modo Ver.');
+      throw new Error('PAID_LOCKED');
+    }
     const updateToastId = toast.loading('Guardando cambios en el gasto...');
     try { await expensesService.update(id as string, updates); toast.success('Gasto actualizado', { id: updateToastId }); onRefresh(); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
@@ -441,8 +446,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
+    const isPaidLocked = !isNew && String(localDoc.status || '').toUpperCase() === 'PAID';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
-    const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : canPerform('PURCHASES_EXPENSES', 'edit');
+    const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : (canPerform('PURCHASES_EXPENSES', 'edit') && !isPaidLocked);
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
     return (
@@ -464,7 +470,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <Trash2 className="size-3 mr-2" /> Eliminar
                 </Button>
              )}
-            {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && (
+            {isPaidLocked && (
+              <div className="flex w-full items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-600 sm:w-auto">
+                <Lock className="size-3.5" /> Gasto pagado y contabilizado · Solo lectura
+              </div>
+            )}
+            {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && !isPaidLocked && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Gasto
               </Button>
@@ -494,7 +505,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={!canMutate}
                       value={localDoc.description || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
                       className="h-8 text-xs font-bold" 
@@ -504,7 +515,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
                     <select
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={!canMutate}
                       value={localDoc.category || 'OPERATIVO'}
                       onChange={(e) => {
                         const cat = e.target.value;
@@ -527,7 +538,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={!canMutate}
                       type="date" 
                       value={localDoc.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, date: new Date(e.target.value).toISOString() })} 
@@ -545,7 +556,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                     <Combobox
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={!canMutate}
                       options={suppliers
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
@@ -573,7 +584,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
                     >
                       {paymentSourceOptions.map(source => (
-                        <option key={source} value={source}>{source}</option>
+                        <option key={source} value={source}>{paymentSourceLabel(source)}</option>
                       ))}
                     </select>
                   </div>
@@ -602,7 +613,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                      disabled={!canMutate}
                       value={localDoc.reference || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
                       className="h-8 text-xs" 
@@ -639,7 +650,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                    <div className="w-1/2">
                       <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
                       <select
-                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                        disabled={!canMutate}
                         value={localDoc.currency || 'NIO'}
                         onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
                         className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
@@ -651,7 +662,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
                       <Input 
-                        disabled={isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canPerform('PURCHASES_EXPENSES', 'edit')}
+                        disabled={!canMutate}
                         type="number" 
                         min="0" 
                         value={localDoc.amount || ''} 
@@ -738,28 +749,42 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
           <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
-            <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1">
+            <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1 sm:w-auto">
+              <Button variant={datePreset === 'all' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('all')}>Todo</Button>
               <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
               <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
             </div>
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant={datePreset === 'specific' ? 'default' : 'outline'} className="h-10 w-full min-w-0 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
-                    <CalendarIcon className="size-4" />
-                    {datePreset === 'specific' && specificDate ? specificDate.toLocaleDateString() : 'Fecha específica'}
+                  <Button variant={datePreset === 'range' ? 'default' : 'outline'} className="h-10 w-full min-w-0 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                    <CalendarRange className="size-4" />
+                    {datePreset === 'range' && appliedRange ? `${appliedRange.from} → ${appliedRange.to}` : 'Rango de fechas'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="single"
-                    selected={specificDate}
-                    onSelect={(date) => {
-                      setSpecificDate(date);
-                      if (date) setDatePreset('specific');
-                    }}
-                    initialFocus
-                  />
+                <PopoverContent className="w-auto p-3" align="end">
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Desde</p>
+                        <Input type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} className="h-9 w-full text-xs sm:w-40" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Hasta</p>
+                        <Input type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} className="h-9 w-full text-xs sm:w-40" />
+                      </div>
+                    </div>
+                    <Button
+                      className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-widest"
+                      disabled={!rangeFrom || !rangeTo || rangeFrom > rangeTo}
+                      onClick={() => {
+                        setAppliedRange({ from: rangeFrom, to: rangeTo });
+                        setDatePreset('range');
+                      }}
+                    >
+                      Aplicar rango
+                    </Button>
+                  </div>
                 </PopoverContent>
               </Popover>
             </div>
@@ -778,10 +803,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                 className="col-span-2 h-10 min-w-0 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto"
                 onClick={() => {
                   setDatePreset('all');
-                  setSpecificDate(undefined);
+                  setAppliedRange(null);
+                  setRangeFrom('');
+                  setRangeTo('');
                 }}
               >
-                Todo
+                Limpiar fechas
               </Button>
             )}
             {activeKpiFilter.type === 'category' && (
@@ -839,7 +866,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
               {canPerform('PURCHASES_EXPENSES', 'delete') && ['PENDING', 'APPROVED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Rechazar gasto" aria-label="Rechazar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => void handleStatusAction(row, 'REJECTED')}><Ban className="size-4" /></Button>
               )}
-              <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              {(['PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase())) && (
+                <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+              )}
+              {String(row.status || '').toUpperCase() === 'PAID' && (
+                <Button title="Ver (gasto pagado y contabilizado, solo lectura)" aria-label="Ver gasto" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted/40" onClick={() => setEditingId(row.id)}><Lock className="size-4" /></Button>
+              )}
               <PurchaseAuditButton entity="EXPENSE" entityId={row.id} title="Auditoria del Gasto" />
               {canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>

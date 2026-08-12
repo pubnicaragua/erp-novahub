@@ -35,10 +35,22 @@ export function useBranchScope() {
     return allBranches.find(b => b.id === selectedBranchId) || null;
   }, [allBranches, selectedBranchId]);
 
-  const filterByBranch = useCallback(<T extends { branchId?: string | null }>(items: T[]): T[] => {
+  const branchWarehouseIds = useMemo(() => {
+    if (!selectedBranch) return [] as string[];
+    return [...new Set<string>([
+      selectedBranch.warehouseId,
+      ...((selectedBranch.warehouses || []) as any[]).map((w: any) => w.id),
+    ].filter(Boolean))];
+  }, [selectedBranch]);
+
+  const filterByBranch = useCallback(<T extends { branchId?: string | null; warehouseId?: string | null }>(items: T[]): T[] => {
     if (!selectedBranchId) return items;
-    return items.filter(item => item.branchId === selectedBranchId);
-  }, [selectedBranchId]);
+    return items.filter((item) => {
+      if (!item.branchId && !item.warehouseId) return true;
+      if (item.branchId) return item.branchId === selectedBranchId;
+      return branchWarehouseIds.includes(item.warehouseId as string);
+    });
+  }, [selectedBranchId, branchWarehouseIds]);
 
   const hasBranchAccess = useCallback((branchId: string): boolean => {
     if (!isRestricted) return true;
@@ -52,6 +64,7 @@ export function useBranchScope() {
     selectedBranchId,
     setSelectedBranchId,
     filterByBranch,
+    branchWarehouseIds,
     hasBranchAccess,
     isRestricted,
   };

@@ -286,9 +286,10 @@ function getInvoiceCustomerName(invoice: PosInvoice) {
 
 interface FacturacionCajaViewProps {
   onNavigateToControlCaja?: (registerId?: string) => void;
+  branchId?: string;
 }
 
-export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
+export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
   const { user, canPerform } = useAuth();
   const canPayPos = canPerform('RETAIL_POS', 'pay');
@@ -356,7 +357,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
         exchangeRate: Number(item.exchangeRate || 1),
         basePrice: Number(item.basePrice),
       })));
-      setSelectedPriceListId((current) => current || normalizedLists.find((list: PriceList) => list.isDefault)?.id || normalizedLists[0]?.id || '');
+      setSelectedPriceListId((current) => {
+        if (current) return current;
+        const retailList = normalizedLists.find((list: PriceList) => String(list.code || '').toUpperCase() === 'RETAIL' || String(list.name || '').toLowerCase().includes('minorista'));
+        return retailList?.id || normalizedLists.find((list: PriceList) => list.isDefault)?.id || normalizedLists[0]?.id || '';
+      });
     }).catch(() => undefined);
     return () => { active = false; };
   }, [user?.tenantId]);
@@ -411,9 +416,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     setLoading(true);
     try {
       const cashRegisters = await cajaService.getRegisters();
-      setRegisters(cashRegisters);
+      const branchRegisters = branchId ? cashRegisters.filter((r) => !r.branchId || r.branchId === branchId) : cashRegisters;
+      setRegisters(branchRegisters);
 
-      if (cashRegisters.length === 0) {
+      if (branchRegisters.length === 0) {
         try {
           setRegisterAvailability(await cajaService.getRegisterAvailability());
         } catch {
@@ -426,13 +432,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
       }
 
       let initialRegisterId = '';
-      if (cashRegisters.length > 0) {
-        const openRegister = cashRegisters.find(r => r.hasActiveSession);
-        initialRegisterId = openRegister ? openRegister.id : cashRegisters[0].id;
+      if (branchRegisters.length > 0) {
+        const openRegister = branchRegisters.find(r => r.hasActiveSession);
+        initialRegisterId = openRegister ? openRegister.id : branchRegisters[0].id;
         setSelectedRegisterId(initialRegisterId);
       }
 
-      const initialWarehouseId = cashRegisters.find(r => r.id === initialRegisterId)?.resolvedWarehouseId || undefined;
+      const initialWarehouseId = branchRegisters.find(r => r.id === initialRegisterId)?.resolvedWarehouseId || undefined;
 
       const [availableProducts, registeredCustomers] = await Promise.all([
         cajaService.getProducts(undefined, initialWarehouseId),
@@ -445,7 +451,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [branchId]);
 
   const loadRecentInvoices = useCallback(async (registerId: string) => {
     try {
@@ -653,7 +659,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   const handleCustomerChange = (value: string) => {
     const customerId = value === GENERAL_CUSTOMER_SELECT_VALUE ? undefined : value;
     const customer = customers.find((item) => item.id === customerId);
-    const nextListId = customer?.priceListId || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
+    const retailList = priceLists.find((list) => String(list.code || '').toUpperCase() === 'RETAIL' || String(list.name || '').toLowerCase().includes('minorista'));
+    const nextListId = customer
+      ? customer.priceListId || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || ''
+      : retailList?.id || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
     setSelectedCustomerId(customerId);
     setSelectedPriceListId(nextListId);
     setCart((current) => current.map((item) => {

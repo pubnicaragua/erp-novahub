@@ -14,6 +14,7 @@ import type { Supplier, EntityStatus } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { toast } from 'sonner';
 
 export function ProveedoresPage() {
   const { canPerform } = useAuth();
@@ -26,6 +27,8 @@ export function ProveedoresPage() {
 
   const [formData, setFormData] = useState<Partial<Supplier>>({
     name: '',
+    type: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL',
+    ruc: '',
     email: '',
     phone: '',
     contactName: '',
@@ -59,6 +62,8 @@ export function ProveedoresPage() {
       setEditingProveedor(proveedor);
       setFormData({
         name: proveedor.name,
+        type: String(proveedor.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY',
+        ruc: proveedor.ruc || '',
         email: proveedor.email,
         phone: proveedor.phone,
         contactName: proveedor.contactName,
@@ -66,12 +71,21 @@ export function ProveedoresPage() {
       });
     } else {
       setEditingProveedor(null);
-      setFormData({ name: '', email: '', phone: '', contactName: '', status: 'ACTIVE' as EntityStatus });
+      setFormData({ name: '', type: 'COMPANY' as 'COMPANY' | 'INDIVIDUAL', ruc: '', email: '', phone: '', contactName: '', status: 'ACTIVE' as EntityStatus });
     }
     setIsDialogOpen(true);
   };
 
   const handleSave = async () => {
+    const isCompany = String(formData.type || 'COMPANY').toUpperCase() === 'COMPANY';
+    if (!formData.name?.trim()) {
+      toast.error('El nombre del proveedor es obligatorio');
+      return;
+    }
+    if (isCompany && !formData.ruc?.trim()) {
+      toast.error('El RUC es obligatorio para un proveedor empresa');
+      return;
+    }
     try {
       if (editingProveedor) {
         await suppliersService.update(editingProveedor.id, formData);
@@ -80,8 +94,9 @@ export function ProveedoresPage() {
       }
       fetchProveedores();
       setIsDialogOpen(false);
-    } catch (error) {
-      console.error('Error saving supplier:', error);
+      toast.success(editingProveedor ? 'Proveedor actualizado' : 'Proveedor creado');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al guardar el proveedor');
     }
   };
 
@@ -117,8 +132,24 @@ export function ProveedoresPage() {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="nombre">Nombre de la Empresa</Label>
+                  <Label htmlFor="nombre">Nombre {formData.type === 'COMPANY' ? 'de la Empresa' : 'del Proveedor'}</Label>
                   <Input id="nombre" value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Tipo</Label>
+                    <Select value={formData.type as string || 'COMPANY'} onValueChange={(v: any) => setFormData({ ...formData, type: v })}>
+                      <SelectTrigger><SelectValue placeholder="Selecciona el tipo" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="COMPANY">Empresa</SelectItem>
+                        <SelectItem value="INDIVIDUAL">Individual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ruc">RUC {formData.type === 'COMPANY' && <span className="text-destructive">*</span>}</Label>
+                    <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
+                  </div>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="contacto">Nombre del Contacto Principal</Label>

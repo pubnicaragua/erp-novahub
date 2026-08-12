@@ -3,8 +3,11 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../..
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Badge } from '../../ui/badge';
-import { Calculator, ArrowDownToLine, Plus, Printer, Lock, Vault, BarChart3 } from 'lucide-react';
-import { CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode } from '../../../services/caja.service';
+import { Input } from '../../ui/input';
+import { Switch } from '../../ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Calculator, ArrowDownToLine, Plus, Printer, Lock, Vault, BarChart3, Landmark, Loader2 } from 'lucide-react';
+import { CashRegisterSession, SessionLog, CashRegisterCount, CashClosureMode, cajaService } from '../../../services/caja.service';
 import { MovimientoManualModal } from './MovimientoManualModal';
 import { DenominationCounter, NIO_BILLS, NIO_COINS, USD_BILLS, USD_COINS, DenominationState } from './DenominationCounter';
 import { toast } from 'sonner';
@@ -13,16 +16,15 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { generateSessionSummaryPDF } from '../../../utils/pdfGenerator';
 import { formatSalesAmount } from '../../../utils/salesPriceList';
+import { api, getApiErrorMessage } from '../../../services/api';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/dialog";
 
 interface SesionActivaStepProps {
   session: CashRegisterSession;
@@ -52,6 +54,9 @@ export function SesionActivaStep({
   const [modalOpen, setModalOpen] = useState(false);
   const [isCloseAlertOpen, setIsCloseAlertOpen] = useState(false);
   const [isRecounting, setIsRecounting] = useState(false);
+  const [closeConfig, setCloseConfig] = useState<{ norms: any; protocol: any; bankAccounts: any[] } | null>(null);
+  const [protocolValues, setProtocolValues] = useState<Record<string, any>>({});
+  const [closing, setClosing] = useState(false);
   const [nioDenominations, setNioDenominations] = useState<DenominationState[]>([
     ...NIO_BILLS.map(v => ({ value: v, quantity: 0, type: 'bill' as const })),
     ...NIO_COINS.map(v => ({ value: v, quantity: 0, type: 'coin' as const }))
@@ -60,6 +65,29 @@ export function SesionActivaStep({
     ...USD_BILLS.map(v => ({ value: v, quantity: 0, type: 'bill' as const })),
     ...USD_COINS.map(v => ({ value: v, quantity: 0, type: 'coin' as const }))
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [norms, protocol, banksRes] = await Promise.all([
+          cajaService.getCashNorms(),
+          cajaService.getClosureProtocol(),
+          api.get<any[]>('/bank-accounts'),
+        ]);
+        if (cancelled) return;
+        setCloseConfig({
+          norms,
+          protocol,
+          bankAccounts: Array.isArray(banksRes) ? banksRes : ((banksRes as any)?.data || []),
+        });
+      } catch {
+        // La configuración es solo informativa; el cierre funciona igual.
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const renderLogIcon = (type: string) => {
     switch(type) {
@@ -151,10 +179,27 @@ export function SesionActivaStep({
   };
 
   const handleClose = () => {
+    setProtocolValues({});
     setIsCloseAlertOpen(true);
   };
 
+  const norms = closeConfig?.norms || {};
+  const protocol = closeConfig?.protocol || { enabled: false, fields: [] as any[] };
+  const protocolFields: any[] = protocol.enabled && Array.isArray(protocol.fields) ? protocol.fields : [];
+  const depositEnabled = Boolean(norms.bankTransferEnabled && norms.bankAccountId);
+  const keepInCashNIO = depositEnabled ? Math.max(0, Number(norms.keepInCashNIO || 0)) : 0;
+  const keepInCashUSD = depositEnabled ? Math.max(0, Number(norms.keepInCashUSD || 0)) : 0;
+  const depositNIO = Math.max(0, contadoNIO - keepInCashNIO);
+  const depositUSD = Math.max(0, contadoUSD - keepInCashUSD);
+  const depositBank = closeConfig?.bankAccounts.find((b: any) => b.id === norms.bankAccountId);
+
   const confirmCloseAction = async () => {
+    const missing = protocolFields.filter((field) => field.required && (protocolValues[field.id] === undefined || protocolValues[field.id] === null || String(protocolValues[field.id]).trim() === ''));
+    if (missing.length > 0) {
+      toast.error(`El protocolo de cierre requiere: ${missing.map((field) => field.label).join(', ')}.`);
+      return;
+    }
+    setClosing(true);
     try {
       const denoms = buildDenominations();
 
@@ -164,11 +209,47 @@ export function SesionActivaStep({
         denominations: denoms,
         notes: diferencia !== 0 ? `Diferencia de ${symbol} ${formatSalesAmount(diferencia)}` : 'Cuadre exacto',
         countAttempt: latestCount?.attempt,
+        protocolData: protocolFields.length > 0 ? protocolValues : undefined,
       });
       setIsCloseAlertOpen(false);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Error al cerrar sesión');
+      toast.error(getApiErrorMessage(err, 'Error al cerrar sesión'));
+    } finally {
+      setClosing(false);
     }
+  };
+
+  const renderProtocolField = (field: any) => {
+    const value = protocolValues[field.id] ?? (field.type === 'boolean' ? false : '');
+    const setValue = (next: any) => setProtocolValues((current) => ({ ...current, [field.id]: next }));
+    const common = { className: 'h-9 w-full text-xs', placeholder: field.placeholder || undefined };
+    if (field.type === 'number') {
+      return <Input type="number" {...common} value={String(value)} onChange={(e) => setValue(e.target.value)} />;
+    }
+    if (field.type === 'date') {
+      return <Input type="date" {...common} value={String(value)} onChange={(e) => setValue(e.target.value)} />;
+    }
+    if (field.type === 'boolean') {
+      return (
+        <div className="flex items-center gap-2">
+          <Switch checked={Boolean(value)} onCheckedChange={setValue} />
+          <span className="text-xs text-muted-foreground">{value ? 'Sí' : 'No'}</span>
+        </div>
+      );
+    }
+    if (field.type === 'select') {
+      return (
+        <Select value={String(value)} onValueChange={setValue}>
+          <SelectTrigger className="h-9 w-full text-xs"><SelectValue placeholder={field.placeholder || 'Selecciona una opción'} /></SelectTrigger>
+          <SelectContent>
+            {(field.options || []).map((option: string) => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+    return <Input {...common} value={String(value)} onChange={(e) => setValue(e.target.value)} />;
   };
 
   const totalVentasNIO = logs.filter(l => l.type === 'SALE').reduce((acc, l) => acc + Number(l.amountNIO || 0), 0);
@@ -450,22 +531,75 @@ export function SesionActivaStep({
       </Card>
       </div>
 
-      <AlertDialog open={isCloseAlertOpen} onOpenChange={setIsCloseAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cerrar Caja?</AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Está seguro de cerrar la caja definitivamente? Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmCloseAction} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              Cerrar Caja
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog open={isCloseAlertOpen} onOpenChange={(open) => { if (!open && !closing) setIsCloseAlertOpen(false); }}>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>¿Cerrar Caja?</DialogTitle>
+            <DialogDescription>
+              El arqueo final se guardará y la sesión quedará cerrada. Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-muted-foreground">Efectivo contado</span>
+                <span className="font-mono font-black">{symbol} {formatSalesAmount(totalContadoConverted)}</span>
+              </div>
+              <p className="mt-0.5 text-right text-[10px] text-muted-foreground">C$ {formatSalesAmount(contadoNIO)} | $ {formatSalesAmount(contadoUSD)}</p>
+              {showSystemAmounts && (
+                <div className={`mt-2 flex items-center justify-between border-t border-border/40 pt-2 text-xs ${diferencia === 0 ? 'text-emerald-600' : 'text-destructive'}`}>
+                  <span className="font-bold">Diferencia vs sistema</span>
+                  <span className="font-mono font-black">{diferencia > 0 ? '+' : ''}{symbol} {formatSalesAmount(diferencia)}</span>
+                </div>
+              )}
+            </div>
+
+            {depositEnabled && (
+              <div className="space-y-2 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
+                  <Landmark className="size-4" /> Depósito del cierre a banco
+                </p>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Cuenta destino</span>
+                  <span className="font-bold">{depositBank ? `${depositBank.bankName} · ${depositBank.accountNumber}` : 'Cuenta no encontrada'}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Fondo fijo que queda en caja (saldo de inicio)</span>
+                  <span className="font-mono font-bold">C$ {formatSalesAmount(keepInCashNIO)} | $ {formatSalesAmount(keepInCashUSD)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-indigo-500/20 pt-2 text-xs">
+                  <span className="font-bold text-indigo-600">Monto a depositar</span>
+                  <span className="font-mono font-black text-indigo-600">C$ {formatSalesAmount(depositNIO)} | $ {formatSalesAmount(depositUSD)}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Se generará un asiento contable DEBE Banco / HABER Caja.</p>
+              </div>
+            )}
+
+            {protocolFields.length > 0 && (
+              <div className="space-y-3 rounded-xl border border-border/50 bg-background/40 p-3">
+                <p className="text-xs font-black uppercase tracking-widest text-foreground">Protocolo de datos del cierre</p>
+                {protocolFields.map((field) => (
+                  <div key={field.id}>
+                    <label className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      {field.label}
+                      {field.required && <span className="text-destructive">*</span>}
+                    </label>
+                    {renderProtocolField(field)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setIsCloseAlertOpen(false)} disabled={closing} className="w-full sm:w-auto">Cancelar</Button>
+            <Button onClick={() => void confirmCloseAction()} disabled={closing} className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white sm:w-auto">
+              {closing ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />} Cerrar Caja
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

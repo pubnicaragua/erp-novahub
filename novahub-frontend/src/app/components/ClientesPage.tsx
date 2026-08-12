@@ -8,12 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { toast } from 'sonner';
 
 import { customersService } from '../services/ventas.service';
 import type { Customer } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { getApiErrorMessage } from '../services/api';
 
 export function ClientesPage() {
   const { canPerform } = useAuth();
@@ -80,6 +82,15 @@ export function ClientesPage() {
   };
 
   const handleSave = async () => {
+    const isCompany = String(formData.type || 'company').toUpperCase() === 'COMPANY';
+    if (!formData.name?.trim()) {
+      toast.error('El nombre del cliente es obligatorio');
+      return;
+    }
+    if (isCompany && !formData.ruc?.trim()) {
+      toast.error('El RUC es obligatorio para una empresa');
+      return;
+    }
     try {
       if (editingCliente) {
         await customersService.update(editingCliente.id, formData);
@@ -87,9 +98,10 @@ export function ClientesPage() {
         await customersService.create(formData);
       }
       setIsDialogOpen(false);
+      toast.success(editingCliente ? 'Cliente actualizado' : 'Cliente creado');
       fetchData();
-    } catch (error) {
-      console.error('Error saving customer:', error);
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, 'Error al guardar el cliente'));
     }
   };
 
@@ -144,9 +156,9 @@ export function ClientesPage() {
                       <Label htmlFor="razonSocial">Razón Social</Label>
                       <Input id="razonSocial" value={formData.razonSocial || ''} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} />
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                       <div className="grid gap-2 col-span-2">
-                        <Label htmlFor="ruc">RUC</Label>
+                        <Label htmlFor="ruc">RUC {formData.type === 'company' && <span className="text-destructive">*</span>}</Label>
                         <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
                       </div>
                       <div className="grid gap-2">
