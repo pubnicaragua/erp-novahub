@@ -25,7 +25,7 @@ interface ReportesPageProps {
 }
 
 export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const [dateRange, setDateRange] = useState('ultimo-mes');
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'reportes-financieros');
   
@@ -138,8 +138,8 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
             const hasRequired = user?.enabledModules?.includes(tab.module);
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('REPORTS_'));
             const hasFallback = user?.enabledModules?.includes('REPORTS') && !hasSpecificSubmodules;
-            const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
-            const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'admin@novahub.com';
+            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
+            const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'superadmin';
             if (!hasAccess) return null;
             if (tab.superOnly && !isSuperAdmin) return null;
             return (

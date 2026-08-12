@@ -165,7 +165,7 @@ export function ConciliacionView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATIONS', 'edit') && (
+            {detail.status !== 'COMPLETED' && canPerform('ACCOUNTING_RECONCILIATION', 'approve') && (
               <>
                 <Button
                   variant="outline"
@@ -247,7 +247,7 @@ export function ConciliacionView() {
                       <TableCell className="text-center">
                         <Checkbox
                           checked={!!item.matched}
-                          disabled={!canPerform('ACCOUNTING_RECONCILIATIONS', 'edit')}
+                          disabled={!canPerform('ACCOUNTING_RECONCILIATION', 'edit')}
                           onCheckedChange={(c) => toggleMatched(item.id, !!c)}
                         />
                       </TableCell>
@@ -282,7 +282,7 @@ export function ConciliacionView() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {canPerform('ACCOUNTING_RECONCILIATIONS', 'create') && (
+          {canPerform('ACCOUNTING_RECONCILIATION', 'create') && (
               <Button
               onClick={() => setShowCreate(true)}
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"

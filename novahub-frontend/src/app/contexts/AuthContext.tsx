@@ -36,7 +36,6 @@ export type Module =
   | 'inventario_productos'
   | 'contabilidad'
   | 'dashboard-ventas'
-  | 'dashboard-cxc'
   | 'qa-console';
 
 export type SubModule = string;
@@ -47,7 +46,28 @@ export interface Permission {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canDeactivate: boolean;
+  canCancel: boolean;
+  canImport: boolean;
+  canExport: boolean;
+  [action: string]: string | boolean | undefined;
 }
+
+export type PermissionAction =
+  | 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'cancel'
+  | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
+  | 'close' | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
+  | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
+  | 'generate' | 'send' | 'print' | 'manage';
+
+// La matriz de roles expone CRUD, importación/exportación y una acción de
+// flujo. Estas acciones legacy siguen aceptándose en las vistas, pero ahora
+// se resuelven contra "Aprobar" cuando la vista tiene ese permiso disponible.
+const DELETE_COMPATIBLE_ACTIONS: PermissionAction[] = ['deactivate', 'cancel', 'reject', 'reverse'];
+const CREATE_COMPATIBLE_ACTIONS: PermissionAction[] = ['duplicate'];
+const APPROVAL_COMPATIBLE_ACTIONS: PermissionAction[] = [
+  'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'apply', 'reconcile', 'convert', 'send',
+];
 
 export interface User {
   id: string;
@@ -77,7 +97,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   hasAccess: (module: string) => boolean;
-  canPerform: (module: string, action: 'view' | 'create' | 'edit' | 'delete') => boolean;
+  canPerform: (module: string, action: PermissionAction) => boolean;
   login: (email: string, password: string) => Promise<void>;
   /**
    * Sets the auth session from a pre-existing token + user pair.
@@ -115,6 +135,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: true,
         canEdit: true,
         canDelete: true,
+        canDeactivate: true,
+        canCancel: true,
+        canImport: true,
+        canExport: true,
       }));
     case 'manager':
       return ALL_MODULES.map(module => ({
@@ -123,6 +147,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
         canEdit: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
         canDelete: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canDeactivate: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canCancel: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canImport: !['roles', 'configuracion', 'schema', 'suscripciones'].includes(module),
+        canExport: true,
       }));
     case 'employee':
       return ALL_MODULES.map(module => ({
@@ -131,6 +159,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: false, // Por defecto no crea nada sin un rol específico
         canEdit: false,   // Por defecto no edita nada sin un rol específico
         canDelete: false,
+        canDeactivate: false,
+        canCancel: false,
+        canImport: false,
+        canExport: false,
       }));
     case 'partner':
       return ALL_MODULES.map(module => ({
@@ -139,6 +171,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: ['suscripciones', 'clientes'].includes(module),
         canEdit: ['suscripciones', 'clientes'].includes(module),
         canDelete: false,
+        canDeactivate: false,
+        canCancel: false,
+        canImport: false,
+        canExport: ['notificaciones', 'configuracion', 'reportes', 'clientes'].includes(module),
       }));
     case 'viewer':
       return ALL_MODULES.map(module => ({
@@ -147,6 +183,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: false,
         canEdit: false,
         canDelete: false,
+        canDeactivate: false,
+        canCancel: false,
+        canImport: false,
+        canExport: false,
       }));
     default:
       return ALL_MODULES.map(module => ({
@@ -155,6 +195,10 @@ const getPermissionsByRole = (role: Role): Permission[] => {
         canCreate: false,
         canEdit: false,
         canDelete: false,
+        canDeactivate: false,
+        canCancel: false,
+        canImport: false,
+        canExport: false,
       }));
   }
 };
@@ -173,7 +217,7 @@ const createUserObject = (apiPayload: any): User => {
   const role = normalizeRole(apiUser?.role);
   
   // Platform Admins: SuperAdmin, Partner, or DEV admin
-  const isPlatformAdmin = ['superadmin', 'partner'].includes(role) || apiUser?.id === 'admin-001';
+  const isPlatformAdmin = ['superadmin', 'partner'].includes(role);
   
   const moduleEnumMapInverse: Record<string, string> = {
     'SALES': 'ventas',
@@ -191,6 +235,13 @@ const createUserObject = (apiPayload: any): User => {
     'NOTIFICATIONS': 'notificaciones',
     'REPORTS': 'reportes',
     'TICKETS': 'tickets',
+    'ACCOUNTING': 'contabilidad',
+    'CONFIGURATION': 'configuracion',
+    'CONFIG_ROLES': 'roles',
+    'CONFIG_USERS': 'usuarios',
+    'SUBSCRIPTIONS': 'suscripciones',
+    'QA_CONSOLE': 'qa-console',
+    'RETAIL_POS': 'ventas',
     'FINANCING': 'financiamiento-pyme',
     'LEGAL': 'asesoria-legal',
     'HR_TRAINING': 'centro-capacitacion',
@@ -198,6 +249,17 @@ const createUserObject = (apiPayload: any): User => {
   };
 
   const defaultPermissions = getPermissionsByRole(role);
+  const specialPermissionActions = [
+    'approve', 'reject', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay',
+    'apply', 'reconcile', 'reverse', 'duplicate', 'convert', 'assign', 'download',
+    'generate', 'send', 'print', 'manage',
+  ] as const;
+  const mapSpecialPermissionFlags = (permission: any) => Object.fromEntries(
+    specialPermissionActions.map(action => [
+      `can${action.charAt(0).toUpperCase()}${action.slice(1)}`,
+      permission?.[action] === true,
+    ]),
+  );
   
   // Normalizar permisos del servidor: puede venir como objeto {moduleName: {read,write,delete}} o como array
   const rawPerms = apiUser.permissions;
@@ -224,21 +286,32 @@ const createUserObject = (apiPayload: any): User => {
     if (serverMatch) {
       return {
         module: def.module,
-        canView: !!serverMatch.read,
-        canCreate: serverMatch.create !== undefined ? !!serverMatch.create : !!serverMatch.write,
-        canEdit: serverMatch.edit !== undefined ? !!serverMatch.edit : !!serverMatch.write,
-        canDelete: !!serverMatch.delete
+        canView: serverMatch.read !== undefined ? !!serverMatch.read : serverMatch.view !== undefined ? !!serverMatch.view : !!serverMatch.canView,
+        canCreate: serverMatch.create !== undefined ? !!serverMatch.create : serverMatch.write !== undefined ? !!serverMatch.write : !!serverMatch.canCreate,
+        canEdit: serverMatch.edit !== undefined ? !!serverMatch.edit : serverMatch.write !== undefined ? !!serverMatch.write : !!serverMatch.canEdit,
+        canDelete: serverMatch.delete !== undefined ? !!serverMatch.delete : !!serverMatch.canDelete,
+        canDeactivate: serverMatch.deactivate !== undefined ? !!serverMatch.deactivate : !!serverMatch.delete,
+        canCancel: serverMatch.cancel !== undefined ? !!serverMatch.cancel : !!serverMatch.delete,
+        canImport: !!serverMatch.import,
+        canExport: !!serverMatch.export,
+        approve: Object.prototype.hasOwnProperty.call(serverMatch, 'approve') ? !!serverMatch.approve : undefined,
+        ...mapSpecialPermissionFlags(serverMatch),
       };
     }
     
     // Si tiene un rol personalizado pero no hay permiso explícito del servidor para este módulo
     // y NO es un admin global, denegamos cualquier acción de escritura/borrado.
-    if (apiUser.customRoleId && !isPlatformAdmin) {
+    if (apiUser.customRoleId && !['admin', 'superadmin', 'partner'].includes(role)) {
       return {
         ...def,
+        canView: false,
         canCreate: false,
         canEdit: false,
-        canDelete: false
+        canDelete: false,
+        canDeactivate: false,
+        canCancel: false,
+        canImport: false,
+        canExport: false,
       };
     }
     
@@ -248,13 +321,20 @@ const createUserObject = (apiPayload: any): User => {
   // Include granular permissions that were not in ALL_MODULES
   serverPermissionsSnippet.forEach((sp: any) => {
     const spMod = (sp.module || sp.id || '').toUpperCase();
-    if (!mergedPermissions.find(p => p.module.toUpperCase() === spMod)) {
+    const mappedModule = moduleEnumMapInverse[spMod] || spMod;
+    if (!mergedPermissions.find(p => p.module.toUpperCase() === mappedModule.toUpperCase() || p.module.toUpperCase() === spMod)) {
       mergedPermissions.push({
-        module: spMod,
-        canView: !!sp.read,
-        canCreate: sp.create !== undefined ? !!sp.create : !!sp.write,
-        canEdit: sp.edit !== undefined ? !!sp.edit : !!sp.write,
-        canDelete: !!sp.delete
+        module: mappedModule,
+        canView: sp.read !== undefined ? !!sp.read : sp.view !== undefined ? !!sp.view : !!sp.canView,
+        canCreate: sp.create !== undefined ? !!sp.create : sp.write !== undefined ? !!sp.write : !!sp.canCreate,
+        canEdit: sp.edit !== undefined ? !!sp.edit : sp.write !== undefined ? !!sp.write : !!sp.canEdit,
+        canDelete: sp.delete !== undefined ? !!sp.delete : !!sp.canDelete,
+        canDeactivate: sp.deactivate !== undefined ? !!sp.deactivate : !!sp.delete,
+        canCancel: sp.cancel !== undefined ? !!sp.cancel : !!sp.delete,
+        canImport: !!sp.import,
+        canExport: !!sp.export,
+        approve: Object.prototype.hasOwnProperty.call(sp, 'approve') ? !!sp.approve : undefined,
+        ...mapSpecialPermissionFlags(sp),
       });
     }
   });
@@ -352,17 +432,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
-    const platformModules = [
+      const platformModules = [
         'dashboard', 'suscripciones', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'qa-console',
-    ];
+      ];
+      const platformConfigurationModules = [
+        'CONFIGURATION', 'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF',
+        'CONFIG_SECURITY', 'CONFIG_ROLES', 'CONFIG_USERS', 'CONFIG_TENANCY',
+        'CONFIG_CURRENCY', 'CONFIG_PLATFORM', 'CONFIG_COUNTRIES', 'CONFIG_MODULE_PRICING', 'CONFIG_DOMAINS',
+      ];
       if (module === 'qa-console') return user.role === 'superadmin';
+      if (platformConfigurationModules.includes(String(module).toUpperCase())) return true;
       return platformModules.includes(module);
     }
 
+    // El rol ADMIN del tenant es administrador de su empresa; el backend
+    // aplica el mismo bypass para no dejar pestañas de configuración sin acceso.
+    if (user.isTenantAdmin) return true;
+
     // Módulos solo para admin
-    const adminOnlyModules = ['roles', 'schema'];
+    const adminOnlyModules = ['schema'];
     if (adminOnlyModules.includes(module) && !user.isTenantAdmin) return false;
 
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
@@ -390,23 +480,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'asesoria-legal': 'LEGAL',
       'centro-capacitacion': 'HR_TRAINING',
       'soporte-tecnico': 'SUPPORT_TECH',
-      'novachat': 'NOVACHAT'
+      'novachat': 'NOVACHAT',
+      'roles': 'CONFIG_ROLES',
+      'usuarios': 'CONFIG_USERS',
+      'configuracion': 'CONFIGURATION',
+      'suscripciones': 'CONFIG_COMPANY',
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
         'SALES', 'CLIENTS',
         'SALES_CLIENTS', 'SALES_QUOTES', 'SALES_ORDERS', 'SALES_INVOICES',
         'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
+        'SALES_PRICE_LISTS',
       ],
       compras: [
         'PURCHASES', 'PROVIDERS',
-        'PURCHASES_PROVIDERS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
-        'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS', 'PURCHASES_INVOICES',
+        'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_MANAGEMENT', 'PURCHASES_SUPPLIER_PRICES', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
+        'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS',
         'PURCHASES_INVOICES_REC', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS',
       ],
       inventario: [
         'INVENTORY',
-        'INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
+        'INVENTORY_PRODUCTS', 'INVENTORY_SERVICES', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
         'INVENTORY_ADJUSTMENTS', 'INVENTORY_COUNT', 'INVENTORY_SERIALS', 'INVENTORY_LOTS',
         'INVENTORY_MOVEMENTS',
       ],
@@ -418,11 +513,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       actividades: [
         'ACTIVITIES',
-        'ACTIVITIES_TASKS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
+        'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
       ],
       documentos: [
         'DOCUMENTS',
-        'DOCUMENTS_FILES', 'DOCUMENTS_FOLDERS', 'DOCUMENTS_CONTRACTS',
+        'DOCUMENTS_FILES', 'DOCUMENTS_FOLDERS', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS',
       ],
       notificaciones: [
         'NOTIFICATIONS',
@@ -430,17 +525,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       reportes: [
         'REPORTS',
-        'REPORTS_SALES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY',
+        'REPORTS_SALES', 'REPORTS_PURCHASES', 'REPORTS_FINANCIAL', 'REPORTS_INVENTORY', 'REPORTS_CLIENTS', 'REPORTS_PROVIDERS', 'REPORTS_HR', 'REPORTS_SUBSCRIPTIONS',
       ],
       tickets: [
-        'TICKETS',
+        'TICKETS', 'TICKETS_KNOWLEDGE_BASE', 'TICKETS_AGENTS',
       ],
       contabilidad: [
         'ACCOUNTING',
         'ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_TRIAL_BALANCE',
         'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW',
+        'ACCOUNTING_LEDGER', 'ACCOUNTING_EXCHANGE_DIFFERENCES', 'ACCOUNTING_EQUITY', 'ACCOUNTING_ASSETS',
         'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL',
+        'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_CONFIG',
       ],
+      clientes: ['SALES', 'CLIENTS', 'SALES_CLIENTS'],
+      proveedores: ['PURCHASES', 'PROVIDERS', 'PURCHASES_PROVIDERS'],
       'financiamiento-pyme': ['FINANCING'],
       'asesoria-legal': ['LEGAL'],
       'centro-capacitacion': ['HR_TRAINING', 'TRAINING'],
@@ -466,13 +565,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 2. Verificar permisos del Rol
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
-    const permission = permissions.find(p => p.module === module);
+    const directPermission = permissions.find((p) => p.module.toUpperCase() === module.toUpperCase())
+      || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase());
+    if (directPermission?.canView) return true;
 
-    return permission?.canView ?? false;
+    // A granular role may omit the parent row while still granting access to
+    // one or more views inside the module; that is enough to render the shell.
+    return permissions.some((permission) => {
+      const key = permission.module.toUpperCase();
+      return key.startsWith(`${backendModuleName.toUpperCase()}_`) && permission.canView;
+    });
   }, [user]);
 
-  const canPerform = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete'): boolean => {
+  const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
+    // El administrador de la empresa tiene acceso total al ERP, incluidos
+    // módulos nuevos y acciones de flujo que todavía no existían cuando se
+    // creó su sesión o su rol.
+    if (user.isTenantAdmin) return true;
     if (user.isPlatformAdmin) return hasAccess(module);
 
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
@@ -491,6 +601,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'PROVIDERS_': 'proveedores',
       'CLIENTS_': 'clientes',
       'ACCOUNTING_': 'contabilidad',
+      'CONFIG_': 'configuracion',
     };
 
     const findPermission = (moduleName: string) => permissions.find(
@@ -511,10 +622,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'herramientas': 'TOOLS',
         'actividades': 'ACTIVITIES',
         'documentos': 'DOCUMENTS',
-        'notificaciones': 'NOTIFICATIONS',
-        'reportes': 'REPORTS',
-        'tickets': 'TICKETS',
-        'contabilidad': 'ACCOUNTING',
+      'notificaciones': 'NOTIFICATIONS',
+      'reportes': 'REPORTS',
+      'tickets': 'TICKETS',
+      'contabilidad': 'ACCOUNTING',
+      'roles': 'CONFIG_ROLES',
+      'usuarios': 'CONFIG_USERS',
+      'configuracion': 'CONFIGURATION',
+      'suscripciones': 'SUBSCRIPTIONS',
+      'qa-console': 'QA_CONSOLE',
         'financiamiento-pyme': 'FINANCING',
         'asesoria-legal': 'LEGAL',
         'centro-capacitacion': 'HR_TRAINING',
@@ -530,12 +646,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!permission) return false;
+    if (permission.canManage === true) return true;
+    const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
     switch (action) {
       case 'view': return permission.canView;
       case 'create': return permission.canCreate;
       case 'edit': return permission.canEdit;
-      case 'delete': return permission.canDelete;
-      default: return false;
+      case 'delete': return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
+      case 'import': return permission.canImport;
+      case 'export': return permission.canExport;
+      default:
+        if (DELETE_COMPATIBLE_ACTIONS.includes(action)) return permission.canDelete || permission.canDeactivate || permission.canCancel || legacyActionAllowed;
+        if (action === 'download') return permission.canExport || legacyActionAllowed;
+        if (APPROVAL_COMPATIBLE_ACTIONS.includes(action)) {
+          return (permission as any).approve !== undefined
+            ? (permission as any).approve === true
+            : permission.canEdit || legacyActionAllowed;
+        }
+        if (CREATE_COMPATIBLE_ACTIONS.includes(action)) return permission.canCreate || legacyActionAllowed;
+        return permission.canEdit || legacyActionAllowed;
     }
   }, [user, hasAccess]);
 

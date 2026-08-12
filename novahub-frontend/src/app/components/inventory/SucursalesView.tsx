@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { api, getApiErrorMessage } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 function toSucursalPayload(form: any) {
   return {
@@ -27,13 +28,20 @@ export function SucursalesView({
   isModal = false,
   autoOpenCreate = false,
   onAutoOpenHandled,
+  permissionModule = 'INVENTORY_WAREHOUSES',
 }: {
   warehouses: any[];
   onRefresh: () => void;
   isModal?: boolean;
   autoOpenCreate?: boolean;
   onAutoOpenHandled?: () => void;
+  permissionModule?: string;
 }) {
+  const { canPerform } = useAuth();
+  const canCreateBranch = canPerform(permissionModule, 'create');
+  const canEditBranch = canPerform(permissionModule, 'edit');
+  const canDeactivateBranch = canPerform(permissionModule, 'deactivate');
+  const canAssignBranchUsers = canPerform(permissionModule, 'assign');
   const [branches, setBranches] = useState<any[]>([]);
   const [cajas, setCajas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +74,7 @@ export function SucursalesView({
   };
 
   const openUsersDialog = async (branch: any) => {
+    if (!canAssignBranchUsers) return;
     setUsersDialogBranch(branch);
     setLoadingUsers(true);
     try {
@@ -89,6 +98,7 @@ export function SucursalesView({
   };
 
   const saveBranchUsers = async () => {
+    if (!canAssignBranchUsers) return;
     if (!usersDialogBranch) return;
     setSavingUsers(true);
     try {
@@ -118,6 +128,7 @@ export function SucursalesView({
   }, [autoOpenCreate, onAutoOpenHandled, warehouses]);
 
   const handleSave = async () => {
+    if (form.id ? !canEditBranch : !canCreateBranch) return;
     if (!form.name || !form.code || !form.warehouseId) {
       return toast.error('Nombre, código y almacén padre son requeridos');
     }
@@ -141,6 +152,7 @@ export function SucursalesView({
   };
 
   const handleDelete = async () => {
+    if (!canDeactivateBranch) return;
     if (!deleteId) return;
     try {
       await api.delete(`/sucursales/${deleteId}`);
@@ -164,13 +176,13 @@ export function SucursalesView({
             </p>
           </div>
         ) : <div />}
-        <Button 
+        {canCreateBranch && <Button 
           size="sm" 
           onClick={() => { setForm({}); setIsFormOpen(true); }}
           className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 sm:w-auto"
         >
           <Plus className="mr-2 size-4" /> Agregar Sucursal
-        </Button>
+        </Button>}
       </div>
 
       <div className="space-y-3 lg:hidden">
@@ -180,7 +192,7 @@ export function SucursalesView({
             <Card key={branch.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
               <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{branch.name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{branch.code}</p></div><Badge variant={branch.isActive === false ? 'secondary' : 'default'}>{branch.isActive === false ? 'Inactiva' : 'Activa'}</Badge></div>
               <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Ubicación</p><p className="truncate">{branch.location || '—'}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén padre</p><p className="truncate">{branch.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cajas</p><p className="font-bold tabular-nums">{assignedCajas.length}</p></div></div>
-              <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3"><Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => openUsersDialog(branch)}><Users className="mr-1.5 size-3.5" /> Usuarios</Button><Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => { setForm({ id: branch.id, name: branch.name, code: branch.code, location: branch.location || '', warehouseId: branch.warehouseId, isActive: branch.isActive !== false }); setIsFormOpen(true); }} aria-label={`Editar ${branch.name}`}><Edit2 className="size-4" /></Button><Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => setDeleteId(branch.id)} aria-label={`Eliminar ${branch.name}`}><Trash2 className="size-4" /></Button></div>
+              <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">{canAssignBranchUsers && <Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => openUsersDialog(branch)}><Users className="mr-1.5 size-3.5" /> Usuarios</Button>}{canEditBranch && <Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => { setForm({ id: branch.id, name: branch.name, code: branch.code, location: branch.location || '', warehouseId: branch.warehouseId, isActive: branch.isActive !== false }); setIsFormOpen(true); }} aria-label={`Editar ${branch.name}`}><Edit2 className="size-4" /></Button>}{canDeactivateBranch && <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => setDeleteId(branch.id)} aria-label={`Eliminar ${branch.name}`}><Trash2 className="size-4" /></Button>}</div>
             </Card>
           );
         })}
@@ -234,13 +246,13 @@ export function SucursalesView({
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openUsersDialog(b)}>
+                      {canAssignBranchUsers && <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openUsersDialog(b)}>
                         <Users className="size-3.5" />
                         Gestionar
-                      </Button>
+                      </Button>}
                     </TableCell>
                     <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => {
+                    {canEditBranch && <Button variant="ghost" size="icon" onClick={() => {
                       setForm({
                         id: b.id,
                         name: b.name,
@@ -252,10 +264,10 @@ export function SucursalesView({
                       setIsFormOpen(true);
                     }}>
                       <Edit2 className="size-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-500 hover:text-white" onClick={() => setDeleteId(b.id)}>
+                    </Button>}
+                    {canDeactivateBranch && <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-500 hover:text-white" onClick={() => setDeleteId(b.id)}>
                       <Trash2 className="size-3.5" />
-                    </Button>
+                    </Button>}
                   </TableCell>
                 </TableRow>
               ); })
@@ -295,7 +307,7 @@ export function SucursalesView({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsFormOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : 'Guardar'}</Button>
+            {(form.id ? canEditBranch : canCreateBranch) && <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : 'Guardar'}</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -350,10 +362,10 @@ export function SucursalesView({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUsersDialogBranch(null)}>Cancelar</Button>
-            <Button onClick={saveBranchUsers} disabled={savingUsers}>
+            {canAssignBranchUsers && <Button onClick={saveBranchUsers} disabled={savingUsers}>
               {savingUsers && <Loader2 className="size-4 mr-1 animate-spin" />}
               Guardar
-            </Button>
+            </Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

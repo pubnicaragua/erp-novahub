@@ -29,6 +29,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -42,6 +43,7 @@ interface EstimacionesViewProps {
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  salesAlert?: PurchaseAlertDetail;
 }
 
 const statusOptions = [
@@ -54,7 +56,7 @@ const statusOptions = [
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: EstimacionesViewProps) {
+export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
@@ -66,13 +68,20 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
 
   const handleConvertToOrder = async (estimate: Estimate) => {
-    if (!canPerform('SALES_ORDERS', 'create')) {
-      toast.error('No tienes permiso para crear órdenes de venta');
+    if (!canPerform('SALES_QUOTES', 'approve')) {
+      toast.error('No tienes permiso para aprobar y enviar cotizaciones');
       return;
     }
     if (convertingId) return;
@@ -812,6 +821,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
+            {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_QUOTES', 'create') && (
               <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Cotización
@@ -825,6 +835,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           columns={columns}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setEditingId(row.id)}
+          highlightedRowId={highlightedAlertId}
           actionsWidth="w-56"
           fitContent
           layoutMode={layoutMode}
@@ -836,7 +847,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 documentLabel="cotización"
                 onSend={() => handleWhatsApp(row)}
               />
-              {canPerform('SALES_ORDERS', 'create') &&
+              {canPerform('SALES_QUOTES', 'approve') &&
                 ['DRAFT', 'SENT'].includes(String(row.status || '').toUpperCase()) && (
                 <Button
                   variant="ghost"

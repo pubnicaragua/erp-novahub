@@ -38,7 +38,6 @@ const TrainingHubView = lazy(() => import('./components/help/TrainingHubView').t
 const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })));
 const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
 const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
-const DashboardCxc = lazy(() => import('./components/DashboardCxc').then(m => ({ default: m.DashboardCxc })));
 const QaConsoleView = lazy(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })));
 
 function PageLoader() {
@@ -68,7 +67,10 @@ const ErrorBoundaryFallback = () => (
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
-    return (localStorage.getItem('erp-active-module') as Module | 'overview') || 'overview';
+    const storedModule = localStorage.getItem('erp-active-module');
+    if (storedModule === 'roles') return 'suscripciones';
+    if (storedModule === 'dashboard-cxc') return 'overview';
+    return (storedModule as Module | 'overview') || 'overview';
   });
   const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
     const storedSubModule = localStorage.getItem('erp-active-submodule');
@@ -99,14 +101,15 @@ function DashboardLayout() {
   };
 
   const handleModuleChange = (module: Module, subModule?: string) => {
-    if (hasAccess(module)) {
-      setActiveModule(module);
+    const targetModule = module === 'roles' ? 'suscripciones' : module;
+    if (hasAccess(targetModule)) {
+      setActiveModule(targetModule);
       setActiveSubModule(module === 'inventario' ? (subModule || 'productos') : subModule);
     }
   };
 
   const handleNavigate = (module: Module) => {
-    setActiveModule(module);
+    setActiveModule(module === 'roles' ? 'suscripciones' : module);
     setActiveSubModule(undefined);
     setSidebarOpen(false);
   };
@@ -123,16 +126,16 @@ function DashboardLayout() {
       'clientes', 'proveedores', 'actividades', 'tickets',
       'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
       'documentos', 'notificaciones', 'transferencias',
-      'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
-      'dashboard-cxc'
+      'reportes', 'configuracion', 'suscripciones', 'schema',
     ];
     return preferredOrder.find(m => hasAccess(m)) ?? activeModule;
   })();
 
   useEffect(() => {
     const handler = (e: any) => {
-      if (e.detail.module === 'overview' || hasAccess(e.detail.module)) {
-        setActiveModule(e.detail.module);
+      const targetModule = e.detail.module === 'roles' ? 'suscripciones' : e.detail.module;
+      if (targetModule === 'overview' || hasAccess(targetModule)) {
+        setActiveModule(targetModule);
         setActiveSubModule(e.detail.subModule);
       }
     };
@@ -173,7 +176,6 @@ function DashboardLayout() {
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'roles': return <SuscripcionesPage />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'suscripciones': return <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
@@ -181,7 +183,6 @@ function DashboardLayout() {
       case 'centro-capacitacion': return <TrainingHubView />;
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'dashboard-cxc': return <DashboardCxc />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'novachat': return <NovaChatView />;
       case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView /></ModuleErrorBoundary>;

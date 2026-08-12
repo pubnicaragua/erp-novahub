@@ -993,19 +993,19 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         {canPerform('HR_EMPLOYEES', 'edit') && <Button variant="ghost" size="icon" title="Editar empleado" aria-label="Editar empleado" onClick={(event) => { event.stopPropagation(); handleEdit(emp); }} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"><Edit2 className="size-4" /></Button>}
-                            {emp.approvalStatus === 'DRAFT' && (
+                            {emp.approvalStatus === 'DRAFT' && canPerform('HR_EMPLOYEES', 'approve') && (
                               <Button title="Enviar a aprobación" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={(e) => { e.stopPropagation(); handleSubmitApproval(emp.id); }}>
                                 <Send className="size-4" />
                               </Button>
                             )}
-                            {emp.approvalStatus === 'PENDING_APPROVAL' && canPerform('HR_EMPLOYEES', 'edit') && (
+                            {emp.approvalStatus === 'PENDING_APPROVAL' && (canPerform('HR_EMPLOYEES', 'approve') || canPerform('HR_EMPLOYEES', 'delete')) && (
                               <>
-                                <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
+                                {canPerform('HR_EMPLOYEES', 'approve') && <Button title="Aprobar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApprove(emp.id); }}>
                                   <CheckCircle2 className="size-4" />
-                                </Button>
-                                <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
+                                </Button>}
+                                {canPerform('HR_EMPLOYEES', 'delete') && <Button title="Rechazar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={(e) => { e.stopPropagation(); setRejectEmpId(emp.id); }}>
                                   <XCircle className="size-4" />
-                                </Button>
+                                </Button>}
                               </>
                             )}
                             <Button title="Historial de cambios" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={(e) => { e.stopPropagation(); loadChangeLog(emp.id); }}>

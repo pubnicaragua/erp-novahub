@@ -271,7 +271,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
             <Download className="size-4 mr-2" />
             Descargar PDF
           </Button>
-          {pendingCount > 0 && canPerform('HR_PAYROLLS', 'edit') && (
+          {pendingCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
             <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
               <CheckCircle className="size-4 mr-2" />
               Pagar Todas ({pendingCount})
@@ -289,7 +289,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
               Incluir Comisiones
             </label>
           </div>
-          {canPerform('HR_PAYROLLS', 'create') && (
+          {canPerform('HR_PAYROLL', 'create') && (
             <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
@@ -362,7 +362,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                       <div className="flex items-center justify-end gap-1">
                         {payroll.status === 'PENDING' && (
                           <>
-                            {canPerform('HR_PAYROLLS', 'edit') && (
+                            {canPerform('HR_PAYROLL', 'approve') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -373,7 +373,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                                 Pagar
                               </Button>
                             )}
-                            {canPerform('HR_PAYROLLS', 'delete') && (
+                            {canPerform('HR_PAYROLL', 'delete') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -491,12 +491,12 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                   </Button>
                   {payroll.status === 'PENDING' && (
                     <>
-                      {canPerform('HR_PAYROLLS', 'edit') && (
+                      {canPerform('HR_PAYROLL', 'approve') && (
                         <Button size="sm" onClick={() => handleMarkAsPaid(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
                           <CheckCircle className="size-3 mr-1" /> Pagar
                         </Button>
                       )}
-                      {canPerform('HR_PAYROLLS', 'delete') && (
+                      {canPerform('HR_PAYROLL', 'delete') && (
                         <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
                           <Trash2 className="size-3.5" />
                         </Button>

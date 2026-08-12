@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellRing, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge } from '../ui/badge';
@@ -28,30 +28,36 @@ export interface PurchaseAlertItem {
 interface PurchaseAlertsButtonProps {
   alert: PurchaseAlertDetail;
   onItemSelect?: (id: string) => void;
+  sectionLabel?: string;
+  storageNamespace?: string;
 }
 
-export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButtonProps) {
-  const { user } = useAuth();
-  const storageKey = `erp-purchase-alerts:${user?.tenantId || 'current'}:${user?.id || 'current'}:${encodeURIComponent(alert.label)}`;
-  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      return new Set(Array.isArray(stored) ? stored.map(String) : []);
-    } catch {
-      return new Set();
-    }
-  });
+const readStoredAlertIds = (storageKey: string) => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    return new Set<string>(Array.isArray(stored) ? stored.map(String) : []);
+  } catch {
+    return new Set<string>();
+  }
+};
 
-  const currentAlertIds = useMemo(() => new Set(alert.items.map((item) => item.id)), [alert.items]);
+export function PurchaseAlertsButton({
+  alert,
+  onItemSelect,
+  sectionLabel = 'compras',
+  storageNamespace = 'erp-purchase-alerts',
+}: PurchaseAlertsButtonProps) {
+  const { user } = useAuth();
+  const storageKey = `${storageNamespace}:${user?.tenantId || 'current'}:${user?.id || 'current'}:${encodeURIComponent(alert.label)}`;
+  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => readStoredAlertIds(storageKey));
   const unreadItems = alert.items.filter((item) => !readAlertIds.has(item.id));
   const unreadCount = unreadItems.length;
 
+  // La lectura se conserva aunque el registro deje de estar pendiente y luego
+  // vuelva a aparecer en la consulta. Así no se presenta otra vez como nuevo.
   useEffect(() => {
-    setReadAlertIds((previous) => {
-      const next = new Set(Array.from(previous).filter((id) => currentAlertIds.has(id)));
-      return next.size === previous.size ? previous : next;
-    });
-  }, [currentAlertIds]);
+    setReadAlertIds(readStoredAlertIds(storageKey));
+  }, [storageKey]);
 
   useEffect(() => {
     try {
@@ -63,7 +69,12 @@ export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButt
 
   const markCurrentAlertsAsRead = () => {
     if (alert.items.length === 0) return;
-    setReadAlertIds((previous) => new Set([...previous, ...currentAlertIds]));
+    setReadAlertIds((previous) => new Set([...previous, ...alert.items.map((item) => item.id)]));
+  };
+
+  const handleItemSelect = (id: string) => {
+    setReadAlertIds((previous) => new Set([...previous, id]));
+    onItemSelect?.(id);
   };
 
   const message = alert.items.length > 0
@@ -92,7 +103,7 @@ export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButt
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 rounded-xl border-border/60 p-2">
         <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-          Novedades de compras
+          Novedades de {sectionLabel}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="space-y-1">
@@ -111,7 +122,7 @@ export function PurchaseAlertsButton({ alert, onItemSelect }: PurchaseAlertsButt
                   <DropdownMenuItem
                     key={item.id}
                     className="items-start gap-2 rounded-lg px-3 py-2"
-                    onSelect={() => onItemSelect?.(item.id)}
+                    onSelect={() => handleItemSelect(item.id)}
                   >
                   {readAlertIds.has(item.id) ? (
                     <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />

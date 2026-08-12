@@ -55,6 +55,8 @@ interface EditableDataTableProps<T> {
   fitContent?: boolean;
   layoutMode?: 'table' | 'cards' | 'responsive';
   showHorizontalControls?: boolean;
+  /** Explicit UI permission. Defaults to whether an update handler exists. */
+  canEdit?: boolean;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -81,8 +83,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   fitContent = false,
   layoutMode = 'responsive',
   showHorizontalControls = false,
+  canEdit,
 }: EditableDataTableProps<T>) {
   const isBulkCancel = bulkAction === 'cancel';
+  const isEditingAllowed = canEdit ?? Boolean(onRowUpdate);
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
@@ -217,7 +221,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   }, [editingCell]);
 
   const handleCellClick = (rowId: string | number, colKey: string, value: any, editable?: boolean) => {
-    if (!editable) return;
+    if (!editable || !isEditingAllowed) return;
     setEditingCell({ rowId, colKey });
     // Empty nullable fields must still mount as controlled inputs.
     setEditValue(value ?? '');
@@ -255,6 +259,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   const handleSave = async (rowId: string | number, colKey: string, valueToSave?: any) => {
+    if (!isEditingAllowed || !onRowUpdate) return;
     if (!editingCell && valueToSave === undefined) return;
     
     const column = columns.find((item) => String(item.key) === colKey);
@@ -275,23 +280,21 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setDraftRows(prev => new Set(prev).add(rowId));
     setEditingCell(null);
  
-    if (onRowUpdate) {
-      try {
-        await onRowUpdate(rowId, { [colKey]: value } as Partial<T>);
-        setDraftRows(prev => {
-          const next = new Set(prev);
-          next.delete(rowId);
-          return next;
-        });
-      } catch (error) {
-        console.error('Failed to update row:', error);
-        setData(initialData); // Rollback
-        setDraftRows(prev => {
-          const next = new Set(prev);
-          next.delete(rowId);
-          return next;
-        });
-      }
+    try {
+      await onRowUpdate(rowId, { [colKey]: value } as Partial<T>);
+      setDraftRows(prev => {
+        const next = new Set(prev);
+        next.delete(rowId);
+        return next;
+      });
+    } catch (error) {
+      console.error('Failed to update row:', error);
+      setData(initialData); // Rollback
+      setDraftRows(prev => {
+        const next = new Set(prev);
+        next.delete(rowId);
+        return next;
+      });
     }
   };
 
@@ -323,6 +326,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (!isEditingAllowed || !onRowUpdate) return;
     if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
     e.preventDefault();
     const text = e.clipboardData.getData('text');
@@ -349,7 +353,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     });
     setData(newData);
     toast.success(`Sincronizadas ${updatedCount} filas desde Excel`);
-  }, [data, columns, onRowUpdate, idField]);
+  }, [data, columns, onRowUpdate, idField, isEditingAllowed]);
 
   const handleAddNewRow = () => {
     if (onAddRow) {
@@ -540,7 +544,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     return (
                       <TableCell 
                         key={colKey}
-                        data-row-click-exempt={col.editable && !editOnPencilOnly ? 'true' : undefined}
+                        data-row-click-exempt={col.editable && isEditingAllowed && !editOnPencilOnly ? 'true' : undefined}
                         tabIndex={focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex ? 0 : -1}
                         data-grid-row-index={rowIndex}
                         data-grid-col-index={colIndex}
@@ -552,7 +556,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                         className={cn(
                           "relative group/cell h-14 min-w-0",
                           editOnPencilOnly ? "cursor-default" : "cursor-cell",
-                          col.editable && "hover:bg-primary/5 transition-colors",
+                          col.editable && isEditingAllowed && "hover:bg-primary/5 transition-colors",
                           isEditing && "p-0",
                           focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex && !isEditing && "ring-1 ring-inset ring-primary/50"
                         )}
@@ -601,7 +605,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                                 {value}
                               </span>
                             )}
-                            {col.editable && (
+                            {col.editable && isEditingAllowed && (
                               editOnPencilOnly ? (
                                 <button
                                   type="button"
@@ -627,7 +631,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     );
                   })}
                   <TableCell data-actions-column="true" className={cn('h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto', actionsWidth)}>
-                    <div className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
+                    <div data-action-group="true" className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {actions ? actions(row) : (
                         onRowDelete && (
                           <Button
@@ -705,7 +709,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   return (
                     <div
                       key={colKey}
-                      className={cn('min-w-0 rounded-xl', col.editable && 'transition-colors hover:bg-primary/5')}
+                      className={cn('min-w-0 rounded-xl', col.editable && isEditingAllowed && 'transition-colors hover:bg-primary/5')}
                       onClick={(event) => {
                         if (!col.editable || editOnPencilOnly) return;
                         event.stopPropagation();
@@ -716,7 +720,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                         <p className="min-w-0 text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
                           {col.header}
                         </p>
-                        {col.editable && !isEditing && (
+                        {col.editable && isEditingAllowed && !isEditing && (
                           <button
                             type="button"
                             title={`Editar ${col.header}`}
@@ -772,7 +776,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 })}
               </div>
               {(actions || onRowDelete) && (
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
+                <div data-action-group="true" className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
                   {actions ? actions(row) : (
                     <Button
                       type="button"

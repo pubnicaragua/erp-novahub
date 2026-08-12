@@ -290,7 +290,10 @@ interface FacturacionCajaViewProps {
 
 export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCajaViewProps) {
   const { formatConvertedAmount: formatCurrency } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canPayPos = canPerform('RETAIL_POS', 'pay');
+  const canPrintPos = canPerform('RETAIL_POS', 'print');
+  const canCreateCustomer = canPerform('SALES_CLIENTS', 'create');
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
@@ -663,6 +666,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const handlePay = () => {
+    if (!canPayPos) return;
     if (cart.length === 0) {
       toast.error('Agregá al menos un producto');
       return;
@@ -698,6 +702,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
   };
 
   const submitPayment = async (confirmedDuplicate = false) => {
+    if (!canPayPos) return;
     if (submittingRef.current) return;
     if (!activeSession) return;
     if (missingPriceMessage) {
@@ -896,7 +901,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-          <Button
+          {canCreateCustomer && <Button
             variant="outline"
             size="sm"
             onClick={() => setShowAddCustomer(true)}
@@ -904,7 +909,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
             className="h-10 gap-2 px-3 text-xs font-black rounded-xl border-primary/30 hover:bg-primary/10 shadow-sm bg-background/80"
           >
             <UserPlus className="size-4 text-primary" /> Agregar Cliente
-          </Button>
+          </Button>}
           <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
             <CircleHelp className="mr-2 size-4" /> Cómo facturar
           </Button>
@@ -1335,7 +1340,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                     <span className="text-xl font-black text-primary">{formatCurrency(summary.total)}</span>
                   </div>
                 </div>
-                <Button
+                {canPayPos && <Button
                   size="lg"
                   data-tour="pos-pay"
                   onClick={handlePay}
@@ -1344,7 +1349,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
                 >
                   {submitting ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
                   Pagar y Emitir Factura
-                </Button>
+                </Button>}
                 <Button variant="outline" onClick={clearCart} disabled={isRegisterDisabled} className="w-full h-10 rounded-xl font-bold text-xs gap-2">
                   Limpiar
                 </Button>
@@ -1436,9 +1441,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja }: FacturacionCaja
 
             <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
               <Button variant="outline" onClick={() => setCreatedInvoice(null)} className="rounded-xl font-black">Cerrar</Button>
-              <Button onClick={() => printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, paymentCurrency, createdExchangeRate, companyName)} className="gap-2 rounded-xl font-black">
+              {canPrintPos && <Button onClick={() => printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, paymentCurrency, createdExchangeRate, companyName)} className="gap-2 rounded-xl font-black">
                 <Receipt className="size-4" /> Imprimir ticket
-              </Button>
+              </Button>}
             </div>
           </div>
         </div>

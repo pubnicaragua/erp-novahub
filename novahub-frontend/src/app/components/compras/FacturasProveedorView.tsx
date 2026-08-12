@@ -471,7 +471,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <Ban className="mr-2 size-3.5" /> Anular
                   </Button>
                 )}
-              {!isNew && canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
+              {!isNew && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && (
                 <Button
                   variant="outline"
                   className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
@@ -801,7 +801,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_INVOICES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
-              {canPerform('PURCHASES_INVOICES', 'create') && onRegisterPaymentFromInvoice && (
+              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && onRegisterPaymentFromInvoice && (
                 <Button
                   title="Registrar Pago"
                   variant="ghost"

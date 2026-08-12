@@ -101,7 +101,7 @@ export function ProveedoresPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            {canPerform('PROVIDERS', 'create') && (
+            {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <DialogTrigger asChild>
                 <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleOpenDialog()}>
                   <Plus className="size-4" /> Nuevo Proveedor
@@ -230,7 +230,7 @@ export function ProveedoresPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {canPerform('PROVIDERS', 'edit') && (
+                          {canPerform('PURCHASES_PROVIDERS', 'edit') && (
                             <Button variant="ghost" size="icon" className="size-8 hover:text-primary hover:bg-primary/10 transition-colors" onClick={() => handleOpenDialog(p)}><Edit className="size-4" /></Button>
                           )}
                         </div>

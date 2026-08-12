@@ -31,6 +31,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -50,6 +51,7 @@ interface FacturasViewProps {
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  salesAlert?: PurchaseAlertDetail;
 }
 
 // Todos los estados posibles (para visualización en badges)
@@ -83,7 +85,7 @@ const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => 
   return null;
 };
 
-export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: FacturasViewProps) {
+export function FacturasView({ data, loading, onRefresh, customers = [], products = [], series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasViewProps) {
   const {
     exchangeRate: globalRate,
     displayCurrency,
@@ -109,6 +111,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
@@ -127,6 +130,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [isCreating, setIsCreating] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
 
   const getCustomerPriceListId = (customerId?: string | null) => {
     const customer = customers.find((entry: any) => entry.id === customerId);
@@ -1186,6 +1195,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
+            {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Factura
@@ -1201,6 +1211,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         actionsWidth="w-64"
         fitContent
         layoutMode={layoutMode}
+        highlightedRowId={highlightedAlertId}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
           onRowClick={(row) => setEditingId(row.id)}
         onBulkDelete={async (ids) => {
@@ -1236,7 +1247,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   })();
                 }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
-                {canPerform('SALES_PAYMENTS', 'create') &&
+                {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                   getInvoiceBalance(row) > 0 && (
                   <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>

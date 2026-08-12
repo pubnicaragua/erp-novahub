@@ -91,7 +91,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const navigateToTransaction = useCallback((transaction: any) => {
     const destination = transaction?.destination || {
       module: transaction?.transactionType === 'PURCHASE_ORDER' || transaction?.transactionType === 'PURCHASE_INVOICE' || transaction?.transactionType === 'PURCHASE_PAYMENT' ? 'compras' : 'ventas',
-      subModule: transaction?.transactionType === 'PURCHASE_ORDER' ? 'ordenes-compra' : transaction?.transactionType === 'PURCHASE_INVOICE' ? 'facturas-proveedor' : transaction?.transactionType === 'PURCHASE_PAYMENT' ? 'pagos-realizados' : 'facturas',
+            subModule: transaction?.transactionType === 'PURCHASE_ORDER' ? 'ordenes-compra' : transaction?.transactionType === 'PURCHASE_INVOICE' ? 'recepciones-compra' : transaction?.transactionType === 'PURCHASE_PAYMENT' ? 'pagos-realizados' : 'facturas',
       id: transaction?.id,
       number: transaction?.number,
     };

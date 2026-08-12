@@ -393,7 +393,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           actions={(row) => (
              <div className="flex gap-1">
-              {canPerform('PURCHASES_RETURNS', 'edit') && ['DRAFT', 'ISSUED'].includes(String(row.status || '').toUpperCase()) && (
+              {canPerform('PURCHASES_RETURNS', 'approve') && ['DRAFT', 'ISSUED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title={String(row.status || '').toUpperCase() === 'DRAFT' ? 'Emitir crédito' : 'Aplicar crédito'} aria-label={String(row.status || '').toUpperCase() === 'DRAFT' ? 'Emitir crédito' : 'Aplicar crédito'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row)}>
                   {String(row.status || '').toUpperCase() === 'DRAFT' ? <Send className="size-4" /> : <CheckCircle2 className="size-4" />}
                 </Button>

@@ -33,6 +33,7 @@ export function WhatsAppActionButton({ phone, documentLabel, onSend }: WhatsAppA
       type="button"
       title={actionLabel}
       aria-label={actionLabel}
+      data-whatsapp-action="true"
       variant="ghost"
       size="icon"
       className={cn(

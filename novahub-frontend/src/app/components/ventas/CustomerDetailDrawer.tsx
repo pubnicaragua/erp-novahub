@@ -260,8 +260,8 @@ export function CustomerDetailDrawer({
         ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency })),
         ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, description: item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference })),
         ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: 'Programación de facturación' })),
-        ...returns.map((item: any) => ({ id: item.id, kind: 'Devolución de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
-        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
+        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
+        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
       ].sort((a, b) => {
         const aDate = a.date ? new Date(a.date).getTime() : 0;
         const bDate = b.date ? new Date(b.date).getTime() : 0;
@@ -395,7 +395,7 @@ export function CustomerDetailDrawer({
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MetricCard label="Saldo Deudor" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} accent={balance > 0 ? 'text-destructive' : 'text-primary'} loading={loading} />
+                  <MetricCard label="Saldo" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} accent={balance < 0 ? 'text-destructive' : 'text-emerald-500'} loading={loading} />
                   <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                   <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
@@ -436,7 +436,7 @@ export function CustomerDetailDrawer({
                     <InfoField label="Régimen Fiscal" value={customer?.fiscalRegime || 'No registrado'} icon={ShieldAlert} muted={!customer?.fiscalRegime} />
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
-                    <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label="Saldo Actual" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
                   </div>
 

@@ -37,6 +37,7 @@ import { SucursalesView } from './inventory/SucursalesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
+import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, type PermissionMatrixAction } from '../utils/permissions';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -53,23 +54,24 @@ export type ExtendedPermission = Permission & { create?: boolean; edit?: boolean
 export type ExtendedRoleManagement = Omit<RoleManagement, 'permissions'> & { permissions: ExtendedPermission[] };
 
 const AVAILABLE_MODULES = [
+  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
   { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
+  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
-  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
-  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
-  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
-  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
-  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
   { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
   { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
+  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
   { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
+  { id: 'MY_COMPANY', label: 'Mi Empresa', icon: Building2, description: 'Empresa, plan, equipo, sucursales y dominio' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
 // Submódulos para permisos ultra-granulares
@@ -81,17 +83,20 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
-  { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', parent: 'SALES' },
-  { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', parent: 'SALES' },
+  { id: 'SALES_RETURNS', label: 'Notas de Crédito', parent: 'SALES' },
+  { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
+  { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
   { id: 'RETAIL_POS', label: 'Facturación por Caja', parent: 'SALES' },
 
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
+  { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', parent: 'PURCHASES' },
+  { id: 'PURCHASES_MANAGEMENT', label: 'Gestión de compras', parent: 'PURCHASES' },
+  { id: 'PURCHASES_SUPPLIER_PRICES', label: 'Precios de proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', parent: 'PURCHASES' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
   { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
@@ -114,9 +119,16 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos Recurrentes', parent: 'FINANCIAL' },
   { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_JOURNAL', label: 'Diario financiero', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_LEDGER', label: 'Libro mayor financiero', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_BANK', label: 'Bancos', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_BUDGET', label: 'Presupuestos', parent: 'FINANCIAL' },
+  { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
 
   // Inventario
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
+  { id: 'INVENTORY_SERVICES', label: 'Servicios', parent: 'INVENTORY' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
   { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
@@ -127,17 +139,24 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'ACTIVITIES_EVENTS', label: 'Eventos', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
 
   // Documentos
   { id: 'DOCUMENTS_FILES', label: 'Archivos', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_INVOICES', label: 'Facturas Legales', parent: 'DOCUMENTS' },
   { id: 'DOCUMENTS_REPORTS', label: 'Reportes', parent: 'DOCUMENTS' },
+  { id: 'DOCUMENTS_FOLDERS', label: 'Carpetas', parent: 'DOCUMENTS' },
 
   // Notificaciones
   { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', parent: 'NOTIFICATIONS' },
   { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
+
+  // Tickets y soporte
+  { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de conocimiento', parent: 'TICKETS' },
+  { id: 'TICKETS_AGENTS', label: 'Agentes', parent: 'TICKETS' },
 
   // Reportes
   { id: 'REPORTS_SALES', label: 'Ventas', parent: 'REPORTS' },
@@ -149,11 +168,23 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
   { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
   
+  // Mi Empresa
+  { id: 'CONFIG_COMPANY', label: 'General', parent: 'MY_COMPANY' },
+  { id: 'SUBSCRIPTIONS', label: 'Módulos y Plan', parent: 'MY_COMPANY' },
+  { id: 'CONFIG_USERS', label: 'Mi Equipo', parent: 'MY_COMPANY' },
+  { id: 'CONFIG_ROLES', label: 'Roles y permisos', parent: 'MY_COMPANY' },
+  { id: 'COMPANY_BRANCHES', label: 'Sucursales', parent: 'MY_COMPANY' },
+  { id: 'CONFIG_DOMAINS', label: 'Dominio propio', parent: 'MY_COMPANY' },
+
   // Configuración
-  { id: 'CONFIG_COMPANY', label: 'Empresa', parent: 'CONFIGURATION' },
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
   { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_TENANCY', label: 'Multiempresa', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_COUNTRIES', label: 'Países', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de módulos', parent: 'CONFIGURATION' },
 
   // Contabilidad
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
@@ -165,6 +196,13 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_EXCHANGE_DIFFERENCES', label: 'Diferencias Cambiarias', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_EQUITY', label: 'Cambios Patrimonio', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_ASSETS', label: 'Activos Fijos', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_BUDGET', label: 'Presupuestos', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'Categorías de gastos', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_CONFIG', label: 'Configuración contable', parent: 'ACCOUNTING' },
 ];
 
 // Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
@@ -350,6 +388,17 @@ const ALL_TABS: TabDef[] = [
   { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
 ];
 
+const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
+  branding: 'CONFIG_BRANDING',
+  'documentos-pdf': 'CONFIG_PDF',
+  seguridad: 'CONFIG_SECURITY',
+  tenancy: 'CONFIG_TENANCY',
+  currency: 'CONFIG_CURRENCY',
+  plataforma: 'CONFIG_PLATFORM',
+  paises: 'CONFIG_COUNTRIES',
+  precios: 'CONFIG_MODULE_PRICING',
+};
+
 // ---- Main Component ----
 const PRICING_MODULES = [
   { category: 'Operaciones', modules: [
@@ -381,24 +430,52 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const scenario = getScenario(user?.role);
   const visibleTabs = ALL_TABS.filter(t => {
     if (!t.scenario.includes(scenario)) return false;
-    if (t.id === 'roles' && !canPerform('roles', 'view')) return false;
-    return true;
+    const permissionModule = CONFIG_TAB_PERMISSIONS[t.id];
+    return !permissionModule || canPerform(permissionModule, 'view');
   });
-  const canViewRoles = canPerform('roles', 'view');
-  const canCreateRoles = canPerform('roles', 'create');
-  const canEditRoles = canPerform('roles', 'edit');
-  const canDeleteRoles = canPerform('roles', 'delete');
+  const canViewRoles = canPerform('CONFIG_ROLES', 'view');
+  const canCreateRoles = canPerform('CONFIG_ROLES', 'create');
+  const canEditRoles = canPerform('CONFIG_ROLES', 'edit');
+  const canDeleteRoles = canPerform('CONFIG_ROLES', 'delete');
+  const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
+  const canViewBranding = canPerform('CONFIG_BRANDING', 'view');
+  const canViewTenancy = canPerform('CONFIG_TENANCY', 'view');
+  const canViewCurrency = canPerform('CONFIG_CURRENCY', 'view');
+  const canViewModulePricing = canPerform('CONFIG_MODULE_PRICING', 'view');
+  const canViewWarehouses = canPerform('COMPANY_BRANCHES', 'view');
+  const canCreateWarehouses = canPerform('COMPANY_BRANCHES', 'create');
+  const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
+  const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
+  const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
+  const canEditBranding = canPerform('CONFIG_BRANDING', 'edit');
+  const canEditSecurity = canPerform('CONFIG_SECURITY', 'edit');
+  const canEditCurrency = canPerform('CONFIG_CURRENCY', 'edit');
+  const canEditTenancy = canPerform('CONFIG_TENANCY', 'edit');
+  const canEditPdf = canPerform('CONFIG_PDF', 'edit');
+  const canCreatePdf = canPerform('CONFIG_PDF', 'create');
+  const canDeletePdf = canPerform('CONFIG_PDF', 'delete');
+  const canEditPlatform = canPerform('CONFIG_PLATFORM', 'edit');
+  const canEditCountries = canPerform('CONFIG_COUNTRIES', 'edit');
+  const canEditModulePricing = canPerform('CONFIG_MODULE_PRICING', 'edit');
 
   const tenantPermModules = React.useMemo(() => {
     if (!user) return [];
     
 
     return ALL_PERM_MODULES.filter(m => {
+      const parentMod = 'parent' in m ? (m as any).parent : null;
+      const permissionModules = Array.isArray(user.permissions) ? user.permissions.map(permission => String(permission.module).toUpperCase()) : [];
+      if (parentMod === 'CONFIGURATION' && (
+        user.enabledModules.includes('CONFIGURATION') ||
+        permissionModules.includes('CONFIGURATION') ||
+        permissionModules.includes('CONFIGURACION') ||
+        user.isTenantAdmin
+      )) return true;
+
       // 1. Direct check
       if (user.enabledModules.includes(m.id)) return true;
 
       // 2. Fallback check for submodules
-      const parentMod = 'parent' in m ? (m as any).parent : null;
       if (parentMod && user.enabledModules.includes(parentMod)) {
         const hasSpecificSubmodules = user.enabledModules.some(mod => mod.startsWith(`${parentMod}_`));
         if (!hasSpecificSubmodules) return true;
@@ -431,12 +508,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [industryOptions, setIndustryOptions] = useState<{ id?: string; code: string; name: string; isDefault: boolean }[]>([]);
   const [newIndustryName, setNewIndustryName] = useState('');
   const [showAddIndustry, setShowAddIndustry] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
+  const resolvedInitialTab = visibleTabs.find(tab => tab.id === initialTab)?.id || visibleTabs[0]?.id || 'branding';
+  const [activeTab, setActiveTab] = useState(resolvedInitialTab);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setActiveTab(ALL_TABS.some(tab => tab.id === initialTab) ? initialTab : 'branding');
-  }, [initialTab]);
+    setActiveTab(resolvedInitialTab);
+  }, [resolvedInitialTab]);
 
   // Security state
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
@@ -468,7 +546,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleAddIndustry = async () => {
-    if (!newIndustryName.trim() || !user?.tenantId) return;
+    if (!canCreateCompany || !newIndustryName.trim() || !user?.tenantId) return;
     try {
       const code = newIndustryName.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
       await api.post(`/tenants/${user.tenantId}/industries`, { name: newIndustryName.trim(), code });
@@ -482,7 +560,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleDeleteIndustry = async (id: string) => {
-    if (!user?.tenantId) return;
+    if (!canDeactivateCompany || !user?.tenantId) return;
     try {
       await api.delete(`/tenants/${user.tenantId}/industries/${id}`);
       toast.success('Industria eliminada');
@@ -493,6 +571,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleSaveCompanyInfo = async () => {
+    if (!canEditCompany) return;
     try {
       updateConfig({ tenantName: companyName });
       await brandingService.update({
@@ -522,6 +601,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   }, []);
 
   const handleSave = async () => {
+    if (!canEditBranding) return;
     try {
       const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
       colors.primaryForeground = hexToOklch(primaryFgHex);
@@ -558,6 +638,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEditBranding) return;
     const file = e.target.files?.[0];
     if (!file) return;
     setLogoFile(file);
@@ -567,7 +648,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleLogoSave = async () => {
-    if (!logoFile) return;
+    if (!canEditBranding || !logoFile) return;
     setLogoUploading(true);
     try {
       let logoUrl: string;
@@ -631,6 +712,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleSaveCurrencySettings = async () => {
+    if (!canEditCurrency) return;
     setIsSavingCurrency(true);
     try {
       const resp = await api.post<{
@@ -681,17 +763,20 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
 
   const { data: configurationData, refetch: refetchConfiguration } = useTenantQuery(
-    ['configuration', user?.tenantId || 'current', scenario, canViewRoles],
+    ['configuration', user?.tenantId || 'current', scenario, canViewRoles, canViewCompany, canViewBranding, canViewCurrency, canViewModulePricing, canViewWarehouses],
     async (signal) => {
       const tenantId = user?.tenantId;
       const [branding, currency, industries, pricing, rolesData, warehouseData, modules] = await Promise.all([
-        brandingService.getCurrent(signal),
-        api.get<any>('/tools/exchange-rate', { signal }),
-        tenantId ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
-        scenario === 'superadmin' ? modulePricingService.getAll(signal) : Promise.resolve([]),
-        tenantId && canViewRoles ? rolesService.getAll({ clientTenantId: tenantId }, signal) : Promise.resolve([]),
-        tenantId ? api.get<any>('/inventory/warehouses', { signal }) : Promise.resolve([]),
-        tenantId ? subscriptionsService.getEnabledModules(tenantId, undefined, signal) : Promise.resolve([]),
+        canViewBranding || canViewCompany || canViewTenancy ? brandingService.getCurrent(signal) : Promise.resolve(null),
+        canViewCurrency ? api.get<any>('/tools/exchange-rate', { signal }) : Promise.resolve(null),
+        tenantId && canViewCompany ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
+        scenario === 'superadmin' && canViewModulePricing ? modulePricingService.getAll(signal) : Promise.resolve([]),
+        // Los roles se administran exclusivamente desde Mi Empresa > Mi Equipo.
+        Promise.resolve([]),
+        tenantId && canViewWarehouses ? api.get<any>('/inventory/warehouses', { signal }) : Promise.resolve([]),
+        tenantId && (user?.isTenantAdmin || canPerform('SUBSCRIPTIONS', 'view'))
+          ? subscriptionsService.getEnabledModules(tenantId, undefined, signal)
+          : Promise.resolve(user?.enabledModules || []),
       ]);
       return { branding, currency, industries, pricing, roles: rolesData, warehouses: warehouseData, modules };
     },
@@ -747,13 +832,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setEditingRole({
       name: '',
       description: '',
-      permissions: tenantPermModules.map(m => ({
-        module: m.id,
-        read: true,
-        create: false,
-        edit: false,
-        delete: false
-      })) as any,
+      permissions: tenantPermModules.map(m => hydratePermissionActions({}, m.id)) as any,
       tenantId: user?.tenantId
     });
     setIsRoleDialogOpen(true);
@@ -778,16 +857,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       ) as any;
       
       if (existing) {
-        return { 
-          module: m.id, 
-          read: !!existing.read, 
-          create: existing.create !== undefined ? !!existing.create : !!existing.write,
-          edit: existing.edit !== undefined ? !!existing.edit : !!existing.write,
-          delete: !!existing.delete 
-        } as any;
+        return hydratePermissionActions(existing, m.id) as any;
       }
       
-      return { module: m.id, read: false, create: false, edit: false, delete: false } as any;
+      return hydratePermissionActions({}, m.id) as any;
     });
     
     setEditingRole({
@@ -798,6 +871,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const handleSavePortalBranding = async () => {
+    if (!canEditBranding) return;
     try {
       await brandingService.update({
         portalPrimaryColor: portalPrimaryHex,
@@ -811,7 +885,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   };
 
   const confirmDeleteRole = async () => {
-    if (!pendingDeleteRole) return;
+    if (!pendingDeleteRole || !canDeleteRoles) return;
     const role = pendingDeleteRole;
     if (!user?.isPlatformAdmin && (role as any).clientTenantId && (role as any).clientTenantId !== user?.tenantId) {
       toast.error('No puedes eliminar roles de otra empresa');
@@ -874,18 +948,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
   };
 
-  const togglePermission = (module: string, type: 'read' | 'write' | 'create' | 'edit' | 'delete') => {
+  const togglePermission = (module: string, type: PermissionMatrixAction) => {
     if (!editingRole) return;
     let newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module) as any;
     if (!targetPerm) return;
 
-    const newValue = !targetPerm[type];
+    const newValue = !permissionValue(targetPerm, type);
 
     // Si se intenta desactivar leer, pero crear/editar/borrar siguen activos, no permitir.
     if (type === 'read' && newValue === false) {
-      if (targetPerm.create || targetPerm.edit || targetPerm.delete || targetPerm.write) {
+      if (PERMISSION_ACTION_DEFINITIONS.some(({ key }) => key !== 'read' && permissionValue(targetPerm, key))) {
         return; // Bloquear
       }
     }
@@ -893,7 +967,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     // Aplicar el cambio al módulo clickeado
     targetPerm[type] = newValue;
     // Si se activa crear, editar o borrar, asegurar que se active leer.
-    if ((type === 'create' || type === 'edit' || type === 'delete') && newValue === true) {
+    if (type !== 'read' && newValue === true) {
       targetPerm.read = true;
     }
 
@@ -907,14 +981,12 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         if (childPerm) {
           childPerm[type] = newValue;
           // Si se activa crear/editar/borrar en padre, también activar leer en hijos
-          if ((type === 'create' || type === 'edit' || type === 'delete') && newValue === true) {
+          if (type !== 'read' && newValue === true) {
             childPerm.read = true;
           }
           // Si se desactiva leer en padre, desactivar todo en hijos
           if (type === 'read' && newValue === false) {
-            childPerm.create = false;
-            childPerm.edit = false;
-            childPerm.delete = false;
+            PERMISSION_ACTION_DEFINITIONS.filter(({ key }) => key !== 'read').forEach(({ key }) => { childPerm[key] = false; });
             childPerm.write = false;
           }
         }
@@ -1038,7 +1110,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); }} />
                   <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); }} />
                   <div className="flex gap-3 pt-2">
-                    <Button onClick={handleSave} className="rounded-xl gap-2 font-bold">
+                    <Button onClick={handleSave} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold">
                       <Save className="size-4" />Guardar Tema
                     </Button>
                     <Button variant="outline" onClick={handleReset} className="rounded-xl gap-2">
@@ -1055,7 +1127,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 <CardContent className="space-y-4 pt-6">
                   <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
                   <ColorField label="Color de las tarjetas" description="Fondos del encabezado, datos y documentos" hexValue={portalAccentHex} onHexChange={setPortalAccentHex} />
-                  <Button onClick={handleSavePortalBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
+                  <Button onClick={handleSavePortalBranding} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold"><Save className="size-4" />Guardar portal</Button>
                 </CardContent>
               </Card>
             </div>
@@ -1070,7 +1142,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <div
-                    onClick={() => logoInputRef.current?.click()}
+                    onClick={() => canEditBranding && logoInputRef.current?.click()}
                     className={cn('relative flex flex-col items-center justify-center h-40 rounded-2xl border-2 border-dashed cursor-pointer transition-all group',
                       logoPreview ? 'border-primary/40 bg-primary/5' : 'border-border/50 hover:border-primary/40 hover:bg-primary/5')}>
                     {logoPreview ? (
@@ -1088,9 +1160,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </div>
                     )}
                   </div>
-                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden" disabled={!canEditBranding} onChange={handleLogoUpload} />
                   {logoFile && (
-                    <Button onClick={handleLogoSave} disabled={logoUploading} className="w-full rounded-xl gap-2 font-bold">
+                    <Button onClick={handleLogoSave} disabled={logoUploading || !canEditBranding} className="w-full rounded-xl gap-2 font-bold">
                       {logoUploading ? <><RefreshCw className="size-4 animate-spin" />Subiendo...</> : <><Save className="size-4" />Guardar en Supabase</>}
                     </Button>
                   )}
@@ -1145,11 +1217,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             companyName={companyName || user?.tenantName || ''}
             corporateColor={themeConfig.colors.primary.startsWith('#') ? themeConfig.colors.primary : '#10b981'}
             logo={logoPreview || themeConfig.logo}
+            canEdit={canEditPdf}
+            canCreate={canCreatePdf}
+            canDelete={canDeletePdf}
           />
         </TabsContent>
 
         {/* ══════════ TAB: EMPRESA ══════════ */}
-        <TabsContent value="empresa" className="space-y-6 mt-0">
+        {false && <TabsContent value="empresa" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
@@ -1159,20 +1234,20 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               <CardContent className="pt-6 space-y-5">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre de la Empresa</Label>
-                  <Input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Ej: Empresa Demo S.A." className="rounded-xl h-11" />
+                    <Input value={companyName} onChange={e => setCompanyName(e.target.value)} disabled={!canEditCompany} placeholder="Ej: Empresa Demo S.A." className="rounded-xl h-11" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Slug / Identificador</Label>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground font-mono bg-muted px-3 py-2 rounded-lg">novahub.io/</span>
-                    <Input value={companySlug || user?.tenantId || ''} onChange={e => setCompanySlug(e.target.value)} className="rounded-xl h-11 font-mono" placeholder="empresa-demo" />
+                    <Input value={companySlug || user?.tenantId || ''} onChange={e => setCompanySlug(e.target.value)} disabled={!canEditCompany} className="rounded-xl h-11 font-mono" placeholder="empresa-demo" />
                   </div>
                   <p className="text-[10px] text-muted-foreground">Identificador único de tu instancia en la plataforma</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
                   <div className="space-y-2">
-                    <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)}
+                    <select value={companyIndustry} onChange={e => setCompanyIndustry(e.target.value)} disabled={!canEditCompany}
                       className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       {industryOptions.length > 0 ? (
                         <>
@@ -1203,16 +1278,16 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         {industryOptions.filter(o => !o.isDefault).map(o => (
                           <Badge key={o.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
                             {o.name}
-                            <button onClick={() => o.id && handleDeleteIndustry(o.id)}
+                            {canDeactivateCompany && <button onClick={() => o.id && handleDeleteIndustry(o.id)}
                               className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive transition-colors">
                               <Trash2 className="size-2.5" />
-                            </button>
+                            </button>}
                           </Badge>
                         ))}
                       </div>
                     )}
                     {/* Add new industry inline */}
-                    {showAddIndustry ? (
+                    {showAddIndustry && canCreateCompany ? (
                       <div className="flex gap-2">
                         <Input
                           value={newIndustryName}
@@ -1230,14 +1305,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         </Button>
                       </div>
                     ) : (
-                      <button onClick={() => setShowAddIndustry(true)}
+                      <button onClick={() => canCreateCompany && setShowAddIndustry(true)}
                         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-bold transition-colors">
                         <Plus className="size-3.5" />Agregar nueva industria
                       </button>
                     )}
                   </div>
                 </div>
-                <Button onClick={handleSaveCompanyInfo} className="w-full rounded-xl gap-2 font-bold h-11">
+                <Button onClick={handleSaveCompanyInfo} disabled={!canEditCompany} className="w-full rounded-xl gap-2 font-bold h-11">
                   <Save className="size-4" />Guardar Información
                 </Button>
               </CardContent>
@@ -1283,10 +1358,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardContent>
             </Card>
           </motion.div>
-        </TabsContent>
+        </TabsContent>}
 
-        {/* ══════════ TAB: ROLES ══════════ */}
-        <TabsContent value="roles" className="space-y-6 mt-0">
+        {/* Roles se administran únicamente en Mi Empresa → Mi Equipo. */}
+        {false && <TabsContent value="roles" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
@@ -1331,7 +1406,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                   {(() => {
                                     const permsArray = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
-                                    const activePerms = permsArray.filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
+                                    const activePerms = permsArray.filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write);
                                     const parentModules = new Set(activePerms.map((p: any) => {
                                       const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
                                       return sub ? sub.parent : p.module;
@@ -1358,24 +1433,24 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                           {/* Permissions Matrix */}
                           <div className="space-y-1.5 mb-5">
-                            {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => p.read || p.create || p.edit || p.delete || p.write).slice(0, 4).map((p: any) => {
+                            {(Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : [])).filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write).slice(0, 4).map((p: any) => {
                               const mod = tenantPermModules.find(m => m.id === p.module);
                               if (!mod) return null;
                               return (
                                 <div key={p.module} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-muted/20">
                                   <span className="font-bold text-muted-foreground truncate mr-2">{mod?.label || p.module}</span>
                                   <div className="flex gap-1 flex-shrink-0">
-                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.read ? 'bg-blue-500/15 text-blue-500' : 'bg-muted/30 text-muted-foreground/30')}>L</span>
-                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', (p.create || p.write) ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted/30 text-muted-foreground/30')}>C</span>
-                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', (p.edit || p.write) ? 'bg-amber-500/15 text-amber-500' : 'bg-muted/30 text-muted-foreground/30')}>E</span>
-                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', p.delete ? 'bg-rose-500/15 text-rose-500' : 'bg-muted/30 text-muted-foreground/30')}>B</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', permissionValue(p, 'read') ? 'bg-blue-500/15 text-blue-500' : 'bg-muted/30 text-muted-foreground/30')}>L</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', permissionValue(p, 'create') ? 'bg-emerald-500/15 text-emerald-500' : 'bg-muted/30 text-muted-foreground/30')}>C</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', permissionValue(p, 'edit') ? 'bg-amber-500/15 text-amber-500' : 'bg-muted/30 text-muted-foreground/30')}>E</span>
+                                    <span className={cn('px-1.5 py-0.5 rounded text-[9px] font-black', permissionValue(p, 'delete') ? 'bg-rose-500/15 text-rose-500' : 'bg-muted/30 text-muted-foreground/30')}>B</span>
                                   </div>
                                 </div>
                               );
                             })}
                             {(() => {
                               const permsArr = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
-                              const active = permsArr.filter((p: any) => p.read || p.create || p.edit || p.delete || p.write);
+                              const active = permsArr.filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write);
                               return active.length > 4 ? (
                                 <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
                               ) : null;
@@ -1422,9 +1497,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Sucursales</CardTitle>
                     <CardDescription>Gestiona las sucursales de tu empresa</CardDescription>
                   </div>
-                  <Button onClick={() => { setSucursalModalOpen(true); fetchWarehouses(); }} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
+                  {canCreateWarehouses && <Button onClick={() => { setSucursalModalOpen(true); fetchWarehouses(); }} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
                     <Plus className="size-4" />Crear Sucursal
-                  </Button>
+                  </Button>}
                 </div>
               </CardHeader>
             </Card>
@@ -1434,6 +1509,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogTitle>Sucursales</DialogTitle>
               <SucursalesView
+                permissionModule="COMPANY_BRANCHES"
                 warehouses={warehouses}
                 onRefresh={() => {}}
                 isModal
@@ -1471,20 +1547,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Crear</span>
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500 inline-block" />Editar</span>
-                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Borrar</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Eliminar</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-violet-500 inline-block" />Importar</span>
+                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-cyan-500 inline-block" />Exportar</span>
                   </div>
                 </div>
                 
                 <div className="flex-1 rounded-2xl border border-border/40 overflow-hidden flex flex-col min-h-0 relative">
                   <div className="overflow-y-auto overflow-x-hidden flex-1" style={{ contain: 'paint' }}>
-                    <table className="w-full text-sm">
+                    <table className="w-max min-w-[1900px] text-sm">
                       <thead className="bg-muted/95 backdrop-blur-md sticky top-0 z-[50] shadow-sm border-b border-border/50">
                         <tr>
                           <th className="text-left px-4 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
-                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-blue-500 w-[60px] sm:w-[90px]">Leer</th>
-                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-emerald-500 w-[60px] sm:w-[90px]">Crear</th>
-                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-amber-500 w-[60px] sm:w-[90px]">Editar</th>
-                          <th className="px-0 py-3 text-center text-[10px] sm:text-xs font-black text-rose-500 w-[60px] sm:w-[90px]">Borrar</th>
+                          {PERMISSION_ACTION_DEFINITIONS.map(({ key, label }) => <th key={key} className="w-[72px] px-0 py-3 text-center text-[10px] font-black text-muted-foreground sm:text-xs">{label}</th>)}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
@@ -1516,18 +1591,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                   </div>
                                 </div>
                               </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.read} onCheckedChange={() => togglePermission(p.module, 'read')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!(p as any).create} onCheckedChange={() => togglePermission(p.module, 'create')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!(p as any).edit} onCheckedChange={() => togglePermission(p.module, 'edit')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
-                              <td className="px-0 py-1.5 text-center">
-                                <div className="flex justify-center"><Switch disabled={!canEditRoles} checked={!!p.delete} onCheckedChange={() => togglePermission(p.module, 'delete')} className="scale-[0.65] sm:scale-75" /></div>
-                              </td>
+                              {PERMISSION_ACTION_DEFINITIONS.map(({ key }) => <td key={key} className="px-0 py-1.5 text-center"><div className="flex justify-center"><Switch disabled={!canEditRoles} checked={permissionValue(p, key)} onCheckedChange={() => togglePermission(p.module, key)} className="scale-[0.65] sm:scale-75" /></div></td>)}
                             </tr>
                           );
                         })}
@@ -1544,7 +1608,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </TabsContent>
+        </TabsContent>}
 
         {/* ══════════ TAB: SEGURIDAD ══════════ */}
         <TabsContent value="seguridad" className="space-y-6 mt-0">
@@ -1567,13 +1631,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </div>
                       <p className="text-xs text-muted-foreground">{desc}</p>
                     </div>
-                    <Switch checked={value} onCheckedChange={setter} />
+                    <Switch checked={value} onCheckedChange={setter} disabled={!canEditSecurity} />
                   </div>
                 ))}
                 <div className="space-y-2 pt-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tiempo de Expiración de Sesión</Label>
                   <div className="flex items-center gap-3">
-                    <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)}
+                    <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} disabled={!canEditSecurity}
                       className="flex h-11 flex-1 rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <option value="15">15 minutos</option>
                       <option value="30">30 minutos</option>
@@ -1582,7 +1646,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <option value="480">8 horas</option>
                       <option value="1440">24 horas</option>
                     </select>
-                    <Button className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
+                    <Button disabled={!canEditSecurity} className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
                       <Save className="size-4" />Guardar
                     </Button>
                   </div>
@@ -1597,9 +1661,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <CardDescription>Permite solo conexiones desde IPs autorizadas</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
-                  <textarea value={ipWhitelist} onChange={e => setIpWhitelist(e.target.value)} rows={4} placeholder={'192.168.1.0/24\n10.0.0.1\n203.0.113.5'}
+                  <textarea value={ipWhitelist} onChange={e => setIpWhitelist(e.target.value)} disabled={!canEditSecurity} rows={4} placeholder={'192.168.1.0/24\n10.0.0.1\n203.0.113.5'}
                     className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-                  <Button className="w-full rounded-xl gap-2 font-bold" variant="outline" onClick={() => toast.success('Lista de IPs actualizada')}>
+                  <Button disabled={!canEditSecurity} className="w-full rounded-xl gap-2 font-bold" variant="outline" onClick={() => toast.success('Lista de IPs actualizada')}>
                     <CheckCircle2 className="size-4" />Actualizar Whitelist
                   </Button>
                 </CardContent>
@@ -1654,10 +1718,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
                     </div>
-                    <Switch checked={value} onCheckedChange={locked ? undefined : setter} disabled={locked} />
+                    <Switch checked={value} onCheckedChange={locked || !canEditTenancy ? undefined : setter} disabled={locked || !canEditTenancy} />
                   </div>
                 ))}
-                <Button className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { brandingService.update({ whiteLabel }); toast.success('Configuración de tenancy guardada'); }}>
+                <Button disabled={!canEditTenancy} className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { if (!canEditTenancy) return; brandingService.update({ whiteLabel }); toast.success('Configuración de tenancy guardada'); }}>
                   <Save className="size-4" />Guardar Configuración
                 </Button>
               </CardContent>
@@ -1709,7 +1773,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <p className="text-sm font-black uppercase tracking-widest text-primary">Tasa de Cambio Automática (BCN)</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Sincroniza diariamente con el Banco Central de Nicaragua</p>
                     </div>
-                    <Switch checked={exchangeRateAuto} onCheckedChange={setExchangeRateAuto} />
+                    <Switch checked={exchangeRateAuto} onCheckedChange={setExchangeRateAuto} disabled={!canEditCurrency} />
                   </div>
 
                   <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40">
@@ -1728,7 +1792,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         <div className="flex gap-3">
                           <div className="relative flex-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">C$</span>
-                            <Input value={manualRate} onChange={e => setManualRate(e.target.value)} type="number" step="0.01" className="pl-9 rounded-xl h-11 font-mono" />
+                            <Input value={manualRate} onChange={e => setManualRate(e.target.value)} disabled={!canEditCurrency} type="number" step="0.01" className="pl-9 rounded-xl h-11 font-mono" />
                           </div>
                         </div>
                         <p className="text-[10px] text-amber-600 font-bold italic">* Esta tasa se aplicará a todas las conversiones manuales del sistema</p>
@@ -1746,6 +1810,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <select
                       value={baseCurrencySetting}
                       onChange={(e) => setBaseCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
+                      disabled={!canEditCurrency}
                       className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-black uppercase tracking-widest"
                       aria-label="Moneda base contable de la empresa"
                     >
@@ -1765,7 +1830,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           Si se desactiva, nadie podrá cambiar `NIO/USD` desde la barra superior.
                         </p>
                       </div>
-                      <Switch checked={allowCurrencySwitch} onCheckedChange={setAllowCurrencySwitch} />
+                      <Switch checked={allowCurrencySwitch} onCheckedChange={setAllowCurrencySwitch} disabled={!canEditCurrency} />
                     </div>
 
                     <div className="space-y-2">
@@ -1775,6 +1840,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <select
                         value={displayCurrencySetting}
                         onChange={(e) => setDisplayCurrencySetting(e.target.value === 'USD' ? 'USD' : 'NIO')}
+                        disabled={!canEditCurrency}
                         className="h-11 w-full rounded-xl border border-input bg-background px-3 text-xs font-black uppercase tracking-widest"
                       >
                         <option value="NIO">NIO (Córdoba)</option>
@@ -1783,7 +1849,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     </div>
                   </div>
 
-                  <Button onClick={handleSaveCurrencySettings} disabled={isSavingCurrency} className="w-full rounded-xl gap-2 font-black h-11">
+                  <Button onClick={handleSaveCurrencySettings} disabled={isSavingCurrency || !canEditCurrency} className="w-full rounded-xl gap-2 font-black h-11">
                     {isSavingCurrency ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
                     Guardar Configuración
                   </Button>
@@ -1831,7 +1897,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         </TabsContent>
 
         {/* ══════════ TAB: DOMINIOS ══════════ */}
-        <TabsContent value="dominios" className="space-y-6 mt-0">
+        {false && <TabsContent value="dominios" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm mb-6">
               <CardHeader className="border-b border-border/30 bg-muted/10">
@@ -1898,7 +1964,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardContent>
             </Card>
           </motion.div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* ══════════ TAB: PRECIOS (Super Admin only) ══════════ */}
         <TabsContent value="precios" className="space-y-6 mt-0">
@@ -1939,7 +2005,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           setPricingSaving(false);
                         }
                       }}
-                      disabled={pricingSaving || Object.keys(pricingEdits).length === 0}
+                      disabled={!canEditModulePricing || pricingSaving || Object.keys(pricingEdits).length === 0}
                       className="rounded-xl gap-2 font-bold h-9 text-xs"
                     >
                       {pricingSaving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -1999,6 +2065,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                             step="0.01"
                                             min="0"
                                             value={currentPrice}
+                                            disabled={!canEditModulePricing}
                                             onChange={e => {
                                               const val = parseFloat(e.target.value) || 0;
                                               setPricingEdits(prev => ({ ...prev, [mod.id]: val }));
@@ -2042,7 +2109,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
         {/* ══════════ TAB: PLATAFORMA (Super Admin only) ══════════ */}
         <TabsContent value="paises" className="space-y-6 mt-0">
-          <CountriesView />
+          <CountriesView canEdit={canEditCountries} />
         </TabsContent>
         <TabsContent value="plataforma" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2066,7 +2133,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <Label className="font-bold text-sm">{label}</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
                     </div>
-                    <Switch defaultChecked={value} onCheckedChange={() => toast.success('Configuración actualizada')} />
+                    <Switch defaultChecked={value} disabled={!canEditPlatform} onCheckedChange={() => canEditPlatform && toast.success('Configuración actualizada')} />
                   </div>
                 ))}
               </CardContent>

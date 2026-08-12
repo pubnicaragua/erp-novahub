@@ -24,6 +24,7 @@ import { TaxCatalogView } from './TaxCatalogView'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
+import { useAuth } from '../../contexts/AuthContext'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -176,16 +177,16 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
-    id: 'creditNote', label: 'Notas de Crédito', icon: RotateCcw,
-    description: 'N/C al cliente → reversa ingreso y disminuye CxC',
+    id: 'creditNote', label: 'Créditos', icon: RotateCcw,
+    description: 'Crédito al cliente → reconoce la venta y aumenta CxC',
     fields: [
       { key: 'returns', label: 'Devoluciones', side: 'debit', description: 'Se debita la cuenta de devoluciones', defaultCode: '4100', defaultName: 'Devoluciones y Descuentos', defaultType: 'INCOME' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la CxC (disminuye)', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
   {
-    id: 'saleReturn', label: 'Devoluciones de Venta', icon: Undo2,
-    description: 'Devolución de mercancía → reversa ingreso y CxC',
+    id: 'saleReturn', label: 'Notas de Crédito', icon: Undo2,
+    description: 'Retorno de mercancía → aplica saldo a favor y ajusta CxC',
     fields: [
       { key: 'returns', label: 'Devoluciones', side: 'debit', description: 'Se debita devoluciones', defaultCode: '4100', defaultName: 'Devoluciones y Descuentos', defaultType: 'INCOME' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita CxC', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
@@ -422,6 +423,10 @@ type ConnectionModule = {
 }
 
 export function ConfiguracionContableView() {
+  const { canPerform } = useAuth()
+  const canEditAccounting = canPerform('ACCOUNTING', 'edit')
+  const canImportAccounting = canPerform('ACCOUNTING', 'import')
+  const canExportAccounting = canPerform('ACCOUNTING', 'export')
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
@@ -507,6 +512,7 @@ export function ConfiguracionContableView() {
   const loadConnections = () => connectionsQuery.refetch()
 
   const handleSave = async () => {
+    if (!canEditAccounting) return
     setSaving(true)
     try {
       const payload = { autoGenEnabled, defaultCurrency, taxRate, industry, accountMappings: accountMappingsRef.current, customModules }
@@ -520,6 +526,7 @@ export function ConfiguracionContableView() {
   }
 
   const persistAccountMappings = useCallback((nextMappings: Record<string, any>) => {
+    if (!canEditAccounting) return Promise.resolve()
     const saveTask = accountMappingSaveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
@@ -545,9 +552,10 @@ export function ConfiguracionContableView() {
       })
     accountMappingSaveQueueRef.current = saveTask
     return saveTask
-  }, [autoGenEnabled, defaultCurrency, taxRate, industry, customModules])
+  }, [autoGenEnabled, defaultCurrency, taxRate, industry, customModules, canEditAccounting])
 
   const handleSeedConfig = async () => {
+    if (!canEditAccounting) return
     setSeeding(true)
     try {
       await contabilidadService.seedConfig()
@@ -561,6 +569,7 @@ export function ConfiguracionContableView() {
   }
 
   const updateMapping = (moduleId: string, fieldKey: string, value: string) => {
+    if (!canEditAccounting) return
     const module = allModuleDefs.find(item => item.id === moduleId)
     const field = module?.fields.find(item => item.key === fieldKey)
     const account = allAccounts.find(item => item.code === value)
@@ -591,6 +600,7 @@ export function ConfiguracionContableView() {
   }
 
   const removeCustomModule = (id: string) => {
+    if (!canEditAccounting) return
     setCustomModules(prev => prev.filter(m => m.id !== id))
     setAccountMappings(prev => {
       const next = { ...prev }
@@ -600,6 +610,7 @@ export function ConfiguracionContableView() {
   }
 
   const addCustomField = (moduleId: string) => {
+    if (!canEditAccounting) return
     setCustomModules(prev => prev.map(m => {
       if (m.id !== moduleId) return m
       const key = `field${m.fields.length + 1}`
@@ -615,6 +626,7 @@ export function ConfiguracionContableView() {
   }
 
   const removeCustomField = (moduleId: string, fieldKey: string) => {
+    if (!canEditAccounting) return
     setCustomModules(prev => prev.map(m => {
       if (m.id !== moduleId) return m
       return { ...m, fields: m.fields.filter(f => f.key !== fieldKey) }
@@ -642,6 +654,7 @@ export function ConfiguracionContableView() {
   }
 
   const handleImportCatalog = async () => {
+    if (!canImportAccounting) return
     if (!industry) { toast.error('Selecciona una industria'); return }
     try {
       const res = await contabilidadService.importDefaultsWithHierarchy(industry)
@@ -654,6 +667,7 @@ export function ConfiguracionContableView() {
   }
 
   const handleExportAccounts = async () => {
+    if (!canExportAccounting) return
     try {
       const raw = await contabilidadService.exportAccounts()
       if (!Array.isArray(raw) || raw.length === 0) throw new Error('El servidor no devolvió cuentas para exportar')
@@ -665,6 +679,7 @@ export function ConfiguracionContableView() {
   }
 
   const handleDownloadTemplate = () => {
+    if (!canExportAccounting) return
     downloadCsv('plantilla_cuentas.csv', templateRows())
     toast.success('Plantilla descargada')
   }
@@ -919,14 +934,14 @@ export function ConfiguracionContableView() {
             <RefreshCw className={`size-3.5 mr-1 ${connectionsLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Probar conexiones</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleSeedConfig} disabled={seeding}>
+          {canEditAccounting && <Button variant="outline" size="sm" onClick={handleSeedConfig} disabled={seeding}>
             {seeding ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
             Restablecer
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          </Button>}
+          {canEditAccounting && <Button size="sm" onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Save className="size-3.5 mr-1" />}
             Guardar configuración general
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -1203,10 +1218,10 @@ export function ConfiguracionContableView() {
               <Eye className="size-3.5 mr-1" />
               Vista Previa
             </Button>
-            <Button onClick={handleImportCatalog} disabled={!industry} size="sm">
+            {canImportAccounting && <Button onClick={handleImportCatalog} disabled={!industry} size="sm">
               <Upload className="size-3.5 mr-1" />
               Importar Catálogo
-            </Button>
+            </Button>}
           </div>
           {showPreviewCatalog && previewAccounts.length > 0 && (
             <div className="mt-4 rounded-xl border border-border/40 overflow-hidden">
@@ -1428,12 +1443,12 @@ export function ConfiguracionContableView() {
             <pre className="text-muted-foreground whitespace-pre">{csvRowsToText(templateRows())}</pre>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" size="sm" onClick={handleExportAccounts}>
+            {canExportAccounting && <Button variant="outline" size="sm" onClick={handleExportAccounts}>
               <FileDown className="size-3.5 mr-1" /> Exportar Cuentas
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+            </Button>}
+            {canExportAccounting && <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
               <FileSpreadsheet className="size-3.5 mr-1" /> Descargar Plantilla
-            </Button>
+            </Button>}
           </div>
         </CardContent>
       </Card>

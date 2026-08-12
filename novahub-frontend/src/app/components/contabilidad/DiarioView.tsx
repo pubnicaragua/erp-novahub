@@ -20,6 +20,7 @@ import { cn } from '../ui/utils';
 import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
 
@@ -32,10 +33,6 @@ const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'o
   VOIDED: 'destructive',
 };
 
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-}
-
 function formatAccountingDate(value?: string | Date | null): string {
   if (!value) return '—';
   const raw = String(value);
@@ -46,8 +43,19 @@ function formatAccountingDate(value?: string | Date | null): string {
   return new Date(raw).toLocaleDateString('es-NI');
 }
 
+function formatReferenceId(value?: string | null): string {
+  if (!value) return '—';
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}…${value.slice(-4)}`;
+}
+
+function referenceDisplay(journal: JournalEntry): string {
+  return journal.referenceNumber || formatReferenceId(journal.referenceId);
+}
+
 export function DiarioView() {
   const { canPerform } = useAuth();
+  const { baseCurrency, formatAmount } = useCurrency();
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -86,6 +94,7 @@ export function DiarioView() {
   );
   const journals = accountingList(journalsQuery.data) as JournalEntry[];
   const viewJournal = journalDetailQuery.data || null;
+  const formatCurrency = (value: number) => formatAmount(Number(value || 0), baseCurrency);
   const journalGridCols = viewJournal
     ? '48px 1fr 1.15fr 0.85fr 1.35fr 1.35fr 1fr 1.35fr 84px'
     : '48px 1fr 2.2fr 0.85fr 1fr 1fr 1fr 1.35fr 84px';
@@ -142,7 +151,7 @@ export function DiarioView() {
     const statusKey = journal.status?.toLowerCase();
     return (
       <div className="flex items-center justify-end gap-1">
-        {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+        {statusKey === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'approve') && (
           <Button
             variant="ghost"
             size="icon"
@@ -153,7 +162,7 @@ export function DiarioView() {
             <Send className="size-3.5" />
           </Button>
         )}
-        {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+        {statusKey === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'delete') && (
           <Button
             variant="ghost"
             size="icon"
@@ -333,7 +342,7 @@ export function DiarioView() {
                   <span className="px-1 text-center">Debe</span>
                   <span className="px-1 text-center">Haber</span>
                   <span className="min-w-0 truncate px-1">Ref. Tipo</span>
-                  <span className="min-w-0 truncate px-1">Ref. ID</span>
+                  <span className="min-w-0 truncate px-1">Referencia</span>
                   <span className="px-1 text-right">Acciones</span>
                 </div>
                 {journals.map((j) => {
@@ -353,7 +362,7 @@ export function DiarioView() {
                       <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalDeb)}</span>
                       <span className="truncate px-1 text-right text-xs tabular-nums">{formatCurrency(totalCred)}</span>
                       <span className="min-w-0 truncate px-1 text-xs text-muted-foreground" title={referenceTypeLabel((j as any).referenceType)}>{referenceTypeLabel((j as any).referenceType) || '-'}</span>
-                      <span className="min-w-0 truncate px-1 font-mono text-xs" title={j.referenceId || ''}>{j.referenceId || '-'}</span>
+                      <span className="min-w-0 truncate px-1 font-mono text-xs" title={j.referenceNumber || j.referenceId || ''}>{referenceDisplay(j)}</span>
                       <span className="flex justify-end px-1">{renderJournalActions(j)}</span>
                     </div>
                   );
@@ -400,7 +409,7 @@ export function DiarioView() {
 
                       <div className="mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
                         {referenceType && <span className="truncate"><strong className="text-foreground/80">Ref.:</strong> {referenceTypeLabel(referenceType)}</span>}
-                        {j.referenceId && <span className="truncate font-mono"><strong className="font-sans text-foreground/80">ID:</strong> {j.referenceId}</span>}
+                        {j.referenceId && <span className="truncate font-mono"><strong className="font-sans text-foreground/80">Referencia:</strong> {referenceDisplay(j)}</span>}
                         {!referenceType && !j.referenceId && <span>Sin referencia asociada</span>}
                       </div>
                     </div>
@@ -456,9 +465,6 @@ export function DiarioView() {
                           {formatCurrency(viewJournal.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0)}
                         </p>
                       </div>
-                      <Badge variant="outline" className="shrink-0">
-                        {formatAccountingDate(viewJournal.date)}
-                      </Badge>
                     </div>
                   </div>
 
@@ -478,15 +484,11 @@ export function DiarioView() {
                       <p className="truncate text-sm font-semibold">{referenceTypeLabel((viewJournal as any).referenceType)}</p>
                     </div>
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ref. ID</p>
-                      <p className="truncate font-mono text-xs font-bold">{(viewJournal as any).referenceId || '—'}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referencia</p>
+                      <p className="truncate font-mono text-xs font-bold" title={viewJournal.referenceNumber || viewJournal.referenceId || ''}>{referenceDisplay(viewJournal)}</p>
                     </div>
                     <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Centro de Costo</p>
-                      <p className="truncate text-sm font-semibold">{(viewJournal as any).costCenterId || '—'}</p>
-                    </div>
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Líneas</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Asientos</p>
                       <p className="text-sm font-semibold tabular-nums">{viewJournal.lines?.length ?? 0}</p>
                     </div>
                   </div>
@@ -497,12 +499,12 @@ export function DiarioView() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {viewJournal.status?.toLowerCase() === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+                    {viewJournal.status?.toLowerCase() === 'draft' && canPerform('ACCOUNTING_JOURNAL', 'approve') && (
                       <Button className="flex-1" size="sm" onClick={() => { void handlePost(viewJournal); }}>
                         <Send className="mr-1 size-3.5" /> Contabilizar
                       </Button>
                     )}
-                    {viewJournal.status?.toLowerCase() === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'edit') && (
+                    {viewJournal.status?.toLowerCase() === 'posted' && canPerform('ACCOUNTING_JOURNAL', 'delete') && (
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => { void handleVoid(viewJournal); }}>
                         <Ban className="mr-1 size-3.5" /> Anular
                       </Button>
@@ -516,7 +518,7 @@ export function DiarioView() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <ArrowDownLeft className="size-4 text-primary" />
-                          <h3 className="truncate text-sm font-black uppercase tracking-tight">Líneas del Asiento</h3>
+                          <h3 className="truncate text-sm font-black uppercase tracking-tight">Asientos del Diario</h3>
                         </div>
                         <p className="mt-1 text-[11px] text-muted-foreground">Movimientos de débito y crédito del asiento.</p>
                       </div>
@@ -524,7 +526,7 @@ export function DiarioView() {
 
                     {!viewJournal.lines || viewJournal.lines.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
-                        <p className="text-sm font-semibold">Sin líneas</p>
+                        <p className="text-sm font-semibold">Sin asientos</p>
                         <p className="mt-1 text-xs text-muted-foreground">Este asiento no tiene movimientos.</p>
                       </div>
                     ) : (
@@ -563,9 +565,7 @@ export function DiarioView() {
 
                   <div className="flex items-center justify-end gap-2 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
                     <span>Creado: {new Date(viewJournal.createdAt).toLocaleString('es-NI')}</span>
-                    {viewJournal.updatedAt !== viewJournal.createdAt && (
-                      <span>| Actualizado: {new Date(viewJournal.updatedAt).toLocaleString('es-NI')}</span>
-                    )}
+                    <span>| Creado por: {viewJournal.createdBy?.name || 'Sistema'}</span>
                   </div>
                 </>
               )}

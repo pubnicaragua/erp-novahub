@@ -15,11 +15,13 @@ import {
   BarChart3,
   HandHeart,
   Settings2,
+  Building2,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardHRView } from './hr/DashboardHRView';
 import { EmpleadosView } from './hr/EmpleadosView';
+import { DepartamentosView } from './hr/DepartamentosView';
 import { NominasView } from './hr/NominasView';
 import { AsistenciaView } from './hr/AsistenciaView';
 import { AusenciasView } from './hr/AusenciasView';
@@ -38,13 +40,14 @@ interface RecursosHumanosPageProps {
 }
 
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   
   // Map sidebar submodule IDs to tab values
   const subModuleToTab: Record<string, string> = {
     'dashboard-hr': 'dashboard',
     'empleados': 'empleados',
+    'departamentos': 'departamentos',
     'nominas': 'nominas',
     'config-nomina': 'config-nomina',
     'asistencia': 'asistencia',
@@ -101,6 +104,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             hrService.getPositions(undefined, signal),
           ]);
           return { employees, departments, positions };
+        }
+        case 'departamentos': {
+          const [departments, users] = await Promise.all([
+            hrService.getDepartments(signal),
+            hrService.getDepartmentHeadCandidates(signal),
+          ]);
+          return { departments, users };
         }
         case 'nominas': {
           const [payrolls, employees] = await Promise.all([
@@ -169,6 +179,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     reviews: list(hrQuery.data?.reviews),
     trainings: list(hrQuery.data?.trainings),
     benefits: list(hrQuery.data?.benefits),
+    users: list(hrQuery.data?.users),
     stats: hrQuery.data?.stats || null,
   }), [hrQuery.data]);
   const loading = hrQuery.isLoading;
@@ -211,6 +222,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3, module: 'HR_DASHBOARD' },
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
+            { id: 'departamentos', label: 'Departamentos', icon: Building2, module: 'HR_EMPLOYEES' },
             { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
             { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
             { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
@@ -224,7 +236,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             const hasRequired = user?.enabledModules?.includes(tab.module);
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('HR_'));
             const hasFallback = user?.enabledModules?.includes('HR') && !hasSpecificSubmodules;
-            const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
+            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
             if (!hasAccess) return null;
             return (
               <TabsTrigger 
@@ -274,6 +286,14 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                   positions={data.positions}
                   onRefresh={refreshData}
                   isSidebarCollapsed={isSidebarCollapsed}
+                />
+              </TabsContent>
+
+              <TabsContent value="departamentos" className="m-0">
+                <DepartamentosView
+                  departments={data.departments}
+                  users={data.users}
+                  onRefresh={refreshData}
                 />
               </TabsContent>
 

@@ -20,19 +20,22 @@ export const SALES_SUBMODULES: Submodule[] = [
   { id: 'SALES_INVOICES', label: 'Facturas', description: 'Facturación y cobros' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', description: 'Suscripciones y contratos' },
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', description: 'Historial de ingresos' },
-  { id: 'SALES_RETURNS', label: 'Devoluciones de Venta', description: 'Retornos de mercancía' },
-  { id: 'SALES_CREDIT_NOTES', label: 'Notas de Crédito', description: 'Ajustes y créditos emitidos' },
+  { id: 'SALES_RETURNS', label: 'Notas de Crédito', description: 'Retornos de mercancía' },
+  { id: 'SALES_CREDIT_NOTES', label: 'Créditos', description: 'Productos y servicios vendidos a crédito' },
+  { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', description: 'Tarifas y precios de venta' },
   { id: 'RETAIL_POS', label: 'Facturación por Caja', description: 'Punto de venta y caja' },
 ];
 
 // Submódulos de Compras (alineados con sidebar)
 export const PURCHASES_SUBMODULES: Submodule[] = [
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', description: 'Gestión de proveedores' },
+  { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', description: 'Solicitudes internas de compra' },
+  { id: 'PURCHASES_MANAGEMENT', label: 'Gestión de compras', description: 'Aprobación y conversión de solicitudes' },
+  { id: 'PURCHASES_SUPPLIER_PRICES', label: 'Precios de proveedores', description: 'Historial de precios por proveedor' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', description: 'Registro de gastos' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', description: 'Gastos periódicos' },
   { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', description: 'Órdenes de compra' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', description: 'Recepción de mercancía' },
-  { id: 'PURCHASES_INVOICES', label: 'Facturas de Proveedor', description: 'Facturas de proveedores' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Facturas Proveedor Rec.', description: 'Facturas recurrentes de proveedores' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', description: 'Pagos a proveedores' },
   { id: 'PURCHASES_RETURNS', label: 'Créditos del Proveedor', description: 'Devoluciones y créditos' },
@@ -41,6 +44,7 @@ export const PURCHASES_SUBMODULES: Submodule[] = [
 // Submódulos de Inventario
 export const INVENTORY_SUBMODULES: Submodule[] = [
   { id: 'INVENTORY_PRODUCTS', label: 'Productos', description: 'Catálogo de productos' },
+  { id: 'INVENTORY_SERVICES', label: 'Servicios', description: 'Catálogo de servicios' },
   { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', description: 'Gestión de almacenes' },
   { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', description: 'Movimientos entre almacenes' },
   { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', description: 'Control de stock' },
@@ -111,11 +115,17 @@ export const REPORTS_SUBMODULES: Submodule[] = [
 export const ACCOUNTING_SUBMODULES: Submodule[] = [
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', description: 'Catálogo de cuentas contables' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', description: 'Asientos contables' },
+  { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', description: 'Movimientos por cuenta' },
   { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', description: 'Balance de comprobación' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', description: 'Pérdidas y ganancias' },
   { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', description: 'Balance general' },
   { id: 'ACCOUNTING_CASH_FLOW', label: 'Flujo de Efectivo', description: 'Estado de flujo de efectivo' },
+  { id: 'ACCOUNTING_EXCHANGE_DIFFERENCES', label: 'Diferencias Cambiarias', description: 'Diferencias por conversión de moneda' },
+  { id: 'ACCOUNTING_EQUITY', label: 'Cambios Patrimonio', description: 'Cambios en el patrimonio' },
   { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', description: 'Conciliación de cuentas bancarias' },
+  { id: 'ACCOUNTING_ASSETS', label: 'Activos Fijos', description: 'Control y depreciación de activos' },
+  { id: 'ACCOUNTING_BUDGET', label: 'Presupuestos', description: 'Planificación presupuestaria' },
+  { id: 'ACCOUNTING_CONFIG', label: 'Configuración contable', description: 'Configuración del módulo contable' },
   { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', description: 'Gestión de períodos contables' },
   { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', description: 'IVA, IR, INSS, INATEC' },
 ];

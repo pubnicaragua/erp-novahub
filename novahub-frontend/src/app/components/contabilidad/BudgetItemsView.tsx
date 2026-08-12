@@ -20,6 +20,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const PERIODS = [
   { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
@@ -27,6 +28,10 @@ const PERIODS = [
 ];
 
 export function BudgetItemsView() {
+  const { canPerform } = useAuth();
+  const canCreate = canPerform('ACCOUNTING', 'create');
+  const canEdit = canPerform('ACCOUNTING', 'edit');
+  const canDeactivate = canPerform('ACCOUNTING', 'deactivate');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -50,12 +55,14 @@ export function BudgetItemsView() {
   const loadData = () => { itemsQuery.refetch(); accountsQuery.refetch(); };
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ code: '', name: '', assignedAmount: 0, accountId: '', costCenterId: '', period: filterPeriod, status: 'ACTIVE' });
     setDialogOpen(true);
   }
 
   function openEdit(item: any) {
+    if (!canEdit) return;
     setEditing(item);
     setForm({
       code: item.code, name: item.name, assignedAmount: Number(item.assignedAmount),
@@ -65,6 +72,7 @@ export function BudgetItemsView() {
   }
 
   async function handleSave() {
+    if (editing ? !canEdit : !canCreate) return;
     if (!form.code || !form.name || !form.accountId) {
       toast.error('Código, nombre y cuenta son requeridos');
       return;
@@ -86,11 +94,12 @@ export function BudgetItemsView() {
   }
 
   async function handleDelete(id: string) {
+    if (!canDeactivate) return;
     setPendingDeleteId(id);
   }
 
   async function confirmDelete() {
-    if (!pendingDeleteId) return;
+    if (!pendingDeleteId || !canDeactivate) return;
     try {
       await contabilidadService.deleteBudgetItem(pendingDeleteId);
       toast.success('Partida eliminada');
@@ -115,9 +124,9 @@ export function BudgetItemsView() {
           <h2 className="text-xl font-black uppercase tracking-tight">Partidas Presupuestarias</h2>
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black">{items.length}</Badge>
         </div>
-        <Button onClick={openCreate} className="gap-2 text-xs font-black uppercase tracking-widest rounded-xl">
+        {canCreate && <Button onClick={openCreate} className="gap-2 text-xs font-black uppercase tracking-widest rounded-xl">
           <Plus className="size-4" /> Nueva Partida
-        </Button>
+        </Button>}
       </div>
 
       <Separator />
@@ -205,8 +214,8 @@ export function BudgetItemsView() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>
+                        {canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-8 rounded-lg" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}
+                        {canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar partida" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -220,7 +229,7 @@ export function BudgetItemsView() {
               const assigned = Number(item.assignedAmount); const executed = Number(item.executedAmount); const available = assigned - executed;
               return <div key={item.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{item.code}</p><p className="break-words text-xs font-semibold">{item.name}</p><p className="break-words text-[10px] text-muted-foreground">{item.account?.code} - {item.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{item.status === 'ACTIVE' ? 'Activo' : item.status === 'SUSPENDED' ? 'Suspendido' : 'Cerrado'}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button></div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar partida" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             })}
           </div>
@@ -281,7 +290,7 @@ export function BudgetItemsView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-xl text-xs font-bold">Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving} className="rounded-xl text-xs font-bold gap-2">
+            <Button onClick={handleSave} disabled={saving || (editing ? !canEdit : !canCreate)} className="rounded-xl text-xs font-bold gap-2">
               {saving && <Loader2 className="size-3.5 animate-spin" />}
               {editing ? 'Actualizar' : 'Crear'}
             </Button>

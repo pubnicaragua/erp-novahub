@@ -120,7 +120,11 @@ const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER
 };
 
 export function SuscripcionesPage() {
-  const { user, refreshEnabledModules } = useAuth();
+  const { user, refreshEnabledModules, canPerform } = useAuth();
+  const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
+  const canViewUsers = canPerform('CONFIG_USERS', 'view');
+  const canViewRoles = canPerform('CONFIG_ROLES', 'view');
+  const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
   const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,7 +201,7 @@ export function SuscripcionesPage() {
   const { data: subscriptionData, isLoading: subscriptionLoading, refetch: refetchSubscriptions } = useTenantQuery(
     ['my-company', user?.tenantId || 'platform', user?.role || 'unknown'],
     async (signal) => {
-      if (!user?.isPlatformAdmin && !user?.isTenantAdmin) return { requests: [], tenants: [], customRoles: [] };
+      if (!user) return { requests: [], tenants: [], customRoles: [] };
       if (user.isPlatformAdmin) {
         const [reqs, allTenants, rolesRes] = await Promise.all([
           user.role === 'partner' ? subscriptionsService.getPartnerRequests(undefined, signal) : subscriptionsService.getAllRequests(undefined, signal),
@@ -206,19 +210,32 @@ export function SuscripcionesPage() {
         ]);
         return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes) };
       }
-      const [reqs, myTenants, rolesRes] = await Promise.all([
-        subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal),
-        tenantsService.getAll(undefined, signal),
-        rolesService.getAll({ clientTenantId: user.tenantId }, signal),
+      if (user.isTenantAdmin) {
+        const [reqs, myTenants, rolesRes] = await Promise.all([
+          subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal),
+          tenantsService.getAll(undefined, signal),
+          rolesService.getAll({ clientTenantId: user.tenantId }, signal),
+        ]);
+        return {
+          requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
+          tenants: asList(myTenants).filter((tenant: any) => tenant.id === user.tenantId),
+          customRoles: asList(rolesRes),
+        };
+      }
+
+      const [tenantRes, reqs, rolesRes] = await Promise.all([
+        canViewCompany ? tenantsService.getOne(user.tenantId, signal) : Promise.resolve(null),
+        canViewSubscriptions ? subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
+        canViewRoles ? rolesService.getAll({ clientTenantId: user.tenantId }, signal) : Promise.resolve([]),
       ]);
       return {
         requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
-        tenants: asList(myTenants).filter((tenant: any) => tenant.id === user.tenantId),
+        tenants: tenantRes ? [tenantRes] : [],
         customRoles: asList(rolesRes),
       };
     },
     {
-      enabled: Boolean(user && (user.isPlatformAdmin || user.isTenantAdmin)),
+      enabled: Boolean(user && (user.isPlatformAdmin || user.isTenantAdmin || canViewCompany || canViewUsers || canViewRoles || canViewSubscriptions)),
       refetchInterval: user?.isPlatformAdmin ? 5000 : false,
       onError: (error) => toast.error(error.message || 'Error al cargar datos de Mi Empresa'),
     },
@@ -583,6 +600,9 @@ export function SuscripcionesPage() {
 
   if (user && !user.isPlatformAdmin) {
     const myTenant = tenants.find(t => t.id === user.tenantId);
+    if (!myTenant) {
+      return <div className="mx-auto flex min-h-[320px] max-w-3xl items-center justify-center p-6 text-center text-sm text-muted-foreground">{subscriptionLoading ? 'Cargando la información de Mi Empresa...' : 'No tienes acceso a la información de esta empresa.'}</div>;
+    }
     return (
       <>
       <TenantSubscriptionView 

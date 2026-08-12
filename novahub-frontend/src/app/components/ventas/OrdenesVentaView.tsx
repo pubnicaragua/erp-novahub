@@ -30,6 +30,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -46,6 +47,7 @@ interface OrdenesVentaViewProps {
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  salesAlert?: PurchaseAlertDetail;
 }
 
 const statusOptions = [
@@ -58,7 +60,7 @@ const statusOptions = [
   { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -68,6 +70,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
@@ -103,9 +106,15 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
 
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
+
   const handleInvoiceOrder = async (order: SalesOrder) => {
-    if (!canPerform('SALES_INVOICES', 'create')) {
-      toast.error('No tienes permiso para facturar órdenes de venta');
+    if (!canPerform('SALES_ORDERS', 'approve')) {
+      toast.error('No tienes permiso para aprobar y enviar órdenes a factura');
       return;
     }
     if (invoicingOrderId) return;
@@ -1076,6 +1085,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <option value="table">Lista</option>
               <option value="cards">Tarjetas</option>
             </select>
+            {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_ORDERS', 'create') && (
               <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Orden
@@ -1093,6 +1103,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           layoutMode={layoutMode}
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setEditingId(row.id)}
+          highlightedRowId={highlightedAlertId}
           isLoading={loading}
            actions={(row) => (
              <div className="flex min-w-max items-center justify-end gap-2 pr-1">
@@ -1101,7 +1112,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                 {canPerform('SALES_INVOICES', 'create') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
+                 {canPerform('SALES_ORDERS', 'approve') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
                     title="Aprobar y enviar a Factura" 

@@ -572,7 +572,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               {account.isActive ? 'Activo' : 'Inactivo'}
             </Badge>
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-              {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+              {canPerform('ACCOUNTING_CHART', 'edit') && (
                 <>
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar">
                     <Pencil className="size-3.5" />
@@ -618,7 +618,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           {visibleAccountColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
           {visibleAccountColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+            {canPerform('ACCOUNTING_CHART', 'edit') && (
               <>
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar cuenta" aria-label="Editar cuenta">
                   <Pencil className="size-3.5" />
@@ -666,12 +666,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <Button variant="outline" size="sm" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-1" /> Exportar
           </Button>
-          {canPerform('ACCOUNTING_CHARTS', 'create') && (
+          {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-1" /> Importar
             </Button>
           )}
-          {canPerform('ACCOUNTING_CHARTS', 'create') && (
+          {canPerform('ACCOUNTING_CHART', 'create') && (
             <Button size="sm" onClick={() => openAddDialog()}>
               <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
             </Button>
@@ -861,7 +861,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 )}
 
                 <div className="flex flex-wrap gap-2">
-                  {canPerform('ACCOUNTING_CHARTS', 'edit') && (
+                  {canPerform('ACCOUNTING_CHART', 'edit') && (
                     <>
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditDialog(selectedAccount)}>
                         <Pencil className="mr-1 size-3.5" /> Editar

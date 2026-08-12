@@ -51,7 +51,7 @@ interface Props {
   initialStatus?: string;
   prefillDoc?: Partial<PurchaseOrder> | null;
   onPrefillHandled?: () => void;
-  onApprovedToInvoice?: (invoice?: any) => void;
+  onApprovedToReceipt?: (receipt?: any) => void;
 }
 
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -224,7 +224,7 @@ const getProductListFromResponse = (response: any): any[] => (
 
 const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToInvoice }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -740,15 +740,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const handleApproveOrder = async (orderId: string) => {
     setApproving(true);
-    const approveToastId = toast.loading('Aprobando orden de compra y generando factura pendiente...');
+    const approveToastId = toast.loading('Aprobando orden de compra y preparando recepción...');
     try {
       const result = await purchaseOrdersService.approve(orderId) as any;
-      toast.success(result?.invoice?.number
-        ? `Orden aprobada. Factura ${result.invoice.number} creada como pendiente.`
+      toast.success(result?.receipt?.number
+        ? `Orden aprobada. Recepción ${result.receipt.number} preparada.`
         : 'Orden de compra aprobada', { id: approveToastId });
       setPreviewOrder(null);
       if (editingId === orderId) setEditingId(null);
-      onApprovedToInvoice?.(result?.invoice);
+      onApprovedToReceipt?.(result?.receipt);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al aprobar', { id: approveToastId });
@@ -1102,7 +1102,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                    <Ban className="size-3 mr-2" /> Rechazar
                  </Button>
               )}
-            {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'edit') && (
+            {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'approve') && (
               <Button variant="outline" onClick={() => setPreviewOrder(localDoc)} className="rounded-xl border-primary/40 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4">
                 <CheckCircle2 className="size-3 mr-2" /> Aprobar
               </Button>
@@ -1617,7 +1617,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           open={!!previewOrder}
           order={previewOrder}
           suppliers={supplierCatalog}
-          canApprove={canPerform('PURCHASES_ORDERS', 'edit')}
+          canApprove={canPerform('PURCHASES_ORDERS', 'approve')}
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
@@ -1676,7 +1676,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               >
                 <Eye className="size-4" />
               </Button>
-              {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
+              {canPerform('PURCHASES_ORDERS', 'approve') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}><CheckCircle2 className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
@@ -1716,7 +1716,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           open={!!previewOrder}
           order={previewOrder}
           suppliers={supplierCatalog}
-          canApprove={canPerform('PURCHASES_ORDERS', 'edit')}
+          canApprove={canPerform('PURCHASES_ORDERS', 'approve')}
           canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
           approving={approving}
           onClose={() => setPreviewOrder(null)}

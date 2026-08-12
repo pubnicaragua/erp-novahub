@@ -2,17 +2,16 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil,
-  AlertTriangle, XCircle, ArrowDown
+  AlertTriangle, XCircle, ArrowDown, FileText, Upload, Banknote
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { isTaxExempt } from '../../utils/taxUtils';
 import { purchaseOrdersService, purchaseReceiptsService } from '../../services/compras.service';
+import { storageService } from '../../services/storage.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { inventoryService } from '../../services/inventario.service';
 import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -29,7 +28,7 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 
-interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onConvertToInvoice?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; onRegisterPaymentFromReceipt?: (draft: any) => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-500' },
@@ -47,7 +46,7 @@ const incidenciaIcons: Record<string, any> = {
   incidencia: AlertTriangle,
 };
 
-export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onConvertToInvoice, pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], onRegisterPaymentFromReceipt, pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
@@ -79,7 +78,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
-  const [invalidCodeItems, setInvalidCodeItems] = useState<Record<number, boolean>>({});
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [invoiceDueDate, setInvoiceDueDate] = useState('');
+  const [invoiceTotal, setInvoiceTotal] = useState('');
+  const [invoiceEvidenceFiles, setInvoiceEvidenceFiles] = useState<File[]>([]);
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [codeEditMode, setCodeEditMode] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
@@ -95,9 +99,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   if (editingId !== prevEdit.editingId || data !== prevEdit.data) {
     setPrevEdit({ editingId, data });
     if (editingId) {
-      setInvalidCodeItems({});
       setCodeEditMode({});
-      if (editingId === 'NEW') {
+       if (editingId === 'NEW') {
          setLocalDoc({
            supplierId: '',
            purchaseOrderId: '',
@@ -105,13 +108,25 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
            status: 'PENDING' as any,
            items: [],
          });
-      } else {
-         const found = data.find(x => x.id === editingId);
-         setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+          setInvoiceNumber('');
+          setInvoiceDate(new Date().toISOString().slice(0, 10));
+          setInvoiceDueDate(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+          setInvoiceTotal('');
+          setInvoiceEvidenceFiles([]);
+       } else {
+          const found = data.find(x => x.id === editingId);
+          setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+          const linkedInvoice = (found as any)?.supplierInvoices?.find((item: any) => String(item.status || '').toUpperCase() !== 'CANCELLED');
+          setInvoiceNumber(linkedInvoice?.number || '');
+          setInvoiceDate(linkedInvoice?.date ? new Date(linkedInvoice.date).toISOString().slice(0, 10) : (found?.date ? new Date(found.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)));
+          setInvoiceDueDate(linkedInvoice?.dueDate ? new Date(linkedInvoice.dueDate).toISOString().slice(0, 10) : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+          setInvoiceTotal(linkedInvoice?.total ? String(Number(linkedInvoice.total)) : '');
+          setInvoiceEvidenceFiles([]);
+       }
+     } else {
+       setLocalDoc(null);
+        setInvoiceEvidenceFiles([]);
       }
-    } else {
-      setLocalDoc(null);
-    }
   }
 
   const filtered = data.filter(r => {
@@ -158,13 +173,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           toast.error('Selecciona la bodega para cada ítem recibido antes de marcar la recepción');
           return;
         }
-        const invalidManualItem = (currentReceipt?.items || []).some((item: any) =>
+        const missingProduct = (currentReceipt?.items || []).some((item: any) =>
           Number(item?.quantityReceived || 0) > 0
-          && !String(item?.productId || '').trim()
-          && (!String(item?.description || '').trim() || !String(item?.code || '').trim()),
+          && item?.stockApplies !== false
+          && !String(item?.productId || '').trim(),
         );
-        if (invalidManualItem) {
-          toast.error('Cada ítem recibido sin producto debe tener nombre y código para crearse en inventario');
+        if (missingProduct) {
+          toast.error('Cada ítem recibido que afecte inventario debe estar vinculado a un producto del catálogo');
           return;
         }
       }
@@ -172,132 +187,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const updatedResponse = await purchaseReceiptsService.update(id as string, updates);
       const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
       const nextStatus = String(updatedReceipt?.status || updates.status || previousStatus).toUpperCase();
-      if (!['RECEIVED', 'PARTIAL'].includes(previousStatus) && ['RECEIVED', 'PARTIAL'].includes(nextStatus)) {
-        try {
-          await ensureInventoryEntriesForReceipt({
-            ...(currentReceipt || {}),
-            ...(updatedReceipt || {}),
-            id: String(id),
-            status: nextStatus as any,
-          });
-        } catch (syncError: any) {
-          toast.warning(`Recepción actualizada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
-        }
-      }
       toast.success('Recepción actualizada', updateToastId ? { id: updateToastId } : undefined);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', updateToastId ? { id: updateToastId } : undefined); throw new Error('Update failed'); }
-  };
-
-  const findProductByCode = async (code: string): Promise<any> => {
-    const normalizedCode = String(code || '').trim().toLowerCase();
-    if (!normalizedCode) return null;
-    try {
-      const searchResp = await inventoryService.getProducts({ search: code, page: 1, pageSize: 50 });
-      const searchList = Array.isArray(searchResp) ? searchResp : (searchResp as any)?.data || [];
-      return searchList.find((p: any) => String(p.code || p.sku || '').trim().toLowerCase() === normalizedCode) || null;
-    } catch {
-      return products.find((p: any) => String(p.code || p.sku || '').trim().toLowerCase() === normalizedCode) || null;
-    }
-  };
-
-  const ensureInventoryEntriesForReceipt = async (receipt: Partial<PurchaseReceipt>) => {
-    const nextStatus = String(receipt.status || '').toUpperCase();
-    if (!STATUS_OPTIONS_RECEIVING.includes(nextStatus)) return;
-    if (!receipt.id) return;
-    const receiptItems = Array.isArray(receipt.items) ? receipt.items : [];
-    if (receiptItems.length === 0) return;
-
-    const movementsResponse = await inventoryService.getMovements({ type: 'IN', limit: 1000 }).catch(() => []);
-    const existingMovements = Array.isArray(movementsResponse)
-      ? movementsResponse
-      : (movementsResponse as any)?.data || [];
-
-    for (const [index, item] of receiptItems.entries()) {
-      const quantityReceived = Number((item as any)?.quantityReceived || 0);
-      if (quantityReceived <= 0) continue;
-      let productId = String((item as any)?.productId || '').trim();
-      const warehouseId = String((item as any)?.warehouseId || '').trim();
-      if (!warehouseId) {
-        throw new Error(`Debe seleccionar bodega para el ítem ${index + 1}`);
-      }
-
-      // Producto no vinculado: intentar crearlo en inventario con código y categoría del ítem
-      if (!productId) {
-        const name = String((item as any)?.description || (item as any)?.name || '').trim();
-        const code = String((item as any)?.code || '').trim();
-        if (!name) {
-          throw new Error(`El ítem ${index + 1} necesita un nombre/descripción para crearse en inventario`);
-        }
-        if (!code) {
-          throw new Error(`El ítem ${index + 1} necesita un código para crearse en inventario`);
-        }
-        const isService = (item as any)?.stockApplies === false;
-
-        const existingProduct = await findProductByCode(code);
-
-        if (existingProduct?.id) {
-          productId = String(existingProduct.id);
-        } else {
-          const createdResponse = await inventoryService.createProduct({
-            code,
-            name,
-            sku: code,
-            categoryId: (item as any)?.categoryId || undefined,
-            costPrice: Number((item as any)?.unitPrice || 0),
-            salePrice: Number((item as any)?.unitPrice || 0),
-            minStock: 0,
-            unit: 'unidad',
-            type: isService ? 'SERVICE' : 'PRODUCT',
-            itemType: isService ? 'SERVICE' : 'PRODUCT',
-            trackInventory: !isService,
-            initialStock: 0,
-          } as any);
-          const created = (createdResponse as any)?.data || createdResponse;
-          productId = created?.id || productId;
-          if (!productId) {
-            throw new Error(`No se pudo crear el producto para el ítem ${index + 1}`);
-          }
-          toast.success(`${isService ? 'Servicio' : 'Producto'} '${name}' creado en inventario`);
-        }
-      }
-
-      let variantId: string | undefined;
-      const productDetailResp = await inventoryService.getProduct(productId).catch(() => null);
-      const productDetail = (productDetailResp as any)?.data || productDetailResp;
-      variantId = productDetail?.variants?.[0]?.id;
-      if (!variantId) {
-        throw new Error(`El producto '${(item as any)?.description || productId}' no tiene una variante de stock; revisa el producto ${index + 1}`);
-      }
-
-      const movementReference = `PURCHASE_RECEIPT:${receipt.id}:${(item as any)?.id || productId}:${warehouseId}`;
-      const alreadySynced = existingMovements.some((movement: any) => String(movement?.reference || '') === movementReference);
-      if (alreadySynced) continue;
-
-      const stockLevels = Array.isArray(productDetail?.stockLevels) ? productDetail.stockLevels : [];
-      const currentLevel = Number(stockLevels.find((sl: any) => sl.warehouseId === warehouseId)?.quantity || 0);
-      const newQuantity = currentLevel + quantityReceived;
-
-      await inventoryService.updateStockLevel({
-        productId,
-        warehouseId,
-        variantId,
-        quantity: newQuantity,
-        minStock: 0,
-      } as any);
-
-      await inventoryService.createMovement({
-        productId,
-        warehouseId,
-        variantId,
-        type: 'IN',
-        quantity: quantityReceived,
-        unitCost: Number((item as any)?.unitPrice || 0),
-        reference: movementReference,
-      } as any);
-    }
   };
 
   const handleSaveDoc = async () => {
@@ -313,33 +207,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       if (missingWarehouse) {
         return toast.error('Debe seleccionar una bodega para cada ítem recibido');
       }
-      const invalidManualItem = (localDoc.items || []).some((item: any) =>
+      const missingProduct = (localDoc.items || []).some((item: any) =>
         Number(item?.quantityReceived || 0) > 0
-        && !String(item?.productId || '').trim()
-        && (!String(item?.description || '').trim() || !String(item?.code || '').trim()),
+        && item?.stockApplies !== false
+        && !String(item?.productId || '').trim(),
       );
-      if (invalidManualItem) {
-        return toast.error('Cada ítem recibido sin producto debe tener nombre y código para crearse en inventario');
-      }
-
-      const nextInvalidMap: Record<number, boolean> = {};
-      for (const [idx, item] of (localDoc.items || []).entries()) {
-        const qty = Number((item as any)?.quantityReceived || 0);
-        if (qty <= 0 || String((item as any)?.productId || '').trim()) continue;
-        const name = String((item as any)?.description || (item as any)?.name || '').trim();
-        const code = String((item as any)?.code || '').trim();
-        const existing = await findProductByCode(code);
-        if (existing?.id) {
-          const existingName = String(existing.name || '').trim();
-          if (existingName && existingName.toLowerCase() !== name.toLowerCase()) {
-            nextInvalidMap[idx] = true;
-            toast.error(`No se puede recepcionar. El código "${code}" ya está registrado en inventario bajo el nombre "${existingName}", y no coincide con el ítem "${name}". Verifique que el código no sea repetido o ajuste el ítem en esta recepción, y reintente.`);
-          }
-        }
-      }
-      setInvalidCodeItems(nextInvalidMap);
-      if (Object.keys(nextInvalidMap).length > 0) {
-        return;
+      if (missingProduct) {
+        return toast.error('Cada ítem recibido que afecte inventario debe estar vinculado a un producto del catálogo');
       }
     }
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepción de compra...' : 'Guardando recepción de compra...');
@@ -347,19 +221,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       if (editingId === 'NEW') {
         const createdResponse = await purchaseReceiptsService.create(localDoc as any);
         const createdReceipt = (createdResponse as any)?.data || createdResponse;
-        if (STATUS_OPTIONS_RECEIVING.includes(String(createdReceipt?.status || localDoc.status || '').toUpperCase())) {
-          try {
-            await ensureInventoryEntriesForReceipt({
-              ...(localDoc || {}),
-              items: (localDoc?.items && localDoc.items.length ? localDoc.items : createdReceipt?.items),
-              id: createdReceipt?.id || localDoc?.id,
-              status: (createdReceipt?.status || localDoc.status) as any,
-            });
-          } catch (syncError: any) {
-            console.error('[RecepcionInventario] error de sincronización:', syncError);
-            toast.warning(`Recepción creada, pero no se pudo sincronizar inventario: ${syncError?.message || syncError?.response?.data?.message || 'Error de sincronización'}`);
-          }
-        }
         toast.success('Recepción creada', { id: saveToastId });
       } else {
         const currentReceipt = data.find((x) => x.id === editingId);
@@ -367,19 +228,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         const updatedResponse = await purchaseReceiptsService.update(editingId!, localDoc as any);
         const updatedReceipt = (updatedResponse as any)?.data || updatedResponse;
         const nextStatus = String(updatedReceipt?.status || localDoc.status || previousStatus).toUpperCase();
-if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(nextStatus)) {
-          try {
-            await ensureInventoryEntriesForReceipt({
-              ...(currentReceipt || {}),
-              ...(updatedReceipt || {}),
-              items: (currentReceipt?.items && currentReceipt.items.length ? currentReceipt.items : updatedReceipt?.items),
-              id: editingId!,
-              status: nextStatus as any,
-            });
-          } catch (syncError: any) {
-            toast.warning(`Recepción guardada, pero no se pudo sincronizar inventario: ${syncError?.message || 'Error de sincronización'}`);
-          }
-        }
         toast.success('Recepción guardada', { id: saveToastId });
       }
       setEditingId(null);
@@ -387,6 +235,61 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción', { id: saveToastId });
+    }
+  };
+
+  const handleRegisterInvoiceEvidence = async () => {
+    if (!localDoc?.id || editingId === 'NEW') return;
+    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(localDoc.status || '').toUpperCase())) {
+      toast.error('Primero recepciona al menos un producto antes de registrar la evidencia.');
+      return;
+    }
+    const linkedInvoice = (localDoc as any)?.supplierInvoices?.find((item: any) => String(item.status || '').toUpperCase() !== 'CANCELLED');
+    const number = invoiceNumber.trim() || linkedInvoice?.number || '';
+    if (!number) return toast.error('Ingresa el número de factura del proveedor.');
+    if (invoiceEvidenceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
+
+    const saveToastId = toast.loading(linkedInvoice ? 'Agregando evidencia a la factura...' : 'Registrando evidencia y cuenta por pagar...');
+    setInvoiceSaving(true);
+    try {
+      const uploaded: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> = [];
+      for (const file of invoiceEvidenceFiles) {
+        const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (!isImage && !isPdf) throw new Error(`"${file.name}" no es una imagen ni un PDF.`);
+        if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el límite de 2 MB.`);
+        if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el límite de 10 MB.`);
+        const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: `recepciones/${localDoc.id}` });
+        uploaded.push({ fileName: file.name, fileType: file.type || (isPdf ? 'application/pdf' : 'application/octet-stream'), fileSize: file.size, fileUrl: evidence.uri });
+      }
+
+      const response = await purchaseReceiptsService.registerInvoice(String(localDoc.id), {
+        number,
+        date: invoiceDate || undefined,
+        dueDate: invoiceDueDate || undefined,
+        total: invoiceTotal === '' ? undefined : Number(invoiceTotal),
+        currency: localDoc.currency,
+        exchangeRate: localDoc.exchangeRate,
+        attachments: uploaded,
+      });
+      const invoice = (response as any)?.data || response;
+      setLocalDoc((previous) => previous ? { ...previous, supplierInvoices: invoice ? [invoice] : previous.supplierInvoices } : previous);
+      setInvoiceEvidenceFiles([]);
+      toast.success(linkedInvoice ? 'Evidencia agregada' : 'Factura y evidencia registradas', { id: saveToastId });
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar la evidencia', { id: saveToastId });
+    } finally {
+      setInvoiceSaving(false);
+    }
+  };
+
+  const openInvoiceEvidence = async (attachment: any) => {
+    try {
+      const url = await storageService.resolveUrl(attachment.fileUrl);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo abrir la evidencia.');
     }
   };
 
@@ -415,18 +318,14 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
     newItems[idx] = { ...newItems[idx], [field]: value };
     const autoStatus = calcStatus(newItems);
     setLocalDoc({ ...localDoc, items: newItems as any, status: autoStatus as any });
-    if (invalidCodeItems[idx]) {
-      const next = { ...invalidCodeItems };
-      delete next[idx];
-      setInvalidCodeItems(next);
-    }
   };
 
-  const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()));
+  const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'PENDING').toUpperCase());
+    const linkedInvoice = (localDoc as any)?.supplierInvoices?.find((item: any) => String(item.status || '').toUpperCase() !== 'CANCELLED');
     
     return (
       <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
@@ -444,44 +343,9 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!isNew && String(localDoc.status || '').toUpperCase() === 'RECEIVED' && onConvertToInvoice && (
-              <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
-                onClick={() => {
-                  const draft = {
-                    supplierId: localDoc.supplierId,
-                    purchaseOrderId: localDoc.purchaseOrderId,
-                    purchaseReceiptId: localDoc.id,
-                    date: new Date().toISOString(),
-                    dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-                    currency: 'NIO',
-                    exchangeRate: 1,
-                    status: 'PENDING',
-                    items: (localDoc.items || []).map((it: any) => ({
-                      description: it.description || '',
-                      quantity: Number(it.quantityReceived || 0),
-                      unitPrice: Number(it.unitPrice || 0),
-                      productId: it.productId || null,
-                      taxType: it.taxType || 'GRAVADO',
-                      taxRate: isTaxExempt(it.taxType) ? 0 : Number(it.taxRate || 15),
-                      taxBase: isTaxExempt(it.taxType) ? 0 : Number(it.taxBase || 0),
-                      taxAmount: Number(it.taxAmount || 0),
-                      withholdingType: it.withholdingType || 'NONE',
-                      withholdingRate: Number(it.withholdingRate || 0),
-                      withholdingBase: it.withholdingType === 'NONE' ? 0 : Number(it.withholdingBase || 0),
-                      accountId: it.accountId || null,
-                      total: Number((it.unitPrice||0) * (it.quantityReceived||0)),
-                    })),
-                    subtotal: (localDoc.items || []).reduce((a: number, it: any) => a + Number((it.unitPrice||0) * (it.quantityReceived||0)), 0),
-                    taxAmount: 0,
-                    withholdingTotal: 0,
-                    withholdingBase: 0,
-                    total: (localDoc.items || []).reduce((a: number, it: any) => a + Number((it.unitPrice||0) * (it.quantityReceived||0)), 0),
-                  };
-                  onConvertToInvoice(draft);
-                  toast.success('Abriendo formulario de factura...', { position: 'bottom-right' });
-                }}
-              >
-                <FilePlus2 className="mr-2 size-3.5" /> Generar factura
+            {!isNew && ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(localDoc.status || '').toUpperCase()) && (
+              <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4" onClick={() => document.getElementById('receipt-invoice-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                <FilePlus2 className="mr-2 size-3.5" /> {((localDoc as any).supplierInvoices || []).length ? 'Agregar evidencia' : 'Registrar factura'}
               </Button>
             )}
             {isNew && canPerform('PURCHASES_RECEIPTS', 'create') && (
@@ -571,6 +435,67 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
           </Card>
         </div>
 
+        {!isNew && (
+          <Card id="receipt-invoice-evidence" className="rounded-2xl border-primary/20 bg-primary/[0.03]">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Evidencia de factura y cuenta por pagar</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Primero se recibe el inventario. Luego se registra la factura del proveedor con sus imágenes o PDF.</p>
+                </div>
+                {linkedInvoice && (
+                  <Badge variant="outline" className="w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+                    {String(linkedInvoice.status).toUpperCase() === 'PAID' ? 'Pagada' : `Pendiente: ${formatConvertedAmount(Number(linkedInvoice.balance || 0), linkedInvoice.currency, linkedInvoice.exchangeRate)}`}
+                  </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Número de factura</p>
+                  <Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Ej. A-001-000123" disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha factura</p>
+                  <Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Vencimiento</p>
+                  <Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total factura</p>
+                  <Input type="number" min="0" step="0.01" value={invoiceTotal} onChange={(event) => setInvoiceTotal(event.target.value)} placeholder={String(Number(localDoc.total || 0) || '')} disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
+                </div>
+              </div>
+              {linkedInvoice && (linkedInvoice.attachments || []).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {(linkedInvoice.attachments || []).map((attachment: any) => (
+                    <button key={attachment.id} type="button" onClick={() => void openInvoiceEvidence(attachment)} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
+                      <FileText className="size-3.5 shrink-0" /> <span className="truncate">{attachment.fileName}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <Input type="file" multiple accept="application/pdf,image/*,.pdf" disabled={invoiceSaving} onChange={(event) => setInvoiceEvidenceFiles(Array.from(event.target.files || []))} className="h-10 border-border/70 bg-background text-xs" />
+                  {invoiceEvidenceFiles.length > 0 && <p className="mt-1 truncate text-[10px] text-muted-foreground">Archivos seleccionados: {invoiceEvidenceFiles.map((file) => file.name).join(', ')}</p>}
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {linkedInvoice && Number(linkedInvoice.balance || 0) > 0 && onRegisterPaymentFromReceipt && (
+                    <Button variant="outline" className="h-9 rounded-xl border-emerald-500/40 text-emerald-600" onClick={() => onRegisterPaymentFromReceipt({ supplierId: localDoc.supplierId, supplierInvoiceId: linkedInvoice.id, amount: Number(linkedInvoice.balance || 0), currency: linkedInvoice.currency, exchangeRate: linkedInvoice.exchangeRate })}>
+                      <Banknote className="mr-2 size-3.5" /> Registrar pago
+                    </Button>
+                  )}
+                  <Button onClick={handleRegisterInvoiceEvidence} disabled={invoiceSaving || invoiceEvidenceFiles.length === 0} className="h-9 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                    <Upload className="mr-2 size-3.5" /> {invoiceSaving ? 'Procesando...' : linkedInvoice ? 'Agregar evidencia' : 'Registrar evidencia'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {(localDoc.items || []).some((it: any) => {
           const qOrd = Number(it.quantityOrdered||0);
           const qRec = Number(it.quantityReceived||0);
@@ -610,14 +535,8 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                 const qRejected = Number(item.quantityRejected || 0);
                 const faltante = qReceived < qOrdered && qReceived >= 0;
                 const rechazado = qRejected > 0;
-                const conflictoCodigo = !!invalidCodeItems[idx];
                 return (
-                <div key={item.id || idx} className={cn('group relative rounded-2xl border p-4 space-y-3 transition-all duration-200', conflictoCodigo ? 'border-rose-500/40 bg-rose-500/5 hover:border-rose-500/60' : (faltante || rechazado) ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'border-border/40 bg-background/60 backdrop-blur-sm hover:border-primary/30 hover:shadow-md')}>
-                  {conflictoCodigo && (
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-rose-500/15 text-rose-500"><XCircle className="size-2.5 mr-1" /> Código duplicado en inventario — corregir antes de recepcionar</Badge>
-                    </div>
-                  )}
+                <div key={item.id || idx} className={cn('group relative rounded-2xl border p-4 space-y-3 transition-all duration-200', (faltante || rechazado) ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'border-border/40 bg-background/60 backdrop-blur-sm hover:border-primary/30 hover:shadow-md')}>
                   {((faltante || rechazado) && !isNew) && (
                     <div className="flex items-center gap-1.5 mb-2">
                       {faltante && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-500"><ArrowDown className="size-2.5 mr-1" /> Faltante: {qOrdered - qReceived} uds.</Badge>}
@@ -643,7 +562,7 @@ if (!STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVI
                             handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
                           }
                         }}
-                        placeholder="Seleccionar producto (o déjalo vacío para crear uno)"
+                        placeholder="Seleccionar producto del catálogo"
                       />
                     </div>
                     {((isNew && canPerform('PURCHASES_RECEIPTS', 'create')) || (!isNew && canPerform('PURCHASES_RECEIPTS', 'edit'))) && (

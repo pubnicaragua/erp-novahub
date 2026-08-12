@@ -19,6 +19,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ACCOUNT_TYPES = [
   { value: 'ASSET', label: 'Activo' },
@@ -29,6 +30,10 @@ const ACCOUNT_TYPES = [
 ];
 
 export function CategoriasGastosView() {
+  const { canPerform } = useAuth();
+  const canCreate = canPerform('ACCOUNTING', 'create');
+  const canEdit = canPerform('ACCOUNTING', 'edit');
+  const canDeactivate = canPerform('ACCOUNTING', 'deactivate');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -51,18 +56,21 @@ export function CategoriasGastosView() {
   const loadData = () => { categoriesQuery.refetch(); accountsQuery.refetch(); };
 
   function openCreate() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ code: '', name: '', description: '', accountId: '', isActive: true });
     setDialogOpen(true);
   }
 
   function openEdit(cat: any) {
+    if (!canEdit) return;
     setEditing(cat);
     setForm({ code: cat.code, name: cat.name, description: cat.description || '', accountId: cat.accountId, isActive: cat.isActive });
     setDialogOpen(true);
   }
 
   async function handleSave() {
+    if (editing ? !canEdit : !canCreate) return;
     if (!form.code || !form.name || !form.accountId) {
       toast.error('Código, nombre y cuenta son requeridos');
       return;
@@ -84,11 +92,12 @@ export function CategoriasGastosView() {
   }
 
   async function handleDelete(id: string) {
+    if (!canDeactivate) return;
     setPendingDeleteId(id);
   }
 
   async function confirmDelete() {
-    if (!pendingDeleteId) return;
+    if (!pendingDeleteId || !canDeactivate) return;
     try {
       await contabilidadService.deleteExpenseCategory(pendingDeleteId);
       toast.success('Categoría eliminada');
@@ -118,9 +127,9 @@ export function CategoriasGastosView() {
           <h2 className="text-xl font-black uppercase tracking-tight">Categorías de Gastos</h2>
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-black">{categories.length}</Badge>
         </div>
-        <Button onClick={openCreate} className="gap-2 text-xs font-black uppercase tracking-widest rounded-xl">
+        {canCreate && <Button onClick={openCreate} className="gap-2 text-xs font-black uppercase tracking-widest rounded-xl">
           <Plus className="size-4" /> Nueva Categoría
-        </Button>
+        </Button>}
       </div>
 
       <Separator />
@@ -192,12 +201,12 @@ export function CategoriasGastosView() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="size-8 rounded-lg" onClick={() => openEdit(cat)}>
+                      {canEdit && <Button variant="ghost" size="icon" aria-label="Editar categoría" className="size-8 rounded-lg" onClick={() => openEdit(cat)}>
                         <Pencil className="size-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(cat.id)}>
+                      </Button>}
+                      {canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar categoría" className="size-8 rounded-lg text-red-500 hover:text-red-600" onClick={() => handleDelete(cat.id)}>
                         <Trash2 className="size-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   </td>
                 </tr>
@@ -209,7 +218,7 @@ export function CategoriasGastosView() {
             {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin categorías</p> : filtered.map(cat => (
               <div key={cat.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{cat.code}</p><p className="break-words text-xs font-semibold">{cat.name}</p><p className="mt-1 break-words text-[10px] font-mono text-muted-foreground">{cat.account?.code} - {cat.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{cat.isActive ? 'Activo' : 'Inactivo'}</Badge></div>
-                <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/20 pt-2"><p className="min-w-0 break-words text-[10px] text-muted-foreground">{cat.description || 'Sin descripción'}</p><div className="shrink-0"><Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(cat)}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(cat.id)}><Trash2 className="size-3.5" /></Button></div></div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/20 pt-2"><p className="min-w-0 break-words text-[10px] text-muted-foreground">{cat.description || 'Sin descripción'}</p><div className="shrink-0">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar categoría" className="size-7" onClick={() => openEdit(cat)}><Pencil className="size-3.5" /></Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar categoría" className="size-7 text-red-500" onClick={() => handleDelete(cat.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             ))}
           </div>
@@ -276,7 +285,7 @@ export function CategoriasGastosView() {
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-xl text-xs font-bold">
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="rounded-xl text-xs font-bold gap-2">
+            <Button onClick={handleSave} disabled={saving || (editing ? !canEdit : !canCreate)} className="rounded-xl text-xs font-bold gap-2">
               {saving && <Loader2 className="size-3.5 animate-spin" />}
               {editing ? 'Actualizar' : 'Crear'}
             </Button>

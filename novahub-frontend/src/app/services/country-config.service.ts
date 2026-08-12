@@ -154,11 +154,11 @@ export function getImpactByCountry(country: CountryConfig): ImpactModule[] {
             { view: 'OrdenesCompraView', description: isCL ? 'Número de OC con formato chileno' : '', category: 'format' },
           ].filter(Boolean) as ImpactViewChange[] },
         {
-          submodule: 'Facturas de Proveedor', views: [
-            { view: 'FacturasProveedorView', description: `Validación ${country.taxIdLabel} del proveedor`, category: 'validation' },
-            { view: 'FacturasProveedorView', description: isCL ? 'Validación RUT proveedor + aceptación DTE en SII' : '', category: 'integration' },
-            { view: 'FacturasProveedorView', description: isCL ? 'Recepción de DTE de proveedores (RCV - Registro de Compras)' : '', category: 'integration' },
-            { view: 'FacturasProveedorView', description: `Tasa ${country.ivaLabel}: ${country.ivaRate}%`, category: 'tax' },
+          submodule: 'Recepciones de Compra', views: [
+            { view: 'RecepcionesCompraView', description: `Validación ${country.taxIdLabel} del proveedor`, category: 'validation' },
+            { view: 'RecepcionesCompraView', description: isCL ? 'Validación RUT proveedor + aceptación DTE en SII' : '', category: 'integration' },
+            { view: 'RecepcionesCompraView', description: isCL ? 'Recepción de DTE de proveedores (RCV - Registro de Compras)' : '', category: 'integration' },
+            { view: 'RecepcionesCompraView', description: `Tasa ${country.ivaLabel}: ${country.ivaRate}%`, category: 'tax' },
           ] },
         {
           submodule: 'Proveedores', views: [

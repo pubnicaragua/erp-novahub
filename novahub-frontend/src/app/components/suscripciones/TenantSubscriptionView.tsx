@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -63,7 +63,26 @@ const linkedEmployeePuesto = (user: any, employees: any[]) => {
 
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, canPerform } = useAuth();
+  const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
+  const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
+  const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
+  const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
+  const canCreateUsers = canPerform('CONFIG_USERS', 'create');
+  const canEditUsers = canPerform('CONFIG_USERS', 'edit');
+  const canDeactivateUsers = canPerform('CONFIG_USERS', 'deactivate');
+  const canViewUsers = canPerform('CONFIG_USERS', 'view');
+  const canManageRoles = canPerform('CONFIG_ROLES', 'edit');
+  const canViewRoles = canPerform('CONFIG_ROLES', 'view');
+  const canEditEmployees = canPerform('HR_EMPLOYEES', 'edit');
+  const canViewEmployees = canPerform('HR_EMPLOYEES', 'view');
+  const canViewCompanyBranches = canPerform('COMPANY_BRANCHES', 'view');
+  const canViewLegacyBranches = canPerform('INVENTORY_WAREHOUSES', 'view');
+  const branchPermissionModule = canViewCompanyBranches ? 'COMPANY_BRANCHES' : 'INVENTORY_WAREHOUSES';
+  const canViewWarehouses = canViewCompanyBranches || canViewLegacyBranches;
+  const canViewDomains = canPerform('CONFIG_DOMAINS', 'view');
+  const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
+  const canRequestModules = canPerform('SUBSCRIPTIONS', 'create');
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isPermsDialogOpen, setIsPermsDialogOpen] = useState(false);
@@ -104,11 +123,11 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     async (signal) => {
       if (!tenant?.id) return null;
       const [usersRes, warehouseRes, branding, industriesRes, employeesRes] = await Promise.all([
-        tenantsService.getUsers(tenant.id, signal),
-        inventoryService.getWarehouses(signal),
-        brandingService.getCurrent(signal),
-        api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }),
-        hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal),
+        canViewUsers ? tenantsService.getUsers(tenant.id, signal) : Promise.resolve([]),
+        canViewWarehouses ? inventoryService.getWarehouses(signal) : Promise.resolve([]),
+        (canViewCompany || canPerform('CONFIG_BRANDING', 'view')) ? brandingService.getCurrent(signal) : Promise.resolve(null),
+        canViewCompany ? api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }) : Promise.resolve([]),
+        (canViewEmployees || canEditEmployees) ? hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal) : Promise.resolve([]),
       ]);
       return { users: asList(usersRes), warehouses: asList(warehouseRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
     },
@@ -142,6 +161,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       clearPendingUserCreate();
     }
   }, []);
+
+  const visibleTabs = useMemo(() => [
+    ...(canViewCompany ? ['general'] : []),
+    ...(canViewSubscriptions ? ['plan'] : []),
+    ...((canViewUsers || canViewRoles) ? ['team'] : []),
+    ...(canViewWarehouses ? ['sucursales'] : []),
+    ...(canViewDomains ? ['dominio'] : []),
+  ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewWarehouses, canViewDomains]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) setActiveTab(visibleTabs[0] || 'general');
+  }, [activeTab, visibleTabs]);
 
   useEffect(() => {
     if (userDialogMode !== 'withEmployee' || !selectedCreateEmployeeId) return;
@@ -185,6 +216,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   }, [userForm.email, users]);
 
   const handleAddIndustry = async () => {
+    if (!canCreateCompany) return;
     const name = newIndustryName.trim();
     if (!name || !tenant?.id) return;
     try {
@@ -200,6 +232,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleDeleteIndustry = async (id: string) => {
+    if (!canDeactivateCompany) return;
     try {
       await api.delete(`/tenants/${tenant.id}/industries/${id}`);
       setIndustryOptions((current) => current.filter((industry) => industry.id !== id));
@@ -210,6 +243,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleSaveCompanyInfo = async () => {
+    if (!canEditCompany) return;
     if (!companyName.trim()) {
       toast.error('El nombre de la empresa es obligatorio');
       return;
@@ -243,6 +277,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleUpdateCustomRole = async (userId: string, customRoleId: string | null) => {
+    if (!canManageRoles) return;
     try {
       await tenantsService.updateUser(tenant.id, userId, { customRoleId: customRoleId === 'none' ? null : customRoleId } as any);
       toast.success('Rol personalizado actualizado');
@@ -258,12 +293,14 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleOpenChangePassword = (user: any) => {
+    if (!canEditUsers) return;
     setSelectedUser(user);
     setNewPasswordForUser('');
     setIsChangePasswordDialogOpen(true);
   };
 
   const handleAdminChangePassword = async () => {
+    if (!canEditUsers) return;
     const passwordError = getPasswordError(newPasswordForUser);
     if (passwordError) {
       toast.error(passwordError);
@@ -284,6 +321,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleLinkEmployee = async () => {
+    if (!canEditEmployees) return;
     if (!linkingUser?.id || !linkingEmployeeId) return;
     try {
       await tenantsService.linkUserToEmployee(tenant.id, linkingUser.id, linkingEmployeeId);
@@ -297,6 +335,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleUnlinkEmployee = async (user: any) => {
+    if (!canEditEmployees) return;
     try {
       await tenantsService.unlinkUserFromEmployee(tenant.id, user.id);
       toast.success('Vínculo con empleado eliminado');
@@ -314,6 +353,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   );
 
   const handleAddUser = async () => {
+    if (!canCreateUsers) return;
     if (!userForm.name || !userForm.email) {
       toast.error('Complete nombre y email');
       return;
@@ -369,6 +409,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    if (!canDeactivateUsers) return;
     try {
       await tenantsService.updateUser(tenant.id, userId, { isActive: !currentStatus });
       toast.success(currentStatus ? 'Usuario desactivado' : 'Usuario activado');
@@ -379,12 +420,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const handleRequestClick = (mod: any) => {
+    if (!canRequestModules) return;
     setSelectedModule(mod);
     setIsRequestDialogOpen(true);
   };
 
   const submitRequest = () => {
-    if (selectedModule) {
+    if (selectedModule && canRequestModules) {
       onRequestModule(selectedModule.id, notes);
       setIsRequestDialogOpen(false);
       setSelectedModule(null);
@@ -402,12 +444,16 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   };
 
   const isModuleActive = (modId: string) => {
-    return tenant.subscriptions?.some((s: any) => s.module === modId && s.isActive);
+    return tenant?.subscriptions?.some((s: any) => s.module === modId && s.isActive);
   };
 
   const isModulePending = (modId: string) => {
-    return requests.some((r: any) => r.clientTenantId === tenant.id && r.requestedModule === modId && r.status === 'PENDING');
+    return requests.some((r: any) => r.clientTenantId === tenant?.id && r.requestedModule === modId && r.status === 'PENDING');
   };
+
+  if (!tenant) {
+    return <div className="mx-auto flex min-h-[320px] max-w-3xl items-center justify-center p-6 text-center text-sm text-muted-foreground">Cargando la información de Mi Empresa...</div>;
+  }
 
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto min-h-screen">
@@ -442,21 +488,21 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-muted/20 border border-border/50 p-1 h-auto min-h-12 mb-8 flex flex-wrap">
-          <TabsTrigger value="general" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          {canViewCompany && <TabsTrigger value="general" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Building2 className="size-4" /> General
-          </TabsTrigger>
-          <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          </TabsTrigger>}
+          {canViewSubscriptions && <TabsTrigger value="plan" className="px-8 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <LayoutGrid className="size-4" /> Módulos y Plan
-          </TabsTrigger>
-          <TabsTrigger value="team" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          </TabsTrigger>}
+          {(canViewUsers || canViewRoles) && <TabsTrigger value="team" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Users className="size-4" /> Mi Equipo ({users.length})
-          </TabsTrigger>
-          <TabsTrigger value="sucursales" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          </TabsTrigger>}
+          {canViewWarehouses && <TabsTrigger value="sucursales" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Store className="size-4" /> Sucursales
-          </TabsTrigger>
-          <TabsTrigger value="dominio" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
+          </TabsTrigger>}
+          {canViewDomains && <TabsTrigger value="dominio" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Globe className="size-4" /> Dominio propio
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -469,19 +515,19 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               <CardContent className="space-y-5 pt-6">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre de la empresa</Label>
-                  <Input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ej: Empresa Demo S.A." className="h-11 rounded-xl" />
+                    <Input value={companyName} onChange={(event) => setCompanyName(event.target.value)} disabled={!canEditCompany} placeholder="Ej: Empresa Demo S.A." className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Slug / Identificador</Label>
                   <div className="flex items-center gap-2">
                     <span className="rounded-lg bg-muted px-3 py-2 text-sm font-mono text-muted-foreground">novahub.io/</span>
-                    <Input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} className="h-11 rounded-xl font-mono" placeholder="empresa-demo" />
+                    <Input value={companySlug} onChange={(event) => setCompanySlug(event.target.value)} disabled={!canEditCompany} className="h-11 rounded-xl font-mono" placeholder="empresa-demo" />
                   </div>
                   <p className="text-[10px] text-muted-foreground">Identificador único de tu empresa dentro de NovaHub.</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
-                  <select value={companyIndustry} onChange={(event) => setCompanyIndustry(event.target.value)} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <select value={companyIndustry} onChange={(event) => setCompanyIndustry(event.target.value)} disabled={!canEditCompany} className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     {industryOptions.length > 0 ? (
                       <>
                         <optgroup label="Predeterminadas">
@@ -503,18 +549,18 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   {industryOptions.filter((industry) => !industry.isDefault).length > 0 && <div className="flex flex-wrap gap-1.5">
                     {industryOptions.filter((industry) => !industry.isDefault).map((industry) => <Badge key={industry.id} variant="secondary" className="gap-1 pr-1 text-[10px] font-bold">
                       {industry.name}
-                      <button onClick={() => industry.id && void handleDeleteIndustry(industry.id)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive"><Trash2 className="size-2.5" /></button>
+                      {canDeactivateCompany && <button onClick={() => industry.id && void handleDeleteIndustry(industry.id)} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/20 hover:text-destructive"><Trash2 className="size-2.5" /></button>}
                     </Badge>)}
                   </div>}
-                  {showAddIndustry ? <div className="flex gap-2">
+                  {canCreateCompany && (showAddIndustry ? <div className="flex gap-2">
                     <Input value={newIndustryName} onChange={(event) => setNewIndustryName(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void handleAddIndustry()} placeholder="Ej: Logística y Transporte" className="h-9 flex-1 rounded-xl text-xs" autoFocus />
                     <Button size="sm" onClick={() => void handleAddIndustry()} className="h-9 rounded-xl text-xs font-bold">Agregar</Button>
                     <Button size="sm" variant="ghost" onClick={() => { setShowAddIndustry(false); setNewIndustryName(''); }} className="h-9 text-xs">Cancelar</Button>
-                  </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary/80"><Plus className="size-3.5" />Agregar nueva industria</button>}
+                  </div> : <button onClick={() => setShowAddIndustry(true)} className="flex items-center gap-1.5 text-xs font-bold text-primary transition-colors hover:text-primary/80"><Plus className="size-3.5" />Agregar nueva industria</button>)}
                 </div>
-                <Button onClick={() => void handleSaveCompanyInfo()} disabled={savingCompany} className="h-11 w-full gap-2 rounded-xl font-bold">
+                {canEditCompany && <Button onClick={() => void handleSaveCompanyInfo()} disabled={savingCompany} className="h-11 w-full gap-2 rounded-xl font-bold">
                   {savingCompany ? 'Guardando...' : 'Guardar información'}
-                </Button>
+                </Button>}
               </CardContent>
             </Card>
 
@@ -637,7 +683,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                               </div>
                               
                               <div className="flex items-center gap-2 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                                {!subActive && !subPending && (
+                                {canRequestModules && !subActive && !subPending && (
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
@@ -660,7 +706,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                       </div>
                     )}
 
-                    {!hasSubmodules && !isMainActive && !isMainPending && (
+                    {canRequestModules && !hasSubmodules && !isMainActive && !isMainPending && (
                       <div className="mt-auto pt-6">
                         <Button 
                           variant="outline" 
@@ -680,27 +726,27 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
 
          <TabsContent value="team" className="space-y-4">
           {showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} employees={employees} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} onLinkUserToEmployee={(user) => { setLinkingUser(user); setLinkingEmployeeId(''); }} /> : <>
-           <div className="flex justify-end">
-            <div className="flex items-center gap-2">
-              <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
+            <div className="flex justify-end">
+             <div className="flex items-center gap-2">
+              {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
-              </Button>
-              <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
+              </Button>}
+              {canViewUsers && canViewEmployees && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
-              </Button>
+              </Button>}
             </div>
            </div>
 
           <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
-            <Card className="h-full border-border/50" data-tour="team-users">
+            {canViewUsers && <Card className="h-full border-border/50" data-tour="team-users">
               <CardHeader className="flex-row items-center justify-between gap-4 border-b border-border/30 bg-muted/10 pb-3">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
-                <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setShowEmployeeGuard(true)}>
+                {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setShowEmployeeGuard(true)}>
                   <Plus className="size-4" /> Crear usuario
-                </Button>
+                </Button>}
               </CardHeader>
               <CardContent className="space-y-2 p-4">
             {users.map((u) => {
@@ -736,13 +782,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                         toast.success('Tipo de acceso actualizado');
                         fetchUsers();
                       } catch (err: any) { toast.error(err.response?.data?.message || 'Error'); }
-                    }}>
+                    }} disabled={!canEditUsers}>
                       <SelectTrigger className="h-8 w-[122px] bg-primary/5 text-[10px] font-bold uppercase"><SelectValue /></SelectTrigger>
                       <SelectContent>{SYSTEM_ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
 
-                  {u.role?.toUpperCase() !== 'ADMIN' && <div className="flex items-center gap-1.5">
+                  {canManageRoles && u.role?.toUpperCase() !== 'ADMIN' && <div className="flex items-center gap-1.5">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rol</span>
                     <Select value={u.customRoleId || 'none'} onValueChange={(val) => handleUpdateCustomRole(u.id, val)}>
                       <SelectTrigger className="h-8 w-[132px] bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600"><SelectValue placeholder="Ninguno" /></SelectTrigger>
@@ -750,20 +796,20 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     </Select>
                   </div>}
 
-                  {u.role?.toUpperCase() !== 'ADMIN' && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
-                  {u.employee ? <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title="Desvincular empleado"><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title="Vincular empleado"><Link2 className="size-3" /> Vincular empleado</Button>}
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>
-                  <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
+                  {canEditUsers && u.role?.toUpperCase() !== 'ADMIN' && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                  {canEditEmployees && (u.employee ? <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title="Desvincular empleado"><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title="Vincular empleado"><Link2 className="size-3" /> Vincular empleado</Button>)}
+                  {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
+                  {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
                     {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
-                  </Button>
+                  </Button>}
                 </div>
               </div>;
             })}
                 {!users.length && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Aún no hay usuarios creados.</div>}
               </CardContent>
-            </Card>
+            </Card>}
 
-            <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={onRefresh} />
+            {canViewRoles && <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={onRefresh} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} />}
           </div>
           </>}
          </TabsContent>
@@ -771,7 +817,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
              <strong className="text-foreground">Sucursales de la empresa.</strong> Crea sucursales y asigna los usuarios que tendrán acceso a cada una.
            </div>
-           <SucursalesView warehouses={warehouses} onRefresh={() => inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => undefined)} />
+           <SucursalesView permissionModule={branchPermissionModule} warehouses={warehouses} onRefresh={() => inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => undefined)} />
          </TabsContent>
          <TabsContent value="dominio" className="space-y-6">
            <DominiosView />

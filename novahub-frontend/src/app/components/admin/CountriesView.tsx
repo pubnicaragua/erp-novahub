@@ -40,7 +40,7 @@ const CATEGORY_META: Record<string, { label: string; color: string; icon: React.
   template: { label: 'Plantillas', color: 'text-rose-600 bg-rose-50 border-rose-200', icon: FileDown },
 };
 
-export function CountriesView() {
+export function CountriesView({ canEdit = true }: { canEdit?: boolean }) {
   const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CountryConfig | null>(null);
@@ -116,7 +116,7 @@ export function CountriesView() {
       <AnimatePresence>
         {selected && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-            <CountryDetail country={selected} onRefresh={fetch} />
+            <CountryDetail country={selected} onRefresh={fetch} canEdit={canEdit} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -166,7 +166,7 @@ function loadStatuses(code: string): Record<string, ChangeStatus> {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY(code)) || '{}'); } catch { return {}; }
 }
 
-function CountryDetail({ country, onRefresh }: { country: CountryConfig; onRefresh: () => void }) {
+function CountryDetail({ country, onRefresh, canEdit }: { country: CountryConfig; onRefresh: () => void; canEdit: boolean }) {
   const [form, setForm] = useState<CountryConfig>(country);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('impacto');
@@ -198,6 +198,7 @@ function CountryDetail({ country, onRefresh }: { country: CountryConfig; onRefre
   const pctDone = totalChanges > 0 ? Math.round((doneCount / totalChanges) * 100) : 0;
 
   const handleSave = async () => {
+    if (!canEdit) return;
     setSaving(true);
     try {
       await countryConfigService.update(form.code, form);
@@ -305,10 +306,10 @@ function CountryDetail({ country, onRefresh }: { country: CountryConfig; onRefre
                 </div>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Switch checked={form.isActive} onCheckedChange={(v) => handleChange('isActive', v)} />
+                    <Switch checked={form.isActive} disabled={!canEdit} onCheckedChange={(v) => handleChange('isActive', v)} />
                     Activo
                   </label>
-                  <Button onClick={handleSave} disabled={saving} className="rounded-xl gap-2 text-xs font-bold h-9">
+                  <Button onClick={handleSave} disabled={saving || !canEdit} className="rounded-xl gap-2 text-xs font-bold h-9">
                     {saving ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Guardar
                   </Button>
                 </div>

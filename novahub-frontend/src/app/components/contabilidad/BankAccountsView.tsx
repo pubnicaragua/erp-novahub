@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Monetaria' },
@@ -22,6 +23,10 @@ const ACCOUNT_TYPES = [
 const CURRENCIES = ['NIO', 'USD'];
 
 export function BankAccountsView() {
+  const { canPerform } = useAuth();
+  const canCreateBankAccount = canPerform('ACCOUNTING', 'create');
+  const canEditBankAccount = canPerform('ACCOUNTING', 'edit');
+  const canDeactivateBankAccount = canPerform('ACCOUNTING', 'deactivate');
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -34,18 +39,21 @@ export function BankAccountsView() {
   const fetch = () => accountsQuery.refetch();
 
   const openCreate = () => {
+    if (!canCreateBankAccount) return;
     setEditing(null);
     setForm({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '' });
     setFormOpen(true);
   };
 
   const openEdit = (a: any) => {
+    if (!canEditBankAccount) return;
     setEditing(a);
     setForm({ bankName: a.bankName, accountNumber: a.accountNumber, accountType: a.accountType, currency: a.currency, notes: a.notes || '', accountId: a.accountId || '' });
     setFormOpen(true);
   };
 
   const handleSave = async () => {
+    if (editing ? !canEditBankAccount : !canCreateBankAccount) return;
     if (!form.bankName || !form.accountNumber) { toast.error('Banco y número de cuenta son requeridos'); return; }
     setSaving(true);
     try {
@@ -66,6 +74,7 @@ export function BankAccountsView() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canDeactivateBankAccount) return;
     try {
       await api.delete(`/bank-accounts/${id}`);
       toast.success('Cuenta bancaria eliminada');
@@ -83,9 +92,9 @@ export function BankAccountsView() {
             <Landmark className="size-4 text-primary" />
             <CardTitle className="text-sm font-black uppercase tracking-tight">Cuentas Bancarias</CardTitle>
           </div>
-          <Button size="sm" onClick={openCreate} className="rounded-xl gap-1 font-bold text-xs uppercase tracking-widest h-8">
+          {canCreateBankAccount && <Button size="sm" onClick={openCreate} className="rounded-xl gap-1 font-bold text-xs uppercase tracking-widest h-8">
             <Plus className="size-3.5" /> Agregar
-          </Button>
+          </Button>}
         </div>
       </CardHeader>
       <CardContent className="px-5 pb-4">
@@ -115,8 +124,8 @@ export function BankAccountsView() {
                   <TableCell className="text-xs">{a.currency}</TableCell>
                   <TableCell><Badge variant={a.isActive ? 'default' : 'secondary'} className="text-[9px]">{a.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>
+                    {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
+                    {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                   </TableCell>
                 </TableRow>
               ))}
@@ -136,8 +145,8 @@ export function BankAccountsView() {
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
                 <span>{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType} · {a.currency}</span>
                 <span className="shrink-0">
-                  <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>
-                  <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>
+                  {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
+                  {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                 </span>
               </div>
             </div>
@@ -190,7 +199,7 @@ export function BankAccountsView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving && <Loader2 className="size-3.5 mr-1 animate-spin" />}Guardar</Button>
+            {(editing ? canEditBankAccount : canCreateBankAccount) && <Button onClick={handleSave} disabled={saving}>{saving && <Loader2 className="size-3.5 mr-1 animate-spin" />}Guardar</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>

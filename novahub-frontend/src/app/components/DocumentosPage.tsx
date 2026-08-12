@@ -19,12 +19,12 @@ interface DocumentosPageProps {
 }
 
 export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: DocumentosPageProps) => {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'archivos');
-  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' });
-  const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' });
-  const invoicesQuery = useTenantQuery<any[]>(['documents', 'legal-invoices'], signal => legalInvoicesService.getAll(signal), { enabled: activeTab === 'facturas' });
-  const reportsQuery = useTenantQuery<any[]>(['documents', 'reports'], signal => reportsService.getAll(signal), { enabled: activeTab === 'reportes' });
+  const filesQuery = useTenantQuery<any[]>(['documents', 'files'], signal => filesService.getAll(signal), { enabled: activeTab === 'archivos' && canPerform('DOCUMENTS_FILES', 'view') });
+  const contractsQuery = useTenantQuery<any[]>(['documents', 'contracts'], signal => contractsService.getAll(signal), { enabled: activeTab === 'contratos' && canPerform('DOCUMENTS_CONTRACTS', 'view') });
+  const invoicesQuery = useTenantQuery<any[]>(['documents', 'legal-invoices'], signal => legalInvoicesService.getAll(signal), { enabled: activeTab === 'facturas' && canPerform('DOCUMENTS_INVOICES', 'view') });
+  const reportsQuery = useTenantQuery<any[]>(['documents', 'reports'], signal => reportsService.getAll(signal), { enabled: activeTab === 'reportes' && canPerform('DOCUMENTS_REPORTS', 'view') });
   const data = {
     archivos: asList(filesQuery.data), contratos: asList(contractsQuery.data),
     facturas: asList(invoicesQuery.data), reportes: asList(reportsQuery.data),
@@ -76,7 +76,7 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                 const hasRequired = user?.enabledModules?.includes(tab.module);
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('DOCUMENTS_'));
                 const hasFallback = user?.enabledModules?.includes('DOCUMENTS') && !hasSpecificSubmodules;
-                const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
+                const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
                 if (!hasAccess) return null;
                 return (
                 <TabsTrigger 

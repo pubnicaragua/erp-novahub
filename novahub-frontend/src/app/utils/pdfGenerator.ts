@@ -53,7 +53,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   const design = savedDesign.settings || {};
   const fields = Array.isArray(savedDesign.layoutZones?.fields) ? savedDesign.layoutZones.fields : [];
   const field = (id: string, fallback: any) => fields.find((item: any) => item.id === id) || { id, x: fallback.x, y: fallback.y, width: fallback.width, height: fallback.height, enabled: true };
-  const titleMap: Record<string, string> = { estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', 'credit-note': 'NOTA DE CRÉDITO' };
+  const titleMap: Record<string, string> = { estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'NOTA DE CRÉDITO', 'credit-note': 'CRÉDITO' };
   const total = formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate);
   const values: Record<string, string> = {
     company: design.companyName || tenantName || 'Nuestra Empresa',
@@ -253,8 +253,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'invoice') docTypeStr = 'Factura';
   else if (documentType === 'recurring') docTypeStr = 'Factura Recurrente';
   else if (documentType === 'payment') docTypeStr = 'Comprobante de Pago';
-  else if (documentType === 'return') docTypeStr = 'Devolución de Venta';
-  else if (documentType === 'credit-note') docTypeStr = 'Nota de Crédito';
+  else if (documentType === 'return') docTypeStr = 'Nota de Crédito';
+  else if (documentType === 'credit-note') docTypeStr = 'Crédito';
   doc.text(docTypeStr, margin, titleY + (design.slogan || design.fiscalInfo ? 15 : 7));
   
   // 3. Head - Top Right (Info de la Cotización)
@@ -266,8 +266,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'invoice') titleStr = 'FACTURA';
   else if (documentType === 'recurring') titleStr = 'FACTURA RECURRENTE';
   else if (documentType === 'payment') titleStr = 'PAGO RECIBIDO';
-  else if (documentType === 'return') titleStr = 'DEVOLUCIÓN';
-  else if (documentType === 'credit-note') titleStr = 'NOTA DE CRÉDITO';
+  else if (documentType === 'return') titleStr = 'NOTA DE CRÉDITO';
+  else if (documentType === 'credit-note') titleStr = 'CRÉDITO';
   doc.text(titleStr, rightEdge, 25, { align: 'right' });
   
   doc.setFontSize(10);

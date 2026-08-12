@@ -1,6 +1,6 @@
 // Sistema de Roles y Permisos Granulares para NovaHub
 
-export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'export' | 'import' | 'approve' | 'manage';
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'deactivate' | 'cancel' | 'export' | 'import' | 'approve' | 'manage';
 
 export type ModuleName = 
   | 'inventario' | 'ventas' | 'compras' | 'finanzas' | 'rh' 

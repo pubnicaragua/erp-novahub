@@ -33,7 +33,6 @@ import {
   Wallet,
   Banknote,
   CalendarClock,
-  FileInput,
   FileMinus,
   FileOutput,
   Plus,
@@ -112,6 +111,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'notas-credito': ['SALES_CREDIT_NOTES'],
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
   'control-caja': ['RETAIL_POS', 'SALES_POS'],
+  'listas-precios': ['SALES_PRICE_LISTS'],
   // Compras
   solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
   proveedores: ['PURCHASES_PROVIDERS'],
@@ -119,13 +119,13 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'gastos-recurrentes': ['PURCHASES_EXPENSES_REC'],
   'ordenes-compra': ['PURCHASES_ORDERS'],
   'recepciones-compra': ['PURCHASES_RECEIPTS'],
-  'facturas-proveedor': ['PURCHASES_INVOICES'],
   'facturas-proveedor-rec': ['PURCHASES_INVOICES_REC'],
   'pagos-realizados': ['PURCHASES_PAYMENTS'],
   'creditos-proveedor': ['PURCHASES_RETURNS'],
   // Recursos Humanos
   'dashboard-hr': ['HR_DASHBOARD'],
   empleados: ['HR_EMPLOYEES'],
+  departamentos: ['HR_EMPLOYEES'],
   nominas: ['HR_PAYROLL'],
   asistencia: ['HR_ATTENDANCE'],
   ausencias: ['HR_LEAVES'],
@@ -146,6 +146,7 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'balance-general': ['FINANCIAL_BALANCE'],
   // Inventario
   productos: ['INVENTORY_PRODUCTS'],
+  servicios: ['INVENTORY_PRODUCTS'],
   almacenes: ['INVENTORY_WAREHOUSES'],
   transferencias: ['INVENTORY_TRANSFERS'],
   ajustes: ['INVENTORY_ADJUSTMENTS'],
@@ -173,6 +174,23 @@ const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-proveedores': ['REPORTS_PROVIDERS'],
   'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
   'reportes-rrhh': ['REPORTS_HR'],
+  // Contabilidad
+  'plan-cuentas': ['ACCOUNTING_CHART'],
+  diario: ['ACCOUNTING_JOURNAL'],
+  'libro-mayor': ['ACCOUNTING_LEDGER'],
+  'balance-comprobacion': ['ACCOUNTING_TRIAL_BALANCE'],
+  'estado-resultados': ['ACCOUNTING_PROFIT_LOSS'],
+  'balance-general-contable': ['ACCOUNTING_BALANCE_SHEET'],
+  'flujo-efectivo': ['ACCOUNTING_CASH_FLOW'],
+  'diferencias-cambiarias': ['ACCOUNTING_EXCHANGE_DIFFERENCES'],
+  'cambios-patrimonio': ['ACCOUNTING_EQUITY'],
+  'activos-fijos': ['ACCOUNTING_ASSETS'],
+  conciliacion: ['ACCOUNTING_RECONCILIATION'],
+  periodos: ['ACCOUNTING_PERIODS'],
+  'reportes-fiscales': ['ACCOUNTING_FISCAL'],
+  presupuestos: ['ACCOUNTING_BUDGET'],
+  'categorias-gastos': ['ACCOUNTING_EXPENSE_CATEGORIES'],
+  configuracion: ['ACCOUNTING_CONFIG'],
 };
 
 const menuItems: MenuItem[] = [
@@ -199,8 +217,8 @@ const menuItems: MenuItem[] = [
       { id: 'facturas', label: 'Facturas', icon: <FileText className="size-4" /> },
       { id: 'facturas-recurrentes', label: 'Facturas recurrentes', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
-      { id: 'devoluciones-venta', label: 'Devoluciones de venta', icon: <FileOutput className="size-4" /> },
-      { id: 'notas-credito', label: 'Notas de crédito', icon: <FileMinus className="size-4" /> },
+      { id: 'devoluciones-venta', label: 'Notas de crédito', icon: <FileOutput className="size-4" /> },
+      { id: 'notas-credito', label: 'Créditos', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
@@ -217,7 +235,6 @@ const menuItems: MenuItem[] = [
       { id: 'gastos-recurrentes', label: 'Gastos recurrentes', icon: <CalendarClock className="size-4" /> },
       { id: 'ordenes-compra', label: 'Órdenes de compra', icon: <ClipboardList className="size-4" /> },
       { id: 'recepciones-compra', label: 'Recepciones de compra', icon: <PackageCheck className="size-4" /> },
-      { id: 'facturas-proveedor', label: 'Facturas de proveedor', icon: <FileInput className="size-4" /> },
       { id: 'facturas-proveedor-rec', label: 'Facturas de proveedor rec.', icon: <RotateCcw className="size-4" /> },
       { id: 'pagos-realizados', label: 'Pagos realizados', icon: <Banknote className="size-4" /> },
       { id: 'creditos-proveedor', label: 'Créditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
@@ -265,7 +282,7 @@ const menuItems: MenuItem[] = [
       { id: 'libro-mayor', label: 'Libro Mayor', icon: <BookOpenCheck className="size-4" /> },
       { id: 'balance-comprobacion', label: 'Balance de comprobación', icon: <Scale className="size-4" /> },
       { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },
-      { id: 'balance-general', label: 'Balance General', icon: <PieChart className="size-4" /> },
+      { id: 'balance-general-contable', label: 'Balance General', icon: <PieChart className="size-4" /> },
       { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: <DollarSign className="size-4" /> },
       { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
@@ -283,6 +300,7 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'dashboard-hr', label: 'Dashboard', icon: <BarChart3 className="size-4" /> },
       { id: 'empleados', label: 'Empleados', icon: <Users className="size-4" /> },
+      { id: 'departamentos', label: 'Departamentos', icon: <Building2 className="size-4" /> },
       { id: 'nominas', label: 'Nóminas', icon: <DollarSign className="size-4" /> },
       { id: 'asistencia', label: 'Asistencia', icon: <CalendarClock className="size-4" /> },
       { id: 'ausencias', label: 'Vacaciones', icon: <CalendarClock className="size-4" /> },
@@ -370,7 +388,6 @@ const menuItems: MenuItem[] = [
     ]
   },
   { id: 'suscripciones', label: 'Mi Empresa', icon: <Zap className="size-5" />, section: 'Sistema' },
-  { id: 'dashboard-cxc', label: 'CxC / CxP', icon: <BadgeDollarSign className="size-5" /> },
   { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-5" /> },
 ];
 

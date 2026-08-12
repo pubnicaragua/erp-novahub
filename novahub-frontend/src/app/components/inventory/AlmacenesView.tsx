@@ -20,6 +20,7 @@ import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface AlmacenesViewProps {
   warehouses: any[];
@@ -72,6 +73,12 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
 ];
 
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
+  const { canPerform } = useAuth();
+  const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
+  const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
+  const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'deactivate');
+  const canManageBranches = canPerform('INVENTORY_WAREHOUSES', 'edit');
+  const canManagePos = canPerform('RETAIL_POS', 'edit');
   const [showTutorial, setShowTutorial] = useState(false);
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
@@ -106,6 +113,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [accessLoading, setAccessLoading] = useState(false);
 
   const handleManageAccess = async (caja: CashRegister) => {
+    if (!canManagePos) return;
     setIsManageDialogOpen(false);
     setAccessCaja(caja);
     setIsAccessModalOpen(true);
@@ -123,6 +131,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
 
   const handleSaveAccess = async () => {
     if (!accessCaja) return;
+    if (!canManagePos) return;
     try {
       await cajaService.updateRegisterAccess(
         accessCaja.id!,
@@ -175,6 +184,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   }, []);
 
   const handleAddNewRow = () => {
+    if (!canCreateWarehouse) return;
     const tempId = `new-${Date.now()}`;
     const newWarehouse: EditingWarehouse = {
       id: tempId,
@@ -205,6 +215,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   }, []);
 
   const handleEditRow = (wh: any) => {
+    if (!canEditWarehouse) return;
     const editWarehouse: EditingWarehouse = {
       id: wh.id,
       name: wh.name,
@@ -231,6 +242,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const handleSaveRow = async (id: string) => {
     const warehouse = editingRows.get(id);
     if (!warehouse) return;
+    if (warehouse.isNew ? !canCreateWarehouse : !canEditWarehouse) return;
 
     if (!warehouse.name) {
       toast.error('El nombre es requerido');
@@ -275,11 +287,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   const handleDeleteWarehouse = async (id: string) => {
+    if (!canDeactivateWarehouse) return;
     setPendingDeleteId(id);
   };
 
   const handleConfirmDeleteWarehouse = async () => {
     if (!pendingDeleteId) return;
+    if (!canDeactivateWarehouse) return;
     setDeleteLoading(true);
     try {
       await inventoryService.deleteWarehouse(pendingDeleteId);
@@ -451,8 +465,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock</p><p className="font-bold tabular-nums">{stockCount}</p></div>
         </div>
         <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">
-          <Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => handleEditRow(warehouse)} aria-label={`Editar ${warehouse.name}`}><Edit2 className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(warehouse.id)} aria-label={`Eliminar ${warehouse.name}`}><Trash2 className="size-4" /></Button>
+          {canEditWarehouse && <Button type="button" variant="ghost" size="icon" className="size-9" onClick={() => handleEditRow(warehouse)} aria-label={`Editar ${warehouse.name}`}><Edit2 className="size-4" /></Button>}
+          {canDeactivateWarehouse && <Button type="button" variant="ghost" size="icon" className="size-9 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteWarehouse(warehouse.id)} aria-label={`Eliminar ${warehouse.name}`}><Trash2 className="size-4" /></Button>}
         </div>
       </Card>
     );
@@ -472,7 +486,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
             <CircleHelp className="size-3.5 mr-1" /> Tutorial
           </Button>
-          <Button 
+          {canManageBranches && <Button 
             variant="outline" 
             size="sm" 
             className="order-3 col-span-2 h-10 min-w-0 w-full gap-2 whitespace-nowrap border-primary/20 px-3 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground sm:order-none sm:col-span-1 sm:w-auto"
@@ -482,8 +496,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             data-tour="almacenes-sucursales-btn"
           >
             <Store className="size-4" /> Administrar Sucursales
-          </Button>
-          <Button 
+          </Button>}
+          {canCreateWarehouse && <Button 
             size="sm" 
             className="order-2 h-10 min-w-0 w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-3 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:order-none sm:w-auto" 
             onClick={handleAddNewRow}
@@ -491,7 +505,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           >
             <Plus className="size-4" />
             Agregar Almacén
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -584,17 +598,17 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     <TableCell className="text-right font-medium tabular-nums">{stockCount}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 transition-opacity">
-                        <Button variant="ghost" size="icon" className="size-7" onClick={() => handleEditRow(wh)}>
+                        {canEditWarehouse && <Button variant="ghost" size="icon" className="size-7" onClick={() => handleEditRow(wh)}>
                           <Edit2 className="size-3.5" />
-                        </Button>
-                        <Button 
+                        </Button>}
+                        {canDeactivateWarehouse && <Button 
                           variant="ghost" 
                           size="icon" 
                           className="size-7 text-red-600 hover:text-white hover:bg-red-500"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
                           <Trash2 className="size-3.5" />
-                        </Button>
+                        </Button>}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -627,13 +641,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <DialogTitle className="flex items-center gap-2 text-lg font-black"><Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)</DialogTitle>
             <DialogDescription>Crea y gestiona las cajas para el sistema POS</DialogDescription>
           </div>
-          <Button onClick={() => {
+          {canManagePos && <Button onClick={() => {
             setIsManageDialogOpen(false);
             setCajaForm({ isActive: true });
             setIsCajaFormOpen(true);
           }} className="gap-2 mt-0 mr-8">
             <Plus className="size-4" /> Nueva Caja
-          </Button>
+          </Button>}
         </DialogHeader>
         <div className="py-4 overflow-y-auto">
           {cajasLoading ? (
@@ -667,16 +681,16 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleManageAccess(caja)}>
+                          {canManagePos && <Button variant="ghost" size="icon" onClick={() => handleManageAccess(caja)}>
                             <Users className="size-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => {
+                          </Button>}
+                          {canManagePos && <Button variant="ghost" size="icon" onClick={() => {
                             setIsManageDialogOpen(false);
                             setCajaForm(caja);
                             setIsCajaFormOpen(true);
                           }}>
                             <Edit2 className="size-4" />
-                          </Button>
+                          </Button>}
                         </div>
                       </td>
                     </tr>
@@ -740,7 +754,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
-          <Button onClick={async () => {
+          {canManagePos && <Button onClick={async () => {
+            if (!canManagePos) return;
             if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');
             try {
               if (cajaForm.id) {
@@ -756,7 +771,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             } catch (e: any) {
               toast.error(getApiErrorMessage(e, 'Error al guardar la caja'));
             }
-          }}>Guardar Caja</Button>
+          }}>Guardar Caja</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -804,7 +819,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>
+          {canManagePos && <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

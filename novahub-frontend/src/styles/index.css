@@ -143,6 +143,27 @@
   white-space: nowrap;
 }
 
+/* Todas las acciones de registro comparten un tratamiento neutro. Las
+   vistas pueden conservar sus clases históricas, pero no deben cambiar el
+   color del icono entre módulos ni volverlo blanco sobre fondo claro. La
+   acción de WhatsApp se excluye porque su color verde es intencional. */
+[data-action-group="true"] button:not([data-whatsapp-action="true"]),
+[data-action-group="true"] a:not([data-whatsapp-action="true"]) {
+  color: var(--muted-foreground) !important;
+  background-color: transparent !important;
+}
+
+[data-action-group="true"] button:not([data-whatsapp-action="true"]):hover:not(:disabled),
+[data-action-group="true"] a:not([data-whatsapp-action="true"]):hover {
+  color: var(--foreground) !important;
+  background-color: color-mix(in srgb, var(--muted) 72%, transparent) !important;
+}
+
+[data-action-group="true"] button:not([data-whatsapp-action="true"]):focus-visible,
+[data-action-group="true"] a:not([data-whatsapp-action="true"]):focus-visible {
+  color: var(--foreground) !important;
+}
+
 .sales-module [data-slot="table-cell"] > *,
 .sales-module [data-slot="table-cell"] span,
 .sales-module [data-slot="table-cell"] p,
@@ -278,6 +299,17 @@
   border-color: var(--border);
   background-color: var(--background);
   color: var(--foreground);
+}
+
+/* --input puede ser transparente en el tema claro. Los campos donde se
+   capturan notas, motivos y observaciones deben conservar un contorno visible
+   en todas las vistas de Ventas y Compras. */
+.sales-module input.border-input,
+.sales-module textarea.border-input,
+.purchases-module input.border-input,
+.purchases-module textarea.border-input {
+  border-color: var(--border);
+  background-color: var(--background);
 }
 
 /* Ventas: todo control accionable debe comunicar que puede pulsarse. */

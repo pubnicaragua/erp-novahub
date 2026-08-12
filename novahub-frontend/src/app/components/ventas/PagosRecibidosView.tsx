@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import type { PaymentReceived, Customer, Invoice, SalesPaginationControls } from '../../types';
+import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
@@ -23,6 +23,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { cn } from '../ui/utils';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -30,11 +31,13 @@ interface PagosRecibidosViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   invoices?: Invoice[];
+  credits?: CreditNote[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  salesAlert?: PurchaseAlertDetail;
 }
 
 const methodOptions = [
@@ -44,7 +47,7 @@ const methodOptions = [
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
 
-export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: PagosRecibidosViewProps) {
+export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,9 +58,16 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [cancelLoading, setCancelLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
 
   const filtered = data.filter(p =>
-    (invoiceFilter === 'ALL' || Boolean(p.invoice?.number)) &&
+    (invoiceFilter === 'ALL' || Boolean(p.invoice?.number || p.creditNote?.number)) &&
     (p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase()))
@@ -78,6 +88,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     setLocalDoc({
       customerId: '',
       invoiceId: '',
+      creditNoteId: '',
       date: new Date().toISOString().split('T')[0],
       amount: 0,
       currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
@@ -91,6 +102,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   // Sync currency from topbar
   const handleSave = async () => {
+    if (isCreating && (!canPerform('SALES_PAYMENTS', 'create') || !canPerform('SALES_PAYMENTS', 'approve'))) return;
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
@@ -100,6 +112,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       await paymentsService.create({
         customerId: localDoc.customerId,
         invoiceId: localDoc.invoiceId || undefined,
+        creditNoteId: localDoc.creditNoteId || undefined,
         date: new Date(localDoc.date).toISOString(),
         amount: Number(localDoc.amount),
         currency: localDoc.currency,
@@ -136,10 +149,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'reference', header: 'Referencia / Factura', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || val || 'Anticipo'}</span> },
+    { key: 'reference', header: 'Referencia / Documento', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || row.creditNote?.number || val || 'Anticipo'}</span> },
     {
       key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
-        if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">Sin factura</span>;
+        if (row.creditNote?.number) return <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">Crédito</Badge>;
+        if (!row.invoice?.number) return <span className="text-xs text-muted-foreground">Sin documento</span>;
         const isCashSale = String(row.sourceType || row.invoice.sourceType || '').toUpperCase() === 'CASH_SALE'
           || Boolean(row.invoice.registerId || row.invoice.sessionId);
         return (
@@ -202,7 +216,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
             </div>
           </div>
-          {canPerform('SALES_PAYMENTS', 'edit') && (
+          {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
               Confirmar Pago
             </Button>
@@ -220,7 +234,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc.customerId} 
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '' })} 
+                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '', creditNoteId: '' })} 
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
@@ -230,8 +244,17 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   }))}
                     value={localDoc.invoiceId} onChange={(val) => {
                       const inv = invoices.find(i => i.id === val);
-                      setLocalDoc({ ...localDoc, invoiceId: val, amount: inv ? Number(inv.balance || 0) : localDoc.amount });
+                      setLocalDoc({ ...localDoc, invoiceId: val, creditNoteId: '', amount: inv ? Number(inv.balance || 0) : localDoc.amount });
                     }} placeholder="Sin factura (anticipo)" /></div>
+                <div><p className="text-[10px] text-muted-foreground mb-1">Crédito a liquidar (Opcional)</p>
+                  <Combobox options={credits.filter((credit) => credit.customerId === localDoc.customerId && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
+                    label: `${credit.number} — ${formatConvertedAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate)} pend.`,
+                    value: credit.id,
+                  }))}
+                    value={localDoc.creditNoteId} onChange={(val) => {
+                      const credit = credits.find((item) => item.id === val);
+                      setLocalDoc({ ...localDoc, creditNoteId: val, invoiceId: '', amount: credit ? Number(credit.balance ?? credit.total ?? 0) : localDoc.amount, currency: credit?.currency || localDoc.currency, exchangeRate: credit?.exchangeRate || localDoc.exchangeRate });
+                    }} placeholder="Sin crédito" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc.date} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
@@ -287,7 +310,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
         <SalesKpiCard title="Pagos" value={data.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
-        <SalesKpiCard title="Con Factura" value={data.filter(p => p.invoice?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Con documento" value={data.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
         <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />
       </div>
       <div className="flex flex-col gap-4">
@@ -300,7 +323,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
-            {canPerform('SALES_PAYMENTS', 'create') && (
+            {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
+            {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
               <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
             )}
@@ -311,6 +335,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
+          highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>

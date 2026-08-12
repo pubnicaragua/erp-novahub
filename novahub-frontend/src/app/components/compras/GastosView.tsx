@@ -830,13 +830,13 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
-              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'PENDING' && (
+              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'PENDING' && (
                 <Button title="Aprobar gasto" aria-label="Aprobar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'APPROVED')}><CheckCircle2 className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'APPROVED' && (
+              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'APPROVED' && (
                 <Button title="Marcar gasto como pagado" aria-label="Marcar gasto como pagado" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'PAID')}><CheckCircle2 className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_EXPENSES', 'edit') && ['PENDING', 'APPROVED'].includes(String(row.status || '').toUpperCase()) && (
+              {canPerform('PURCHASES_EXPENSES', 'delete') && ['PENDING', 'APPROVED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button title="Rechazar gasto" aria-label="Rechazar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => void handleStatusAction(row, 'REJECTED')}><Ban className="size-4" /></Button>
               )}
               <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>

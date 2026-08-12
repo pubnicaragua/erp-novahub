@@ -76,7 +76,7 @@ const customerToDraft = (customer: Customer): CustomerDraft => ({
 
 const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="customers-title"]', title: 'Directorio de Clientes', description: 'Aquí administras los clientes, sus datos fiscales, ubicación, crédito, estado y lista de precios asignada.', placement: 'bottom' },
-  { target: '[data-tour="sales-list-kpis"]', title: 'KPIs de clientes', description: 'Total Clientes, Particulares y Empresas son filtros rápidos. Saldo deudor es un indicador monetario para priorizar la cobranza; la tarjeta activa se refleja en la lista.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-kpis"]', title: 'KPIs de clientes', description: 'Total Clientes, Particulares y Empresas son filtros rápidos. Saldo es un indicador monetario para priorizar la cobranza; la tarjeta activa se refleja en la lista.', placement: 'bottom' },
   { target: '[data-tour="sales-list-actions"]', title: 'Búsqueda y filtros', description: 'Busca por nombre, identificación o contacto y combina el texto con Activos, Inactivos o Todos. Cambiar el filtro reinicia la paginación.', placement: 'bottom' },
   { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
   { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
@@ -496,7 +496,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span> },
-    { key: 'balance', header: 'Saldo deudor', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) > 0 ? 'text-destructive' : 'text-primary')}>{formatConvertedAmount(val || 0, baseCurrency)}</span> },
+    { key: 'balance', header: 'Saldo', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) < 0 ? 'text-destructive' : 'text-emerald-500')}>{formatConvertedAmount(val || 0, baseCurrency)}</span> },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -531,7 +531,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'phone', label: 'Teléfono' },
     { key: 'department', label: 'Departamento' },
     { key: 'creditLimit', label: 'Límite de crédito' },
-    { key: 'balance', label: 'Saldo deudor' },
+    { key: 'balance', label: 'Saldo' },
     { key: 'status', label: 'Estado' },
   ];
 
@@ -542,7 +542,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        <SalesKpiCard title="Saldo deudor" value={formatConvertedAmount(data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0), baseCurrency)} icon={CreditCard} color="text-destructive" bg="bg-destructive/10" />
+        <SalesKpiCard title="Saldo" value={formatConvertedAmount(data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0), baseCurrency)} icon={CreditCard} color="text-primary" bg="bg-primary/10" />
       </div>
 
       {/* Main Content */}

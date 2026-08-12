@@ -144,7 +144,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canPerform('HR_LEAVE', 'create') && (
+          {canPerform('HR_LEAVES', 'create') && (
             <Button onClick={() => { resetForm(); setShowForm(!showForm); }} className="gap-2 rounded-xl font-bold" variant={showForm ? 'outline' : 'default'}>
               {showForm ? <X className="size-4" /> : <Plus className="size-4" />}
               {showForm ? 'Cancelar' : 'Nuevo Tipo'}
@@ -277,7 +277,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {canPerform('HR_LEAVE', 'edit') && (
+                    {canPerform('HR_LEAVES', 'edit') && (
                       <>
                         <Button size="sm" variant="outline" onClick={() => openEdit(at)} className="rounded-xl h-9 text-xs font-bold">
                           Editar

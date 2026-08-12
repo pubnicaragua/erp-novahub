@@ -59,24 +59,26 @@ interface NotificacionesPageProps {
 }
 
 export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: NotificacionesPageProps) => {
+  const { canPerform } = useAuth();
   const tabs = [
-    { id: 'alertas', label: 'Alertas', icon: AlertTriangle },
-    { id: 'mensajes', label: 'Mensajes', icon: MessageSquare },
-    { id: 'push', label: 'Push', icon: Send },
+    { id: 'alertas', label: 'Alertas', icon: AlertTriangle, module: 'NOTIFICATIONS_ALERTS' },
+    { id: 'mensajes', label: 'Mensajes', icon: MessageSquare, module: 'NOTIFICATIONS_MESSAGES' },
+    { id: 'push', label: 'Push', icon: Send, module: 'NOTIFICATIONS_PUSH' },
   ];
+  const visibleTabs = tabs.filter(tab => canPerform(tab.module, 'view'));
   const tabIds = tabs.map((tab) => tab.id);
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'alertas');
   const [showTour, setShowTour] = useState(false);
   const alertsQuery = useTenantQuery<any[]>(['notifications', 'alerts'], signal => alertsService.getAll(signal), {
-    enabled: activeTab === 'alertas',
+    enabled: activeTab === 'alertas' && canPerform('NOTIFICATIONS_ALERTS', 'view'),
   });
   const messagesQuery = useTenantQuery<any[]>(['notifications', 'messages'], signal => messagesService.getAll(signal), {
-    enabled: activeTab === 'mensajes',
+    enabled: activeTab === 'mensajes' && canPerform('NOTIFICATIONS_MESSAGES', 'view'),
     refetchInterval: activeTab === 'mensajes' ? 5000 : false,
     refetchIntervalInBackground: false,
   });
   const pushQuery = useTenantQuery<any[]>(['notifications', 'push'], signal => pushNotificationsService.getAll(signal), {
-    enabled: activeTab === 'push',
+    enabled: activeTab === 'push' && canPerform('NOTIFICATIONS_PUSH', 'view'),
   });
   const data = {
     alertas: asList(alertsQuery.data),
@@ -89,8 +91,8 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
 
   useEffect(() => {
     if (!activeSubModule) return;
-    setActiveTab(tabIds.includes(activeSubModule) ? activeSubModule : 'alertas');
-  }, [activeSubModule]);
+    setActiveTab(tabIds.includes(activeSubModule) && visibleTabs.some(tab => tab.id === activeSubModule) ? activeSubModule : (visibleTabs[0]?.id || 'alertas'));
+  }, [activeSubModule, visibleTabs]);
 
   return (
     <div className="min-h-full bg-background">
@@ -118,7 +120,7 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
         >
           <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
           <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="notificaciones-tabs">
-            {tabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
                 value={tab.id}

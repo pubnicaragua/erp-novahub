@@ -332,6 +332,8 @@ export interface PaymentReceived {
   customer?: Customer;
   invoiceId?: string;
   invoice?: Invoice;
+  creditNoteId?: string;
+  creditNote?: CreditNote;
   sourceType?: 'SALES_ORDER' | 'CASH_SALE' | string;
   sourceLabel?: string | null;
   date: string;
@@ -366,9 +368,14 @@ export interface SalesReturn {
   taxAmount?: number;
   discountAmount?: number;
   total: number;
+  baseTotal?: number;
+  currency?: Currency;
+  exchangeRate?: number;
+  appliedToInvoice?: number;
+  isPartial?: boolean;
   reason: string;
   accountId?: string;
-  status: 'pending' | 'approved' | 'processed' | 'rejected';
+  status: 'pending' | 'approved' | 'processed' | 'rejected' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED';
   items: SalesReturnItem[];
   createdAt: string;
   updatedAt: string;
@@ -377,9 +384,14 @@ export interface SalesReturn {
 export interface SalesReturnItem {
   id: string;
   salesReturnId: string;
+  invoiceItemId?: string;
   productId?: string;
   description: string;
   quantity: number;
+  originalQuantity?: number;
+  quantityToInventory?: number;
+  quantityDiscarded?: number;
+  discardReason?: string | null;
   unitPrice: number;
   taxRate?: number;
   discount?: number;
@@ -404,11 +416,16 @@ export interface CreditNote {
   invoiceId?: string;
   salesReturnId?: string;
   date: string;
+  dueDate?: string | null;
   subtotal?: number;
   taxAmount?: number;
   discountAmount?: number;
   total: number;
-  status: 'draft' | 'issued' | 'applied' | 'voided';
+  amountPaid?: number;
+  balance?: number;
+  currency?: Currency;
+  exchangeRate?: number;
+  status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'VOIDED';
   reason: string;
   accountId?: string;
   items: CreditNoteItem[];
@@ -419,6 +436,7 @@ export interface CreditNote {
 export interface CreditNoteItem {
   id: string;
   creditNoteId: string;
+  productId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -494,6 +512,7 @@ export interface PurchaseOrder {
   evidenceFileUrl?: string;
   notes?: string;
   items: PurchaseOrderItem[];
+  receipts?: Array<{ id: string; number: string; status: string }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -535,7 +554,16 @@ export interface PurchaseReceipt {
   supplierId: string;
   supplier?: Supplier;
   date: string;
-  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents';
+  status: 'pending' | 'received' | 'partial' | 'rejected' | 'with_incidents' | 'PENDING' | 'RECEIVED' | 'PARTIAL' | 'REJECTED' | 'WITH_INCIDENTS';
+  subtotal?: number;
+  taxAmount?: number;
+  withholdingTotal?: number;
+  withholdingBase?: number;
+  total?: number;
+  currency?: Currency;
+  exchangeRate?: number;
+  baseTotal?: number;
+  inventoryProcessedAt?: string;
   notes?: string;
   items: PurchaseReceiptItem[];
   supplierInvoices?: SupplierInvoice[];
@@ -546,6 +574,8 @@ export interface PurchaseReceipt {
 export interface PurchaseReceiptItem {
   id: string;
   purchaseReceiptId: string;
+  code?: string;
+  name?: string;
   productId?: string;
   warehouseId?: string;
   description: string;
@@ -561,6 +591,7 @@ export interface PurchaseReceiptItem {
   withholdingBase?: number;
   accountId?: string;
   costCenterId?: string;
+  inventoryProcessedQuantity?: number;
 }
 
 // ---- Supplier Invoices ----
@@ -827,8 +858,10 @@ export interface JournalEntry {
   referenceId?: string;
   costCenterId?: string;
   costCenter?: any;
+  createdBy?: { id: string; name: string; email?: string | null } | null;
+  referenceNumber?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface JournalEntryLine {
@@ -945,6 +978,13 @@ export interface Permission {
   read: boolean;
   write: boolean;
   delete: boolean;
+  create?: boolean;
+  edit?: boolean;
+  deactivate?: boolean;
+  cancel?: boolean;
+  import?: boolean;
+  export?: boolean;
+  [action: string]: unknown;
 }
 
 // ============================================================

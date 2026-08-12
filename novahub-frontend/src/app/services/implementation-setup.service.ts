@@ -273,12 +273,12 @@ const STEP_DEFINITIONS: StepDefinition[] = [
     load: () => api.get('/purchases/suppliers'),
   },
   {
-    id: 'supplier-invoices',
-    title: 'Importar facturas de proveedor',
+    id: 'purchase-receipt-evidence',
+    title: 'Importar evidencias de compras',
     description: 'Cuentas por pagar conectadas al proveedor correcto.',
     actionLabel: 'Importar',
-    target: { module: 'compras', subModule: 'facturas-proveedor' },
-    load: () => api.get('/purchases/invoices'),
+    target: { module: 'compras', subModule: 'recepciones-compra' },
+    load: () => api.get('/purchases/receipts'),
   },
   {
     id: 'expenses',
@@ -368,7 +368,7 @@ function hasModuleAccess(target: ImplementationNavigationTarget, enabledModules?
     return has('INVENTORY', inventoryModule);
   }
   if (target.module === 'compras') {
-    const purchasingModule = subModule === 'proveedores' ? 'PURCHASES_PROVIDERS' : subModule === 'facturas-proveedor' ? 'PURCHASES_INVOICES' : subModule === 'gastos' ? 'PURCHASES_EXPENSES' : 'PURCHASES';
+    const purchasingModule = subModule === 'proveedores' ? 'PURCHASES_PROVIDERS' : subModule === 'recepciones-compra' ? 'PURCHASES_RECEIPTS' : subModule === 'gastos' ? 'PURCHASES_EXPENSES' : 'PURCHASES';
     return has('PURCHASES', purchasingModule);
   }
   if (target.module === 'rh') return has('HR', 'HR_EMPLOYEES', 'HR_PAYROLL', 'HR_PAYROLL_CONFIG');

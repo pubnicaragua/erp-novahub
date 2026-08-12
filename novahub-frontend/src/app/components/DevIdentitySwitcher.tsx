@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Shield, User, Users, RefreshCcw, X, ChevronRight } from 'lucide-react';
+import { Shield, RefreshCcw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './ui/utils';
 
@@ -8,13 +8,6 @@ export function DevIdentitySwitcher() {
   const { switchIdentity, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [customId, setCustomId] = useState('');
-
-  // Identidades predefinidas (Ajustar según IDs reales de la DB/Seed)
-  const presets = [
-    { id: 'admin-001', label: 'Super Admin', role: 'superadmin', icon: <Shield className="size-4" /> },
-    { id: 'partner-demo-001', label: 'Partner Demo', role: 'partner', icon: <Users className="size-4" /> },
-    { id: 'client-demo-001', label: 'Cliente Demo (Full)', role: 'admin', icon: <User className="size-4" /> },
-  ];
 
   if (!import.meta.env.DEV) return null;
 
@@ -41,32 +34,9 @@ export function DevIdentitySwitcher() {
             </div>
 
             <div className="space-y-2">
-              <p className="text-[10px] text-white/40 mb-1">PRESETS</p>
-              {presets.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => switchIdentity(p.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-3 py-2.5 transition-all hover:bg-white/10 hover:border-white/10",
-                    user?.id === p.id && "border-emerald-500/50 bg-emerald-500/10"
-                  )}
-                >
-                  <div className={cn(
-                    "flex size-8 items-center justify-center rounded-lg",
-                    user?.id === p.id ? "bg-emerald-500 text-white" : "bg-white/5 text-white/60"
-                  )}>
-                    {p.icon}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-xs font-semibold text-white">{p.label}</p>
-                    <p className="text-[10px] text-white/40 uppercase">{p.role}</p>
-                  </div>
-                  <ChevronRight className="size-4 text-white/20" />
-                </button>
-              ))}
-
-              <div className="pt-2">
-                <p className="text-[10px] text-white/40 mb-2">CUSTOM USER ID</p>
+              <div>
+                <p className="text-[10px] text-white/40 mb-2">AUTHORIZED USER ID</p>
+                <p className="mb-2 text-[10px] text-white/50">Solo funciona en desarrollo y con el permiso explícito del backend.</p>
                 <div className="flex gap-2">
                   <input
                     type="text"

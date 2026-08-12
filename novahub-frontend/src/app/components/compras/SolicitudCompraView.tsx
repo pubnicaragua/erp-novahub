@@ -86,7 +86,13 @@ interface SolicitudCompraViewProps {
 }
 
 export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSearchChange, onStatusChange, purchaseAlert, warehouseCatalog, supplierCatalog = [], productCatalog = [] }: SolicitudCompraViewProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
+  const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
+  const canCancelRequests = canPerform('PURCHASES_REQUESTS', 'cancel');
+  const canApproveManagement = canPerform('PURCHASES_MANAGEMENT', 'approve');
+  const canRejectManagement = canPerform('PURCHASES_MANAGEMENT', 'reject');
+  const canConvertManagement = canPerform('PURCHASES_MANAGEMENT', 'convert');
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
@@ -131,10 +137,12 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const actionIconClass = 'size-3.5';
 
   const handleApproveManagement = (mgmt: PurchaseManagement) => {
+    if (!canApproveManagement) return;
     setPendingApproveManagement(mgmt);
   };
 
   const confirmApproveManagement = async () => {
+    if (!canApproveManagement) return;
     if (!pendingApproveManagement) return;
     const mgmt = pendingApproveManagement;
     setActionLoading(mgmt.id);
@@ -145,10 +153,12 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const handleRejectManagement = async (mgmt: PurchaseManagement) => {
+    if (!canRejectManagement) return;
     setPendingRejectManagement(mgmt);
   };
 
   const confirmRejectManagement = async (rejectReason: string) => {
+    if (!canRejectManagement) return;
     if (!pendingRejectManagement) return;
     const mgmt = pendingRejectManagement;
     setActionLoading(mgmt.id);
@@ -159,10 +169,12 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const handleConvertToOrder = async (mgmt: PurchaseManagement) => {
+    if (!canConvertManagement) return;
     setPendingConvertManagement(mgmt);
   };
 
   const confirmConvertToOrder = async () => {
+    if (!canConvertManagement) return;
     if (!pendingConvertManagement) return;
     const mgmt = pendingConvertManagement;
     setActionLoading(mgmt.id);
@@ -177,6 +189,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const handleRequestApprove = (req: PurchaseRequest) => {
+    if (!canApproveRequests) return;
     if (normalizeRequestStatus(req.status) !== 'PENDING_APPROVAL') return;
     setApprovalSupplierId(getRequestSupplierId(req));
     const action: RequestActionState = { request: req, action: 'approve' };
@@ -185,6 +198,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const handleRequestCancel = (req: PurchaseRequest) => {
+    if (!canCancelRequests) return;
     if (normalizeRequestStatus(req.status) !== 'PENDING_APPROVAL') return;
     setApprovalSupplierId('');
     const action: RequestActionState = { request: req, action: 'cancel' };
@@ -288,6 +302,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     formatConvertedAmount(Number(amount || 0), (currency || displayCurrency) as any, rate ?? globalRate);
 
   const handleDownloadRequestPdf = async (request: PurchaseRequest) => {
+    if (!canExportRequests) return;
     const pdfToastId = toast.loading('Generando PDF de la solicitud de compra...');
     try {
       await generatePurchaseRequestPDF({
@@ -417,28 +432,28 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(req.date).toLocaleDateString()}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1 flex-wrap">
-                          <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => void handleDownloadRequestPdf(req)}>
+                          {canExportRequests && <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => void handleDownloadRequestPdf(req)}>
                             <FileDown className={actionIconClass} />
-                          </Button>
+                          </Button>}
                           <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => setDetailOpen(req)}>
                             <Eye className={actionIconClass} />
                           </Button>
-                          {normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
+                          {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
                             <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
                               <ThumbsUp className={actionIconClass} />
                             </Button>
-                            <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
+                            {canCancelRequests && <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
                               <Ban className={actionIconClass} />
-                            </Button>
+                            </Button>}
                           </>}
-                          {normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
+                          {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
                             <>
-                              <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                              {canApproveManagement && <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <CheckCircle className={actionIconClass} />
-                              </Button>
-                              <Button title="Rechazar gestión" aria-label="Rechazar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                              </Button>}
+                              {canRejectManagement && <Button title="Rechazar gestión" aria-label="Rechazar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
                                 <X className={actionIconClass} />
-                              </Button>
+                              </Button>}
                             </>
                           )}
                         </div>
@@ -489,28 +504,28 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       Solicitante: <span className="font-semibold text-foreground">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</span>
                     </p>
                     <div className="mt-3 flex flex-wrap justify-end gap-1">
-                      <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => void handleDownloadRequestPdf(req)} title="Descargar PDF" aria-label="Descargar PDF">
+                      {canExportRequests && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => void handleDownloadRequestPdf(req)} title="Descargar PDF" aria-label="Descargar PDF">
                         <FileDown className={actionIconClass} />
-                      </Button>
+                      </Button>}
                       <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => setDetailOpen(req)} title="Ver detalle" aria-label="Ver detalle">
                         <Eye className={actionIconClass} />
                       </Button>
-                      {normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
+                      {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
                         <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id} title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra">
                           <ThumbsUp className={actionIconClass} />
                         </Button>
-                        <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id} title="Anular solicitud" aria-label="Anular solicitud">
+                        {canCancelRequests && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id} title="Anular solicitud" aria-label="Anular solicitud">
                           <Ban className={actionIconClass} />
-                        </Button>
+                        </Button>}
                       </>}
-                      {normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
+                      {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
                         <>
-                          <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Aprobar gestión">
+                          {canApproveManagement && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Aprobar gestión">
                             <CheckCircle className={actionIconClass} />
-                          </Button>
-                          <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Rechazar gestión">
+                          </Button>}
+                          {canRejectManagement && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Rechazar gestión">
                             <X className={actionIconClass} />
-                          </Button>
+                          </Button>}
                         </>
                       )}
                     </div>
@@ -633,9 +648,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
                 <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6">
                   <div className="w-full">
-                    <Button variant="outline" className="h-10 w-full gap-2" onClick={() => void handleDownloadRequestPdf(detailOpen)}>
+                    {canExportRequests && <Button variant="outline" className="h-10 w-full gap-2" onClick={() => void handleDownloadRequestPdf(detailOpen)}>
                       <FileDown className="size-4" /> Descargar PDF
-                    </Button>
+                    </Button>}
                   </div>
                 </SheetFooter>
               </>

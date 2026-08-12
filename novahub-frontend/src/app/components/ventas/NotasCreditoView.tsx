@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { 
-  FileMinus, Plus, Search, TrendingUp, Clock, CheckCircle2, Eye, Trash2, ChevronLeft, Send, FileDown
+import {
+  BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
+  Eye, Trash2, ChevronLeft, Send, FileDown, CreditCard, AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -12,16 +13,15 @@ import { creditNotesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import type { CreditNote, Customer, SalesPaginationControls } from '../../types';
+import type { CreditNote, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
-import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
-import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -31,6 +31,8 @@ interface NotasCreditoViewProps {
   loading: boolean;
   onRefresh: () => void;
   customers?: Customer[];
+  products?: Product[];
+  salesAlert?: unknown;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
@@ -39,43 +41,99 @@ interface NotasCreditoViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador', value: 'DRAFT',   color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Emitida',  value: 'ISSUED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Aplicada', value: 'APPLIED', color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Anulada',  value: 'VOIDED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador', value: 'DRAFT', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Activo', value: 'ISSUED', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Pago parcial', value: 'PARTIAL', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Pagado', value: 'PAID', color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Anulado', value: 'VOIDED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function NotasCreditoView({ data, loading, onRefresh, customers = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
+const methodOptions = [
+  { label: 'Transferencia', value: 'TRANSFER' },
+  { label: 'Efectivo', value: 'CASH' },
+  { label: 'Tarjeta', value: 'CARD' },
+  { label: 'Cheque', value: 'CHECK' },
+  { label: 'Otro', value: 'OTHER' },
+];
+
+const isoDate = (value: unknown) => {
+  if (!value) return '';
+  const text = String(value);
+  return text.includes('T') ? text.split('T')[0] : text;
+};
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next.toISOString().split('T')[0];
+};
+
+const toWholeQuantity = (value: string | number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+};
+
+export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credit-notes-layout', 'table', 24 * 365);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED'>('ALL');
+  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credits-layout', 'table', 24 * 365);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [paymentCredit, setPaymentCredit] = useState<CreditNote | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('TRANSFER');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentReference, setPaymentReference] = useState('');
 
-  const [prevEditingId, setPrevEditingId] = useState(editingId);
-  if (prevEditingId !== editingId) {
-    setPrevEditingId(editingId);
-    if (editingId) {
-      const cn = data.find(x => x.id === editingId);
-      if (cn) setLocalDoc(JSON.parse(JSON.stringify(cn)));
-    } else if (!isCreating) {
-      setLocalDoc(null);
-    }
-  }
+  const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
+  const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
+  const customerFor = (id?: string | null) => customers.find((customer) => customer.id === id);
+  const customerName = (row: CreditNote) => row.customer?.name || customerFor(row.customerId)?.name || 'Cliente';
+  const normalizeStatus = (status?: string) => String(status || '').toUpperCase();
+  const statusFor = (status?: string) => statusOptions.find((option) => option.value === normalizeStatus(status));
+  const recalcTotal = (items: any[]) => items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+  const formatDate = (value?: string | null) => value ? new Date(value).toLocaleDateString() : 'Sin fecha';
+  const availableCreditFor = (customer?: Customer) => {
+    if (!customer) return 0;
+    // El saldo negativo representa deuda; un saldo positivo representa favor.
+    return Math.max(0, Number(customer.creditLimit || 0) - Math.max(0, -Number(customer.balance || 0)));
+  };
 
-  const filtered = data.filter(cn =>
-    (statusFilter === 'ALL' || String(cn.status || '').toUpperCase() === statusFilter) &&
-    (cn.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (cn.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cn.reason.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const goToCustomers = () => {
+    window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'ventas', subModule: 'clientes' } }));
+  };
 
-  const recalcTotal = (items: any[]) => items.reduce((acc: number, it: any) => { const gross = Number(it.quantity || 0) * Number(it.unitPrice || 0); const discount = gross * Number(it.discount || 0) / 100; const net = gross - discount; return acc + net + net * Number(it.taxRate || 0) / 100 - net * Number(it.irRate || 0) / 100; }, 0);
+  const showCreditLimitRequired = () => {
+    toast.error('El cliente no tiene un límite de crédito configurado. Ve a Clientes para configurarlo.', {
+      action: { label: 'Ir a Clientes', onClick: goToCustomers },
+    });
+  };
+
+  const filtered = data.filter((credit) => {
+    const search = searchTerm.toLowerCase();
+    return (statusFilter === 'ALL' || normalizeStatus(credit.status) === statusFilter)
+      && ([credit.number, customerName(credit), credit.reason].join(' ').toLowerCase().includes(search));
+  });
+
+  const closeEditor = () => {
+    setEditingId(null);
+    setIsCreating(false);
+    setLocalDoc(null);
+  };
+
+  const startEdit = (id: string) => {
+    const record = data.find((credit) => credit.id === id);
+    if (!record) return;
+    setEditingId(id);
+    setIsCreating(false);
+    setLocalDoc(JSON.parse(JSON.stringify(record)));
+  };
 
   const startNew = () => {
     setIsCreating(true);
@@ -83,6 +141,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
     setLocalDoc({
       customerId: '',
       date: new Date().toISOString().split('T')[0],
+      dueDate: addDays(new Date(), 30),
       reason: '',
       items: [],
       total: 0,
@@ -93,278 +152,156 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pag
 
   const handleSave = async () => {
     if (!localDoc) return;
-    if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
-    if (!localDoc.reason.trim()) { toast.error('Ingresa la razón de la nota'); return; }
-    const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
-    if (priceMessage) { toast.error(priceMessage); return; }
-    const saveToastId = toast.loading(isCreating ? 'Creando nota de crédito...' : 'Guardando cambios...');
+    if (!localDoc.customerId) return void toast.error('Selecciona un cliente');
+    if (!localDoc.dueDate) return void toast.error('Selecciona la fecha límite de pago');
+    if (!String(localDoc.reason || '').trim()) return void toast.error('Describe el motivo del crédito');
+    if (!localDoc.items?.length) return void toast.error('Agrega al menos un producto o servicio');
+    if (localDoc.items.some((item: any) => !item.productId)) return void toast.error('Selecciona el producto o servicio de cada línea');
+    if (localDoc.items.some((item: any) => !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) return void toast.error('Las cantidades deben ser enteros mayores que cero');
+    const customer = customerFor(localDoc.customerId);
+    if (Number(customer?.creditLimit || 0) <= 0) return void showCreditLimitRequired();
+    const saveToastId = toast.loading(isCreating ? 'Creando crédito...' : 'Guardando crédito...');
     try {
+      const payload: any = {
+        customerId: localDoc.customerId,
+        date: new Date(localDoc.date).toISOString(),
+        dueDate: new Date(localDoc.dueDate).toISOString(),
+        reason: String(localDoc.reason).trim(),
+        items: localDoc.items.map((item: any) => ({
+          productId: item.productId || undefined,
+          description: item.description || '',
+          quantity: toWholeQuantity(item.quantity || 1),
+          unitPrice: Number(item.unitPrice || 0),
+          total: Number(item.total || 0),
+        })),
+        total: Number(localDoc.total || 0),
+        currency: localDoc.currency || displayCurrency,
+        exchangeRate: Number(localDoc.exchangeRate || globalRate),
+        status: 'DRAFT',
+      };
       if (isCreating) {
-        await creditNotesService.create({
-          customerId: localDoc.customerId,
-          invoiceId: localDoc.invoiceId || undefined,
-          date: new Date(localDoc.date).toISOString(),
-          reason: localDoc.reason.trim(),
-          items: (localDoc.items || []).map((item: any) => ({
-            description: item.description || '',
-            quantity: Number(item.quantity || 1),
-            unitPrice: Number(item.unitPrice || 0),
-            productId: item.productId || undefined,
-            priceListId: item.priceListId || undefined,
-            total: Number(item.total || 0),
-          })),
-          total: localDoc.total,
-          status: 'DRAFT',
-          currency: localDoc.currency || displayCurrency,
-          exchangeRate: localDoc.exchangeRate || globalRate,
-          priceListId: localDoc.priceListId || undefined,
-        } as any);
-        toast.success('Nota de crédito creada', { id: saveToastId });
+        await creditNotesService.create(payload);
       } else {
-        const { accountId: _accountId, ...creditNotePayload } = localDoc;
-        await creditNotesService.update(localDoc.id, creditNotePayload);
+        await creditNotesService.update(localDoc.id, payload);
       }
-      setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
+      toast.success(isCreating ? 'Crédito creado' : 'Crédito actualizado', { id: saveToastId });
+      closeEditor();
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo guardar el crédito', { id: saveToastId });
+    }
   };
 
   const handleIssue = async (id: string) => {
-    const issueToastId = toast.loading('Emitiendo nota de crédito...');
+    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    const issueToastId = toast.loading('Emitiendo crédito y validando el límite disponible...');
     try {
       await creditNotesService.issue(id);
-      toast.success('Nota de crédito emitida — Balance del cliente actualizado', { id: issueToastId });
-      setEditingId(null); onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al emitir nota de crédito', { id: issueToastId }); }
+      toast.success('Crédito emitido y agregado al saldo del cliente', { id: issueToastId });
+      closeEditor();
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo emitir el crédito', { id: issueToastId });
+    }
+  };
+
+  const openPayment = (credit: CreditNote) => {
+    setPaymentCredit(credit);
+    setPaymentAmount(String(Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0))));
+    setPaymentMethod('TRANSFER');
+    setPaymentAccountId('');
+    setPaymentReference(credit.number);
+  };
+
+  const handlePayment = async () => {
+    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    if (!paymentCredit) return;
+    const amount = Number(paymentAmount);
+    if (!paymentAccountId) return void toast.error('Selecciona la cuenta que recibió el pago');
+    if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
+    const paymentToastId = toast.loading('Registrando pago del crédito...');
+    try {
+      setPaymentLoading(true);
+      await creditNotesService.apply(paymentCredit.id, { amount, paymentMethod, accountId: paymentAccountId, reference: paymentReference || undefined });
+      toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
+      setPaymentCredit(null);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar el pago', { id: paymentToastId });
+    } finally {
+      setPaymentLoading(false);
+    }
   };
 
   const handleExportPDF = async (row: CreditNote) => {
-    const pdfToastId = toast.loading('Generando PDF de la nota de crédito...');
+    const pdfToastId = toast.loading('Generando PDF del crédito...');
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
-      await generateEstimatePDF({
-        estimate: { ...row, number: row.number, customer: row.customer || customers.find(c => c.id === row.customerId) },
-        tenantName,
-        formatAmount: formatConvertedAmount,
-        documentType: 'credit-note',
-      });
+      await generateEstimatePDF({ estimate: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount, documentType: 'credit-note' });
       toast.success('PDF generado exitosamente', { id: pdfToastId });
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al generar PDF', { id: pdfToastId });
+    }
   };
 
-  const getCustomerName = (cn: CreditNote) => cn.customer?.name || customers.find(c => c.id === cn.customerId)?.name || 'Cliente';
+  const addItem = (itemType: 'PRODUCT' | 'SERVICE') => {
+    if (Number(customerFor(localDoc?.customerId)?.creditLimit || 0) <= 0) {
+      showCreditLimitRequired();
+      return;
+    }
+    const items = [...(localDoc.items || []), { id: `${Date.now()}-${itemType}`, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }];
+    setLocalDoc({ ...localDoc, items });
+  };
+
+  const updateItem = (index: number, patch: Record<string, unknown>) => {
+    const items = [...(localDoc.items || [])];
+    items[index] = { ...items[index], ...patch };
+    items[index].total = Number(items[index].quantity || 0) * Number(items[index].unitPrice || 0);
+    setLocalDoc({ ...localDoc, items, total: recalcTotal(items) });
+  };
 
   const columns: ColumnDef<CreditNote>[] = [
-    { key: 'number', header: 'Nº Nota', width: '140px',
-      render: (val, row) => (
-        <span 
-          className={cn(
-            "text-xs font-black font-mono text-primary",
-            canPerform('SALES_CREDIT_NOTES', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
-          )} 
-          onClick={() => canPerform('SALES_CREDIT_NOTES', 'edit') && setEditingId(row.id)}
-        >
-          {val}
-        </span>
-      )
-    },
-    { key: 'customerId', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{getCustomerName(row)}</span> },
-    { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
-    { key: 'reason', header: 'Razón', render: (val) => <span className="text-xs text-muted-foreground truncate max-w-[200px] block">{val}</span> },
-    { key: 'total', header: 'Total', width: '130px', render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
-    { key: 'status', header: 'Estado', width: '110px', render: (val) => {
-      const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
-      return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
+    { key: 'number', header: 'Nº Crédito', width: '140px', render: (value, row) => <span className={cn('text-xs font-black font-mono text-primary', canPerform('SALES_CREDIT_NOTES', 'edit') ? 'cursor-pointer hover:underline' : '')} onClick={() => canPerform('SALES_CREDIT_NOTES', 'edit') && startEdit(row.id)}>{value}</span> },
+    { key: 'customerId', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{customerName(row)}</span> },
+    { key: 'dueDate', header: 'Vence', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDate(value as string)}</span> },
+    { key: 'total', header: 'Total', width: '125px', render: (value, row) => <span className="text-[13px] font-black tabular-nums text-primary">{formatConvertedAmount(Number(value || 0), row.currency, row.exchangeRate)}</span> },
+    { key: 'balance', header: 'Saldo', width: '125px', render: (_, row) => <span className={cn('text-[13px] font-black tabular-nums', Number(row.balance ?? row.total) > 0 ? 'text-amber-500' : 'text-emerald-500')}>{formatConvertedAmount(Number(row.balance ?? row.total), row.currency, row.exchangeRate)}</span> },
+    { key: 'status', header: 'Estado', width: '115px', render: (value) => { const option = statusFor(value as string); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none', option?.color || 'bg-muted/20 text-muted-foreground')}>{option?.label || value}</Badge>; } },
   ];
 
-  const issuedTotalInDisplayCurrency = data
-    .filter(cn => (cn.status||'').toUpperCase() === 'ISSUED')
-    .reduce((acc, cn) => acc + ((cn as any).baseTotal !== null && (cn as any).baseTotal !== undefined
-      ? Number((cn as any).baseTotal)
-      : toBaseAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate)), 0);
-  const liveCreditInDisplayCurrency = data
-    .filter(cn => ['ISSUED','APPLIED'].includes((cn.status||'').toUpperCase()))
-    .reduce((acc, cn) => acc + ((cn as any).baseTotal !== null && (cn as any).baseTotal !== undefined
-      ? Number((cn as any).baseTotal)
-      : toBaseAmount(cn.total || 0, (cn as any).currency, (cn as any).exchangeRate)), 0);
+  const totalIssued = data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
+  const totalOpen = data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
+  const overdueCount = data.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < Date.now()).length;
 
-  // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
-    const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
-    const canIssue = !isCreating && (localDoc?.status || '').toUpperCase() === 'DRAFT';
+    const statusOption = statusFor(localDoc.status);
+    const canIssue = !isCreating && normalizeStatus(localDoc.status) === 'DRAFT';
+    const selectedCustomer = customerFor(localDoc.customerId);
+    const availableCredit = availableCreditFor(selectedCustomer);
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
-            <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nueva Nota de Crédito' : `Nota ${localDoc?.number}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Crear nota de crédito manual' : 'Detalle de la nota de crédito'}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {canPerform('SALES_CREDIT_NOTES', 'edit') && (
-              <>
-                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { await creditNotesService.delete(localDoc.id); setEditingId(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
-                {canIssue && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => handleIssue(localDoc.id)}><Send className="size-3 mr-2" /> Emitir NC</Button>}
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
-                  {isCreating ? 'Crear Nota' : 'Guardar'}
-                </Button>
-              </>
-            )}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
+          <div className="flex flex-wrap items-center gap-3">{canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 font-black uppercase text-[10px] tracking-widest" onClick={async () => { const id = toast.loading('Eliminando crédito...'); try { await creditNotesService.delete(localDoc.id); toast.success('Crédito eliminado', { id }); closeEditor(); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || 'No se pudo eliminar', { id }); } }} disabled={isCreating}><Trash2 className="mr-2 size-3" /> Eliminar</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'approve') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><Send className="mr-2 size-3" /> Emitir Crédito</Button>}<Button className="rounded-xl bg-primary font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>{isCreating ? 'Crear Crédito' : 'Guardar'}</Button></>}</div>
         </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información de la Nota</p>
-              <SalesAccountingLegend flow="creditNote" />
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div><p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox 
-                    options={(customers || [])
-                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
-                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
-                    value={localDoc?.customerId || ''} 
-                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: val, priceListId, items }); }}
-                    placeholder="Seleccionar Cliente" 
-                  /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
-                  <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
-                {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${statusOpt?.color || 'bg-muted/20 text-muted-foreground'}`}>{statusOpt?.label || localDoc?.status}</span></div>}
-                {localDoc?.salesReturnId && <div><p className="text-[10px] text-muted-foreground mb-1">Devolución Asociada</p>
-                  <span className="text-xs font-bold text-blue-500">{localDoc.salesReturnId.slice(0, 10)}...</span></div>}
-              </div>
-              <div><p className="text-[10px] text-muted-foreground mb-1">Razón</p>
-                <textarea value={localDoc?.reason || ''} onChange={(e) => setLocalDoc({ ...localDoc, reason: e.target.value })}
-                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Razón de la nota de crédito..." /></div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-border/50">
-            <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
-              <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
-                <span className="font-black">Total Nota de Crédito</span>
-                <span className="text-rose-500 font-black text-lg">{formatConvertedAmount(Number(localDoc?.total||0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground italic">Al emitir esta nota, el ajuste se aplicará a la factura relacionada según el flujo de devoluciones y crédito.</p>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => setLocalDoc({ ...localDoc, customerId: value })} placeholder="Seleccionar cliente" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
+          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite</p><p className="mt-1 text-lg font-black">{formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), baseCurrency)}</p></div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Saldo del cliente</p><p className="mt-1 text-2xl font-black">{formatConvertedAmount(Number(selectedCustomer?.balance || 0), baseCurrency)}</p><p className="mt-1 text-[10px] text-muted-foreground">Negativo: pendiente por cobrar · Positivo: saldo a favor</p></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. Configúralo en <button type="button" className="font-black underline underline-offset-2" onClick={goToCustomers}>Clientes</button> para continuar.</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
-
-        <Card className="rounded-2xl border-border/50">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Items de la Nota de Crédito</p>
-              <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
-                const newItems = [...(localDoc.items || []), { id: Date.now().toString(), description: '', quantity: 1, unitPrice: 0, total: 0 }];
-                setLocalDoc({ ...localDoc, items: newItems });
-              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar Item</Button>
-            </div>
-            <div className="space-y-2">
-              <div className="hidden xl:grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                <div className="col-span-4">Descripción</div><div className="col-span-2 text-right">Cant.</div><div className="col-span-2 text-right">Precio U.</div><div className="col-span-2 text-right">Total</div>
-              </div>
-              {(localDoc.items || []).map((item: any, idx: number) => (
-                <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
-                  <div className="col-span-6"><div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1"><Input value={item.description || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], description: e.target.value };
-                    setLocalDoc({ ...localDoc, items: ni }); }} className="h-8 text-xs" placeholder="Descripción del concepto..." /></div><SalesLinePriceListSelect productId={item.productId} productCode={item.code} value={item.priceListId} defaultPriceListId={localDoc?.priceListId} currency={localDoc?.currency} exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} onChange={(priceListId, result) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, total: Number(ni[idx].quantity || 1) * Number(result.unitPrice || 0) }; setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni), priceListId }); }} /><SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact onChange={(option) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], irRate: Number(option?.rate || 0), irTaxId: option?.id || null }; setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} /></div></div>
-                    {item.priceMissing && <PriceMissingBadge className="mt-1" />}
-                  <div className="col-span-2"><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };
-                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} /></div>
-                  <div className="col-span-2"><Input type="text" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} readOnly className="bg-muted/20 text-right" onChange={(e) => {
-                    const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], unitPrice: Number(e.target.value), total: Number(ni[idx].quantity || 1) * Number(e.target.value) };
-                      setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }} /></div>
-                  <div className="col-span-2 flex items-center justify-end gap-2">
-                    <span className="text-xs font-black text-rose-500">{formatConvertedAmount(Number(item.total || 0), localDoc?.currency || displayCurrency, localDoc?.exchangeRate)}</span>
-                    <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md"
-                      onClick={() => { const ni = [...(localDoc.items || [])]; ni.splice(idx, 1); setLocalDoc({ ...localDoc, items: ni, total: recalcTotal(ni) }); }}><Trash2 className="size-3" /></Button>
-                  </div>
-                </div>
-              ))}
-              {(!localDoc.items || localDoc.items.length === 0) && <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">Sin items. Haz clic en "Agregar Item".</div>}
-            </div>
-          </CardContent>
-        </Card>
+        <Card className="rounded-2xl border-border/50"><CardContent className="p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos y servicios</p><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => addItem('PRODUCT')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Producto</Button><Button type="button" variant="outline" size="sm" onClick={() => addItem('SERVICE')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Servicio</Button></div></div><div className="space-y-3">{(localDoc.items || []).map((item: any, index: number) => { const catalog = item.itemType === 'SERVICE' ? serviceCatalog : productCatalog; return <div key={item.id || index} className="grid min-w-0 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 md:grid-cols-[minmax(0,1fr)_100px_140px_120px_32px] md:items-center"><Combobox options={catalog.map((product) => ({ label: `${product.code} · ${product.name}`, value: product.id }))} value={item.productId || ''} onChange={(value) => { const product = catalog.find((candidate) => candidate.id === value); updateItem(index, { productId: value, description: product?.name || '', unitPrice: Number(product?.salePrice ?? product?.price ?? 0) }); }} placeholder={item.itemType === 'SERVICE' ? 'Seleccionar servicio' : 'Seleccionar producto'} /><Input type="number" inputMode="numeric" min="1" step="1" value={item.quantity || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="Cantidad" /><Input type="number" min="0" step="0.01" value={item.unitPrice ?? ''} onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} placeholder="Precio" /><span className="text-right text-sm font-black text-primary">{formatConvertedAmount(Number(item.total || 0), localDoc.currency, localDoc.exchangeRate)}</span><Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" onClick={() => { const items = [...localDoc.items]; items.splice(index, 1); setLocalDoc({ ...localDoc, items, total: recalcTotal(items) }); }}><Trash2 className="size-3.5" /></Button><Input value={item.description || ''} onChange={(event) => updateItem(index, { description: event.target.value })} className="md:col-span-4" placeholder="Descripción del producto o servicio" /></div>; })}{!localDoc.items?.length && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Agrega los productos o servicios que se entregarán a crédito.</div>}</div><div className="mt-5 flex items-center justify-between border-t border-border/50 pt-4"><span className="text-sm font-black uppercase tracking-widest">Total del crédito</span><span className="text-2xl font-black text-primary">{formatConvertedAmount(Number(localDoc.total || 0), localDoc.currency, localDoc.exchangeRate)}</span></div></CardContent></Card>
       </div>
     );
   }
 
-  // ─── TABLE VIEW ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title={`Total Emitido (${baseCurrency})`} value={formatConvertedAmount(issuedTotalInDisplayCurrency, baseCurrency)} icon={FileMinus} color="text-rose-500" bg="bg-rose-500/10" />
-        <SalesKpiCard title="Borradores" value={data.filter(cn => (cn.status||'').toUpperCase() === 'DRAFT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
-        <SalesKpiCard title="Emitidas" value={data.filter(cn => (cn.status||'').toUpperCase() === 'ISSUED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'ISSUED'} onClick={() => setStatusFilter(statusFilter === 'ISSUED' ? 'ALL' : 'ISSUED')} />
-        <SalesKpiCard title={`Crédito Vivo (${baseCurrency})`} value={formatConvertedAmount(liveCreditInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
-      </div>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
-          <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Notas de Crédito</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Registros de crédito emitidos a clientes.</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <SalesViewTutorial view="credit-notes" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de notas de crédito" />
-            <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
-            {canPerform('SALES_CREDIT_NOTES', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
-                <Plus className="size-4" /> Nueva NC</Button>
-            )}
-          </div>
-        </div>
-        <EditableDataTable data={filtered}
-          pagination={pagination}
-          onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { await creditNotesService.delete(id as string); } toast.success('Eliminadas', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
-          columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
-          layoutMode={layoutMode}
-          actions={(row) => (
-            <div className="flex items-center gap-1">
-               {canPerform('SALES_CREDIT_NOTES', 'edit') && (row.status||'').toUpperCase() === 'DRAFT' && (
-                 <Button title="Emitir" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>
-               )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-               {canPerform('SALES_CREDIT_NOTES', 'delete') && (
-                 <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
-               )}
-            </div>
-          )}
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis"><SalesKpiCard title={`Crédito emitido (${baseCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" /><SalesKpiCard title={`Saldo abierto (${baseCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" /><SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" /><SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-rose-500" bg="bg-rose-500/10" /></div>
+      <div className="flex flex-col gap-4"><div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center"><div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2><p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p></div><div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions"><SalesViewTutorial view="credit-notes" /><ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos" /><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} /><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} /></div><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="h-10 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"><option value="ALL">Todos los estados</option>{statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{canPerform('SALES_CREDIT_NOTES', 'create') && <Button onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}</div></div>
+        <EditableDataTable data={filtered} pagination={pagination} onBulkDelete={async (ids) => { const id = toast.loading(`Eliminando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`); try { for (const recordId of ids) await creditNotesService.delete(recordId as string); toast.success('Créditos eliminados', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudieron eliminar', { id }); } }} columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => startEdit(row.id)} isLoading={loading} actionsWidth="w-36" fitContent showHorizontalControls layoutMode={layoutMode} actions={(row) => <div className="flex items-center gap-1">{canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(row.status) === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><Send className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}<Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button><Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => startEdit(row.id)}><Eye className="size-4" /></Button>{canPerform('SALES_CREDIT_NOTES', 'delete') && <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>}</div>} />
       </div>
 
-      <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title={"¿Eliminar nota de crédito?"}
-        description="¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        variant="destructive"
-        loading={deleteLoading}
-        onConfirm={async () => {
-          if (!pendingDeleteId) return;
-          const deleteToastId = toast.loading('Eliminando nota de crédito...');
-          try {
-            setDeleteLoading(true);
-            await creditNotesService.delete(pendingDeleteId);
-            toast.success('Registro eliminado', { id: deleteToastId });
-            onRefresh();
-          } catch (error: any) {
-            toast.error(error?.message || 'Error al eliminar', { id: deleteToastId });
-          } finally {
-            setDeleteLoading(false);
-            setPendingDeleteId(null);
-          }
-        }}
-      />
+      <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Eliminar crédito?" description="Solo deben eliminarse créditos que aún no hayan sido emitidos." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Eliminando crédito...'); try { setDeleteLoading(true); await creditNotesService.delete(pendingDeleteId); toast.success('Crédito eliminado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
+
+      <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}><DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl"><DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle><DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription></DialogHeader>{paymentCredit && <div className="space-y-4"><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentCredit.number} · {customerName(paymentCredit)}</p><p className="mt-1 text-2xl font-black text-primary">Saldo: {formatConvertedAmount(Number(paymentCredit.balance ?? paymentCredit.total ?? 0), paymentCredit.currency, paymentCredit.exchangeRate)}</p></div><Badge className="bg-primary/10 text-primary">{statusFor(paymentCredit.status)?.label}</Badge></div></div><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto</p><Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></div><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div></div><AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</p><Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Número de recibo, transferencia..." /></div></div>}<DialogFooter><Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button><Button onClick={handlePayment} disabled={paymentLoading} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }
-

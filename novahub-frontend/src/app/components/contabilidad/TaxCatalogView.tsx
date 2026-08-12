@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Plus, Trash2, Save, ShieldAlert, Loader2 } from 'lucide-react'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface TaxEntry {
   id?: string
@@ -24,6 +25,10 @@ interface TaxEntry {
 }
 
 export function TaxCatalogView() {
+  const { canPerform } = useAuth()
+  const canCreate = canPerform('ACCOUNTING', 'create')
+  const canEdit = canPerform('ACCOUNTING', 'edit')
+  const canDeactivate = canPerform('ACCOUNTING', 'deactivate')
   const queryClient = useQueryClient()
   const [newEntry, setNewEntry] = useState<TaxEntry>({
     name: '', code: '', type: 'WITHHOLDING', category: 'IR',
@@ -31,6 +36,7 @@ export function TaxCatalogView() {
     requiresAuth: false, isActive: true,
   })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState('')
 
   const entriesQuery = useAccountingQuery<TaxEntry[]>(['tax-catalog'], async (signal) => accountingList(await contabilidadService.getTaxCatalog(undefined, signal)))
   const entries = entriesQuery.data || []
@@ -38,6 +44,7 @@ export function TaxCatalogView() {
   const fetchEntries = () => entriesQuery.refetch()
 
   const handleCreate = async () => {
+    if (!canCreate) return
     if (!newEntry.name || !newEntry.code) { toast.error('Nombre y código requeridos'); return }
     try {
       await contabilidadService.createTaxCatalogEntry(newEntry)
@@ -50,6 +57,8 @@ export function TaxCatalogView() {
   }
 
   const handleUpdate = async (id: string, data: Partial<TaxEntry>) => {
+    const isDeactivation = data.isActive === false
+    if (isDeactivation ? !canDeactivate : !canEdit) return
     try {
       await contabilidadService.updateTaxCatalogEntry(id, data)
       toast.success('Actualizado')
@@ -61,6 +70,7 @@ export function TaxCatalogView() {
   }
 
   const handleDelete = async (id: string) => {
+    if (!canDeactivate) return
     try {
       await contabilidadService.deleteTaxCatalogEntry(id)
       toast.success('Eliminado')
@@ -71,6 +81,7 @@ export function TaxCatalogView() {
   }
 
   const handleSeed = async () => {
+    if (!canCreate) return
     try {
       const res = await contabilidadService.seedDefaultTaxCatalog()
       const data = res?.data || res
@@ -91,9 +102,9 @@ export function TaxCatalogView() {
             <Badge variant="outline" className="text-[10px]">{entries.length}</Badge>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <Button variant="outline" size="sm" onClick={handleSeed}>
+            {canCreate && <Button variant="outline" size="sm" onClick={handleSeed}>
               <Loader2 className="size-3.5 mr-1" /> Sembrar datos por defecto
-            </Button>
+            </Button>}
           </div>
         </div>
       </CardHeader>
@@ -103,7 +114,7 @@ export function TaxCatalogView() {
         </p>
 
         {/* New entry form */}
-        <div className="grid grid-cols-1 gap-3 items-end rounded-xl bg-muted/20 p-3 sm:grid-cols-12 sm:gap-2">
+        {canCreate && <div className="grid grid-cols-1 gap-3 items-end rounded-xl bg-muted/20 p-3 sm:grid-cols-12 sm:gap-2">
           <div className="sm:col-span-2">
             <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Nombre</label>
             <Input size={1} value={newEntry.name} onChange={e => setNewEntry(prev => ({ ...prev, name: e.target.value }))} placeholder="Ej: IR Bienes 2%" />
@@ -157,7 +168,7 @@ export function TaxCatalogView() {
           <div className="sm:col-span-1">
             <Button size="sm" onClick={handleCreate}><Plus className="size-3.5 mr-1" />Agregar</Button>
           </div>
-        </div>
+        </div>}
 
         {/* Table */}
         {loading ? (
@@ -183,7 +194,7 @@ export function TaxCatalogView() {
               <tbody>
                 {entries.map(entry => (
                   <tr key={entry.id} className="border-b border-muted/30 hover:bg-muted/10">
-                    <td className="py-2 px-1">{editingId === entry.id ? <Input value={entry.name} onChange={e => setEntries(prev => prev.map(p => p.id === entry.id ? { ...p, name: e.target.value } : p))} /> : entry.name}</td>
+                    <td className="py-2 px-1">{editingId === entry.id ? <Input value={draftName} onChange={e => setDraftName(e.target.value)} /> : entry.name}</td>
                     <td className="py-2 px-1 font-mono">{entry.code}</td>
                     <td className="py-2 px-1"><Badge variant={entry.type === 'TAX' ? 'default' : 'secondary'} className="text-[10px]">{entry.type === 'TAX' ? 'Impuesto' : 'Retención'}</Badge></td>
                     <td className="py-2 px-1">{entry.category}</td>
@@ -192,16 +203,16 @@ export function TaxCatalogView() {
                     <td className="py-2 px-1">{entry.appliesTo}</td>
                     <td className="py-2 px-1 text-center">{entry.requiresAuth ? <ShieldAlert className="size-3.5 text-amber-500 mx-auto" /> : '—'}</td>
                     <td className="py-2 px-1 text-center">
-                      <Switch checked={entry.isActive} onCheckedChange={v => entry.id && handleUpdate(entry.id, { isActive: v })} />
+                      {(canEdit || canDeactivate) && <Switch checked={entry.isActive} disabled={entry.isActive ? !canDeactivate : !canEdit} onCheckedChange={v => entry.id && handleUpdate(entry.id, { isActive: v })} />}
                     </td>
                     <td className="py-2 px-1 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {editingId === entry.id ? (
-                          <Button variant="ghost" size="icon" className="size-7" onClick={() => entry.id && handleUpdate(entry.id, { name: entry.name, rate: Number(entry.rate), baseCalculation: entry.baseCalculation, appliesTo: entry.appliesTo, requiresAuth: entry.requiresAuth })}><Save className="size-3.5" /></Button>
+                        {canEdit && (editingId === entry.id ? (
+                          <Button variant="ghost" size="icon" aria-label="Guardar entrada tributaria" className="size-7" onClick={() => entry.id && handleUpdate(entry.id, { name: draftName, rate: Number(entry.rate), baseCalculation: entry.baseCalculation, appliesTo: entry.appliesTo, requiresAuth: entry.requiresAuth })}><Save className="size-3.5" /></Button>
                         ) : (
-                          <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditingId(entry.id || null)}>✎</Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="Editar entrada tributaria" className="size-7" onClick={() => { setEditingId(entry.id || null); setDraftName(entry.name) }}>✎</Button>
+                        ))}
+                        {canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -216,7 +227,7 @@ export function TaxCatalogView() {
             {entries.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">Sin entradas.</p> : entries.map(entry => (
               <div key={entry.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{entry.name}</p><p className="mt-1 break-all text-[10px] font-mono text-muted-foreground">{entry.code}</p></div><Badge variant={entry.type === 'TAX' ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{entry.type === 'TAX' ? 'Impuesto' : 'Retención'}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Categoría</span><span>{entry.category}</span></div><div><span className="block text-muted-foreground">Tasa</span><span className="font-mono">{Number(entry.rate).toFixed(1)}%</span></div><div><span className="block text-muted-foreground">Aplica a</span><span>{entry.appliesTo}</span></div><div><span className="block text-muted-foreground">Estado</span><span>{entry.isActive ? 'Activo' : 'Inactivo'}</span></div><div className="col-span-2 flex justify-end gap-1"><Button variant="ghost" size="icon" className="size-7" onClick={() => setEditingId(entry.id || null)}>✎</Button><Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button></div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Categoría</span><span>{entry.category}</span></div><div><span className="block text-muted-foreground">Tasa</span><span className="font-mono">{Number(entry.rate).toFixed(1)}%</span></div><div><span className="block text-muted-foreground">Aplica a</span><span>{entry.appliesTo}</span></div><div><span className="block text-muted-foreground">Estado</span><span>{entry.isActive ? 'Activo' : 'Inactivo'}</span></div><div className="col-span-2 flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar entrada tributaria" className="size-7" onClick={() => { setEditingId(entry.id || null); setDraftName(entry.name) }}>✎</Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar entrada tributaria" className="size-7 text-destructive" onClick={() => entry.id && handleDelete(entry.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             ))}
           </div>

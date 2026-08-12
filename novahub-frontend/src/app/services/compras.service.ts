@@ -21,7 +21,7 @@ export const purchaseOrdersService = {
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>) => api.post<PurchaseOrder>('/purchases/orders', data),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
-  approve: (id: string) => api.patch<{ order: PurchaseOrder; invoice: SupplierInvoice }>(`/purchases/orders/${id}/approve`, {}),
+  approve: (id: string) => api.patch<{ order: PurchaseOrder; receipt: PurchaseReceipt }>(`/purchases/orders/${id}/approve`, {}),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PurchaseOrder, 'id' | 'number' | 'status'> }>(`/purchases/orders/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/cancel`, { reason }),
@@ -36,7 +36,8 @@ export const purchaseReceiptsService = {
   create: (data: Partial<PurchaseReceipt>) => api.post<PurchaseReceipt>('/purchases/receipts', data),
   update: (id: string, data: Partial<PurchaseReceipt>) => api.patch<PurchaseReceipt>(`/purchases/receipts/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/receipts/${id}`),
-  convertToInvoice: (id: string) => api.post<SupplierInvoice>(`/purchases/receipts/${id}/convert-to-invoice`, {}),
+  registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
+    api.post<SupplierInvoice>(`/purchases/receipts/${id}/invoice`, data),
 };
 
 export const supplierInvoicesService = {

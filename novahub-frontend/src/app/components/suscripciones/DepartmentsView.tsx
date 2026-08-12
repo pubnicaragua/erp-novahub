@@ -45,6 +45,9 @@ const getMembershipIds = (memberships: any[] | undefined, fallbackId?: string | 
 
 const getUserDepartmentIds = (user: any) => getMembershipIds(user.departmentMemberships, user.departmentId);
 const getEmployeeDepartmentIds = (employee: any) => getMembershipIds(employee.departmentMemberships, employee.departmentId);
+const getDepartmentHeadIds = (department: any) => (department?.departmentHeads || [])
+  .map((head: any) => head.userId || head.user?.id)
+  .filter(Boolean);
 
 const getEmployeeName = (employee: any) => `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.employeeNumber || 'Empleado';
 
@@ -62,6 +65,7 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
   const [newPosition, setNewPosition] = useState('');
   const [departmentSearch, setDepartmentSearch] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
+  const [headSearch, setHeadSearch] = useState('');
   const [savingKey, setSavingKey] = useState('');
   const [creating, setCreating] = useState(false);
   const [creatingPosition, setCreatingPosition] = useState(false);
@@ -123,6 +127,40 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
     const term = memberSearch.trim().toLowerCase();
     return employees.filter((employee) => !term || `${getEmployeeName(employee)} ${employee.email || ''} ${employee.employeeNumber || ''}`.toLowerCase().includes(term));
   }, [employees, memberSearch]);
+
+  const assignedDepartmentUsers = useMemo(
+    () => departmentUsers.filter((user) => getUserDepartmentIds(user).includes(selectedDepartmentId)),
+    [departmentUsers, selectedDepartmentId],
+  );
+  const availableDepartmentUsers = useMemo(
+    () => departmentUsers.filter((user) => !getUserDepartmentIds(user).includes(selectedDepartmentId)),
+    [departmentUsers, selectedDepartmentId],
+  );
+  const assignedDepartmentEmployees = useMemo(
+    () => departmentEmployees.filter((employee) => getEmployeeDepartmentIds(employee).includes(selectedDepartmentId)),
+    [departmentEmployees, selectedDepartmentId],
+  );
+  const availableDepartmentEmployees = useMemo(
+    () => departmentEmployees.filter((employee) => !getEmployeeDepartmentIds(employee).includes(selectedDepartmentId)),
+    [departmentEmployees, selectedDepartmentId],
+  );
+
+  const activeUsers = useMemo(() => users.filter((user) => user.isActive !== false), [users]);
+  const departmentHeadIds = useMemo(() => getDepartmentHeadIds(selectedDepartment), [selectedDepartment]);
+  const filteredHeadUsers = useMemo(() => {
+    const term = headSearch.trim().toLowerCase();
+    return activeUsers
+      .filter((user) => !term || `${user.name || ''} ${user.email || ''}`.toLowerCase().includes(term))
+      .sort((a, b) => Number(departmentHeadIds.includes(b.id)) - Number(departmentHeadIds.includes(a.id)));
+  }, [activeUsers, departmentHeadIds, headSearch]);
+  const assignedDepartmentHeads = useMemo(
+    () => activeUsers.filter((user) => departmentHeadIds.includes(user.id)),
+    [activeUsers, departmentHeadIds],
+  );
+  const availableDepartmentHeads = useMemo(
+    () => filteredHeadUsers.filter((user) => !departmentHeadIds.includes(user.id)),
+    [filteredHeadUsers, departmentHeadIds],
+  );
 
   const countMembers = (departmentId: string) => ({
     users: users.filter((user) => getUserDepartmentIds(user).includes(departmentId)).length,
@@ -201,6 +239,32 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
       toast.success(checked ? 'Departamento habilitado como vendedor' : 'Departamento quitado como vendedor');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al actualizar el departamento');
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const toggleDepartmentHead = async (user: any) => {
+    if (!selectedDepartment) return;
+    const isAssigned = departmentHeadIds.includes(user.id);
+    const nextHeadUserIds = isAssigned
+      ? departmentHeadIds.filter((id: string) => id !== user.id)
+      : [...departmentHeadIds, user.id];
+
+    try {
+      setSavingKey(`head:${user.id}`);
+      const response: any = await hrService.updateDepartment(selectedDepartment.id, { headUserIds: nextHeadUserIds });
+      const updatedDepartment = response?.data || response;
+      setDepartments((items) => items.map((department) => (
+        department.id === selectedDepartment.id
+          ? { ...department, ...updatedDepartment }
+          : department
+      )));
+      await refetchDepartments();
+      await onDataChange?.();
+      toast.success(isAssigned ? 'Jefe desvinculado del departamento' : 'Jefe asignado al departamento');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al actualizar los jefes del departamento');
     } finally {
       setSavingKey('');
     }
@@ -337,10 +401,42 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
               </div>
             </CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black uppercase tracking-wider">Integrantes del departamento</p><p className="mt-1 text-xs text-muted-foreground">Un usuario puede pertenecer a varios departamentos. Un empleado conserva al menos uno.</p></div><div className="relative w-full sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar usuario o empleado..." className="h-10 pl-9" aria-label="Buscar integrante" /></div></div>
+              <Card className="min-w-0 border-primary/20 bg-primary/[0.02]">
+                <CardHeader className="border-b border-border/30 pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm font-black"><UserRoundCheck className="size-4 text-primary" /> Jefes de departamento <Badge variant="secondary" className="text-[9px]">{assignedDepartmentHeads.length}</Badge></CardTitle>
+                  <CardDescription className="text-xs">Selecciona uno o varios usuarios. Los empleados no aparecen aquí como candidatos; solo se muestran sus cuentas de acceso.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-600"><Check className="size-3.5" /> Usuarios asignados</p><Badge variant="secondary" className="text-[9px]">{assignedDepartmentHeads.length}</Badge></div>
+                    <div className="grid max-h-52 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                      {!assignedDepartmentHeads.length && <p className="col-span-full rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">Aún no hay jefes asignados.</p>}
+                      {assignedDepartmentHeads.map((user) => {
+                        const busy = savingKey === `head:${user.id}`;
+                        const hasEmployee = Boolean(user.employee?.id);
+                        return <div key={user.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2.5"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><Badge variant="outline" className="mt-1 rounded-full text-[9px]">{hasEmployee ? 'Usuario + empleado' : 'Usuario sin empleado'}</Badge></div></div><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleDepartmentHead(user)} aria-label={`Desvincular jefe ${user.name}`}><Check className="size-3" /> Quitar</Button></div>;
+                      })}
+                    </div>
+                  </div>
+                  <div className="border-t border-border/40 pt-4">
+                    <div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Plus className="size-3.5" /> Usuarios disponibles</p><Badge variant="secondary" className="text-[9px]">{availableDepartmentHeads.length}</Badge></div>
+                    <div className="relative mb-2"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={headSearch} onChange={(event) => setHeadSearch(event.target.value)} placeholder="Buscar usuario por nombre o correo..." className="h-9 pl-9 text-xs" aria-label="Buscar usuario jefe" /></div>
+                    <div className="grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                      {availableDepartmentHeads.map((user) => {
+                        const busy = savingKey === `head:${user.id}`;
+                        const hasEmployee = Boolean(user.employee?.id);
+                        return <div key={user.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border/40 bg-background/70 px-3 py-2.5"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black text-muted-foreground">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><Badge variant="outline" className="mt-1 rounded-full text-[9px]">{hasEmployee ? 'Usuario + empleado' : 'Usuario sin empleado'}</Badge></div></div><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleDepartmentHead(user)} aria-label={`Asignar como jefe a ${user.name}`}><Plus className="size-3" /> Asignar</Button></div>;
+                      })}
+                    </div>
+                    {!availableDepartmentHeads.length && <p className="mt-2 rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay usuarios disponibles que coincidan con la búsqueda.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black uppercase tracking-wider">Integrantes del departamento</p><p className="mt-1 text-xs text-muted-foreground">Los usuarios tienen acceso a la empresa; los empleados pertenecen a Recursos Humanos. Un empleado puede existir sin usuario vinculado.</p></div><div className="relative w-full sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Buscar usuario o empleado..." className="h-10 pl-9" aria-label="Buscar integrante" /></div></div>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.03] px-3 py-2.5 text-[10px] text-muted-foreground"><span className="font-black uppercase tracking-wider text-foreground">Cómo leerlo:</span><Badge variant="outline" className="gap-1 rounded-full text-[9px]"><UserRoundCheck className="size-3 text-emerald-600" /> Vinculado</Badge><Badge variant="outline" className="gap-1 rounded-full text-[9px]"><Users className="size-3 text-primary" /> Usuario + empleado</Badge><Badge variant="outline" className="gap-1 rounded-full text-[9px]"><UserRound className="size-3" /> Solo empleado</Badge></div>
               <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-2">
-                <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><Users className="size-4 text-primary" /> Usuarios <Badge variant="secondary" className="text-[9px]">{users.filter((user) => getUserDepartmentIds(user).includes(selectedDepartment.id)).length}</Badge></CardTitle><CardDescription className="text-xs">Personas con acceso a la empresa.</CardDescription></CardHeader><CardContent className="space-y-2"><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!departmentUsers.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay usuarios que coincidan.</p>}{departmentUsers.map((user) => { const assigned = getUserDepartmentIds(user).includes(selectedDepartment.id); const busy = savingKey === `user:${user.id}`; const needsEmployee = selectedDepartment.isSellerDepartment && !user.employee?.id && !assigned; return <div key={user.id} className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/40 bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-primary">{getRoleLabel(user)}</span>{needsEmployee && <p className="mt-1 text-[10px] font-semibold text-amber-600">Requiere empleado vinculado para comisiones</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><Button type="button" size="sm" variant={assigned ? 'default' : 'outline'} disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleUserDepartment(user)} aria-pressed={assigned}>{assigned ? <Check className="size-3" /> : <Plus className="size-3" />}{assigned ? 'Vinculado' : 'Vincular'}</Button>{needsEmployee && onLinkUserToEmployee && <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 border-amber-500/25 text-[10px] font-bold text-amber-600 hover:bg-amber-500/10" onClick={() => onLinkUserToEmployee(user)}><Link2 className="size-3" /> Vincular empleado</Button>}</div></div>; })}</div></CardContent></Card>
-                <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><UserRound className="size-4 text-primary" /> Empleados <Badge variant="secondary" className="text-[9px]">{employees.filter((employee) => getEmployeeDepartmentIds(employee).includes(selectedDepartment.id)).length}</Badge></CardTitle><CardDescription className="text-xs">Empleados de Recursos Humanos y futuros vendedores.</CardDescription></CardHeader><CardContent className="space-y-2"><div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{!departmentEmployees.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">No hay empleados que coincidan.</p>}{departmentEmployees.map((employee) => { const assigned = getEmployeeDepartmentIds(employee).includes(selectedDepartment.id); const busy = savingKey === `employee:${employee.id}`; return <div key={employee.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/60 px-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold">{getEmployeeName(employee)}</p><p className="truncate text-[10px] text-muted-foreground">{employee.employeeNumber || employee.email || 'Sin identificador'}</p>{employee.user && <p className="mt-1 text-[10px] font-semibold text-emerald-600">Usuario vinculado: {employee.user.name}</p>}</div><Button type="button" size="sm" variant={assigned ? 'default' : 'outline'} disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleEmployeeDepartment(employee)} aria-pressed={assigned}>{assigned ? <Check className="size-3" /> : <Plus className="size-3" />}{assigned ? 'Vinculado' : 'Vincular'}</Button></div>; })}</div></CardContent></Card>
+                <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><Users className="size-4 text-primary" /> Usuarios <Badge variant="secondary" className="text-[9px]">{users.length}</Badge></CardTitle><CardDescription className="text-xs">Cuentas con acceso a la empresa. Se separan los usuarios ya asignados de los disponibles.</CardDescription></CardHeader><CardContent className="space-y-4"><div><div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-600"><UserRoundCheck className="size-3.5" /> Vinculados a este departamento</p><Badge variant="secondary" className="text-[9px]">{assignedDepartmentUsers.length}</Badge></div><div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">{!assignedDepartmentUsers.length && <p className="rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay usuarios vinculados aquí.</p>}{assignedDepartmentUsers.map((user) => { const busy = savingKey === `user:${user.id}`; const hasEmployee = Boolean(user.employee?.id); const needsEmployee = selectedDepartment.isSellerDepartment && !hasEmployee; return <div key={user.id} className="flex min-w-0 flex-col gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><div className="mt-1 flex flex-wrap gap-1"><Badge variant="outline" className="rounded-full text-[9px]">{hasEmployee ? 'Usuario + empleado' : 'Usuario sin empleado'}</Badge><Badge variant="outline" className="rounded-full text-[9px]">{getRoleLabel(user)}</Badge></div>{needsEmployee && <p className="mt-1 text-[10px] font-semibold text-amber-600">Requiere empleado vinculado para comisiones</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleUserDepartment(user)} aria-label={`Desvincular usuario ${user.name}`}><Check className="size-3" /> Desvincular</Button>{needsEmployee && onLinkUserToEmployee && <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 border-amber-500/25 text-[10px] font-bold text-amber-600 hover:bg-amber-500/10" onClick={() => onLinkUserToEmployee(user)}><Link2 className="size-3" /> Vincular empleado</Button>}</div></div>; })}</div></div><div className="border-t border-border/40 pt-4"><div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Plus className="size-3.5" /> Disponibles para vincular</p><Badge variant="secondary" className="text-[9px]">{availableDepartmentUsers.length}</Badge></div><div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">{!availableDepartmentUsers.length && <p className="rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay usuarios disponibles con esta búsqueda.</p>}{availableDepartmentUsers.map((user) => { const busy = savingKey === `user:${user.id}`; const hasEmployee = Boolean(user.employee?.id); const needsEmployee = selectedDepartment.isSellerDepartment && !hasEmployee; return <div key={user.id} className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/40 bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-2"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">{user.name?.charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{user.name}</p><p className="truncate text-[10px] text-muted-foreground">{user.email}</p><div className="mt-1 flex flex-wrap gap-1"><Badge variant="outline" className="rounded-full text-[9px]">{hasEmployee ? 'Usuario + empleado' : 'Usuario sin empleado'}</Badge><Badge variant="outline" className="rounded-full text-[9px]">{getRoleLabel(user)}</Badge></div>{needsEmployee && <p className="mt-1 text-[10px] font-semibold text-amber-600">Requiere empleado vinculado para comisiones</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleUserDepartment(user)} aria-label={`Vincular usuario ${user.name}`}><Plus className="size-3" /> Vincular</Button>{needsEmployee && onLinkUserToEmployee && <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 gap-1.5 border-amber-500/25 text-[10px] font-bold text-amber-600 hover:bg-amber-500/10" onClick={() => onLinkUserToEmployee(user)}><Link2 className="size-3" /> Vincular empleado</Button>}</div></div>; })}</div></div></CardContent></Card>
+                <Card className="min-w-0 border-border/50 bg-muted/5"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm font-black"><UserRound className="size-4 text-primary" /> Empleados <Badge variant="secondary" className="text-[9px]">{employees.length}</Badge></CardTitle><CardDescription className="text-xs">Expedientes de Recursos Humanos. Pueden existir aunque no tengan una cuenta de acceso.</CardDescription></CardHeader><CardContent className="space-y-4"><div><div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-600"><UserRoundCheck className="size-3.5" /> Vinculados a este departamento</p><Badge variant="secondary" className="text-[9px]">{assignedDepartmentEmployees.length}</Badge></div><div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">{!assignedDepartmentEmployees.length && <p className="rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay empleados vinculados aquí.</p>}{assignedDepartmentEmployees.map((employee) => { const busy = savingKey === `employee:${employee.id}`; const hasUser = Boolean(employee.user?.id); return <div key={employee.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold">{getEmployeeName(employee)}</p><p className="truncate text-[10px] text-muted-foreground">{employee.employeeNumber || employee.email || 'Sin identificador'}</p><div className="mt-1 flex flex-wrap items-center gap-1"><Badge variant="outline" className="rounded-full text-[9px]">{hasUser ? 'Empleado + usuario' : 'Solo empleado'}</Badge>{hasUser && <span className="truncate text-[10px] text-emerald-600">Usuario: {employee.user.name}</span>}</div></div><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleEmployeeDepartment(employee)} aria-label={`Desvincular empleado ${getEmployeeName(employee)}`}><Check className="size-3" /> Desvincular</Button></div>; })}</div></div><div className="border-t border-border/40 pt-4"><div className="mb-2 flex items-center justify-between gap-2"><p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Plus className="size-3.5" /> Disponibles para vincular</p><Badge variant="secondary" className="text-[9px]">{availableDepartmentEmployees.length}</Badge></div><div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">{!availableDepartmentEmployees.length && <p className="rounded-lg border border-dashed border-border p-5 text-center text-xs text-muted-foreground">No hay empleados disponibles con esta búsqueda.</p>}{availableDepartmentEmployees.map((employee) => { const busy = savingKey === `employee:${employee.id}`; const hasUser = Boolean(employee.user?.id); return <div key={employee.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/60 px-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold">{getEmployeeName(employee)}</p><p className="truncate text-[10px] text-muted-foreground">{employee.employeeNumber || employee.email || 'Sin identificador'}</p><div className="mt-1 flex flex-wrap items-center gap-1"><Badge variant="outline" className="rounded-full text-[9px]">{hasUser ? 'Empleado + usuario' : 'Solo empleado'}</Badge>{hasUser && <span className="truncate text-[10px] text-emerald-600">Usuario: {employee.user.name}</span>}</div></div><Button type="button" size="sm" variant="outline" disabled={busy} className="h-8 shrink-0 gap-1.5 text-[10px] font-bold" onClick={() => void toggleEmployeeDepartment(employee)} aria-label={`Vincular empleado ${getEmployeeName(employee)}`}><Plus className="size-3" /> Vincular</Button></div>; })}</div></div></CardContent></Card>
               </div>
               <Card className="min-w-0 border-border/50 bg-muted/5">
                 <CardHeader className="pb-3">

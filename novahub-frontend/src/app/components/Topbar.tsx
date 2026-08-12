@@ -102,7 +102,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     { label: 'Proveedores', description: 'Registro y gestión de proveedores', module: 'compras', subModule: 'proveedores', keywords: ['proveedor', 'vendor'], group: 'Compras' },
     { label: 'Órdenes de Compra', description: 'Órdenes de compra a proveedores', module: 'compras', subModule: 'ordenes-compra', keywords: ['orden', 'compra', 'pedido'], group: 'Compras' },
     { label: 'Recepciones', description: 'Recepción de mercadería', module: 'compras', subModule: 'recepciones-compra', keywords: ['recepcion', 'entrada', 'mercaderia'], group: 'Compras' },
-    { label: 'Facturas de Proveedor', description: 'Facturas recibidas de proveedores', module: 'compras', subModule: 'facturas-proveedor', keywords: ['factura', 'proveedor'], group: 'Compras' },
     { label: 'Pagos Realizados', description: 'Pagos a proveedores', module: 'compras', subModule: 'pagos-realizados', keywords: ['pago', 'proveedor'], group: 'Compras' },
     { label: 'Solicitudes de Compra', description: 'Solicitudes internas de compra', module: 'compras', subModule: 'solicitudes-compra', keywords: ['solicitud', 'requisicion'], group: 'Compras' },
     { label: 'Gestión de Compras', description: 'Aprobación y gestión de compras', module: 'compras', subModule: 'gestion-compras', keywords: ['gestion', 'aprobacion'], group: 'Compras' },

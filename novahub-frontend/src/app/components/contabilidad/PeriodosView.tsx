@@ -179,7 +179,7 @@ export function PeriodosView() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'edit') && (
+                      {p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'approve') && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -190,7 +190,7 @@ export function PeriodosView() {
                           <Lock className="size-4" />
                         </Button>
                       )}
-                      {p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'edit') && (
+                      {p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'approve') && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -212,7 +212,7 @@ export function PeriodosView() {
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : periods.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay períodos registrados</p> : periods.map((p) => (
               <div key={p.id} className={cn('min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3', isCurrentPeriod(p) && 'border-primary/30 bg-primary/[0.03]')}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-black">{p.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{months.find((m) => m.value === String(p.month))?.label || p.month} {p.year}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[p.status || 'OPEN'])}>{statusLabels[p.status || 'OPEN']}</Badge></div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'edit') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'edit') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)}><Unlock className="size-4" /></Button>}</div></div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Inicio</span><span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A'}</span></div><div><span className="block text-muted-foreground">Fin</span><span>{p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A'}</span></div><div className="col-span-2 flex justify-end gap-1"><span className="sr-only">Acciones</span>{p.status === 'OPEN' && canPerform('ACCOUNTING_PERIODS', 'approve') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setCloseConfirmId(p.id)}><Lock className="size-4" /></Button>}{p.status === 'CLOSED' && canPerform('ACCOUNTING_PERIODS', 'approve') && <Button variant="ghost" size="icon" className="size-7" onClick={() => setReopenConfirmId(p.id)}><Unlock className="size-4" /></Button>}</div></div>
               </div>
             ))}
           </div>

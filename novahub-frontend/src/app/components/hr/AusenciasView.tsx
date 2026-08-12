@@ -221,7 +221,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
       {/* New Request Button */}
       <div className="flex justify-end">
-        {canPerform('HR_LEAVE', 'create') && (
+        {canPerform('HR_LEAVES', 'create') && (
           <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4 mr-2" />
             Nueva Solicitud
@@ -395,24 +395,24 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {request.status === 'PENDING' && canPerform('HR_LEAVE', 'edit') && (
+                    {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete')) && (
                       <div className="flex items-center justify-end gap-1">
-                        <Button
+                        {canPerform('HR_LEAVES', 'approve') && <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleApprove(request.id)}
                           className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
                         >
                           <Check className="size-4" />
-                        </Button>
-                        <Button
+                        </Button>}
+                        {canPerform('HR_LEAVES', 'delete') && <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleReject(request.id)}
                           className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
                           <X className="size-4" />
-                        </Button>
+                        </Button>}
                       </div>
                     )}
                   </td>
@@ -472,14 +472,14 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 )}
               </div>
 
-              {request.status === 'PENDING' && canPerform('HR_LEAVE', 'edit') && (
+              {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete')) && (
                 <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
-                  <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
+                  {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
                     <Check className="size-3 mr-1" /> Aprobar
-                  </Button>
-                  <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
+                  </Button>}
+                  {canPerform('HR_LEAVES', 'delete') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
                     <X className="size-3 mr-1" /> Rechazar
-                  </Button>
+                  </Button>}
                 </div>
               )}
             </div>

@@ -4,7 +4,7 @@ export const REFERENCE_TYPE_LABELS: Record<string, string> = {
   SUPPLIER_INVOICE: 'Factura de proveedor',
   PAYMENT: 'Pago recibido',
   PAYMENT_MADE: 'Pago a proveedor',
-  CREDIT_NOTE: 'Nota de crédito',
+  CREDIT_NOTE: 'Crédito',
   DEBIT_NOTE: 'Nota de débito',
   SALE_RETURN: 'Devolución de venta',
   PURCHASE_RECEIPT: 'Recepción de compra',

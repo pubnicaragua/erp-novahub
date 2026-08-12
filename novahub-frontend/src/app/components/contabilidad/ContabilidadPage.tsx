@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BookOpen, FileText, Scale, TrendingUp, PieChart,
   DollarSign, Landmark, Calendar, FileBarChart,
@@ -28,6 +28,7 @@ import { CategoriasGastosView } from './CategoriasGastosView';
 import { BudgetItemsView } from './BudgetItemsView';
 import { DiferenciasCambiariasView } from './DiferenciasCambiariasView';
 import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -35,7 +36,7 @@ const SECTIONS = [
   { id: 'libro-mayor', label: 'Libro Mayor', icon: BookOpenCheck },
   { id: 'balance-comprobacion', label: 'Balance de Comprobación', icon: Scale },
   { id: 'estado-resultados', label: 'Estado de Resultados', icon: TrendingUp },
-  { id: 'balance-general', label: 'Balance General', icon: PieChart },
+  { id: 'balance-general-contable', label: 'Balance General', icon: PieChart },
   { id: 'flujo-efectivo', label: 'Flujo de Efectivo', icon: DollarSign },
   { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: ArrowLeftRight },
   { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: FileSpreadsheet },
@@ -47,6 +48,25 @@ const SECTIONS = [
   { id: 'categorias-gastos', label: 'Categorías Gastos', icon: Tag },
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
+
+const SECTION_PERMISSIONS: Record<string, string> = {
+  'plan-cuentas': 'ACCOUNTING_CHART',
+  diario: 'ACCOUNTING_JOURNAL',
+  'libro-mayor': 'ACCOUNTING_LEDGER',
+  'balance-comprobacion': 'ACCOUNTING_TRIAL_BALANCE',
+  'estado-resultados': 'ACCOUNTING_PROFIT_LOSS',
+  'balance-general-contable': 'ACCOUNTING_BALANCE_SHEET',
+  'flujo-efectivo': 'ACCOUNTING_CASH_FLOW',
+  'diferencias-cambiarias': 'ACCOUNTING_EXCHANGE_DIFFERENCES',
+  'cambios-patrimonio': 'ACCOUNTING_EQUITY',
+  'activos-fijos': 'ACCOUNTING_ASSETS',
+  conciliacion: 'ACCOUNTING_RECONCILIATION',
+  periodos: 'ACCOUNTING_PERIODS',
+  'reportes-fiscales': 'ACCOUNTING_FISCAL',
+  presupuestos: 'ACCOUNTING_BUDGET',
+  'categorias-gastos': 'ACCOUNTING_EXPENSE_CATEGORIES',
+  configuracion: 'ACCOUNTING_CONFIG',
+};
 
 const HELP_DATA: Record<string, {
   description: string;
@@ -241,16 +261,28 @@ interface ContabilidadPageProps {
 }
 
 export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ContabilidadPageProps) {
-  const [activeSection, setActiveSection] = useState(activeSubModule || 'plan-cuentas');
+  const { canPerform } = useAuth();
+  const visibleSections = SECTIONS.filter(section => canPerform(SECTION_PERMISSIONS[section.id], 'view'));
+  const fallbackSection = visibleSections[0]?.id || 'plan-cuentas';
+  const normalizedInitialSection = activeSubModule === 'balance-general' ? 'balance-general-contable' : activeSubModule;
+  const [activeSection, setActiveSection] = useState(normalizedInitialSection || 'plan-cuentas');
   const [showHelp, setShowHelp] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const help = HELP_DATA[activeSection];
+  const help = HELP_DATA[activeSection] || (activeSection === 'balance-general-contable' ? HELP_DATA['balance-general'] : undefined);
+
+  useEffect(() => {
+    if (!visibleSections.some(section => section.id === activeSection)) {
+      setActiveSection(fallbackSection);
+      onSubModuleChange?.(fallbackSection);
+    }
+  }, [activeSection, fallbackSection, onSubModuleChange, visibleSections]);
 
   const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
   if (activeSubModule !== prevSubModule) {
     setPrevSubModule(activeSubModule);
     if (activeSubModule && activeSubModule !== activeSection) {
-      const validSection = SECTIONS.find(s => s.id === activeSubModule);
+      const normalizedSection = activeSubModule === 'balance-general' ? 'balance-general-contable' : activeSubModule;
+      const validSection = visibleSections.find(s => s.id === normalizedSection);
       if (validSection) {
         setActiveSection(validSection.id);
       }
@@ -304,7 +336,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
             !isSidebarCollapsed && 'hidden lg:hidden',
           )}>
             <div className="flex w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm">
-              {SECTIONS.map((section) => {
+              {visibleSections.map((section) => {
                 const isActive = activeSection === section.id;
                 return (
                   <button
@@ -340,7 +372,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'libro-mayor' && <LibroMayorView />}
                   {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}
                   {activeSection === 'estado-resultados' && <EstadoResultadosView />}
-                  {activeSection === 'balance-general' && <BalanceGeneralView />}
+                  {activeSection === 'balance-general-contable' && <BalanceGeneralView />}
                   {activeSection === 'flujo-efectivo' && <FlujoEfectivoView />}
                   {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
                   {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}

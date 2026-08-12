@@ -47,7 +47,7 @@ interface InventarioPageProps {
 }
 
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
@@ -327,7 +327,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
             const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
-            const hasAccess = !user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback;
+            const hasAccess = (!user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback)
+              && (section.requiredModules.length === 0 || section.requiredModules.some(mod => canPerform(mod, 'view')));
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

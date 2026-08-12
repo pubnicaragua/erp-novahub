@@ -109,7 +109,7 @@ export function ClientesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="gap-2"><Download className="size-4" /> Exportar</Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            {canPerform('CLIENTS', 'create') && (
+            {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>
                 <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => handleOpenDialog()}>
                   <Plus className="size-4" /> Nuevo Cliente
@@ -250,7 +250,7 @@ export function ClientesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {canPerform('CLIENTS', 'edit') && (
+                          {canPerform('SALES_CLIENTS', 'edit') && (
                             <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(c)}><Edit className="size-4" /></Button>
                           )}
                         </div>

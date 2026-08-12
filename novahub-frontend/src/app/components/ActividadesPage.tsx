@@ -22,23 +22,23 @@ interface ActividadesPageProps {
 }
 
 export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ActividadesPageProps) => {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
 
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
   const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
-    enabled: activeTab === 'tareas',
+    enabled: activeTab === 'tareas' && canPerform('ACTIVITIES_TASKS', 'view'),
   });
   const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
-    enabled: activeTab === 'eventos',
+    enabled: activeTab === 'eventos' && canPerform('ACTIVITIES_EVENTS', 'view'),
   });
   const remindersQuery = useTenantQuery<any[]>(['activities', 'reminders'], signal => remindersService.getAll(signal), {
-    enabled: activeTab === 'recordatorios',
+    enabled: activeTab === 'recordatorios' && canPerform('ACTIVITIES_REMINDERS', 'view'),
   });
   const logsQuery = useTenantQuery<any[]>(['activities', 'logs'], signal => activityLogsService.getAll(signal), {
-    enabled: activeTab === 'bitacora',
+    enabled: activeTab === 'bitacora' && canPerform('ACTIVITIES_LOGS', 'view'),
   });
 
   const data = useMemo(() => {
@@ -117,7 +117,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
                 const hasRequired = user?.enabledModules?.includes(tab.module);
                 const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('ACTIVITIES_'));
                 const hasFallback = user?.enabledModules?.includes('ACTIVITIES') && !hasSpecificSubmodules;
-                const hasAccess = !user?.enabledModules || hasRequired || hasFallback;
+                const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
                 if (!hasAccess) return null;
                 return (
                 <TabsTrigger 
