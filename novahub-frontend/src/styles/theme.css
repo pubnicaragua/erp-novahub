@@ -170,6 +170,31 @@ html[data-theme-transition="active"]::view-transition-new(root) {
     font-family: 'Inter', sans-serif;
   }
 
+  /* Los select nativos no heredan de forma consistente el color de option
+     entre navegadores. Fijamos ambos lados con los tokens del tema para que
+     el menú sea legible en claro y oscuro. */
+  select,
+  select option,
+  select optgroup {
+    color: var(--foreground);
+    background-color: var(--background);
+    color-scheme: light;
+  }
+
+  select option:checked,
+  select option:hover {
+    color: var(--accent-foreground);
+    background-color: var(--accent);
+  }
+
+  .dark select,
+  .dark select option,
+  .dark select optgroup {
+    color: var(--foreground);
+    background-color: var(--background);
+    color-scheme: dark;
+  }
+
   html.dark body {
     background: radial-gradient(circle at 0% 0%, #04883333 0%, #14201a 50%, #1a2620 100%);
     background-color: #1a2620;
@@ -182,15 +207,8 @@ html[data-theme-transition="active"]::view-transition-new(root) {
     background-attachment: fixed;
   }
 
-  /* Dark mode: fix native select/option elements */
-  .dark select,
-  .dark option {
-    background-color: oklch(0.2 0.01 155);
-    color: oklch(0.985 0 0);
-  }
-
   .dark select {
-    border-color: oklch(0.35 0.01 155);
+    border-color: var(--border);
   }
 
   /* Custom Scrollbar */

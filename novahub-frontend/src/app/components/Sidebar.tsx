@@ -74,6 +74,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { NovaHubLogo } from './NovaHubLogo';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
 
 interface SidebarProps {
   activeModule: Module | 'overview';
@@ -101,101 +102,8 @@ interface MenuItem {
   superadminOnly?: boolean;
 }
 
-const SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
-  // Ventas — cada subítem solo se controla por su submódulo específico
-  clientes: ['SALES_CLIENTS'],
-  estimaciones: ['SALES_QUOTES'],
-  'ordenes-venta': ['SALES_ORDERS'],
-  facturas: ['SALES_INVOICES'],
-  'facturas-recurrentes': ['SALES_RECURRING'],
-  'pagos-recibidos': ['SALES_PAYMENTS'],
-  'devoluciones-venta': ['SALES_RETURNS'],
-  'notas-credito': ['SALES_CREDIT_NOTES'],
-  'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
-  'control-caja': ['RETAIL_POS', 'SALES_POS'],
-  'listas-precios': ['SALES_PRICE_LISTS'],
-  // Compras
-  solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],
-  proveedores: ['PURCHASES_PROVIDERS'],
-  gastos: ['PURCHASES_EXPENSES'],
-  'gastos-recurrentes': ['PURCHASES_EXPENSES_REC'],
-  'ordenes-compra': ['PURCHASES_ORDERS'],
-  'recepciones-compra': ['PURCHASES_RECEIPTS'],
-  'facturas-proveedor-rec': ['PURCHASES_INVOICES_REC'],
-  'pagos-realizados': ['PURCHASES_PAYMENTS'],
-  'creditos-proveedor': ['PURCHASES_RETURNS'],
-  // Recursos Humanos
-  'dashboard-hr': ['HR_DASHBOARD'],
-  empleados: ['HR_EMPLOYEES'],
-  departamentos: ['HR_EMPLOYEES'],
-  nominas: ['HR_PAYROLL'],
-  asistencia: ['HR_ATTENDANCE'],
-  ausencias: ['HR_LEAVES'],
-  evaluaciones: ['HR_PERFORMANCE'],
-  capacitaciones: ['HR_TRAINING'],
-  beneficios: ['HR_BENEFITS'],
-  'config-nomina': ['HR_PAYROLL_CONFIG'],
-  // Finanzas
-  'resumen-financiero': ['FINANCIAL_DASHBOARD'],
-  'caja-bancos': ['FINANCIAL_DASHBOARD'],
-  'cuentas-cobrar': ['FINANCIAL_INCOMES'],
-  'cuentas-pagar': ['FINANCIAL_EXPENSES'],
-  'ingresos': ['FINANCIAL_INCOMES'],
-  'egresos': ['FINANCIAL_EXPENSES'],
-  'movimientos-recurrentes': ['FINANCIAL_EXPENSES_REC'],
-  'calendario-financiero': ['FINANCIAL_DASHBOARD'],
-  'analisis-ingresos-gastos': ['FINANCIAL_BALANCE'],
-  'balance-general': ['FINANCIAL_BALANCE'],
-  // Inventario
-  productos: ['INVENTORY_PRODUCTS'],
-  servicios: ['INVENTORY_PRODUCTS'],
-  almacenes: ['INVENTORY_WAREHOUSES'],
-  transferencias: ['INVENTORY_TRANSFERS'],
-  ajustes: ['INVENTORY_ADJUSTMENTS'],
-  auditorias: ['INVENTORY_ADJUSTMENTS'],
-  perdidas: ['INVENTORY_ADJUSTMENTS', 'FINANCIAL_EXPENSES'],
-  movimientos: ['INVENTORY_MOVEMENTS'],
-  // Notificaciones
-  alertas: ['NOTIFICATIONS_ALERTS'],
-  mensajes: ['NOTIFICATIONS_MESSAGES'],
-  push: ['NOTIFICATIONS_PUSH'],
-  // Documentos
-  archivos: ['DOCUMENTS_FILES'],
-  contratos: ['DOCUMENTS_CONTRACTS'],
-  'doc-facturas': ['DOCUMENTS_INVOICES'],
-  'doc-reportes': ['DOCUMENTS_REPORTS'],
-  // Actividades
-  tareas: ['ACTIVITIES_TASKS'],
-  eventos: ['ACTIVITIES_EVENTS'],
-  recordatorios: ['ACTIVITIES_REMINDERS'],
-  bitacora: ['ACTIVITIES_LOGS'],
-  // Reportes
-  'reportes-ventas': ['REPORTS_SALES'],
-  'reportes-compras': ['REPORTS_PURCHASES'],
-  'reportes-financieros': ['REPORTS_FINANCIAL'],
-  'reportes-inventario': ['REPORTS_INVENTORY'],
-  'reportes-clientes': ['REPORTS_CLIENTS'],
-  'reportes-proveedores': ['REPORTS_PROVIDERS'],
-  'reportes-suscripciones': ['REPORTS_SUBSCRIPTIONS'],
-  'reportes-rrhh': ['REPORTS_HR'],
-  // Contabilidad
-  'plan-cuentas': ['ACCOUNTING_CHART'],
-  diario: ['ACCOUNTING_JOURNAL'],
-  'libro-mayor': ['ACCOUNTING_LEDGER'],
-  'balance-comprobacion': ['ACCOUNTING_TRIAL_BALANCE'],
-  'estado-resultados': ['ACCOUNTING_PROFIT_LOSS'],
-  'balance-general-contable': ['ACCOUNTING_BALANCE_SHEET'],
-  'flujo-efectivo': ['ACCOUNTING_CASH_FLOW'],
-  'diferencias-cambiarias': ['ACCOUNTING_EXCHANGE_DIFFERENCES'],
-  'cambios-patrimonio': ['ACCOUNTING_EQUITY'],
-  'activos-fijos': ['ACCOUNTING_ASSETS'],
-  conciliacion: ['ACCOUNTING_RECONCILIATION'],
-  periodos: ['ACCOUNTING_PERIODS'],
-  'reportes-fiscales': ['ACCOUNTING_FISCAL'],
-  presupuestos: ['ACCOUNTING_BUDGET'],
-  'categorias-gastos': ['ACCOUNTING_EXPENSE_CATEGORIES'],
-  configuracion: ['ACCOUNTING_CONFIG'],
-};
+// La matriz de permisos y el sidebar deben consultar el mismo catálogo.
+const SUBMENU_MODULE_REQUIREMENTS = SIDEBAR_SUBMENU_MODULE_REQUIREMENTS;
 
 const menuItems: MenuItem[] = [
   {
@@ -298,6 +206,8 @@ const menuItems: MenuItem[] = [
       { id: 'periodos', label: 'Períodos contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
       { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: <ClipboardCheck className="size-4" /> },
+      { id: 'presupuestos', label: 'Presupuestos', icon: <Wallet className="size-4" /> },
+      { id: 'categorias-gastos', label: 'Categorías Gastos', icon: <Tags className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },
@@ -435,7 +345,7 @@ const platformMenuItems: MenuItem[] = [
 ];
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
-  const { hasAccess, user } = useAuth();
+  const { hasAccess, canPerform, user } = useAuth();
   const { themeConfig } = useTheme();
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(activeModule && activeModule !== 'overview' ? [activeModule] : []));
 
@@ -502,7 +412,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     reportes: 'REPORTS',
     documentos: 'DOCUMENTS',
     actividades: 'ACTIVITIES',
-    tickets: 'TOOLS',
+    tickets: 'TICKETS',
     notificaciones: 'NOTIFICATIONS',
     contabilidad: 'ACCOUNTING',
     'financiamiento-pyme': 'FINANCING',
@@ -527,18 +437,23 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     
     if (parentMod && !isParentOrSubmoduleActive) return false;
 
-    const requiredModules = SUBMENU_MODULE_REQUIREMENTS[subId];
-    if (!requiredModules || requiredModules.length === 0) return true;
-
-    const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
-    if (hasRequired) return true;
-
-    if (parentMod && user.enabledModules.includes(parentMod)) {
-      const hasSpecificSubmodules = user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
-      if (!hasSpecificSubmodules) return true;
+    const requiredModules = SUBMENU_MODULE_REQUIREMENTS[`${parentId}:${subId}`] || SUBMENU_MODULE_REQUIREMENTS[subId];
+    if (!requiredModules || requiredModules.length === 0) {
+      return parentMod ? canPerform(parentMod, 'view') : false;
     }
 
-    return false;
+    const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
+    const hasSpecificSubmodules = parentMod && user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
+    const hasSubscription = hasRequired || Boolean(parentMod && user.enabledModules.includes(parentMod) && !hasSpecificSubmodules);
+    if (!hasSubscription) return false;
+
+    // La suscripción habilita el módulo, pero el rol también debe tener
+    // permiso de lectura sobre la vista concreta.
+    const permissionModules = SIDEBAR_SUBMENU_PERMISSION_MODULES[`${parentId}:${subId}`]
+      || SIDEBAR_SUBMENU_PERMISSION_MODULES[subId]
+      || requiredModules;
+    return permissionModules.some(mod => canPerform(mod, 'view'))
+      || (parentMod ? canPerform(parentMod, 'view') : false);
   };
 
   const sectionHeaderIds = (() => {

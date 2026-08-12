@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { api } from '../services/api';
 import { subscriptionsService } from '../services/subscriptions.service';
+import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 
@@ -84,6 +85,50 @@ export interface User {
   isTenantUser: boolean;
   isTenantAdmin: boolean;
   branchIds?: string[];
+}
+
+/**
+ * Los administradores del tenant heredan todas las acciones, pero no pueden
+ * saltarse la suscripción de su empresa. Configuración y Mi Empresa son
+ * capacidades internas del tenant y no dependen de una suscripción operativa.
+ */
+const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
+  'CONFIGURATION', 'MY_COMPANY', 'SUBSCRIPTIONS',
+  'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
+  'CONFIG_TENANCY', 'CONFIG_CURRENCY', 'CONFIG_PLATFORM', 'CONFIG_COUNTRIES',
+  'CONFIG_MODULE_PRICING', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
+  'CONFIG_DEPARTMENTS', 'CONFIG_ORG_CHART', 'COMPANY_BRANCHES',
+]);
+
+const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
+  FINANCIAL_ACCOUNTS: ['FINANCIAL_ACCOUNTS', 'FINANCIAL_BANK', 'FINANCIAL_DASHBOARD', 'FINANCIAL_BALANCE'],
+  FINANCIAL_INCOMES: ['FINANCIAL_INCOMES', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
+  FINANCIAL_RECEIVABLES: ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
+  FINANCIAL_EXPENSES: ['FINANCIAL_EXPENSES', 'FINANCIAL_PAYABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE', 'FINANCIAL_LOSSES'],
+  FINANCIAL_PAYABLES: ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
+  FINANCIAL_EXPENSES_REC: ['FINANCIAL_EXPENSES_REC', 'FINANCIAL_CALENDAR', 'FINANCIAL_ANALYSIS', 'FINANCIAL_DASHBOARD'],
+  FINANCIAL_CALENDAR: ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD', 'FINANCIAL_EXPENSES_REC'],
+  FINANCIAL_ANALYSIS: ['FINANCIAL_ANALYSIS', 'FINANCIAL_REPORTS', 'FINANCIAL_BALANCE', 'FINANCIAL_DASHBOARD'],
+  FINANCIAL_LOSSES: ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'],
+  SALES_CLIENTS: ['SALES_CLIENTS', 'SALES', 'CLIENTS'],
+  PURCHASES_PROVIDERS: ['PURCHASES_PROVIDERS', 'PURCHASES', 'PROVIDERS'],
+};
+
+function tenantPermissionSubscriptionCandidates(module: string): string[] {
+  const normalized = String(module || '').toUpperCase();
+  const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
+  const parent = normalized.split('_')[0];
+  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL'].includes(parent)) {
+    candidates.add(parent);
+  }
+  return [...candidates];
+}
+
+function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
+  const normalized = String(module || '').toUpperCase();
+  if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)) return true;
+  const enabledModules = new Set((user.enabledModules || []).map((item) => String(item).toUpperCase()));
+  return tenantPermissionSubscriptionCandidates(normalized).some((candidate) => enabledModules.has(candidate));
 }
 
 export interface BranchInfo {
@@ -447,10 +492,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return platformModules.includes(module);
     }
 
-    // El rol ADMIN del tenant es administrador de su empresa; el backend
-    // aplica el mismo bypass para no dejar pestañas de configuración sin acceso.
-    if (user.isTenantAdmin) return true;
-
     // Módulos solo para admin
     const adminOnlyModules = ['schema'];
     if (adminOnlyModules.includes(module) && !user.isTenantAdmin) return false;
@@ -484,7 +525,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'roles': 'CONFIG_ROLES',
       'usuarios': 'CONFIG_USERS',
       'configuracion': 'CONFIGURATION',
-      'suscripciones': 'CONFIG_COMPANY',
+      'suscripciones': 'MY_COMPANY',
     };
     const moduleGroupMap: Record<string, string[]> = {
       ventas: [
@@ -495,29 +536,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ],
       compras: [
         'PURCHASES', 'PROVIDERS',
-        'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_MANAGEMENT', 'PURCHASES_SUPPLIER_PRICES', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
+        'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',
         'PURCHASES_ORDERS', 'PURCHASES_RECEIPTS',
         'PURCHASES_INVOICES_REC', 'PURCHASES_RETURNS', 'PURCHASES_PAYMENTS',
       ],
       inventario: [
         'INVENTORY',
-        'INVENTORY_PRODUCTS', 'INVENTORY_SERVICES', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
-        'INVENTORY_ADJUSTMENTS', 'INVENTORY_COUNT', 'INVENTORY_SERIALS', 'INVENTORY_LOTS',
+        'INVENTORY_PRODUCTS', 'INVENTORY_WAREHOUSES', 'INVENTORY_TRANSFERS',
+        'INVENTORY_ADJUSTMENTS',
         'INVENTORY_MOVEMENTS',
       ],
       finanzas: [
-        'FINANCIAL',
-        'FINANCIAL_ACCOUNTS', 'FINANCIAL_JOURNAL', 'FINANCIAL_LEDGER',
-        'FINANCIAL_BANK', 'FINANCIAL_BUDGET', 'FINANCIAL_REPORTS',
-        'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE',
+        'FINANCIAL', 'FINANCIAL_BANK',
+        'FINANCIAL_INCOMES', 'FINANCIAL_EXPENSES', 'FINANCIAL_EXPENSES_REC', 'FINANCIAL_BALANCE', 'FINANCIAL_DASHBOARD',
       ],
       actividades: [
         'ACTIVITIES',
-        'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS',
+        'ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_LOGS',
       ],
       documentos: [
         'DOCUMENTS',
-        'DOCUMENTS_FILES', 'DOCUMENTS_FOLDERS', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS',
+        'DOCUMENTS_FILES', 'DOCUMENTS_CONTRACTS', 'DOCUMENTS_INVOICES', 'DOCUMENTS_REPORTS',
       ],
       notificaciones: [
         'NOTIFICATIONS',
@@ -536,7 +575,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW',
         'ACCOUNTING_LEDGER', 'ACCOUNTING_EXCHANGE_DIFFERENCES', 'ACCOUNTING_EQUITY', 'ACCOUNTING_ASSETS',
         'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL',
-        'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_CONFIG',
+        'ACCOUNTING_INVOICE_AUDIT', 'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_CONFIG',
       ],
       clientes: ['SALES', 'CLIENTS', 'SALES_CLIENTS'],
       proveedores: ['PURCHASES', 'PROVIDERS', 'PURCHASES_PROVIDERS'],
@@ -563,45 +602,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!isSubscribed) return false;
 
+    // El ADMIN tiene todas las acciones, pero únicamente dentro de los
+    // módulos habilitados para su empresa.
+    if (user.isTenantAdmin) return true;
+
     // 2. Verificar permisos del Rol
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
     const directPermission = permissions.find((p) => p.module.toUpperCase() === module.toUpperCase())
       || permissions.find((p) => p.module.toUpperCase() === backendModuleName.toUpperCase());
     if (directPermission?.canView) return true;
 
+    const parentAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[backendModuleName] || [];
+    if (permissions.some((permission) =>
+      parentAliases.includes(String(permission.module || '').toUpperCase()) && permission.canView
+    )) return true;
+
     // A granular role may omit the parent row while still granting access to
     // one or more views inside the module; that is enough to render the shell.
     return permissions.some((permission) => {
       const key = permission.module.toUpperCase();
-      return key.startsWith(`${backendModuleName.toUpperCase()}_`) && permission.canView;
+      return SIDEBAR_PERMISSION_MODULE_IDS.has(key)
+        && key.startsWith(`${backendModuleName.toUpperCase()}_`)
+        && permission.canView;
     });
   }, [user]);
 
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
-    // El administrador de la empresa tiene acceso total al ERP, incluidos
-    // módulos nuevos y acciones de flujo que todavía no existían cuando se
-    // creó su sesión o su rol.
-    if (user.isTenantAdmin) return true;
+    // El administrador de la empresa tiene todas las acciones de los módulos
+    // habilitados, incluidos permisos de flujo nuevos.
+    if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module);
     if (user.isPlatformAdmin) return hasAccess(module);
 
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
     const normalizedModule = String(module || '');
     const upperModule = normalizedModule.toUpperCase();
     const parentByGranularPrefix: Record<string, string> = {
-      'PURCHASES_': 'compras',
-      'SALES_': 'ventas',
-      'INVENTORY_': 'inventario',
-      'FINANCIAL_': 'finanzas',
-      'HR_': 'rh',
-      'NOTIFICATIONS_': 'notificaciones',
-      'REPORTS_': 'reportes',
-      'DOCUMENTS_': 'documentos',
-      'ACTIVITIES_': 'actividades',
-      'PROVIDERS_': 'proveedores',
-      'CLIENTS_': 'clientes',
-      'ACCOUNTING_': 'contabilidad',
-      'CONFIG_': 'configuracion',
+      'PURCHASES_': 'PURCHASES',
+      'SALES_': 'SALES',
+      'INVENTORY_': 'INVENTORY',
+      'FINANCIAL_': 'FINANCIAL',
+      'HR_': 'HR',
+      'NOTIFICATIONS_': 'NOTIFICATIONS',
+      'REPORTS_': 'REPORTS',
+      'DOCUMENTS_': 'DOCUMENTS',
+      'ACTIVITIES_': 'ACTIVITIES',
+      'PROVIDERS_': 'PROVIDERS',
+      'CLIENTS_': 'CLIENTS',
+      'ACCOUNTING_': 'ACCOUNTING',
+      'CONFIG_': 'CONFIGURATION',
+      'MY_COMPANY_': 'MY_COMPANY',
     };
 
     const findPermission = (moduleName: string) => permissions.find(
@@ -609,6 +659,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     let permission = findPermission(normalizedModule);
+    if (!permission) {
+      const parentAlias = Object.entries(SIDEBAR_PERMISSION_PARENT_ALIASES)
+        .find(([, aliases]) => aliases.includes(upperModule))?.[0];
+      if (parentAlias) permission = findPermission(parentAlias);
+    }
     if (!permission) {
       const moduleEnumMap: Record<string, string> = {
         'inventario': 'INVENTORY',

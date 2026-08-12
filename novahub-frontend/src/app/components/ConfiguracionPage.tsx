@@ -38,6 +38,7 @@ import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, type PermissionMatrixAction } from '../utils/permissions';
+import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -74,136 +75,8 @@ const AVAILABLE_MODULES = [
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
-// Submódulos para permisos ultra-granulares
-export const SUBMODULES_FOR_PERMS = [
-  // Ventas
-  { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
-  { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
-  { id: 'SALES_ORDERS', label: 'Órdenes de Venta', parent: 'SALES' },
-  { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
-  { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },
-  { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
-  { id: 'SALES_RETURNS', label: 'Notas de Crédito', parent: 'SALES' },
-  { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
-  { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
-  { id: 'RETAIL_POS', label: 'Facturación por Caja', parent: 'SALES' },
-
-  // Compras
-  { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
-  { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_MANAGEMENT', label: 'Gestión de compras', parent: 'PURCHASES' },
-  { id: 'PURCHASES_SUPPLIER_PRICES', label: 'Precios de proveedores', parent: 'PURCHASES' },
-  { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
-  { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
-  { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
-  { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
-  { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
-
-  // Recursos Humanos
-  { id: 'HR_DASHBOARD', label: 'Dashboard HR', parent: 'HR' },
-  { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
-  { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
-  { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
-  { id: 'HR_LEAVES', label: 'Vacaciones', parent: 'HR' },
-  { id: 'HR_PERFORMANCE', label: 'Desempeño', parent: 'HR' },
-  { id: 'HR_TRAINING', label: 'Capacitación', parent: 'HR' },
-  { id: 'HR_BENEFITS', label: 'Beneficios', parent: 'HR' },
-  { id: 'HR_PAYROLL_CONFIG', label: 'Config Nómina', parent: 'HR' },
-
-  // Finanzas
-  { id: 'FINANCIAL_DASHBOARD', label: 'Dashboard', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_INCOMES', label: 'Ingresos', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_EXPENSES', label: 'Gastos', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_INCOMES_REC', label: 'Ingresos Recurrentes', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_BALANCE', label: 'Balance General', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_ACCOUNTS', label: 'Cuentas financieras', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_JOURNAL', label: 'Diario financiero', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_LEDGER', label: 'Libro mayor financiero', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_BANK', label: 'Bancos', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_BUDGET', label: 'Presupuestos', parent: 'FINANCIAL' },
-  { id: 'FINANCIAL_REPORTS', label: 'Reportes financieros', parent: 'FINANCIAL' },
-
-  // Inventario
-  { id: 'INVENTORY_PRODUCTS', label: 'Productos', parent: 'INVENTORY' },
-  { id: 'INVENTORY_SERVICES', label: 'Servicios', parent: 'INVENTORY' },
-  { id: 'INVENTORY_WAREHOUSES', label: 'Almacenes', parent: 'INVENTORY' },
-  { id: 'INVENTORY_TRANSFERS', label: 'Transferencias', parent: 'INVENTORY' },
-  { id: 'INVENTORY_ADJUSTMENTS', label: 'Ajustes', parent: 'INVENTORY' },
-  { id: 'INVENTORY_MOVEMENTS', label: 'Movimientos', parent: 'INVENTORY' },
-
-  // Actividades
-  { id: 'ACTIVITIES_TASKS', label: 'Tareas', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_EVENTS', label: 'Eventos', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
-
-  // Documentos
-  { id: 'DOCUMENTS_FILES', label: 'Archivos', parent: 'DOCUMENTS' },
-  { id: 'DOCUMENTS_CONTRACTS', label: 'Contratos', parent: 'DOCUMENTS' },
-  { id: 'DOCUMENTS_INVOICES', label: 'Facturas Legales', parent: 'DOCUMENTS' },
-  { id: 'DOCUMENTS_REPORTS', label: 'Reportes', parent: 'DOCUMENTS' },
-  { id: 'DOCUMENTS_FOLDERS', label: 'Carpetas', parent: 'DOCUMENTS' },
-
-  // Notificaciones
-  { id: 'NOTIFICATIONS_ALERTS', label: 'Alertas', parent: 'NOTIFICATIONS' },
-  { id: 'NOTIFICATIONS_MESSAGES', label: 'Mensajes', parent: 'NOTIFICATIONS' },
-  { id: 'NOTIFICATIONS_PUSH', label: 'Push', parent: 'NOTIFICATIONS' },
-
-  // Tickets y soporte
-  { id: 'TICKETS_KNOWLEDGE_BASE', label: 'Base de conocimiento', parent: 'TICKETS' },
-  { id: 'TICKETS_AGENTS', label: 'Agentes', parent: 'TICKETS' },
-
-  // Reportes
-  { id: 'REPORTS_SALES', label: 'Ventas', parent: 'REPORTS' },
-  { id: 'REPORTS_PURCHASES', label: 'Compras', parent: 'REPORTS' },
-  { id: 'REPORTS_FINANCIAL', label: 'Financiero', parent: 'REPORTS' },
-  { id: 'REPORTS_INVENTORY', label: 'Inventario', parent: 'REPORTS' },
-  { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
-  { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
-  { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
-  { id: 'REPORTS_SUBSCRIPTIONS', label: 'Suscripciones', parent: 'REPORTS' },
-  
-  // Mi Empresa
-  { id: 'CONFIG_COMPANY', label: 'General', parent: 'MY_COMPANY' },
-  { id: 'SUBSCRIPTIONS', label: 'Módulos y Plan', parent: 'MY_COMPANY' },
-  { id: 'CONFIG_USERS', label: 'Mi Equipo', parent: 'MY_COMPANY' },
-  { id: 'CONFIG_ROLES', label: 'Roles y permisos', parent: 'MY_COMPANY' },
-  { id: 'COMPANY_BRANCHES', label: 'Sucursales', parent: 'MY_COMPANY' },
-  { id: 'CONFIG_DOMAINS', label: 'Dominio propio', parent: 'MY_COMPANY' },
-
-  // Configuración
-  { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_TENANCY', label: 'Multiempresa', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_COUNTRIES', label: 'Países', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de módulos', parent: 'CONFIGURATION' },
-
-  // Contabilidad
-  { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_CASH_FLOW', label: 'Flujo de Efectivo', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_EXCHANGE_DIFFERENCES', label: 'Diferencias Cambiarias', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_EQUITY', label: 'Cambios Patrimonio', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_ASSETS', label: 'Activos Fijos', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_BUDGET', label: 'Presupuestos', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'Categorías de gastos', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_CONFIG', label: 'Configuración contable', parent: 'ACCOUNTING' },
-];
+// La matriz de roles solo expone vistas que tienen una entrada navegable en el sidebar.
+export const SUBMODULES_FOR_PERMS = PERMISSION_SUBMODULES;
 
 // Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
 export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
@@ -472,8 +345,28 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         user.isTenantAdmin
       )) return true;
 
+      // Las subvistas internas no consumen una suscripción propia. Si el
+      // tenant tiene habilitado el módulo padre o cualquier vista del grupo,
+      // deben permanecer disponibles para configurar el rol.
+      if (parentMod && (m as any).subscription === false) {
+        const parentAliasesForInternal = SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || [];
+        if (
+          user.enabledModules.includes(parentMod)
+          || parentAliasesForInternal.some((alias) => user.enabledModules.includes(alias))
+          || user.enabledModules.some((enabled) => enabled.startsWith(`${parentMod}_`))
+          || permissionModules.includes(parentMod)
+          || parentAliasesForInternal.some((alias) => permissionModules.includes(alias))
+        ) return true;
+      }
+
       // 1. Direct check
       if (user.enabledModules.includes(m.id)) return true;
+
+      // Mi Empresa y Configuración son entradas únicas del sidebar; sus
+      // pestañas internas conservan compatibilidad mediante el permiso padre.
+      const directAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[m.id] || [];
+      const inheritedAliases = parentMod ? (SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || []) : [];
+      if ([...directAliases, ...inheritedAliases].some((alias) => user.enabledModules.includes(alias))) return true;
 
       // 2. Fallback check for submodules
       if (parentMod && user.enabledModules.includes(parentMod)) {

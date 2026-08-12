@@ -22,6 +22,8 @@ export interface PaginatedResponse<T> {
 
 export interface ApiFilters {
   search?: string;
+  /** Códigos/SKU separados por coma para resolver coincidencias exactas en cargas masivas. */
+  codes?: string;
   categoryId?: string;
   type?: string;
   warehouseId?: string;
@@ -534,6 +536,7 @@ export interface PurchaseOrderItem {
   categoryId?: string;
   stockApplies?: boolean;
   stock?: number;
+  currentStock?: number;
   quantity: number;
   unitPrice: number;
   taxRate?: number;
@@ -549,6 +552,46 @@ export interface PurchaseOrderItem {
 }
 
 // ---- Purchase Receipts ----
+export interface InventoryCostOperationLine {
+  description: string;
+  quantity: number;
+  sourceUnitCost: number;
+  sourceSubtotal: number;
+  sourceTaxAmount: number;
+  sourceWithholdingAmount: number;
+  sourceEffectiveTotal: number;
+  taxRate: number;
+  withholdingRate: number;
+  baseUnitCost: number;
+  totalCost: number;
+  warehouseId?: string;
+}
+
+export interface InventoryCostOperation {
+  productId: string;
+  productCode?: string | null;
+  productName: string;
+  baseCurrency: Currency;
+  sourceCurrency: Currency;
+  exchangeRate: number;
+  previousQuantity: number;
+  previousUnitCost: number;
+  previousTotalCost: number;
+  receivedQuantity: number;
+  receivedUnitCost: number;
+  receivedSubtotal: number;
+  receivedTaxAmount: number;
+  receivedWithholdingTotal: number;
+  receivedTotalCost: number;
+  sourceReceivedSubtotal: number;
+  sourceReceivedTaxAmount: number;
+  sourceReceivedWithholdingTotal: number;
+  sourceReceivedTotalCost: number;
+  finalQuantity: number;
+  newAverageCost: number;
+  lines: InventoryCostOperationLine[];
+}
+
 export interface PurchaseReceipt {
   id: string;
   tenantId: string;
@@ -568,6 +611,7 @@ export interface PurchaseReceipt {
   exchangeRate?: number;
   baseTotal?: number;
   inventoryProcessedAt?: string;
+  inventoryCostOperations?: InventoryCostOperation[];
   notes?: string;
   items: PurchaseReceiptItem[];
   supplierInvoices?: SupplierInvoice[];
