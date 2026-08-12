@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Settings2, Building2, Link2, Activity, Factory, RefreshCw,
-  Loader2, Sparkles, Plus,
+  Loader2, Sparkles, Plus, CircleHelp, Warehouse, CheckCircle2, AlertTriangle, GitBranch,
 } from 'lucide-react'
 import { Card } from '../ui/card'
 import { Badge } from '../ui/badge'
@@ -13,6 +13,7 @@ import { Label } from '../ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { Combobox } from '../ui/Combobox'
+import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour'
 import { Switch } from '../ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { toast } from 'sonner'
@@ -34,11 +35,11 @@ type AccountInfo = {
   acceptsPostings?: boolean
 }
 
-const STATUS_META: Record<string, { label: string; tone: 'success' | 'warn' | 'danger' | 'muted' }> = {
-  VINCULADO: { label: 'Vinculado', tone: 'success' },
-  PENDIENTE: { label: 'Pendiente', tone: 'warn' },
-  CUENTA_INACTIVA: { label: 'Cuenta inactiva', tone: 'danger' },
-  CUENTA_NO_POSTEABLE: { label: 'No posteable', tone: 'danger' },
+const STATUS_META: Record<string, { label: string; tone: 'success' | 'warn' | 'danger' | 'muted'; description: string }> = {
+  VINCULADO: { label: 'Vinculado', tone: 'success', description: 'El almacén tiene una cuenta contable activa que acepta movimientos.' },
+  PENDIENTE: { label: 'Pendiente', tone: 'warn', description: 'El almacén aún no tiene una cuenta contable vinculada. Usa el botón Configurar.' },
+  CUENTA_INACTIVA: { label: 'Cuenta inactiva', tone: 'danger', description: 'La cuenta vinculada está inactiva. Vincula una cuenta activa.' },
+  CUENTA_NO_POSTEABLE: { label: 'No posteable', tone: 'danger', description: 'La cuenta vinculada no acepta movimientos. Debe ser una cuenta de detalle que acepte posteos.' },
 }
 
 function StatusBadge({ status }: { status?: string }) {
@@ -49,7 +50,7 @@ function StatusBadge({ status }: { status?: string }) {
     danger: 'bg-red-500/10 text-red-600 border-red-500/20',
     muted: 'bg-muted/50 text-muted-foreground border-border/40',
   }[meta.tone]
-  return <Badge variant="outline" className={cn('gap-1 text-[9px] font-black uppercase tracking-widest', toneClass)}>{meta.label}</Badge>
+  return <Badge variant="outline" title={meta.description} className={cn('gap-1 text-[9px] font-black uppercase tracking-widest', toneClass)}>{meta.label}</Badge>
 }
 
 const flattenAccounts = (list: any[]): any[] => {
@@ -65,6 +66,40 @@ const flattenAccounts = (list: any[]): any[] => {
   recurse(list);
   return result;
 };
+
+const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
+  {
+    target: '[data-tour="config-header"]',
+    title: 'Configuración contable de Inventario',
+    description: 'Esta vista conecta tus sucursales y almacenes con las cuentas de inventario del Plan de Cuentas, para que los movimientos de mercadería se registren automáticamente en Contabilidad.',
+    tip: 'La lógica es una jerarquía: Cuenta control → Cuenta de sucursal → Cuenta de almacén.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="config-tab-general"]',
+    title: 'Cuenta control y reglas',
+    description: 'Aquí eliges la cuenta control de Inventario (por ejemplo 1105). Es el ancla de la rama: bajo ella se cuelgan las cuentas agrupadoras de cada sucursal y las cuentas posteables de cada almacén. También puedes exigir que cada almacén tenga su propia cuenta.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="config-tab-almacenes"]',
+    title: 'Sucursales y Almacenes',
+    description: 'Primero crea tus sucursales y almacenes aquí (múltiples almacenes por sucursal). Cada almacén que crees aparecerá después en las tablas de vinculación contable.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="config-tab-contable"]',
+    title: 'Vinculación contable',
+    description: 'Tabla de cada almacén con su sucursal, su cuenta contable y su estado. El botón Configurar abre dos opciones: crear automáticamente la cuenta de sucursal + almacén, o vincular una cuenta existente.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="config-tab-estado"]',
+    title: 'Estado de vinculación',
+    description: 'Resumen del avance: cuántas sucursales y almacenes existen, cuántos ya tienen cuenta vinculada, cuántos están pendientes y cuáles tienen errores en su cuenta.',
+    placement: 'bottom',
+  },
+];
 
 interface ConfiguracionInventarioViewProps {
   isSidebarCollapsed?: boolean
@@ -84,6 +119,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const [controlAccountId, setControlAccountId] = useState('')
   const [requiresPerWarehouse, setRequiresPerWarehouse] = useState(false)
   const [configLoading, setConfigLoading] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(false)
 
   // Configurar dialog
   const [configTarget, setConfigTarget] = useState<any | null>(null)
@@ -170,6 +206,19 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     setExistingAccountId(wh.inventoryAccountId || '')
   }
 
+  const buildHierarchyPreview = (wh: any) => {
+    const control = flatAccounts.find((a: any) => a.code === controlAccountId)
+    const branch = wh?.primaryBranch || wh?.branches?.[0] || null
+    const branchId = branch?.id
+    const group = branchId ? flatAccounts.find((a: any) => a.notes === `INV_GROUP:${branchId}`) : undefined
+    const whAccount = wh?.inventoryAccountId ? flatAccounts.find((a: any) => a.id === wh.inventoryAccountId) : undefined
+    return [
+      { code: control?.code, name: control?.name || 'Inventario', exists: !!control, note: 'Cuenta control (consolida)' },
+      { code: group?.code, name: group?.name || `Inventario Sucursal ${branch?.name || 'General'}`, exists: !!group, note: 'Agrupadora de sucursal' },
+      { code: whAccount?.code, name: whAccount?.name || `Inventario Almacén ${wh?.name || ''}`, exists: !!whAccount, note: 'Cuenta del almacén (recibe movimientos)' },
+    ]
+  }
+
   const runConfigure = async () => {
     if (!configTarget) return
     setConfigSaving(true)
@@ -180,10 +229,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           return
         }
         await inventoryService.updateWarehouse(configTarget.id, { inventoryAccountId: existingAccountId } as any)
-        toast.success('Cuenta vinculada al almacén')
+        toast.success('Cuenta vinculada al almacén. Revisa Contabilidad → Plan de Cuentas')
       } else {
         await inventoryService.autoCreateAccountingLink(configTarget.id)
-        toast.success('Cuenta de inventario creada y vinculada')
+        toast.success('Cuentas de sucursal y almacén creadas y vinculadas. Revisa Contabilidad → Plan de Cuentas')
       }
       setConfigTarget(null)
       await refresh()
@@ -200,6 +249,29 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     return acc
   }, {})
 
+  const linkedCount = statusCounts.VINCULADO || 0
+  const pendingCount = statusCounts.PENDIENTE || 0
+  const errorCount = (statusCounts.CUENTA_INACTIVA || 0) + (statusCounts.CUENTA_NO_POSTEABLE || 0)
+  const progressPercent = warehouses.length === 0 ? 0 : Math.round((linkedCount / warehouses.length) * 100)
+
+  const controlAccount = flatAccounts.find((a: any) => a.code === controlAccountId)
+  const exampleWarehouse = warehouses.find((w: any) => w.accountingStatus === 'VINCULADO') || warehouses[0]
+  const hierarchyPreview = exampleWarehouse ? buildHierarchyPreview(exampleWarehouse) : null
+
+  const branchGroups = useMemo(() => {
+    const groups: { branch: any; warehouses: any[] }[] = []
+    for (const wh of warehouses) {
+      const branch = wh.primaryBranch || wh.branches?.[0] || branches.find((b: any) => b.warehouses?.some((w: any) => w.id === wh.id)) || null
+      const existing = branch ? groups.find((g) => g.branch.id === branch.id) : null
+      if (existing) {
+        existing.warehouses.push(wh)
+      } else {
+        groups.push({ branch: branch || { id: 'sin-sucursal', name: 'Sin sucursal' }, warehouses: [wh] })
+      }
+    }
+    return groups.sort((a, b) => a.branch.name.localeCompare(b.branch.name))
+  }, [warehouses, branches])
+
   if (loading) {
     return (
       <div className="flex min-h-96 items-center justify-center">
@@ -210,65 +282,176 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3" data-tour="config-header">
         <div>
           <h3 className="flex items-center gap-2 font-black uppercase tracking-tight italic">
-            <Settings2 className="size-5 text-primary" /> Configuración de Inventario
+            <Settings2 className="size-5 text-primary" /> Configuración contable de Inventario
           </h3>
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Vincula sucursales, almacenes y cuentas contables de inventario
+            Conecta sucursales y almacenes con el Plan de Cuentas para registrar los movimientos en Contabilidad
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
-          <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-1 size-3.5" /> Tutorial
+          </Button>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-border/40 bg-muted/40 p-1.5">
-          <TabsTrigger value="general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
-          <TabsTrigger value="almacenes"><Link2 className="size-4 mr-1.5" /> Sucursales y Almacenes</TabsTrigger>
-          <TabsTrigger value="contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
-          <TabsTrigger value="estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
+          <TabsTrigger value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
+          <TabsTrigger value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Sucursales y Almacenes</TabsTrigger>
+          <TabsTrigger value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
+          <TabsTrigger value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
           {isManufacturing && <TabsTrigger value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
         </TabsList>
 
         {/* General */}
         <TabsContent value="general" className="m-0 mt-4">
-          <Card className="p-5">
-            <div className="mb-4">
-              <h4 className="font-bold">Cuenta control de Inventario</h4>
-              <p className="text-xs text-muted-foreground">
-                La cuenta que consolida el inventario de todas las sucursales. Los movimientos se registran en las cuentas de cada almacén y aquí se agregan automáticamente.
-              </p>
-            </div>
-            <div className="max-w-md space-y-4">
-              <div className="space-y-2">
-                <Label>Cuenta contable (Activo)</Label>
-                <Combobox
-                  options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }))}
-                  value={controlAccountId}
-                  onChange={setControlAccountId}
-                  placeholder="Selecciona la cuenta control de Inventario"
-                  searchPlaceholder="Buscar por código o nombre..."
-                />
+          <div className="grid gap-4 lg:grid-cols-5">
+            {/* Columna izquierda: formulario de cuenta control */}
+            <Card className="p-5 lg:col-span-2">
+              <div className="mb-4">
+                <h4 className="font-bold">Cuenta control de Inventario</h4>
+                <p className="text-xs text-muted-foreground">
+                  Es el ancla de la rama contable de inventario. Los movimientos se registran en las cuentas de cada almacén
+                  (nivel más bajo) y se consolidan automáticamente aquí en el Plan de Cuentas:
+                  <span className="mt-1 block font-mono text-[10px] text-primary/80">
+                    Cuenta control → Cuenta de sucursal (agrupa) → Cuenta de almacén (recibe movimientos)
+                  </span>
+                </p>
               </div>
-              <div className="flex items-center justify-between rounded-xl border border-border/40 p-3">
-                <div>
-                  <p className="text-sm font-semibold">Exigir cuenta por almacén</p>
-                  <p className="text-xs text-muted-foreground">Bloquea movimientos de almacenes sin cuenta de inventario vinculada.</p>
+              <div className="max-w-md space-y-4">
+                <div className="space-y-2">
+                  <Label>Cuenta contable (Activo)</Label>
+                  <Combobox
+                    options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }))}
+                    value={controlAccountId}
+                    onChange={setControlAccountId}
+                    placeholder="Selecciona la cuenta control de Inventario"
+                    searchPlaceholder="Buscar por código o nombre..."
+                  />
+                  {controlAccount && (
+                    <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <CheckCircle2 className="size-3 text-emerald-500" />
+                      {controlAccount.code} - {controlAccount.name} · {controlAccount.isActive === false ? 'cuenta inactiva' : controlAccount.acceptsPostings === false ? 'cuenta agrupadora (consolida)' : 'cuenta de detalle'}
+                    </p>
+                  )}
                 </div>
-                <Switch checked={requiresPerWarehouse} onCheckedChange={setRequiresPerWarehouse} />
+                <div className="flex items-center justify-between rounded-xl border border-border/40 p-3">
+                  <div>
+                    <p className="text-sm font-semibold">Exigir cuenta por almacén</p>
+                    <p className="text-xs text-muted-foreground">Al activarlo, los movimientos de un almacén sin cuenta vinculada serán bloqueados y aparecerá como pendiente en las tablas de vinculación.</p>
+                  </div>
+                  <Switch checked={requiresPerWarehouse} onCheckedChange={setRequiresPerWarehouse} />
+                </div>
+                <Button onClick={saveControlAccount} disabled={configLoading}>
+                  {configLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />} Guardar
+                </Button>
               </div>
-              <Button onClick={saveControlAccount} disabled={configLoading}>
-                {configLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />} Guardar
-              </Button>
+            </Card>
+
+            {/* Columna derecha: estado, jerarquía y ramas */}
+            <div className="space-y-4 lg:col-span-3">
+              {/* Estado de vinculación */}
+              <Card className="p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h4 className="flex items-center gap-2 font-bold"><Activity className="size-4 text-primary" /> Estado de vinculación</h4>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{linkedCount} de {warehouses.length} almacenes vinculados</span>
+                </div>
+                <div className="mb-4 h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-border/40 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Building2 className="size-3" /> Sucursales</p>
+                    <p className="mt-1 text-2xl font-black">{branches.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/40 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-3" /> Almacenes</p>
+                    <p className="mt-1 text-2xl font-black">{warehouses.length}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-3" /> Vinculados</p>
+                    <p className="mt-1 text-2xl font-black text-emerald-600">{linkedCount}</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-amber-600"><AlertTriangle className="size-3" /> Pendientes / errores</p>
+                    <p className="mt-1 text-2xl font-black text-amber-600">{pendingCount + errorCount}</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Jerarquía de ejemplo */}
+              {hierarchyPreview && (
+                <Card className="p-5">
+                  <h4 className="mb-1 flex items-center gap-2 font-bold"><GitBranch className="size-4 text-primary" /> Así se ve en el Plan de Cuentas</h4>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Ejemplo con el almacén <span className="font-semibold text-foreground">{exampleWarehouse?.name}</span>{exampleWarehouse && exampleWarehouse.primaryBranch ? ` (sucursal ${exampleWarehouse.primaryBranch.name})` : ''}:
+                  </p>
+                  <div className="space-y-0">
+                    {hierarchyPreview.map((level, i) => (
+                      <div key={i} className="relative flex items-center gap-3">
+                        {i < hierarchyPreview.length - 1 && <span className="absolute left-[7px] top-7 h-5 w-px bg-border" />}
+                        <span className={cn('z-10 size-[15px] shrink-0 rounded-full border-2', level.exists ? 'border-emerald-500 bg-emerald-500/20' : 'border-primary bg-primary/20')} />
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-[11px] font-bold">{level.code ? `${level.code} · ${level.name}` : level.name}</p>
+                            <p className="text-[9px] uppercase tracking-widest text-muted-foreground">{level.note}</p>
+                          </div>
+                          {level.exists
+                            ? <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600">Existente</Badge>
+                            : <Badge variant="outline" className="shrink-0 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Se creará</Badge>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* Ramas por sucursal */}
+              <Card className="p-5">
+                <h4 className="mb-3 flex items-center gap-2 font-bold"><Link2 className="size-4 text-primary" /> Ramas por sucursal</h4>
+                {branchGroups.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Aún no hay sucursales ni almacenes. Créalos desde la pestaña <span className="font-semibold">Sucursales y Almacenes</span> y luego vincúlalos en <span className="font-semibold">Configuración Contable</span>.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {branchGroups.map(({ branch, warehouses: whs }) => (
+                      <div key={branch.id} className="rounded-xl border border-border/40 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold">
+                            <Building2 className="size-3.5 shrink-0 text-muted-foreground" /> {branch.name}
+                          </p>
+                          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{whs.length} almacén{whs.length !== 1 ? 'es' : ''}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {whs.map((wh: any) => (
+                            <div key={wh.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-muted/30 px-2.5 py-1.5">
+                              <p className="min-w-0 truncate text-xs font-medium">{wh.name}</p>
+                              <StatusBadge status={wh.accountingStatus} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
             </div>
-          </Card>
+          </div>
         </TabsContent>
 
         {/* Sucursales y Almacenes */}
         <TabsContent value="almacenes" className="m-0 mt-4">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Crea y administra tus sucursales y almacenes. Cada almacén creado aquí podrá vincularse a una cuenta contable desde la pestaña <span className="font-semibold text-foreground">Configuración Contable</span>.
+          </p>
           <Card className="p-4">
             <AlmacenesView warehouses={warehouses} onRefresh={refresh} />
           </Card>
@@ -276,6 +459,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
         {/* Configuración Contable */}
         <TabsContent value="contable" className="m-0 mt-4">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Cada almacén necesita una cuenta contable de inventario para registrar sus movimientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + almacén) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+          </p>
           <Card className="p-4">
             <Table>
               <TableHeader>
@@ -299,15 +485,15 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                       </TableCell>
                       <TableCell><StatusBadge status={wh.accountingStatus} /></TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh)}>
-                          <Settings2 className="size-3.5" /> Configurar
+                        <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh)} title={`Configurar la cuenta contable del almacén ${wh.name}`}>
+                          <Settings2 className="size-3.5" /> {wh.accountingStatus === 'VINCULADO' ? 'Cambiar' : 'Configurar'}
                         </Button>
                       </TableCell>
                     </TableRow>
                   )
                 })}
                 {warehouses.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No hay almacenes</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No hay almacenes. Crea uno desde la pestaña <span className="font-semibold">Sucursales y Almacenes</span> para poder configurar su cuenta contable.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -316,6 +502,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
         {/* Estado de Vinculación */}
         <TabsContent value="estado" className="m-0 mt-4">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Resumen del vínculo entre almacenes y sus cuentas contables. Pasa el cursor sobre cada estado para ver su significado.
+          </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursales</p><p className="text-2xl font-black">{branches.length}</p></Card>
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p><p className="text-2xl font-black">{warehouses.length}</p></Card>
@@ -363,7 +552,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
-            <DialogDescription>Vincula una cuenta contable de inventario a este almacén.</DialogDescription>
+            <DialogDescription>
+              Vincula este almacén con su cuenta contable de inventario. Las cuentas creadas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
@@ -374,7 +565,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               >
                 <Sparkles className="size-4" />
                 <span className="text-xs font-black uppercase tracking-widest">Crear automáticamente</span>
-                <span className="text-[10px] font-normal normal-case opacity-80">Genera cuenta de sucursal + almacén</span>
+                <span className="text-[10px] font-normal normal-case opacity-80">Crea cuenta de sucursal + almacén si faltan</span>
               </Button>
               <Button
                 variant={configMode === 'existing' ? 'default' : 'outline'}
@@ -383,9 +574,29 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               >
                 <Link2 className="size-4" />
                 <span className="text-xs font-black uppercase tracking-widest">Vincular existente</span>
-                <span className="text-[10px] font-normal normal-case opacity-80">Usar una cuenta ya creada</span>
+                <span className="text-[10px] font-normal normal-case opacity-80">Usar una cuenta de Activo ya creada</span>
               </Button>
             </div>
+
+            {configMode === 'auto' && configTarget && (
+              <div className="rounded-xl border border-border/40 bg-muted/30 p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Jerarquía resultante</p>
+                <div className="space-y-1.5">
+                  {buildHierarchyPreview(configTarget).map((level, i) => (
+                    <div key={i} className={cn('flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-card px-2.5 py-1.5', i === 2 && 'border-primary/30')}>
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-[10px] font-bold">{level.code ? `${level.code} - ${level.name}` : level.name}</p>
+                        <p className="text-[9px] uppercase tracking-widest text-muted-foreground">{level.note}</p>
+                      </div>
+                      {level.exists
+                        ? <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600">Existente</Badge>
+                        : <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase tracking-widest text-primary">Se creará</Badge>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {configMode === 'existing' && (
               <div className="space-y-2">
                 <Label>Cuenta contable</Label>
@@ -396,17 +607,22 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                   placeholder="Buscar cuenta de Activo..."
                   searchPlaceholder="Buscar por código o nombre..."
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  Solo se muestran cuentas de Activo. La cuenta debe estar activa y aceptar movimientos para poder registrar los movimientos del almacén.
+                </p>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfigTarget(null)}>Cancelar</Button>
             <Button onClick={runConfigure} disabled={configSaving}>
-              {configSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} Guardar
+              {configSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} {configMode === 'auto' ? 'Crear y vincular' : 'Vincular'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {showTutorial && <GuidedTour steps={CONFIG_INVENTORY_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Configuración de Inventario" allowTargetInteraction />}
     </div>
   )
 }
