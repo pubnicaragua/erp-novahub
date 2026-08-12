@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
+import { createExtractorFromData } from 'node-unrar-js/esm/index.esm.js';
+import rarWasmUrl from 'node-unrar-js/esm/js/unrar.wasm?url';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Pagination, PaginationContent, PaginationItem } from '../ui/pagination';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -40,8 +44,8 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por almacén. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Productos muestra el total, disponibles, stock bajo y sin stock. Servicios muestra categorías, promedio semanal y precio promedio. Las tarjetas de existencias filtran la lista; los valores de referencia solo informan.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, almacén o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o almacenes cuando corresponda.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-actions"]', title: 'Importar catálogo inicial', description: 'La importación inicial solo se habilita cuando la empresa todavía no tiene productos. Descarga la plantilla, completa SKU, datos, costo, precios y stock, carga opcionalmente las imágenes y previsualiza antes de confirmar.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes cargar imágenes masivamente en cualquier momento, iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o almacenes cuando corresponda.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'La importación inicial solo se habilita cuando la empresa todavía no tiene productos. La carga masiva de imágenes permanece disponible después y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
   { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
@@ -60,6 +64,7 @@ const PRODUCT_TABLE_WIDTHS = {
   stock: '96px',
   price: '112px',
   cost: '112px',
+  status: '112px',
   actions: '96px',
 } as const;
 
@@ -71,6 +76,72 @@ const normalizeImportHeader = (value: unknown) => String(value ?? '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim()
   .replace(/\s+/g, ' ');
+
+const PRODUCT_IMAGE_EXTENSIONS = /\.(jpe?g|png)$/i;
+const PRODUCT_IMAGE_ARCHIVE_EXTENSIONS = /\.(zip|rar)$/i;
+
+const productImageSkuFromPath = (path: string) => {
+  const fileName = path.split(/[\\/]/).pop() || '';
+  return fileName.replace(PRODUCT_IMAGE_EXTENSIONS, '').trim().toLowerCase();
+};
+
+const productImageFileFromBytes = (path: string, bytes: BlobPart | Uint8Array) => {
+  const fileName = path.split(/[\\/]/).pop() || 'imagen';
+  return new File([bytes as BlobPart], fileName, {
+    type: /\.png$/i.test(fileName) ? 'image/png' : 'image/jpeg',
+  });
+};
+
+/**
+ * Extrae imágenes de un ZIP/RAR usando el mismo contrato para ambas cargas.
+ * La clave de asociación siempre es el nombre del archivo sin extensión,
+ * normalizado a minúsculas y sin espacios laterales.
+ */
+const extractProductImageArchive = async (
+  file: File,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<Map<string, File>> => {
+  if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
+    throw new Error('Selecciona un archivo ZIP o RAR válido');
+  }
+
+  const entries = new Map<string, File>();
+  if (/\.zip$/i.test(file.name)) {
+    const zip = await JSZip.loadAsync(file);
+    const files = Object.values(zip.files).filter((entry) => !entry.dir && PRODUCT_IMAGE_EXTENSIONS.test(entry.name));
+    let completed = 0;
+    onProgress?.(0, files.length);
+    for (const entry of files) {
+      const sku = productImageSkuFromPath(entry.name);
+      if (sku) {
+        const blob = await entry.async('blob');
+        entries.set(sku, productImageFileFromBytes(entry.name, blob));
+      }
+      completed += 1;
+      onProgress?.(completed, files.length);
+    }
+    return entries;
+  }
+
+  const [archiveData, wasmResponse] = await Promise.all([
+    file.arrayBuffer(),
+    fetch(rarWasmUrl),
+  ]);
+  if (!wasmResponse.ok) throw new Error('No se pudo cargar el extractor RAR');
+  const wasmBinary = await wasmResponse.arrayBuffer();
+  const extractor = await createExtractorFromData({ data: archiveData, wasmBinary });
+  const fileHeaders = [...extractor.getFileList().fileHeaders].filter((header) => !header.flags.directory && PRODUCT_IMAGE_EXTENSIONS.test(header.name));
+  const extracted = [...extractor.extract({ files: fileHeaders.map((header) => header.name) }).files];
+  onProgress?.(0, extracted.length);
+  extracted.forEach((item, index) => {
+    if (item.extraction) {
+      const sku = productImageSkuFromPath(item.fileHeader.name);
+      if (sku) entries.set(sku, productImageFileFromBytes(item.fileHeader.name, item.extraction));
+    }
+    onProgress?.(index + 1, extracted.length);
+  });
+  return entries;
+};
 
 interface ProductosViewProps {
   products: any[];
@@ -155,7 +226,10 @@ function ImportPreviewPage({
   onConfirm,
   onBack,
 }: ImportPreviewPageProps) {
+  useImportPreviewLayout();
   const validRows = importData.filter((row) => !row._hasError).length;
+  const errorRows = importData.filter((row) => row._hasError).length;
+  const warningRows = importData.filter((row) => !row._hasError && row._hasWarning).length;
   const issueRows = importData.filter((row) => row._hasError || row._hasWarning).length;
 
   return (
@@ -168,9 +242,6 @@ function ImportPreviewPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {importCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)'}</Badge>
-          <Badge variant="outline">{importData.length} registros</Badge>
-          <Badge variant="outline" className="text-emerald-600">{validRows} válidos</Badge>
-          {issueRows > 0 && <Badge variant="outline" className="text-amber-600">{issueRows} con incidencias</Badge>}
         </div>
       </div>
 
@@ -183,6 +254,8 @@ function ImportPreviewPage({
           <Download className="mr-2 size-3.5" /> Descargar incidencias
         </Button>
       </div>
+
+      <ImportReviewSummary total={importData.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
       <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1320px]">
@@ -211,7 +284,7 @@ function ImportPreviewPage({
                   <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
                   <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
                   <TableCell className="p-1 text-center">
-                    {row._imageStatus === 'matched' ? <ImageIcon className="mx-auto size-4 text-emerald-500" aria-label="Imagen vinculada" title="Imagen vinculada" /> : row._imageStatus === 'missing' ? <ImageOff className="mx-auto size-4 text-red-500" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU" /> : <ImageOff className="mx-auto size-4 text-muted-foreground/50" aria-label="Sin ZIP de imágenes" title="No se cargó un ZIP de imágenes" />}
+                    {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
                   </TableCell>
                   <TableCell className="p-1">
                     {categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
@@ -266,7 +339,7 @@ function ImportPreviewPage({
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
         <Button variant="outline" onClick={onBack} disabled={importing}><ChevronLeft className="mr-2 size-4" />Volver a la carga</Button>
-        <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Importando... ${importProgress}%` : `Importar ${validRows} registros`}</Button>
+        <Button onClick={onConfirm} disabled={importing || validRows === 0} className="bg-primary font-bold text-primary-foreground">{importing ? `Importando... ${importProgress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
       </div>
     </div>
   );
@@ -304,13 +377,24 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importFileName, setImportFileName] = useState('');
-  const [imageZipFileName, setImageZipFileName] = useState('');
-  const [imageZipEntries, setImageZipEntries] = useState<Map<string, File>>(new Map());
+  const [imageArchiveFileName, setImageArchiveFileName] = useState('');
+  const [imageArchiveEntries, setImageArchiveEntries] = useState<Map<string, File>>(new Map());
   const [importProcessing, setImportProcessing] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageZipInputRef = useRef<HTMLInputElement>(null);
+  const imageArchiveInputRef = useRef<HTMLInputElement>(null);
+  const [bulkImageModalOpen, setBulkImageModalOpen] = useState(false);
+  const [bulkImageFileName, setBulkImageFileName] = useState('');
+  const [bulkImageEntries, setBulkImageEntries] = useState<Map<string, File>>(new Map());
+  const [bulkImageProducts, setBulkImageProducts] = useState<any[]>([]);
+  const [bulkImageMissingSkus, setBulkImageMissingSkus] = useState<string[]>([]);
+  const [bulkImageProcessing, setBulkImageProcessing] = useState(false);
+  const [bulkImageUploading, setBulkImageUploading] = useState(false);
+  const [bulkImageProgress, setBulkImageProgress] = useState(0);
+  const [bulkImageResults, setBulkImageResults] = useState<{ updated: number; failed: string[] } | null>(null);
+  const bulkImageInputRef = useRef<HTMLInputElement>(null);
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingStatusChange, setPendingStatusChange] = useState<any | null>(null);
@@ -839,15 +923,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
   };
 
-  const removeInitialAllocation = (productId: string, allocationId: string) => {
-    const product = editingRows.get(productId);
-    if (!product) return;
-    const current = product.initialAllocations || [];
-    if (current.length <= 1) return;
-    const next = current.filter((item) => item.id !== allocationId);
-    setEditingRows(new Map(editingRows.set(productId, { ...product, initialAllocations: next })));
-  };
-
   const handleSaveRow = async (id: string) => {
     const product = editingRows.get(id);
     if (!product) return;
@@ -920,7 +995,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           warehouseId: product.itemType === 'SERVICE' ? serviceWarehouseId : undefined,
           initialStock: 0,
           imageUrl: nextImageUrl || undefined,
-        });
+        } as any);
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
         if (validAllocations.length > 0 && createdId) {
@@ -978,7 +1053,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           isActive: product.isActive,
           warehouseId: product.itemType === 'SERVICE' ? serviceWarehouseId : undefined,
           imageUrl: nextImageUrl,
-        });
+        } as any);
 
         const originalProduct = products.find(p => p.id === id);
         const variantId = originalProduct?.variants?.[0]?.id;
@@ -1081,7 +1156,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         setImportData((current) => {
           const next = [...current];
           next[pendingCategoryRowIndex] = { ...next[pendingCategoryRowIndex], category: createdCategory.name, categoryId: createdCategory.id };
-          return validateImportRows(next, imageZipEntries, imageZipFileName, [...importCategoryOptions, createdCategory], importWarehouseOptions);
+          return validateImportRows(next, imageArchiveEntries, imageArchiveFileName, [...importCategoryOptions, createdCategory], importWarehouseOptions);
         });
       }
       toast.success('Categoría creada');
@@ -1123,7 +1198,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         setImportData((current) => {
           const next = [...current];
           next[pendingWarehouseRowIndex] = { ...next[pendingWarehouseRowIndex], warehouse: createdWarehouse.name, warehouseId: createdWarehouse.id };
-          return validateImportRows(next, imageZipEntries, imageZipFileName, importCategoryOptions, [...importWarehouseOptions, createdWarehouse]);
+          return validateImportRows(next, imageArchiveEntries, imageArchiveFileName, importCategoryOptions, [...importWarehouseOptions, createdWarehouse]);
         });
       }
       toast.success('Almacén creado');
@@ -1520,7 +1595,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     toast.success('Reporte de incidencias descargado');
   }, [importData]);
 
-  const validateImportRows = useCallback((rows: any[], entries = imageZipEntries, zipName = imageZipFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
+  const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
     const codeCounts = new Map<string, number>();
     rows.forEach((row) => {
       const code = String(row.code || '').trim().toLowerCase();
@@ -1552,7 +1627,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
         !Number.isFinite(stock) || stock < 0 ? 'Stock inicial inválido' : !warehouseExists ? 'Almacén no encontrado' : !warehouseOk ? 'Selecciona un almacén para el stock inicial' : '',
       ].filter(Boolean);
-      const imageStatus = zipName ? (code && entries.has(code.toLowerCase()) ? 'matched' : 'missing') : 'none';
+       const imageStatus = archiveName ? (code && entries.has(code.toLowerCase()) ? 'matched' : 'missing') : 'none';
       const warningParts = missingPrices.length > 0 ? [`Sin precio: ${missingPrices.join(', ')}`] : [];
       return {
         ...row,
@@ -1567,14 +1642,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         _imageStatus: imageStatus,
       };
     });
-  }, [importCategoryOptions, importWarehouseOptions, imageZipEntries, imageZipFileName]);
+  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName]);
 
   const handleFileSelected = useCallback((file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
     }
-    const previewToastId = toast.loading('Cargando previsualización de productos...');
     setImportProcessing(true);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1585,7 +1659,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const raw: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
         if (raw.length < 2) {
-          toast.error('El archivo está vacío o no tiene datos', { id: previewToastId });
+          toast.error('El archivo está vacío o no tiene datos');
           return;
         }
         const headers = raw[0].map((h: any) => normalizeImportHeader(h));
@@ -1621,10 +1695,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         setImportData(validateImportRows(parsed));
         setImportFileName(file.name);
         setImportProgress(0);
-        toast.success(`${parsed.length} registros encontrados`, { id: previewToastId });
+        toast.success(`${parsed.length} registros encontrados`);
         } catch (err) {
           console.error('Parse error', err);
-          toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.', { id: previewToastId });
+          toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
         } finally {
           setImportProcessing(false);
         }
@@ -1632,35 +1706,26 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     };
     reader.onerror = () => {
       setImportProcessing(false);
-      toast.error('No se pudo leer el archivo seleccionado', { id: previewToastId });
+      toast.error('No se pudo leer el archivo seleccionado');
     };
     reader.readAsArrayBuffer(file);
   }, [validateImportRows]);
 
-  const handleImageZipSelected = useCallback(async (file: File) => {
-    if (!/\.zip$/i.test(file.name)) {
-      toast.error('Selecciona un archivo ZIP válido');
+  const handleImageArchiveSelected = useCallback(async (file: File) => {
+    if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
+      toast.error('Selecciona un archivo ZIP o RAR válido');
       return;
     }
     setImportProcessing(true);
     try {
-      const zip = await JSZip.loadAsync(file);
-      const entries = new Map<string, File>();
-      const files = Object.values(zip.files).filter((entry) => !entry.dir && /\.(jpe?g|png)$/i.test(entry.name));
-      await Promise.all(files.map(async (entry) => {
-        const fileName = entry.name.split('/').pop() || '';
-        const sku = fileName.replace(/\.(jpe?g|png)$/i, '').trim().toLowerCase();
-        if (!sku) return;
-        const blob = await entry.async('blob');
-        entries.set(sku, new File([blob], fileName, { type: /\.png$/i.test(fileName) ? 'image/png' : 'image/jpeg' }));
-      }));
-      setImageZipEntries(entries);
-      setImageZipFileName(file.name);
+      const entries = await extractProductImageArchive(file);
+      setImageArchiveEntries(entries);
+      setImageArchiveFileName(file.name);
       setImportData((prev) => validateImportRows(prev, entries, file.name));
-      toast.success(`${entries.size} imagen(es) válidas encontradas en el ZIP`);
+      toast.success(`${entries.size} imagen(es) válidas encontradas en el ${/\.rar$/i.test(file.name) ? 'RAR' : 'ZIP'}`);
     } catch (error) {
-      console.error('ZIP image parse error', error);
-      toast.error('No se pudo leer el ZIP de imágenes');
+      console.error('Image archive parse error', error);
+      toast.error('No se pudo leer el archivo de imágenes. Verifica que no esté protegido con contraseña ni dividido en volúmenes.');
     } finally {
       setImportProcessing(false);
     }
@@ -1668,15 +1733,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
   const handleOpenImportPreview = useCallback(() => {
     if (previewLoading || importProcessing || importing || importData.length === 0) return;
-    const previewToastId = toast.loading('Cargando previsualización de productos...');
     setPreviewLoading(true);
+    setPreviewProgress(20);
     window.setTimeout(() => {
+      setPreviewProgress(65);
       setImportModalOpen(false);
       setImportPreviewOpen(true);
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
+          setPreviewProgress(100);
           setPreviewLoading(false);
-          toast.success('Previsualización lista', { id: previewToastId });
+          setPreviewProgress(0);
         });
       });
     }, 40);
@@ -1734,7 +1801,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const cat = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
           const warehouse = importWarehouseOptions.find((w: any) => w.name?.toLowerCase() === row.warehouse?.toLowerCase());
           let imageUrl = row.imageUrl;
-          const imageFile = imageZipEntries.get(String(row.code || '').trim().toLowerCase());
+          const imageFile = imageArchiveEntries.get(String(row.code || '').trim().toLowerCase());
           if (imageFile) {
             try {
               const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: 'catalogo-inicial' });
@@ -1784,7 +1851,83 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, importCategoryOptions, importWarehouseOptions, imageZipEntries, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh]);
+  }, [importData, importCategoryOptions, importWarehouseOptions, imageArchiveEntries, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh]);
+
+  const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
+    if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
+      toast.error('Selecciona un archivo ZIP o RAR válido');
+      return;
+    }
+    setBulkImageProcessing(true);
+    setBulkImageResults(null);
+    try {
+      const entries = await extractProductImageArchive(file);
+      if (entries.size === 0) throw new Error('El archivo no contiene imágenes JPG, JPEG o PNG reconocibles.');
+      const response = await inventoryService.getProducts({
+        codes: Array.from(entries.keys()).join(','),
+        type: 'PRODUCT',
+        includeInactive: true,
+        report: true,
+        pageSize: Math.min(5000, Math.max(1, entries.size)),
+      } as any);
+      const payload: any = response;
+      const productsFromResponse = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.data?.data)
+            ? payload.data.data
+            : [];
+      const productsBySku = new Map<string, any>(productsFromResponse.map((product: any) => [String(product.code || '').trim().toLowerCase(), product]));
+      const matchedProducts = Array.from(entries.keys()).map((sku) => productsBySku.get(sku)).filter(Boolean);
+      const missingSkus = Array.from(entries.keys()).filter((sku) => !productsBySku.has(sku));
+      setBulkImageEntries(entries);
+      setBulkImageFileName(file.name);
+      setBulkImageProducts(matchedProducts);
+      setBulkImageMissingSkus(missingSkus);
+      toast.success(`${entries.size} imagen(es) reconocida(s); ${matchedProducts.length} producto(s) encontrado(s)`);
+    } catch (error: any) {
+      console.error('Bulk product image archive parse error', error);
+      setBulkImageEntries(new Map());
+      setBulkImageFileName('');
+      setBulkImageProducts([]);
+      setBulkImageMissingSkus([]);
+      toast.error(error?.message || 'No se pudo preparar el archivo de imágenes');
+    } finally {
+      setBulkImageProcessing(false);
+    }
+  }, []);
+
+  const handleBulkImageUpload = useCallback(async () => {
+    if (bulkImageUploading || bulkImageProducts.length === 0) return;
+    setBulkImageUploading(true);
+    setBulkImageProgress(0);
+    const failed: string[] = [];
+    let updated = 0;
+    try {
+      for (let index = 0; index < bulkImageProducts.length; index += 1) {
+        const product = bulkImageProducts[index];
+        const sku = String(product.code || '').trim().toLowerCase();
+        const imageFile = bulkImageEntries.get(sku);
+        try {
+          if (!imageFile) throw new Error('Imagen no encontrada');
+          const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: product.id });
+          await inventoryService.updateProduct(product.id, { imageUrl: uploaded.uri });
+          updated += 1;
+        } catch (error) {
+          console.error(`No se pudo actualizar la imagen del producto ${product.code}`, error);
+          failed.push(String(product.code || product.name || 'Producto'));
+        }
+        setBulkImageProgress(Math.round(((index + 1) / bulkImageProducts.length) * 100));
+      }
+      setBulkImageResults({ updated, failed });
+      if (updated > 0) onRefresh();
+      if (failed.length === 0) toast.success(`${updated} imagen(es) actualizada(s) correctamente`);
+      else toast.warning(`${updated} imagen(es) actualizada(s) y ${failed.length} con incidencia`);
+    } finally {
+      setBulkImageUploading(false);
+    }
+  }, [bulkImageUploading, bulkImageProducts, bulkImageEntries, onRefresh]);
 
   return (
     <>
@@ -1953,6 +2096,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-2 size-4" /> Tutorial
           </Button>
+          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
+            onClick={() => setBulkImageModalOpen(true)}
+            title="Actualizar imágenes masivamente por SKU"
+          >
+            <ImageIcon className="mr-2 size-4" /> Imágenes masivas
+          </Button>}
           {!isServiceView && !initialImportCompleted && <Button
             size="sm"
             variant="outline"
@@ -2009,7 +2162,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           const warehousesForProduct = isServiceView
             ? (product.warehouseCatalogs || []).map((catalog: any) => catalog.warehouse?.name).filter(Boolean)
             : (product.stockLevels || []).map((level: any) => level.warehouse?.name).filter(Boolean);
-          const salePrice = Number(product.salePrice || 0);
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
@@ -2436,18 +2588,75 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         onRefresh={onRefresh}
         itemType={catalogItemType}
       />
+      <Dialog open={bulkImageModalOpen} onOpenChange={(open) => {
+        if (bulkImageUploading) return;
+        setBulkImageModalOpen(open);
+        if (!open) {
+          setBulkImageFileName('');
+          setBulkImageEntries(new Map());
+          setBulkImageProducts([]);
+          setBulkImageMissingSkus([]);
+          setBulkImageResults(null);
+          setBulkImageProgress(0);
+        }
+      }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Carga masiva de imágenes</DialogTitle>
+            <DialogDescription>
+              Esta opción queda disponible permanentemente en Productos, incluso después de completar la importación inicial. Permite reemplazar o asignar imágenes a productos existentes sin modificar sus datos, precios o existencias.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
+              <p className="font-bold">Cómo funciona</p>
+              <ul className="mt-2 space-y-1.5 text-muted-foreground">
+                <li>• Sube un archivo ZIP o RAR; también se aceptan imágenes dentro de subcarpetas.</li>
+                <li>• Cada imagen debe ser JPG, JPEG o PNG y llamarse exactamente como el SKU del producto, por ejemplo <span className="font-mono text-foreground">ABC-001.png</span>.</li>
+                <li>• La coincidencia ignora mayúsculas y espacios al inicio o al final. Solo se actualizarán los SKU existentes; los demás se omitirán.</li>
+                <li>• Si el producto ya tiene imagen, la nueva la reemplaza. Las imágenes de productos que no estén en el archivo no cambian.</li>
+              </ul>
+            </div>
+            <div className="flex flex-col gap-3 rounded-xl border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-bold">Archivo de imágenes</p>
+                <p className="text-xs text-muted-foreground">ZIP o RAR · JPG, JPEG y PNG · asociación por SKU</p>
+                {bulkImageFileName && <p className="mt-1 truncate text-xs font-medium text-emerald-600" title={bulkImageFileName}>{bulkImageFileName}</p>}
+              </div>
+              <Button type="button" variant="outline" className="shrink-0" onClick={() => bulkImageInputRef.current?.click()} disabled={bulkImageProcessing || bulkImageUploading}>
+                <Upload className="mr-2 size-4" /> {bulkImageFileName ? 'Cambiar archivo' : 'Seleccionar ZIP/RAR'}
+              </Button>
+              <input ref={bulkImageInputRef} type="file" className="hidden" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" disabled={bulkImageProcessing || bulkImageUploading} onChange={(event) => { if (event.target.files?.[0]) handleBulkImageArchiveSelected(event.target.files[0]); event.currentTarget.value = ''; }} />
+            </div>
+            {bulkImageProcessing && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">Leyendo el archivo y buscando productos por SKU…</div>}
+            {bulkImageFileName && !bulkImageProcessing && <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
+              <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-foreground">{bulkImageEntries.size}</p><p className="text-xs text-muted-foreground">Imágenes reconocidas</p></div>
+              <div className="rounded-xl border bg-emerald-500/5 p-3"><p className="text-2xl font-black text-emerald-600">{bulkImageProducts.length}</p><p className="text-xs text-muted-foreground">Productos encontrados</p></div>
+              <div className="rounded-xl border bg-amber-500/5 p-3"><p className="text-2xl font-black text-amber-600">{bulkImageMissingSkus.length}</p><p className="text-xs text-muted-foreground">SKU omitidos</p></div>
+            </div>}
+            {bulkImageMissingSkus.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">No se encontraron estos SKU:</p><p className="mt-1 break-words font-mono">{bulkImageMissingSkus.slice(0, 20).join(', ')}{bulkImageMissingSkus.length > 20 ? ` y ${bulkImageMissingSkus.length - 20} más` : ''}</p></div>}
+            {bulkImageResults && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm"><p className="font-bold text-emerald-700 dark:text-emerald-300">{bulkImageResults.updated} imagen(es) actualizada(s)</p>{bulkImageResults.failed.length > 0 && <p className="mt-1 text-xs text-rose-600">Con incidencia: {bulkImageResults.failed.join(', ')}</p>}</div>}
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between">
+            <Button variant="outline" onClick={() => setBulkImageModalOpen(false)} disabled={bulkImageUploading}>Cerrar</Button>
+            <Button onClick={handleBulkImageUpload} disabled={bulkImageProcessing || bulkImageUploading || bulkImageProducts.length === 0}>
+              {bulkImageUploading ? `Actualizando… ${bulkImageProgress}%` : `Actualizar ${bulkImageProducts.length} producto(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={initialImportIntroOpen} onOpenChange={setInitialImportIntroOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Importación inicial de inventario</DialogTitle>
             <DialogDescription>
-              Esta carga se realiza una sola vez por empresa. Primero descarga la plantilla, completa los datos y después revisa la previsualización antes de confirmar.
+              Esta carga se realiza una sola vez por empresa. Primero descarga la plantilla, completa los datos y después revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm">
             <p><b>La plantilla siempre incluye:</b> costo, Minorista, Mayorista y Distribuidor.</p>
             <p>Cada producto debe tener SKU único, nombre, categoría, costo y al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
-            <p>Opcionalmente puedes cargar un ZIP con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
+            <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleDownloadTemplate}><Download className="size-4 mr-2" />Descargar plantilla</Button>
@@ -2464,7 +2673,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       <Dialog open={importModalOpen} onOpenChange={(open) => {
         if (!importing && !previewLoading) {
           setImportModalOpen(open);
-          if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageZipFileName(''); setImageZipEntries(new Map()); setImportProgress(0); }
+          if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] flex flex-col">
@@ -2483,13 +2692,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed p-3">
             <div className="min-w-0">
               <p className="text-xs font-bold">Imágenes de productos (opcional)</p>
-              <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP con archivos JPG, JPEG o PNG nombrados exactamente como el SKU para asociarlos automáticamente.</p>
-              {imageZipFileName && <p className="mt-1 text-[11px] text-emerald-600">{imageZipFileName} · {imageZipEntries.size} imagen(es) reconocida(s)</p>}
+              <p className="whitespace-normal text-[11px] text-muted-foreground">ZIP o RAR con archivos JPG, JPEG o PNG nombrados exactamente como el SKU. Se permiten subcarpetas y la asociación no distingue mayúsculas.</p>
+              {imageArchiveFileName && <p className="mt-1 text-[11px] text-emerald-600">{imageArchiveFileName} · {imageArchiveEntries.size} imagen(es) reconocida(s)</p>}
             </div>
-            <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageZipInputRef.current?.click()} disabled={importing || importProcessing}>
-              <Upload className="size-3 mr-2" />{imageZipFileName ? 'Cambiar ZIP' : 'Cargar ZIP'}
+            <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs" onClick={() => imageArchiveInputRef.current?.click()} disabled={importing || importProcessing}>
+              <Upload className="size-3 mr-2" />{imageArchiveFileName ? 'Cambiar ZIP/RAR' : 'Cargar ZIP/RAR'}
             </Button>
-            <input type="file" className="hidden" accept=".zip" ref={imageZipInputRef} onChange={(e) => { if (e.target.files?.[0]) handleImageZipSelected(e.target.files[0]); }} />
+            <input type="file" className="hidden" accept=".zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed" ref={imageArchiveInputRef} onChange={(e) => { if (e.target.files?.[0]) handleImageArchiveSelected(e.target.files[0]); e.currentTarget.value = ''; }} />
           </div>
           
           <div className="flex-1 overflow-auto min-h-0 space-y-4 py-2">
@@ -2522,7 +2731,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 <div>
                   <p className="font-semibold">Archivo cargado correctamente</p>
                   <p className="mt-1 text-xs text-muted-foreground">La previsualización permanece oculta hasta que presiones el botón.</p>
-                  <p className="mt-2 text-xs font-medium">{importFileName} · {importData.length} registro(s){imageZipFileName ? ` · ${imageZipFileName}` : ''}</p>
+                  <p className="mt-2 text-xs font-medium">{importFileName} · {importData.length} registro(s){imageArchiveFileName ? ` · ${imageArchiveFileName}` : ''}</p>
                 </div>
                 {importProcessing && <p className="text-xs text-primary">Procesando archivo, espera un momento...</p>}
               </div>
@@ -2730,7 +2939,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
         </Dialog>
 
-      <Dialog open={initialImportConfirmOpen} onOpenChange={setInitialImportConfirmOpen}>
+      <Dialog open={initialImportConfirmOpen && !importing} onOpenChange={setInitialImportConfirmOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Formalizar importación inicial</DialogTitle>
@@ -2741,23 +2950,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importing} onOpenChange={() => undefined}>
-        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-          <div className="flex flex-col items-center gap-5 py-5 text-center">
-            <div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5">
-              <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" />
-              <span className="text-xl font-black text-primary">{importProgress}%</span>
-            </div>
-            <div>
-              <DialogTitle className="text-xl">Importando productos</DialogTitle>
-              <DialogDescription className="mt-2">Estamos guardando el catálogo y sus precios. No cierres esta ventana.</DialogDescription>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(importProgress, 3)}%` }} />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportProgressOverlay open={importing} progress={importProgress} title="Importando productos" description="Estamos guardando el catálogo y sus precios. No cierres esta ventana." />
+      <ImportProgressOverlay open={bulkImageUploading} progress={bulkImageProgress} title="Actualizando imágenes" description="Subiendo y vinculando las imágenes con los productos por SKU. No cierres esta ventana." />
 
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
@@ -2781,6 +2975,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportProgressOverlay
+        open={previewLoading}
+        progress={previewProgress}
+        title="Preparando previsualización"
+        description="Leyendo el archivo, validando columnas y preparando los registros para edición."
+      />
 
       <Dialog open={expandedProductImage !== null} onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-5xl border-0 bg-transparent p-2 shadow-none">
