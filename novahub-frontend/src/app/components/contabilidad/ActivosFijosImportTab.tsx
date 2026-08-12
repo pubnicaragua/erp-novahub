@@ -9,6 +9,8 @@ import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Download } from '
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { toast } from 'sonner';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -71,6 +73,7 @@ export function ActivosFijosImportTab() {
   const [defaultAccum, setDefaultAccum] = useState('');
   const [validating, setValidating] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [operationProgress, setOperationProgress] = useState(0);
   const [result, setResult] = useState<any>(null);
 
   const fmt = (value: number) => formatConvertedAmount(value, baseCurrency);
@@ -140,21 +143,33 @@ export function ActivosFijosImportTab() {
   async function handleValidate() {
     if (rows.length === 0) { toast.error('Primero carga un archivo'); return; }
     setValidating(true);
+    setOperationProgress(12);
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
+      progressTimer = setInterval(() => setOperationProgress((current) => Math.min(90, current + 4)), 180);
       const res = await contabilidadService.validateFixedAssetImport(effectiveRows());
+      if (progressTimer) clearInterval(progressTimer);
+      setOperationProgress(100);
       setResult(res);
     } catch (err: any) {
       toast.error(err.message || 'Error al validar');
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setValidating(false);
+      window.setTimeout(() => setOperationProgress(0), 180);
     }
   }
 
   async function handleImport() {
     if (!result || result.valid === 0) { toast.error('Valida primero y asegúrate de que haya filas válidas'); return; }
     setImporting(true);
+    setOperationProgress(12);
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
+      progressTimer = setInterval(() => setOperationProgress((current) => Math.min(90, current + 3)), 180);
       const res = await contabilidadService.importFixedAssets(effectiveRows());
+      if (progressTimer) clearInterval(progressTimer);
+      setOperationProgress(100);
       toast.success(`Importación completada: ${res?.imported ?? 0} activos`);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       queryClient.invalidateQueries({ queryKey: ['fixed-assets'] });
@@ -164,7 +179,9 @@ export function ActivosFijosImportTab() {
     } catch (err: any) {
       toast.error(err.message || 'Error al importar');
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
+      window.setTimeout(() => setOperationProgress(0), 180);
     }
   }
 
@@ -226,7 +243,7 @@ export function ActivosFijosImportTab() {
             </Button>
             {result && result.valid > 0 && (
               <Button onClick={handleImport} disabled={importing} className="gap-1.5">
-                <Upload className="size-4" /> {importing ? 'Importando...' : `Importar ${result.valid} activos`}
+                <Upload className="size-4" /> {importing ? 'Importando...' : `Importar ${result.valid} válidos · omitir ${result.invalid ?? 0}`}
               </Button>
             )}
           </div>
@@ -241,6 +258,7 @@ export function ActivosFijosImportTab() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <ImportReviewSummary total={result.total ?? rows.length} valid={result.valid ?? 0} skipped={result.invalid ?? 0} entityLabel="activos fijos" />
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {summaryCards.map((card) => (
                 <div key={card.label} className="rounded-xl border border-border/40 bg-muted/20 p-3">
@@ -277,6 +295,12 @@ export function ActivosFijosImportTab() {
           </CardContent>
         </Card>
       )}
+      <ImportProgressOverlay
+        open={validating || importing}
+        progress={operationProgress}
+        title={validating ? 'Validando activos fijos' : 'Importando activos fijos'}
+        description={validating ? 'Comprobando categorías, fechas, valores y referencias antes de importar.' : 'Guardando los activos válidos y actualizando la información contable.'}
+      />
     </div>
   );
 }

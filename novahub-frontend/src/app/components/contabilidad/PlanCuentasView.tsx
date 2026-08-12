@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
 import { downloadCsv, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
@@ -210,6 +211,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [importPreviewErrors, setImportPreviewErrors] = useState<string[]>([]);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importFileName, setImportFileName] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
 
   const accounts = useMemo(() => {
       const raw = accountsQuery.data || [];
@@ -408,12 +411,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const parseImportFile = async () => {
     if (!importFile) { toast.error('Selecciona un archivo Excel'); return null; }
+    setPreviewLoading(true);
+    setPreviewProgress(5);
     try {
       const fileName = importFile.name.toLowerCase();
 
       if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) { toast.error('El archivo debe ser Excel (.xlsx o .xls)'); return null; }
       const buffer = await importFile.arrayBuffer();
+      setPreviewProgress(24);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const workbook = XLSX.read(buffer, { type: 'array' });
+      setPreviewProgress(48);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const sheetCandidates = workbook.SheetNames.map((sheetName) => {
         const sheet = workbook.Sheets[sheetName];
         const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
@@ -462,10 +471,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         });
       }
 
+      setPreviewProgress(90);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      setPreviewProgress(100);
       return { valid, errors, fileName: `${importFile.name} · Hoja: ${selectedSheet.sheetName}` };
     } catch (e: any) {
       toast.error(e?.message || 'Error al leer el archivo');
       return null;
+    } finally {
+      window.setTimeout(() => { setPreviewLoading(false); setPreviewProgress(0); }, 180);
     }
   };
 
@@ -658,6 +672,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo las hojas, validando la jerarquía y preparando las cuentas para revisión." />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
@@ -1212,7 +1227,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </Dialog>
 
       {/* Import Dialog */}
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

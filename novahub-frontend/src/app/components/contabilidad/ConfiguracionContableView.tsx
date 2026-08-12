@@ -108,8 +108,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
-    id: 'supplierInvoice', label: 'Facturas de proveedor pagadas', icon: Package,
-    description: 'Solo al pagar la factura → inventario/gasto + IVA acreditable + IR + IVA retenido + otras retenciones + medio de pago',
+    id: 'purchaseReceipt', label: 'Recepciones de compra pagadas', icon: Package,
+    description: 'Solo al registrar el pago de la recepción → inventario/gasto + IVA acreditable + retenciones + medio de pago',
     fields: [
       { key: 'inventory', label: 'Inventario / Gasto', side: 'debit', description: 'Se debita el costo del inventario o gasto', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
       { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
@@ -251,15 +251,15 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
 
 const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
 
-const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade', 'purchaseReceipt'])
+const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade'])
 
 const ACCOUNTING_MODULE_GROUPS = [
   {
     id: 'purchases',
     label: 'Cuentas contables de Compras',
-    description: 'Solo procesos que generan asiento: facturas pagadas, gastos pagados y créditos de proveedor aplicados.',
+    description: 'Solo procesos que generan asiento: gastos pagados, recepciones pagadas y créditos de proveedor aplicados.',
     icon: Package,
-    moduleIds: ['supplierInvoice', 'expense', 'supplierCredit'],
+    moduleIds: ['purchaseReceipt', 'expense', 'supplierCredit'],
   },
   {
     id: 'hr',
@@ -493,6 +493,13 @@ export function ConfiguracionContableView() {
       if (mergedMappings.supplierInvoice) {
         const { withholdingPayable: _legacyWithholding, ...supplierInvoiceMapping } = mergedMappings.supplierInvoice
         mergedMappings.supplierInvoice = supplierInvoiceMapping
+        // Las configuraciones anteriores usaban `supplierInvoice` para el
+        // mismo asiento. Se muestran y editan ahora bajo el evento correcto:
+        // recepción de compra pagada.
+        mergedMappings.purchaseReceipt = {
+          ...supplierInvoiceMapping,
+          ...(mergedMappings.purchaseReceipt || {}),
+        }
       }
       accountMappingsRef.current = mergedMappings
       setAccountMappings(mergedMappings)
