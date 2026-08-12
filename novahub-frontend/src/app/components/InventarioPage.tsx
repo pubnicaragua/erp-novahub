@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
-import { ProductosView } from './inventory/ProductosView';
+import { ProductosView, type ProductStatusFilter } from './inventory/ProductosView';
 import { ServiciosView } from './inventory/ServiciosView';
 import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
@@ -82,6 +82,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
   const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
   const statusFor = (section: string) => statusState[section] && statusState[section] !== 'ALL' && statusState[section] !== 'all' ? statusState[section] : undefined;
+  const productStatusFor = (section: string): ProductStatusFilter => {
+    const status = String(statusState[section] || 'ALL').toUpperCase();
+    return status === 'ACTIVE' || status === 'INACTIVE' ? status : 'ALL';
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
@@ -116,12 +120,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   } as const;
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
     queryFn: ({ signal }) => {
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
       const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined, includeInactive: true }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined, includeInactive: true }, signal);
     },
     enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });
@@ -408,6 +412,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     onSearchChange={(value) => updateSearch('productos', value)}
                     onCategoryChange={(value) => updateProductFilters('productos', 'categoryIds', value)}
                     onWarehouseChange={(value) => updateProductFilters('productos', 'warehouseIds', value)}
+                    productStatusFilter={productStatusFor('productos')}
+                    onProductStatusFilterChange={(value) => updateStatus('productos', value)}
                     targetProductId={productTarget?.id}
                     initialStockFilter={productTarget?.stockFilter}
                     onClearTargetProduct={() => setProductTarget(null)}

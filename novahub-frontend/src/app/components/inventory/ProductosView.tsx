@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Trash2, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Card } from '../ui/card';
@@ -46,6 +46,32 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
 
+export type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+
+const PRODUCT_TABLE_WIDTHS = {
+  selector: '40px',
+  code: '112px',
+  name: '192px',
+  category: '144px',
+  unit: '112px',
+  min: '80px',
+  max: '80px',
+  warehouse: '112px',
+  stock: '96px',
+  price: '112px',
+  cost: '112px',
+  actions: '96px',
+} as const;
+
+const normalizeImportHeader = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/g, ' ')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+  .replace(/\s+/g, ' ');
+
 interface ProductosViewProps {
   products: any[];
   categories: any[];
@@ -61,6 +87,8 @@ interface ProductosViewProps {
   isSidebarCollapsed?: boolean;
   targetProductId?: string | null;
   initialStockFilter?: 'all' | 'available' | 'low' | 'out';
+  productStatusFilter?: ProductStatusFilter;
+  onProductStatusFilterChange?: (value: ProductStatusFilter) => void;
   onClearTargetProduct?: () => void;
 }
 
@@ -244,7 +272,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, onClearTargetProduct }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const catalogItemType = itemType || 'PRODUCT';
@@ -269,6 +297,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [localProductStatusFilter, setLocalProductStatusFilter] = useState<ProductStatusFilter>('ALL');
+  const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
@@ -277,13 +307,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [imageZipFileName, setImageZipFileName] = useState('');
   const [imageZipEntries, setImageZipEntries] = useState<Map<string, File>>(new Map());
   const [importProcessing, setImportProcessing] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageZipInputRef = useRef<HTMLInputElement>(null);
   const [editingRows, setEditingRows] = useState<Map<string, EditingProduct>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<any | null>(null);
+  const [statusChanging, setStatusChanging] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [productDetail, setProductDetail] = useState<any | null>(null);
   const [expandedProductImage, setExpandedProductImage] = useState<{ src: string; alt: string } | null>(null);
@@ -309,8 +340,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [importExchangeRate, setImportExchangeRate] = useState<number>(Number(exchangeRate || 1));
   const [initialImportConfirmOpen, setInitialImportConfirmOpen] = useState(false);
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
-  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
-  const [batchDeleting, setBatchDeleting] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -498,17 +527,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     }
   };
 
-  const handleBatchDelete = async () => {
-    try {
-      await Promise.all(Array.from(selectedIds).map(id => inventoryService.deleteProduct(id)));
-      toast.success(`${selectedIds.size} producto(s) desactivado(s)`);
-      setSelectedIds(new Set());
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e?.message || 'Error al desactivar productos');
-    }
-  };
-
   const validateSkuDebounced = (productId: string, code: string, isNew: boolean) => {
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     debounceTimeoutRef.current = setTimeout(async () => {
@@ -535,7 +553,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     if (isServiceView) return;
     const controller = new AbortController();
     inventoryService.getInitialImportStatus(controller.signal).then((status) => {
-      setInitialImportCompleted(Boolean(status.completed) || products.length > 0);
+      setInitialImportCompleted(Boolean(status.completed));
     }).catch(() => undefined);
     return () => controller.abort();
   }, [isServiceView, products.length]);
@@ -556,7 +574,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   useEffect(() => {
     setPage(1);
     pagination?.onPageChange(1);
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, catalogItemType]);
+  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, catalogItemType]);
 
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
@@ -581,10 +599,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
       || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
       || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
+    const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
+      || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
+      || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
     const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesAvailability;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
       });
 
   const paginatedProducts = useMemo(() => {
@@ -1019,22 +1040,23 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     }
   };
 
-  const handleDeleteProduct = async (id: string) => {
-    setPendingDeleteId(id);
+  const handleToggleProductStatus = (product: any) => {
+    setPendingStatusChange(product);
   };
 
-  const handleConfirmDelete = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
+  const handleConfirmStatusChange = async () => {
+    if (!pendingStatusChange) return;
+    const nextIsActive = pendingStatusChange.isActive === false;
+    setStatusChanging(true);
     try {
-      await inventoryService.deleteProduct(pendingDeleteId);
-      toast.success(`${entityLabelCap} eliminado`);
-      setPendingDeleteId(null);
+      await inventoryService.updateProductStatus(pendingStatusChange.id, nextIsActive);
+      toast.success(nextIsActive ? `${entityLabelCap} activado` : `${entityLabelCap} inactivado`);
+      setPendingStatusChange(null);
       onRefresh();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar');
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo actualizar el estado');
     } finally {
-      setDeleteLoading(false);
+      setStatusChanging(false);
     }
   };
 
@@ -1138,7 +1160,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const isSaving = savingIds.has(product.id);
     return (
       <TableRow key={product.id} className="bg-blue-500/5">
-        <TableCell className="w-10 align-top pt-3">
+        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
           <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(product.id); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
             {selectedIds.has(product.id)
               ? <SquareCheckBig className="size-4 text-primary" />
@@ -1146,7 +1168,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             }
           </button>
         </TableCell>
-        <TableCell className="w-28 align-top pt-3">
+        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>
           <div className="flex flex-col gap-1 w-full min-w-[90px]">
             <Input
               ref={product.isNew ? newRowRef : undefined}
@@ -1161,7 +1183,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             )}
           </div>
         </TableCell>
-        <TableCell className="w-48 align-top pt-3">
+        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}>
           <div className="flex min-w-0 w-full items-start gap-2">
             <ProductImagePicker
               size="sm"
@@ -1193,7 +1215,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </div>
           </div>
         </TableCell>
-        <TableCell className="w-36 align-top pt-3">
+        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>
           <div className="space-y-1.5 min-w-0">
             <Select 
               value={product.categoryId} 
@@ -1224,7 +1246,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </div>
           </div>
         </TableCell>
-        {!isServiceView && <TableCell className="w-28 align-top pt-3">
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>
           <Select 
             value={product.unit || 'unidad'} 
             onValueChange={(v) => handleUpdateField(product.id, 'unit', v)}
@@ -1247,7 +1269,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </SelectContent>
           </Select>
         </TableCell>}
-        {!isServiceView && <TableCell className="w-20 align-top pt-3">
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>
           <Input
             type="number"
             min={0}
@@ -1258,7 +1280,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             disabled={isSaving}
           />
         </TableCell>}
-        {!isServiceView && <TableCell className="w-20 align-top pt-3">
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>
           <Input
             type="number"
             min={0}
@@ -1270,7 +1292,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             disabled={isSaving}
           />
         </TableCell>}
-        {isServiceView && <TableCell className="w-32 align-top pt-3">
+        {isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>
           <Select
             value={product.initialAllocations?.[0]?.warehouseId || ''}
             onValueChange={(v) => {
@@ -1288,7 +1310,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </SelectContent>
           </Select>
         </TableCell>}
-        {isServiceView && <TableCell className="w-28 align-top pt-3">
+        {isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.status, minWidth: PRODUCT_TABLE_WIDTHS.status }}>
           <Select
             value={product.isActive === false ? 'false' : 'true'}
             onValueChange={(v) => handleUpdateField(product.id, 'isActive', v === 'true')}
@@ -1303,7 +1325,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </SelectContent>
           </Select>
         </TableCell>}
-        {!isServiceView && <TableCell className="w-28 align-top pt-3">
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>
           {(() => {
             const allocations = product.initialAllocations || [];
             return (
@@ -1356,7 +1378,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             );
           })()}
         </TableCell>}
-        {!isServiceView && <TableCell className="w-24 align-top pt-3 text-right">
+        {!isServiceView && <TableCell className="align-top pt-3 text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>
           {(() => {
             const allocations = product.initialAllocations || [];
             const totalAllocated = allocations.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
@@ -1385,7 +1407,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             );
           })()}
         </TableCell>}
-        {isServiceView && <TableCell className="align-top pt-3">
+        {isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>
           <div className="space-y-1">
             <div className="flex gap-1">
               <Select value={product.priceCurrency || baseCurrency} onValueChange={(value) => handlePriceCurrencyChange(product.id, value)} disabled={isSaving}>
@@ -1406,7 +1428,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <span className="block text-[9px] text-muted-foreground">Tasa: {product.priceCurrency === baseCurrency ? '1.00' : Number(exchangeRate || 1).toFixed(4)}</span>
           </div>
         </TableCell>}
-        {!isServiceView && <TableCell className="w-28 align-top pt-3">
+        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
           <Input
             type="number"
             min={0}
@@ -1418,7 +1440,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             disabled={isSaving}
           />
         </TableCell>}
-        <TableCell className="w-24 text-right align-top pt-3">
+        <TableCell className="text-right align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>
           <div className="flex items-center justify-end gap-1">
             <Button 
               variant="ghost" 
@@ -1552,6 +1574,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
     }
+    const previewToastId = toast.loading('Cargando previsualización de productos...');
     setImportProcessing(true);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1562,16 +1585,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const raw: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
         if (raw.length < 2) {
-          toast.error('El archivo está vacío o no tiene datos');
+          toast.error('El archivo está vacío o no tiene datos', { id: previewToastId });
           return;
         }
-        const headers = raw[0].map((h: any) => String(h || '').trim().toLowerCase());
+        const headers = raw[0].map((h: any) => normalizeImportHeader(h));
         const colMap: Record<string, number> = {};
         const aliases: Record<string, string[]> = {
           code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
         };
         for (const [key, alts] of Object.entries(aliases)) {
-          const idx = headers.findIndex((h: string) => alts.includes(h));
+          const normalizedAliases = alts.map((alias) => normalizeImportHeader(alias));
+          const idx = headers.findIndex((header: string) => normalizedAliases.some((alias) => header === alias || header.startsWith(`${alias} `)));
           if (idx >= 0) colMap[key] = idx;
         }
         const parsed = raw.slice(1).filter((row: any[]) => row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')).map((row: any[]) => {
@@ -1597,10 +1621,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         setImportData(validateImportRows(parsed));
         setImportFileName(file.name);
         setImportProgress(0);
-        toast.success(`${parsed.length} registros encontrados`);
+        toast.success(`${parsed.length} registros encontrados`, { id: previewToastId });
         } catch (err) {
           console.error('Parse error', err);
-          toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
+          toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.', { id: previewToastId });
         } finally {
           setImportProcessing(false);
         }
@@ -1608,7 +1632,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     };
     reader.onerror = () => {
       setImportProcessing(false);
-      toast.error('No se pudo leer el archivo seleccionado');
+      toast.error('No se pudo leer el archivo seleccionado', { id: previewToastId });
     };
     reader.readAsArrayBuffer(file);
   }, [validateImportRows]);
@@ -1641,6 +1665,22 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       setImportProcessing(false);
     }
   }, [validateImportRows]);
+
+  const handleOpenImportPreview = useCallback(() => {
+    if (previewLoading || importProcessing || importing || importData.length === 0) return;
+    const previewToastId = toast.loading('Cargando previsualización de productos...');
+    setPreviewLoading(true);
+    window.setTimeout(() => {
+      setImportModalOpen(false);
+      setImportPreviewOpen(true);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setPreviewLoading(false);
+          toast.success('Previsualización lista', { id: previewToastId });
+        });
+      });
+    }, 40);
+  }, [importData.length, importProcessing, importing, previewLoading]);
 
   const handleImportRowUpdate = (index: number, field: string, value: any) => {
     setImportData((prev) => {
@@ -1856,6 +1896,25 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <Plus className="size-4" />
             </Button>
           </div>
+          {!isServiceView && (
+            <Select
+              value={effectiveProductStatusFilter}
+              onValueChange={(value) => {
+                const nextValue = value as ProductStatusFilter;
+                setLocalProductStatusFilter(nextValue);
+                onProductStatusFilterChange?.(nextValue);
+              }}
+            >
+              <SelectTrigger className="h-9 min-w-0 flex-1 rounded-lg sm:w-auto" aria-label="Filtrar productos por estado">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="ACTIVE">Activos</SelectItem>
+                <SelectItem value="INACTIVE">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
               <SelectTrigger className="h-9 min-w-0 flex-1 rounded-lg sm:w-auto">
@@ -1868,7 +1927,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </SelectContent>
             </Select>
           )}
-          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all') && (
+          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL')) && (
             <Button
               variant="ghost"
               size="sm"
@@ -1881,6 +1940,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 onWarehouseChange?.([]);
                 setStockFilter('all');
                 setAvailabilityFilter('all');
+                setLocalProductStatusFilter('ALL');
+                onProductStatusFilterChange?.('ALL');
               }}
             >
               <X className="size-3.5 mr-1" />
@@ -1892,7 +1953,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-2 size-4" /> Tutorial
           </Button>
-          {!isServiceView && !initialImportCompleted && products.length === 0 && <Button
+          {!isServiceView && !initialImportCompleted && <Button
             size="sm"
             variant="outline"
             className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
@@ -2016,7 +2077,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
-                {canPerform('INVENTORY_PRODUCTS', 'delete') && <Button variant="ghost" size="icon" className="size-8 text-red-600 hover:bg-red-500 hover:text-white" title="Eliminar" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}><Trash2 className="size-3.5" /></Button>}
+                {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`size-8 ${product.isActive === false ? 'text-emerald-600 hover:bg-emerald-500 hover:text-white' : 'text-amber-600 hover:bg-amber-500 hover:text-white'}`}
+                  title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                  aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                  onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product); }}
+                ><Ban className="size-3.5" /></Button>}
               </div>
             </Card>
           );
@@ -2025,10 +2093,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       {/* Desktop table */}
       <div className="hidden max-w-full overflow-x-auto rounded-lg border xl:block" data-tour="inventory-products-table">
-        <Table className="w-full table-fixed">
+        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '920px' : '1176px' }}>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
-              <TableHead className="w-10">
+              <TableHead style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
                 <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }} className="flex items-center justify-center size-7 rounded-md hover:bg-muted/60">
                   {selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0
                     ? <SquareCheckBig className="size-4 text-primary" />
@@ -2036,18 +2104,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                   }
                 </button>
               </TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Código</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-48">{isServiceView ? 'Servicio' : 'Nombre'}</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Categoría</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">U.Medida</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Min</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Max</TableHead>}
-              {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest w-32">Almacén</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">{isServiceView ? 'Estado' : 'Almacenes'}</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Stock</TableHead>}
-              {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Precio Costo</TableHead>}
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>Código</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}>{isServiceView ? 'Servicio' : 'Nombre'}</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>Categoría</TableHead>
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
+              {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>Almacén</TableHead>}
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Almacenes'}</TableHead>
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>Stock</TableHead>}
+              {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -2210,17 +2278,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                              <Pencil className="size-3.5" />
                            </Button>
                         )}
-                         {canPerform('INVENTORY_PRODUCTS', 'delete') && (
+                         {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="size-7 text-red-600 hover:text-white hover:bg-red-500"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteProduct(product.id);
-                              }}
-                            >
-                              <Trash2 className="size-3.5" />
+                             className={`size-7 ${product.isActive === false ? 'text-emerald-600 hover:text-white hover:bg-emerald-500' : 'text-amber-600 hover:text-white hover:bg-amber-500'}`}
+                             title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                             aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                                handleToggleProductStatus(product);
+                             }}
+                           >
+                              <Ban className="size-3.5" />
                            </Button>
                         )}
                       </div>
@@ -2264,13 +2334,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         onRefresh={onRefresh}
       />
       <ConfirmDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="¿Eliminar producto?"
-        description="Esta acción eliminará el producto del inventario."
-        confirmLabel="Eliminar"
-        loading={deleteLoading}
-        onConfirm={handleConfirmDelete}
+        open={pendingStatusChange !== null}
+        onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusChange(null); }}
+        title={pendingStatusChange?.isActive === false ? `¿Activar ${entityLabel}?` : `¿Inactivar ${entityLabel}?`}
+        description={pendingStatusChange?.isActive === false
+          ? `${pendingStatusChange?.name || 'El producto'} volverá a estar disponible para nuevas operaciones.`
+          : `${pendingStatusChange?.name || 'El producto'} quedará inactivo y no estará disponible para nuevas operaciones. Sus transacciones históricas se conservarán.`}
+        confirmLabel={pendingStatusChange?.isActive === false ? `Activar ${entityLabel}` : `Inactivar ${entityLabel}`}
+        variant={pendingStatusChange?.isActive === false ? 'default' : 'destructive'}
+        loading={statusChanging}
+        onConfirm={handleConfirmStatusChange}
       />
       <Dialog open={categoryModalOpen} onOpenChange={(open) => { setCategoryModalOpen(open); if (!open) setPendingCategoryRowIndex(null); }}>
         <DialogContent>
@@ -2389,7 +2462,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         allowTargetInteraction
       />}
       <Dialog open={importModalOpen} onOpenChange={(open) => {
-        if (!importing) {
+        if (!importing && !previewLoading) {
           setImportModalOpen(open);
           if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageZipFileName(''); setImageZipEntries(new Map()); setImportProgress(0); }
         }
@@ -2641,16 +2714,16 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </div>
           </div>
           <DialogFooter className="mt-2 pt-2 border-t">
-            <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing}>
+            <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing || previewLoading}>
               Cerrar
             </Button>
             {importFileName && (
               <Button 
-                onClick={() => { setImportModalOpen(false); setImportPreviewOpen(true); }}
-                disabled={importing || importProcessing || importData.length === 0}
+                onClick={handleOpenImportPreview}
+                disabled={importing || importProcessing || previewLoading || importData.length === 0}
                 className="bg-primary text-primary-foreground font-bold"
               >
-                {importProcessing ? 'Procesando archivos...' : 'Previsualizar importación'}
+                {previewLoading ? <><Loader2 className="mr-2 size-3.5 animate-spin" />Cargando previsualización...</> : importProcessing ? 'Procesando archivos...' : 'Previsualizar importación'}
               </Button>
             )}
           </DialogFooter>
@@ -2721,22 +2794,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
           )}
         </DialogContent>
       </Dialog>
-
-      <ConfirmDialog
-        open={batchDeleteOpen}
-        onOpenChange={(open) => { if (!open) setBatchDeleteOpen(false); }}
-        title={`Eliminar ${selectedIds.size} producto(s)`}
-        description="Esta acción no se puede deshacer. Los productos se desactivarán pero no se eliminarán físicamente del sistema."
-        confirmLabel="Eliminar"
-        variant="destructive"
-        loading={batchDeleting}
-        onConfirm={async () => {
-          setBatchDeleting(true);
-          await handleBatchDelete();
-          setBatchDeleting(false);
-          setBatchDeleteOpen(false);
-        }}
-      />
 
       <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o && !solicitudCreating) setSolicitudOpen(false); }}>
         <DialogContent className="sm:max-w-3xl max-h-[82vh] overflow-y-auto">

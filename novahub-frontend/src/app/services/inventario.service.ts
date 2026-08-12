@@ -14,7 +14,7 @@ export const inventoryService = {
   },
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
-  deleteProduct: (id: string) => api.delete(`/inventory/products/${id}`),
+  updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
   checkProductCode: (code: string, excludeId?: string) => 
     api.get<{ exists: boolean }>('/inventory/products/check-code', { code, excludeId } as any),
 
@@ -104,7 +104,7 @@ export const inventoryService = {
   },
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
   importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
-  deleteProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
+  deactivateProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 
   // ==================== AUDITORÍAS (INVENTARIO SELECTIVO) ====================
   getAudits: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/audits', { params: filters as any, signal }),
