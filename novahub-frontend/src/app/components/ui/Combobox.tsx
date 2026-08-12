@@ -49,9 +49,11 @@ export function Combobox({
   const visibleOptions = React.useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return options.slice(0, maxVisibleOptions)
+    // Con búsqueda activa se muestran todos los resultados (hasta 200),
+    // para que cualquier opción del listado sea alcanzable buscando.
     return options
       .filter((option) => `${option.label} ${option.description || ''}`.toLowerCase().includes(query))
-      .slice(0, maxVisibleOptions)
+      .slice(0, 200)
   }, [maxVisibleOptions, options, search])
 
   const handleOpenChange = (nextOpen: boolean) => {

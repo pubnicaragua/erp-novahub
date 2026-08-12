@@ -73,6 +73,7 @@ export function SucursalesView({
       const cajasData = Array.isArray(cajasRes) ? cajasRes : (cajasRes?.data || []);
       setCajas(cajasData);
     } catch (e: any) {
+      if (e?.name === 'AbortError' || signal?.aborted) return;
       toast.error(getApiErrorMessage(e, 'Error al cargar sucursales'));
     } finally {
       setLoading(false);

@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, FolderTree,
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   Info, Activity, ArrowDownLeft, ArrowUpRight,
-  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck
+  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -200,6 +200,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const [pendingStatusAccount, setPendingStatusAccount] = useState<AccountNode | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingDeleteAccount, setPendingDeleteAccount] = useState<AccountNode | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -263,6 +265,23 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       toast.error(e?.message || 'No se pudo actualizar el estado de la cuenta');
     } finally {
       setStatusChanging(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!pendingDeleteAccount) return;
+    const account = pendingDeleteAccount;
+    setDeletingAccount(true);
+    try {
+      await contabilidadService.deleteAccount(account.id);
+      setSelectedAccount((current) => current?.id === account.id ? null : current);
+      setPendingDeleteAccount(null);
+      await fetchAccounts(true);
+      toast.success(`Cuenta ${account.code} eliminada`);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo eliminar la cuenta');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -857,13 +876,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   </div>
                 </div>
 
-                {selectedAccount.notes && (
-                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notas</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">{selectedAccount.notes}</p>
-                  </div>
-                )}
-
                 <div className="flex flex-wrap gap-2">
                   {canPerform('ACCOUNTING_CHART', 'edit') && (
                     <>
@@ -875,6 +887,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         onClick={() => setPendingStatusAccount(selectedAccount)}
                       >
                         {selectedAccount.isActive ? <Ban className="mr-1 size-3.5" /> : <CircleCheck className="mr-1 size-3.5 text-emerald-500" />} {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
+                      </Button>
+                      <Button
+                        variant="outline" size="sm" className="flex-1 text-red-600 hover:text-red-700"
+                        onClick={() => setPendingDeleteAccount(selectedAccount)}
+                      >
+                        <Trash2 className="mr-1 size-3.5" /> Eliminar
                       </Button>
                     </>
                   )}
@@ -1077,6 +1095,19 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         variant={pendingStatusAccount?.isActive ? 'warning' : 'default'}
         loading={statusChanging}
         onConfirm={toggleAccountStatus}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteAccount !== null}
+        onOpenChange={(open) => { if (!open && !deletingAccount) setPendingDeleteAccount(null); }}
+        title="¿Eliminar cuenta?"
+        description={pendingDeleteAccount
+          ? `${pendingDeleteAccount.code} · ${pendingDeleteAccount.name}. Esta acción es definitiva y no se puede deshacer. Solo se eliminan cuentas sin hijos ni movimientos.`
+          : ''}
+        confirmLabel="Eliminar cuenta"
+        variant="destructive"
+        loading={deletingAccount}
+        onConfirm={handleDeleteAccount}
       />
 
       {/* Add/Edit Dialog */}
