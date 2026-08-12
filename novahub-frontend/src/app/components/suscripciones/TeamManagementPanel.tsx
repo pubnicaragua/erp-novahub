@@ -101,7 +101,7 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
         return
       }
       const code = 'SUC-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + Math.floor(Math.random() * 100)
-      await api.post('/sucursales', { name, code, warehouseId: wh.id, location: null, isActive: true })
+      await api.post('/sucursales', { name, code, warehouseIds: [wh.id], primaryWarehouseId: wh.id, location: null, isActive: true })
       toast.success('Sucursal creada')
       setNewBranch('')
       load()

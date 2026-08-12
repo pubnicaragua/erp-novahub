@@ -961,6 +961,8 @@ export interface Warehouse {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  branches?: { id: string; name: string; code?: string; isPrimary?: boolean }[];
+  primaryBranch?: { id: string; name: string; code?: string } | null;
 }
 
 // ============================================================

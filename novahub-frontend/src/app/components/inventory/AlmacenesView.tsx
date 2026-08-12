@@ -506,7 +506,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     }
 
     const stockCount = getStockCount(warehouse);
-    const assignedSucursales = sucursalesList.filter((branch) => branch.warehouseId === warehouse.id);
+    const assignedSucursales = warehouse.branches || [];
     return (
       <Card key={warehouse.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm" onDoubleClick={() => handleEditRow(warehouse)}>
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -598,7 +598,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 }
                 
                 const stockCount = getStockCount(wh);
-                const assignedSucursales = sucursalesList.filter(s => s.warehouseId === wh.id);
+                const assignedSucursales = wh.branches || [];
                 return (
                   <TableRow 
                     key={wh.id} 
@@ -635,8 +635,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     <TableCell>
                       {assignedSucursales.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {assignedSucursales.map(s => (
-                            <Badge key={s.id} variant="secondary" className="text-[9px] bg-muted/50" title={s.name}>{s.code}</Badge>
+                          {(assignedSucursales as any[]).map((s: any) => (
+                            <Badge key={s.id} variant="secondary" className="text-[9px] bg-muted/50" title={s.name}>{s.code || s.id.slice(0, 4)}</Badge>
                           ))}
                         </div>
                       ) : (

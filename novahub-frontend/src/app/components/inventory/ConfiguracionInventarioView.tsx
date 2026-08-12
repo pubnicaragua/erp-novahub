@@ -16,6 +16,7 @@ import { Combobox } from '../ui/Combobox'
 import { Switch } from '../ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { inventoryService } from '../../services/inventario.service'
 import { contabilidadService } from '../../services/contabilidad.service'
 import { tenantsService } from '../../services/tenants.service'
@@ -71,6 +72,7 @@ interface ConfiguracionInventarioViewProps {
 
 export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewProps) {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('general')
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [branches, setBranches] = useState<any[]>([])
@@ -133,11 +135,12 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const refresh = async () => {
     setRefreshing(true)
     await fetchAll()
+    await queryClient.invalidateQueries({ queryKey: ['accounting'] })
     setRefreshing(false)
   }
 
   const flatAccounts = flattenAccounts(accounts);
-  const activeAccounts = flatAccounts.filter((a) => a.isActive !== false && String(a.type || '').toUpperCase() === 'ASSET')
+  const activeAccounts = flatAccounts.filter((a) => String(a.type || '').toUpperCase() === 'ASSET');
 
   const saveControlAccount = async () => {
     setConfigLoading(true)
@@ -152,6 +155,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         accountMappings,
         inventory: { ...(config.inventory || {}), requiresAccountPerWarehouse: requiresPerWarehouse },
       })
+      await queryClient.invalidateQueries({ queryKey: ['accounting'] })
       toast.success('Configuración contable guardada')
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar configuración'))
@@ -242,7 +246,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               <div className="space-y-2">
                 <Label>Cuenta contable (Activo)</Label>
                 <Combobox
-                  options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.code }))}
+                  options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }))}
                   value={controlAccountId}
                   onChange={setControlAccountId}
                   placeholder="Selecciona la cuenta control de Inventario"
@@ -285,7 +289,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </TableHeader>
               <TableBody>
                 {warehouses.map((wh: any) => {
-                  const branch = branches.find((b) => b.id === wh.branchId)
+                  const branch = wh.primaryBranch || wh.branches?.[0] || branches.find((b: any) => b.warehouses?.some((w: any) => w.id === wh.id)) || null
                   return (
                     <TableRow key={wh.id}>
                       <TableCell className="text-sm">{branch?.name || 'Sin sucursal'}</TableCell>
@@ -331,7 +335,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </TableHeader>
               <TableBody>
                 {warehouses.map((wh: any) => {
-                  const branch = branches.find((b) => b.id === wh.branchId)
+                  const branch = wh.primaryBranch || wh.branches?.[0] || branches.find((b: any) => b.warehouses?.some((w: any) => w.id === wh.id)) || null
                   return (
                     <TableRow key={wh.id}>
                       <TableCell className="text-sm">{branch?.name || 'Sin sucursal'}</TableCell>

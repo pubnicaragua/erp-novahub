@@ -159,7 +159,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const { canPerform } = useAuth();
   const { baseCurrency, formatConvertedAmount } = useCurrency();
 
-  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(true, signal)), {
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+  });
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
