@@ -61,7 +61,7 @@ interface InventarioPageProps {
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds } = useBranchScope();
+  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
   const branchScopeEnabled = Boolean(selectedBranchId);
@@ -478,6 +478,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <ProductosView 
                     products={productItems}
                     summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.categories}
                     warehouses={scopedWarehouses}
                     series={data.series}
@@ -506,6 +507,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <ServiciosView
                     products={serviceItems}
                     summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.serviceCategories}
                     warehouses={scopedWarehouses}
                     series={data.series}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { createExtractorFromData } from 'node-unrar-js/esm/index.esm.js';
@@ -149,6 +149,7 @@ interface ProductosViewProps {
   summaryProducts?: any[];
   categories: any[];
   warehouses?: any[];
+  branches?: any[];
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
@@ -349,7 +350,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
@@ -396,6 +397,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [warehouseDetail, setWarehouseDetail] = useState<any | null>(null);
+  const [branchDetail, setBranchDetail] = useState<any | null>(null);
   const [localProductStatusFilter, setLocalProductStatusFilter] = useState<ProductStatusFilter>('ALL');
   const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -810,6 +813,59 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
   }, [products, summaryProducts]);
+
+  // ─── Estadísticas por almacén y sucursal (stock real de /inventory/stock) ──
+  const warehouseStockStats = useMemo(() => {
+    const stats = new Map<string, { products: number; units: number }>();
+    for (const productId of Object.keys(stockByProduct)) {
+      const perWarehouse = stockByProduct[productId];
+      for (const warehouseId of Object.keys(perWarehouse)) {
+        const quantity = Number(perWarehouse[warehouseId] || 0);
+        if (quantity <= 0) continue;
+        const entry = stats.get(warehouseId) || { products: 0, units: 0 };
+        entry.products += 1;
+        entry.units += quantity;
+        stats.set(warehouseId, entry);
+      }
+    }
+    return stats;
+  }, [stockByProduct]);
+
+  const branchStockStats = useMemo(() => {
+    const stats = new Map<string, { warehouses: number; products: number; units: number }>();
+    for (const branch of branches || []) {
+      const warehouseIds = [branch.warehouseId, ...((branch.warehouses || []) as any[]).map((w: any) => w.id)].filter(Boolean) as string[];
+      const products = new Set<string>();
+      let units = 0;
+      for (const productId of Object.keys(stockByProduct)) {
+        const perWarehouse = stockByProduct[productId];
+        let branchUnits = 0;
+        for (const warehouseId of warehouseIds) {
+          branchUnits += Number(perWarehouse[warehouseId] || 0);
+        }
+        if (branchUnits > 0) {
+          products.add(productId);
+          units += branchUnits;
+        }
+      }
+      stats.set(branch.id, { warehouses: warehouseIds.length, products: products.size, units });
+    }
+    return stats;
+  }, [branches, stockByProduct]);
+
+  const warehouseTypeLabel = (type: string) =>
+    WAREHOUSE_TYPES.find((t) => t.value === type)?.label || type || 'Almacén';
+
+  const branchesForWarehouse = (warehouseId: string) =>
+    (branches || []).filter((branch: any) =>
+      branch.warehouseId === warehouseId || ((branch.warehouses || []) as any[]).some((w: any) => w.id === warehouseId),
+    ).map((branch: any) => branch.name);
+
+  const warehouseNamesForBranch = (branch: any) =>
+    [...new Set<string>([
+      ...((branch.warehouses || []) as any[]).map((w: any) => warehouses.find((wh: any) => wh.id === w.id)?.name),
+      ...(branch.warehouseId ? [warehouses.find((wh: any) => wh.id === branch.warehouseId)?.name] : []),
+    ].filter(Boolean))];
 
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
@@ -2082,6 +2138,43 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </button>
           ))}
         </div>
+        {!isServiceView && selectedBranchId && (() => {
+          const selectedBranch = (branches || []).find((b: any) => b.id === selectedBranchId) || null;
+          const linkedWarehouses = warehouses.filter((w: any) => branchWarehouseIdSet.has(w.id));
+          if (!selectedBranch && linkedWarehouses.length === 0) return null;
+          return (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {selectedBranch && (
+                <button
+                  type="button"
+                  onClick={() => setBranchDetail(selectedBranch)}
+                  title="Ver detalle de la sucursal"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/15"
+                >
+                  <Store className="size-3 shrink-0" />
+                  <span className="max-w-40 truncate">{selectedBranch.name}</span>
+                </button>
+              )}
+              {linkedWarehouses.length > 0 && (
+                <>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacenes vinculados</span>
+                  {linkedWarehouses.map((warehouse: any) => (
+                    <button
+                      key={warehouse.id}
+                      type="button"
+                      onClick={() => setWarehouseDetail(warehouse)}
+                      title="Ver detalle del almacén"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
+                    >
+                      <WarehouseIcon className="size-3 shrink-0 text-sky-600" />
+                      <span className="max-w-40 truncate">{warehouse.name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Toolbar */}
@@ -2654,6 +2747,86 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
             <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(warehouseDetail)} onOpenChange={(open) => !open && setWarehouseDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-sky-600" /> {warehouseDetail?.name || 'Almacén'}</DialogTitle>
+            <DialogDescription>Detalle del almacén con su stock real y productos asignados.</DialogDescription>
+          </DialogHeader>
+          {warehouseDetail && (() => {
+            const stats = warehouseStockStats.get(warehouseDetail.id) || { products: 0, units: 0 };
+            const parent = warehouses.find((w: any) => w.id === warehouseDetail.parentId);
+            const branchNames = branchesForWarehouse(warehouseDetail.id);
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</p>
+                    <p className="mt-1 text-sm font-black">{warehouseTypeLabel(warehouseDetail.type)}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ubicación</p>
+                    <p className="mt-1 truncate text-sm font-black">{warehouseDetail.location || '—'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.products}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.units}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {parent && <Badge variant="outline" className="text-[10px]">Matriz: {parent.name}</Badge>}
+                  {branchNames.map((name) => <Badge key={name} variant="secondary" className="text-[10px]">Sucursal: {name}</Badge>)}
+                  {branchNames.length === 0 && !parent && (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">Sin sucursal asignada</Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(branchDetail)} onOpenChange={(open) => !open && setBranchDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Store className="size-5 text-violet-600" /> {branchDetail?.name || 'Sucursal'}</DialogTitle>
+            <DialogDescription>Detalle de la sucursal con sus almacenes vinculados y stock agregado.</DialogDescription>
+          </DialogHeader>
+          {branchDetail && (() => {
+            const stats = branchStockStats.get(branchDetail.id) || { warehouses: 0, products: 0, units: 0 };
+            const warehouseNames = warehouseNamesForBranch(branchDetail);
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p>
+                    <p className="mt-1 text-sm font-black">{stats.warehouses}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p>
+                    <p className="mt-1 truncate text-sm font-black">{warehouseNames.length > 0 ? warehouseNames.join(', ') : 'Sin almacenes'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.products}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.units}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       <ProductDetailDrawer

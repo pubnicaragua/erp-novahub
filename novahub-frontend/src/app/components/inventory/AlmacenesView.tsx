@@ -84,6 +84,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
   const cameFromSetupRef = useRef(false);
   const [stockByWarehouse, setStockByWarehouse] = useState<Record<string, number>>({});
+  const [detailWarehouse, setDetailWarehouse] = useState<any | null>(null);
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -494,7 +495,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const stockCount = getStockCount(warehouse);
     const assignedSucursales = warehouse.branches || [];
     return (
-      <Card key={warehouse.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm" onDoubleClick={() => handleEditRow(warehouse)}>
+      <Card key={warehouse.id} className={`min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm cursor-pointer ${detailWarehouse?.id === warehouse.id ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/30' : ''}`} onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; setDetailWarehouse(warehouse); }}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Warehouse className="size-5" /></div>
@@ -543,6 +544,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
       </div>
 
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailWarehouse ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+        <div className="min-w-0">
       <div className="space-y-3 lg:hidden" data-tour="almacenes-table">
         {Array.from(editingRows.values()).filter((warehouse) => warehouse.isNew).map(renderMobileWarehouseCard)}
         {warehouses.map(renderMobileWarehouseCard)}
@@ -588,8 +591,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 return (
                   <TableRow 
                     key={wh.id} 
-                    className="group hover:bg-muted/30 cursor-pointer"
-                    onDoubleClick={() => handleEditRow(wh)}
+                    className={`group hover:bg-muted/30 cursor-pointer ${detailWarehouse?.id === wh.id ? 'bg-muted/40 ring-1 ring-border' : ''}`}
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; setDetailWarehouse(wh); }}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -654,7 +657,85 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       </div>
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        Doble clic en una fila para editar · Enter para guardar · Esc para cancelar
+        Haz clic en una fila para ver el detalle · Usa los botones de la fila para editar o eliminar
+      </div>
+        </div>
+        {detailWarehouse && (
+          <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Warehouse className="size-4 text-muted-foreground" />
+                  <h4 className="text-sm font-bold">Detalle de Almacén</h4>
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => setDetailWarehouse(null)} title="Cerrar detalle" aria-label="Cerrar detalle">
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+              <div className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5">
+                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Almacén seleccionado</p>
+                      <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Almacén'}</Badge>
+                  </div>
+                </div>
+                <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ubicación</p>
+                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.location || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacén matriz</p>
+                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.parent?.name || '—'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuentas contables por sucursal</p>
+                  {(detailWarehouse.branches || []).length > 0 ? (
+                    <div className="space-y-1.5">
+                      {(detailWarehouse.branches || []).map((link: any) => {
+                        const account = link.inventoryAccount || detailWarehouse.inventoryAccount;
+                        const status = link.accountingStatus || detailWarehouse.accountingStatus;
+                        return (
+                          <div key={link.id} className="flex items-start justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold">{link.name}</p>
+                              {account ? (
+                                <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{account.code} - {account.name}</p>
+                              ) : (
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">Sin cuenta asignada</p>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              {link.isPrimary && <Badge variant="outline" className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Primaria</Badge>}
+                              {status && status !== 'VINCULADO' && (
+                                <Badge variant="outline" className={`text-[9px] ${status === 'PENDIENTE' ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                                  {status === 'PENDIENTE' ? 'Pendiente' : status === 'CUENTA_INACTIVA' ? 'Cuenta inactiva' : status === 'CUENTA_NO_POSTEABLE' ? 'No posteable' : status}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
+                      <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.inventoryAccount?.code ? `${detailWarehouse.inventoryAccount.code} - ${detailWarehouse.inventoryAccount.name}` : 'Sin asignar'}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos con stock</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums">{getStockCount(detailWarehouse)}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
       <ConfirmDialog
         open={pendingDeleteId !== null}
