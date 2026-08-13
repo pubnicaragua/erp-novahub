@@ -21,9 +21,10 @@ const REASON_LABELS: Record<string, string> = {
 
 interface InventoryLossesViewProps {
   warehouses: any[];
+  warehouseId?: string;
 }
 
-export function InventoryLossesView({ warehouses }: InventoryLossesViewProps) {
+export function InventoryLossesView({ warehouses, warehouseId }: InventoryLossesViewProps) {
   const { user } = useAuth();
   const { formatCurrentAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
@@ -32,12 +33,13 @@ export function InventoryLossesView({ warehouses }: InventoryLossesViewProps) {
   const [page, setPage] = useState(1);
 
   const lossesQuery = useQuery({
-    queryKey: ['inventory', 'losses', tenantKey, dateFrom, dateTo, page],
+    queryKey: ['inventory', 'losses', tenantKey, dateFrom, dateTo, page, warehouseId],
     queryFn: ({ signal }) => inventoryService.getLosses({
       page,
       pageSize: 50,
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
+      ...(warehouseId ? { warehouseId } : {}),
     }, signal),
     staleTime: 30_000,
     gcTime: 5 * 60_000,

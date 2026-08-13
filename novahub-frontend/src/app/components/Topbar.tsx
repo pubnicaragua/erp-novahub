@@ -282,12 +282,24 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
   const { currency, toggleCurrency, currencyInteractionEnabled, valuationMode, setValuationMode, valuationModeLabel, showValuationLegend, setShowValuationLegend } = useCurrency();
 
+  const ROLE_LABELS: Record<string, string> = {
+    superadmin: 'Super Administrador',
+    partner: 'Partner',
+    admin: 'Administrador',
+    manager: 'Gerente',
+    employee: 'Empleado',
+    viewer: 'Solo Lectura',
+    user: 'Usuario',
+  };
+
+  const getRoleLabel = (role: string) => ROLE_LABELS[role?.toLowerCase()] || role;
+
   const getRoleBadge = (role: string) => {
     switch (role?.toLowerCase()) {
-      case 'superadmin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">SuperAdmin</Badge>;
+      case 'superadmin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Super Admin</Badge>;
       case 'partner': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Partner</Badge>;
       case 'admin': return <Badge className="bg-primary/10 text-primary border-primary/20 px-1 py-0 text-[10px]">Administrador</Badge>;
-      default: return <Badge variant="outline" className="px-1 py-0 text-[10px] capitalize">{role}</Badge>;
+      default: return <Badge variant="outline" className="px-1 py-0 text-[10px]">{getRoleLabel(role)}</Badge>;
     }
   };
 
@@ -553,7 +565,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <div className="hidden flex-col items-start text-left lg:flex leading-tight">
                 <span className="font-semibold text-[14px] text-foreground">{user?.name}</span>
                 <span className="text-[12px] text-primary/80 font-medium capitalize">
-                  {user?.role}
+                  {user?.customRoleName || getRoleLabel(user?.role || '')}
                 </span>
               </div>
             </Button>

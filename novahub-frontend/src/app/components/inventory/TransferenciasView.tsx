@@ -103,6 +103,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     const warehouseId = newTransfer.fromId;
     return products
       .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
       .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
   }, [products, newTransfer.fromId]);
 

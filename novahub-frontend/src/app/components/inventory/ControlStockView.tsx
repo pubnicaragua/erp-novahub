@@ -177,6 +177,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     const warehouseId = newAdjustment.warehouseId;
     return products
       .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
       .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
   }, [products, newAdjustment.warehouseId]);
 
@@ -184,6 +185,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     const warehouseId = serialAdjustment.warehouseId;
     return products
       .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }))
       .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
   }, [products, serialAdjustment.warehouseId]);
 
@@ -487,8 +489,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Almacén<ColumnFilterMenu label="Almacén" options={warehouseOptions} selected={colFilters.state.warehouse?.values || []} onSelect={(values) => colFilters.setValues('warehouse', values)} sort={colFilters.state.warehouse?.sort || null} onSort={(sort) => colFilters.setSort('warehouse', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Razón<ColumnFilterMenu label="Razón" options={reasonOptions} selected={colFilters.state.reason?.values || []} onSelect={(values) => colFilters.setValues('reason', values)} sort={colFilters.state.reason?.sort || null} onSort={(sort) => colFilters.setSort('reason', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Producto<ColumnFilterMenu label="Producto" sort={colFilters.state.product?.sort || null} onSort={(sort) => colFilters.setSort('product', sort)} /></span></TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-28">Cant. Ajuste</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Costo Ref.</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Cant. Ajuste</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Costo Ref.</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -507,7 +509,12 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 </TableCell>
                 <TableCell>
                   <Select value={newAdjustment.reason} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, reason: v })}>
-                    <SelectTrigger className="h-8 text-xs min-w-36"><SelectValue /></SelectTrigger>
+                    <SelectTrigger
+                      className="h-8 text-xs"
+                      style={{ width: `${44 + (REASON_OPTIONS.find((r) => r.value === newAdjustment.reason)?.label.length || 4) * 7.5}px`, minWidth: '5.5rem' }}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {REASON_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                     </SelectContent>
@@ -532,7 +539,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       min={0}
                       value={newAdjustment.actualStock} 
                       onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                      className="h-8 text-xs w-28"
+                      className="h-8 text-xs w-32 text-right tabular-nums"
                     />
                   </div>
                 </TableCell>
@@ -544,7 +551,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       step="0.01"
                       value={newAdjustment.unitCost}
                       onChange={(e) => setNewAdjustment({ ...newAdjustment, unitCost: parseFloat(e.target.value) || 0 })}
-                      className="h-8 text-xs w-28"
+                      className="h-8 text-xs w-48 text-right tabular-nums"
                       placeholder="0.00"
                     />
                     <Select value={newAdjustment.currency} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, currency: v })}>

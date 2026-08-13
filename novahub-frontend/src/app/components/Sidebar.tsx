@@ -166,6 +166,7 @@ const menuItems: MenuItem[] = [
       { id: 'perdidas', label: 'Pérdidas', icon: <TrendingDown className="size-4" /> },
       { id: 'movimientos', label: 'Movimientos', icon: <History className="size-4" /> },
       { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: <Building2 className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },
   {
@@ -662,7 +663,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   </p>
                   <div className="flex">
                     <p className="truncate text-[11px] text-sidebar-foreground/50 capitalize odoo-highlight">
-                      {user?.role === 'admin' ? 'Admin' : (user?.customRoleName || user?.role)}
+                      {user?.customRoleName || {
+                        superadmin: 'Super Administrador',
+                        partner: 'Partner',
+                        admin: 'Administrador',
+                        manager: 'Gerente',
+                        employee: 'Empleado',
+                        viewer: 'Solo Lectura',
+                        user: 'Usuario',
+                      }[user?.role?.toLowerCase() || ''] || user?.role}
                     </p>
                   </div>
                 </div>

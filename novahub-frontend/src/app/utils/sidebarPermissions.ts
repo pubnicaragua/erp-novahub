@@ -181,6 +181,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   auditorias: ['INVENTORY_ADJUSTMENTS'],
   'inventario:perdidas': ['INVENTORY_ADJUSTMENTS'],
   movimientos: ['INVENTORY_MOVEMENTS'],
+  'inventario:configuracion': ['INVENTORY_WAREHOUSES'],
 
   alertas: ['NOTIFICATIONS_ALERTS'],
   mensajes: ['NOTIFICATIONS_MESSAGES'],

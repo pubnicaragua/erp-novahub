@@ -195,7 +195,7 @@ const EMPTY_FORM: FormState = {
   status: 'AVAILABLE', observations: '',
 };
 
-export function MobiliarioEquiposView() {
+export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?: string }) {
   const queryClient = useQueryClient();
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
@@ -205,12 +205,14 @@ export function MobiliarioEquiposView() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
 
-  const listQuery = useAccountingQuery<any>(['company-assets', search, categoryFilter, statusFilter, branchFilter, page, pageSize], async (signal) =>
+  const effectiveBranchId = externalBranchId ?? (branchFilter === 'all' ? undefined : branchFilter);
+
+  const listQuery = useAccountingQuery<any>(['company-assets', search, categoryFilter, statusFilter, effectiveBranchId, page, pageSize], async (signal) =>
     mobiliarioService.getAssets({
       search: search.trim() || undefined,
       category: categoryFilter === 'all' ? undefined : categoryFilter,
       status: statusFilter === 'all' ? undefined : statusFilter,
-      branchId: branchFilter === 'all' ? undefined : branchFilter,
+      branchId: effectiveBranchId,
       page, pageSize,
     }, signal),
   );
@@ -428,10 +430,12 @@ export function MobiliarioEquiposView() {
             <option value="all">Todos los estados</option>
             {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-          <select value={branchFilter} onChange={e => { setBranchFilter(e.target.value); setPage(1); }} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="all">Todas las sucursales</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          {!externalBranchId && (
+            <select value={branchFilter} onChange={e => { setBranchFilter(e.target.value); setPage(1); }} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
+              <option value="all">Todas las sucursales</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">

@@ -691,10 +691,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
-      });
+      })
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
   const colFilters = useColumnFilters();
   const filterGetters = {
+    code: (p: any) => p.code || '',
     name: (p: any) => {
       const sort = colFilters.state.name?.sort;
       return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
@@ -2270,7 +2272,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                   }
                 </button>
               </TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>Código</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">Código<ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
