@@ -224,6 +224,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'diferencias-cambiarias': ['ACCOUNTING_EXCHANGE_DIFFERENCES'],
   'cambios-patrimonio': ['ACCOUNTING_EQUITY'],
   'activos-fijos': ['ACCOUNTING_ASSETS'],
+  'libro-bancos': ['ACCOUNTING_LEDGER'],
   conciliacion: ['ACCOUNTING_RECONCILIATION'],
   periodos: ['ACCOUNTING_PERIODS'],
   'reportes-fiscales': ['ACCOUNTING_FISCAL'],

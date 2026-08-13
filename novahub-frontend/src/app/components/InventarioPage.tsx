@@ -477,6 +477,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     targetProductId={productTarget?.id}
                     initialStockFilter={productTarget?.stockFilter}
                     onClearTargetProduct={() => setProductTarget(null)}
+                    selectedBranchId={selectedBranchId}
+                    branchWarehouseIds={branchWarehouseIds}
                   />
                 </motion.div>
               </TabsContent>

@@ -1,13 +1,13 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Landmark, Calendar, ChevronDown, Banknote, AlertTriangle, Loader2, Network
+  Landmark, Calendar, ChevronDown, ChevronLeft, ChevronRight, Banknote, AlertTriangle, Loader2, Network
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
@@ -25,6 +25,14 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   SAVINGS: 'Cuenta de ahorro',
   CURRENT: 'Cuenta corriente',
   SAVING: 'Cuenta de ahorro',
+};
+
+const MONTH_LABELS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const formatMonthLabel = (value: string) => {
+  if (!/^\d{4}-\d{2}$/.test(value)) return 'Seleccionar mes';
+  const [year, mon] = value.split('-').map(Number);
+  return `${MONTH_LABELS_SHORT[mon - 1]} ${year}`;
 };
 
 const BOOK_CONNECTIONS: ViewConnection[] = [
@@ -81,8 +89,15 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
   const queryClient = useQueryClient();
   const [bankAccountId, setBankAccountId] = useState('');
   const [month, setMonth] = useState(currentMonth);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(() => Number(currentMonth.split('-')[0]));
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+
+  const handleMonthOpenChange = (open: boolean) => {
+    setMonthOpen(open);
+    if (open && /^\d{4}-\d{2}$/.test(month)) setViewYear(Number(month.split('-')[0]));
+  };
 
   const bankAccountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
   const bankAccounts = (bankAccountsQuery.data || []).filter((bank: any) => bank.isActive !== false && bank.accountId);
@@ -148,29 +163,74 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
             placeholder="Seleccionar banco"
             searchPlaceholder="Buscar banco o cuenta..."
             maxVisibleOptions={100}
-            className="col-span-2 sm:col-span-1 h-10 min-w-44 text-xs"
+            className="col-span-2 h-10 w-full min-w-0 text-xs sm:col-span-1 sm:w-60 sm:shrink-0"
             emptyMessage="No se encontraron bancos con cuenta contable vinculada."
           />
           <div className="relative col-span-1">
-            <Calendar className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-            <Input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="h-10 pl-9 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest"
-            />
+            <Popover open={monthOpen} onOpenChange={handleMonthOpenChange}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-10 w-full items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-bold tracking-widest transition-colors hover:bg-muted/50 sm:w-44 sm:shrink-0"
+                >
+                  <Calendar className="size-4 shrink-0 text-muted-foreground/40" />
+                  <span className="truncate">{formatMonthLabel(month)}</span>
+                  <ChevronDown className="ml-auto size-3.5 shrink-0 text-muted-foreground/40" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <Button variant="ghost" size="icon" className="size-7 rounded-lg" onClick={() => setViewYear((v) => v - 1)} aria-label="Año anterior">
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <span className="text-xs font-black uppercase tracking-widest">{viewYear}</span>
+                  <Button variant="ghost" size="icon" className="size-7 rounded-lg" onClick={() => setViewYear((v) => v + 1)} aria-label="Año siguiente">
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {MONTH_LABELS_SHORT.map((label, index) => {
+                    const value = `${viewYear}-${String(index + 1).padStart(2, '0')}`;
+                    const isSelected = month === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => { setMonth(value); setMonthOpen(false); }}
+                        className={cn(
+                          'h-9 rounded-lg text-[11px] font-black uppercase tracking-wider transition-colors',
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-8 w-full text-[10px] font-black uppercase tracking-widest"
+                  onClick={() => { setMonth(currentMonth); setMonthOpen(false); }}
+                >
+                  Este mes
+                </Button>
+              </PopoverContent>
+            </Popover>
           </div>
           <Button
             variant="outline"
             onClick={refresh}
-            className="col-span-1 h-10 rounded-xl border-border/50 text-[10px] font-black uppercase tracking-widest"
+            className="col-span-1 h-10 w-full whitespace-nowrap rounded-xl border-border/50 text-[10px] font-black uppercase tracking-widest sm:w-36 sm:shrink-0"
           >
             Actualizar
           </Button>
           <Button
             variant="outline"
             onClick={() => setConnectionsOpen(true)}
-            className="col-span-1 h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/5 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+            className="col-span-2 h-10 w-full whitespace-nowrap gap-1.5 rounded-xl border-primary/30 bg-primary/5 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 sm:col-span-1 sm:w-36 sm:shrink-0"
           >
             <Network className="size-4" /> Conexiones
           </Button>

@@ -162,6 +162,8 @@ interface ProductosViewProps {
   productStatusFilter?: ProductStatusFilter;
   onProductStatusFilterChange?: (value: ProductStatusFilter) => void;
   onClearTargetProduct?: () => void;
+  selectedBranchId?: string;
+  branchWarehouseIds?: string[];
 }
 
 interface EditingProduct {
@@ -346,9 +348,31 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct }: ProductosViewProps) {
+export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
+  const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
+  const [stockByProduct, setStockByProduct] = useState<Record<string, Record<string, number>>>({});
+  const refreshStockMap = useCallback(async () => {
+    try {
+      const res: any = await inventoryService.getAllStock();
+      const levels = Array.isArray(res) ? res : (res?.data || []);
+      const map: Record<string, Record<string, number>> = {};
+      for (const level of levels) {
+        const productId = level.productId || level.product?.id;
+        const warehouseId = level.warehouseId || level.warehouse?.id;
+        if (!productId || !warehouseId) continue;
+        if (!map[productId]) map[productId] = {};
+        map[productId][warehouseId] = (map[productId][warehouseId] || 0) + Number(level.quantity || 0);
+      }
+      setStockByProduct(map);
+    } catch (e) {
+      console.error('Error al cargar stock de productos:', e);
+    }
+  }, []);
+  useEffect(() => {
+    void refreshStockMap();
+  }, [products, refreshStockMap]);
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
   const entityLabel = isServiceView ? 'servicio' : 'producto';
@@ -755,8 +779,35 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     };
   }, [products]);
 
+  // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
+  // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
+  // las sucursales) muestra el stock total del producto. Prioriza el mapa real
+  // de /inventory/stock (fresco tras transferencias) y cae a stockLevels o
+  // product.stock si el listado no trae niveles.
+  const getProductStock = (product: any) => {
+    const perWarehouse = stockByProduct[product?.id];
+    if (perWarehouse) {
+      if (selectedBranchId) {
+        let total = 0;
+        for (const warehouseId of branchWarehouseIdSet) total += perWarehouse[warehouseId] || 0;
+        return total;
+      }
+      return Object.values(perWarehouse).reduce((sum, quantity) => sum + quantity, 0);
+    }
+    const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    if (selectedBranchId) {
+      return levels
+        .filter((l: any) => branchWarehouseIdSet.has(l.warehouseId || l.warehouse?.id))
+        .reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0);
+    }
+    if (levels.length > 0) {
+      return Number(product.stock ?? levels.reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0));
+    }
+    return Number(product.stock || 0);
+  };
+
   const getStockStatus = (product: any) => {
-    const stock = Number(product.stock || 0);
+    const stock = getProductStock(product);
     if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
     const minStock = Number(product.minStock || 0);
     if (minStock > 0 && stock <= minStock) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
@@ -773,7 +824,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   };
 
   const getStockAlertColor = (product: any) => {
-    const stock = Number(product.stock || 0);
+    const stock = getProductStock(product);
     if (stock <= 0) return 'text-red-500 font-bold';
     const minStock = Number(product.minStock || 0);
     if (minStock > 0 && stock <= minStock) return 'text-orange-500 font-bold';
@@ -2211,7 +2262,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     </div>}
                     {!isServiceView && <div>
                       <span className="text-muted-foreground">Existencias</span>
-                      <p className={`font-bold tabular-nums ${getStockAlertColor(product)}`}>{product.stock || 0}</p>
+                      <p className={`font-bold tabular-nums ${getStockAlertColor(product)}`}>{getProductStock(product)}</p>
                     </div>}
                     {!isServiceView && <>
                       <div className="min-w-0"><span className="text-muted-foreground">U. medida</span><p className="truncate font-medium">{product.unit || 'unidad'}</p></div>
@@ -2427,7 +2478,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       )}
                     </TableCell>
                     {!isServiceView && <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
-                      {product.stock || 0}
+                      {getProductStock(product)}
                     </TableCell>}
                     {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-medium" /></TableCell>}
                      {!isServiceView && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}

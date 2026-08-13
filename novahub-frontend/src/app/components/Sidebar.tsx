@@ -204,6 +204,7 @@ const menuItems: MenuItem[] = [
       { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
+      { id: 'libro-bancos', label: 'Libro Diario de Bancos', icon: <Landmark className="size-4" /> },
       { id: 'conciliacion', label: 'Conciliación bancaria', icon: <Landmark className="size-4" /> },
       { id: 'periodos', label: 'Períodos contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
@@ -445,8 +446,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
 
     const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
-    const hasSpecificSubmodules = parentMod && user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
-    const hasSubscription = hasRequired || Boolean(parentMod && user.enabledModules.includes(parentMod) && !hasSpecificSubmodules);
+    // La suscripción al módulo padre habilita todas sus vistas. La
+    // suscripción granular (sin padre) solo habilita los submódulos
+    // específicos contratados.
+    const hasParentModule = Boolean(parentMod && user.enabledModules.includes(parentMod));
+    const hasSubscription = hasRequired || hasParentModule;
     if (!hasSubscription) return false;
 
     // La suscripción habilita el módulo, pero el rol también debe tener

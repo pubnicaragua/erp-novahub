@@ -7,7 +7,6 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -20,9 +19,7 @@ import { SucursalesView } from './SucursalesView';
 import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
-import { contabilidadService } from '../../services/contabilidad.service';
 import { useAuth } from '../../contexts/AuthContext';
-
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
@@ -34,7 +31,6 @@ interface EditingWarehouse {
   location: string;
   type: string;
   parentId: string | null;
-  inventoryAccountId?: string | null;
   isNew?: boolean;
 }
 
@@ -73,20 +69,6 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-const flattenAccounts = (list: any[]): any[] => {
-  const result: any[] = [];
-  const recurse = (items: any[]) => {
-    for (const item of items) {
-      result.push(item);
-      if (item.children && Array.isArray(item.children) && item.children.length > 0) {
-        recurse(item.children);
-      }
-    }
-  };
-  recurse(list);
-  return result;
-};
-
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const { canPerform } = useAuth();
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
@@ -100,9 +82,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const flatAccounts = flattenAccounts(accounts);
   const cameFromSetupRef = useRef(false);
+  const [stockByWarehouse, setStockByWarehouse] = useState<Record<string, number>>({});
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -181,15 +162,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const loadCatalogs = async () => {
       try {
         setCajasLoading(true);
-        const [cajas, sucursales, chart] = await Promise.all([
+        const [cajas, sucursales] = await Promise.all([
           cajaService.getRegisters(true, controller.signal),
           api.get('/sucursales', { signal: controller.signal }),
-          contabilidadService.getChartOfAccounts(false, controller.signal),
         ]);
         setCajasList(Array.isArray(cajas) ? cajas : []);
         const branches: any = sucursales;
         setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
-        setAccounts((chart as any)?.data || chart || []);
       } catch (error: any) {
         if (error?.name !== 'AbortError' && !controller.signal.aborted && error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
           toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
@@ -201,6 +180,32 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     void loadCatalogs();
     return () => controller.abort();
   }, []);
+
+  const refreshStock = async () => {
+    try {
+      const res: any = await inventoryService.getAllStock();
+      const levels = Array.isArray(res) ? res : (res?.data || []);
+      const byWarehouse: Record<string, Set<string>> = {};
+      for (const level of levels) {
+        const warehouseId = level.warehouseId || level.warehouse?.id;
+        const productId = level.productId || level.product?.id;
+        if (!warehouseId || !productId) continue;
+        if (!byWarehouse[warehouseId]) byWarehouse[warehouseId] = new Set();
+        byWarehouse[warehouseId].add(productId);
+      }
+      const counts: Record<string, number> = {};
+      for (const [warehouseId, productIds] of Object.entries(byWarehouse)) {
+        counts[warehouseId] = productIds.size;
+      }
+      setStockByWarehouse(counts);
+    } catch (e) {
+      console.error('Error al cargar stock de almacenes:', e);
+    }
+  };
+
+  useEffect(() => {
+    void refreshStock();
+  }, [warehouses]);
 
   const handleAddNewRow = () => {
     if (!canCreateWarehouse) return;
@@ -275,7 +280,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén creado');
       } else {
@@ -284,7 +288,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén actualizado');
       }
@@ -335,7 +338,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   const getStockCount = (wh: any) => {
-    return wh.stockLevels?.reduce((acc: number, sl: any) => acc + Number(sl.quantity || 0), 0) || 0;
+    return stockByWarehouse[wh?.id] || 0;
   };
 
   const renderEditableRow = (warehouse: EditingWarehouse) => {
@@ -397,33 +400,30 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </Select>
         </TableCell>
         <TableCell>
-          <Combobox
-            value={warehouse.inventoryAccountId || ''}
-            onChange={(v) => handleUpdateField(warehouse.id, 'inventoryAccountId', v || null)}
-            options={flatAccounts.map((a: any) => {
-              const type = String(a.type || '').toUpperCase();
-              const typeLabel = {
-                ASSET: 'Activo',
-                LIABILITY: 'Pasivo',
-                EQUITY: 'Capital',
-                INCOME: 'Ingreso',
-                EXPENSE: 'Gasto',
-              }[type] || type || 'Sin tipo';
-              const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
-              const isUsable = a.isActive !== false;
-              const usabilityLabel = isUsable ? '' : ' · No acepta registros';
-              return {
-                label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
-                value: a.id,
-                description: a.code,
-                disabled: !isUsable
-              };
-            })}
-            placeholder="Seleccionar cuenta..."
-            searchPlaceholder="Buscar por código o nombre..."
-            className="w-full max-w-[280px]"
-            disabled={isSaving}
-          />
+          {warehouse.isNew ? (
+            <span className="text-[10px] text-muted-foreground">Se asigna al vincular con sucursales</span>
+          ) : (
+            (() => {
+              const live = warehouses.find((w: any) => w.id === warehouse.id);
+              return live?.inventoryAccount ? (
+                <Badge variant="outline" className="text-[9px] font-mono">{live.inventoryAccount.code} - {live.inventoryAccount.name}</Badge>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">Sin asignar</span>
+              );
+            })()
+          )}
+        </TableCell>
+        <TableCell>
+          <span className="text-[10px] text-muted-foreground">-</span>
+        </TableCell>
+        <TableCell className="text-right">
+          {warehouse.isNew ? (
+            <span className="text-[10px] font-medium tabular-nums text-muted-foreground">0</span>
+          ) : (
+            <span className="text-[10px] font-medium tabular-nums">
+              {getStockCount(warehouses.find((w: any) => w.id === warehouse.id))}
+            </span>
+          )}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
@@ -471,35 +471,21 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacén matriz</p><Select value={draft.parentId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'parentId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin padre" /></SelectTrigger><SelectContent><SelectItem value="none">Sin padre</SelectItem>{warehouses.filter((item) => item.id !== draft.id).map((item: any) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
-             <div className="space-y-1">
-               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
-               <Combobox
-                 value={draft.inventoryAccountId || ''}
-                 onChange={(value) => handleUpdateField(draft.id, 'inventoryAccountId', value || null)}
-                 options={flatAccounts.map((a: any) => {
-                   const type = String(a.type || '').toUpperCase();
-                   const typeLabel = {
-                     ASSET: 'Activo',
-                     LIABILITY: 'Pasivo',
-                     EQUITY: 'Capital',
-                     INCOME: 'Ingreso',
-                     EXPENSE: 'Gasto',
-                   }[type] || type || 'Sin tipo';
-                   const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
-                   const isUsable = a.isActive !== false;
-                   const usabilityLabel = isUsable ? '' : ' · No acepta registros';
-                   return {
-                     label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
-                     value: a.id,
-                     description: a.code,
-                     disabled: !isUsable
-                   };
-                 })}
-                 placeholder="Seleccionar cuenta..."
-                 searchPlaceholder="Buscar por código o nombre..."
-                 disabled={isSaving}
-               />
-             </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
+              {draft.isNew ? (
+                <p className="text-xs text-muted-foreground">Se asigna al vincular con sucursales</p>
+              ) : (
+                (() => {
+                  const live = warehouses.find((w: any) => w.id === draft.id);
+                  return live?.inventoryAccount ? (
+                    <p className="truncate text-xs font-medium font-mono">{live.inventoryAccount.code} - {live.inventoryAccount.name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sin asignar</p>
+                  );
+                })()
+              )}
+            </div>
           </div>
         </Card>
       );
