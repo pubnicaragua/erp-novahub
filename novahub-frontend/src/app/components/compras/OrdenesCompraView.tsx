@@ -1497,7 +1497,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         ≈ {negative ? '-' : ''}{equivalentCurrencySymbol} {Math.abs(convertToEquivalent(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {equivalentCurrency}
       </span>
     );
-    const canApproveCurrent = !isNew && ['DRAFT', 'PENDING'].includes(currentStatus);
     const canEditOrderItems = isNew
       ? canPerform('PURCHASES_ORDERS', 'create')
       : canPerform('PURCHASES_ORDERS', 'edit') && ['DRAFT', 'PENDING'].includes(currentStatus);
@@ -1544,28 +1543,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                  </Button>
                </>
              )}
-              {!isNew && !['CANCELLED', 'REJECTED'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'delete') && (
-                 <Button variant="outline" className="rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10 font-black uppercase text-[10px] tracking-widest px-4"
-                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
-                   <Ban className="size-3 mr-2" /> Rechazar
-                 </Button>
-              )}
-            {canApproveCurrent && canPerform('PURCHASES_ORDERS', 'approve') && (
-              <Button variant="outline" onClick={() => setPendingApproveOrder(localDoc)} className="rounded-xl border-primary/40 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4">
-                <CheckCircle2 className="size-3 mr-2" /> Aprobar
-              </Button>
-            )}
             {isNew && canPerform('PURCHASES_ORDERS', 'create') && (
-              <>
-                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-                  Guardar borrador
-                </Button>
-                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                  Guardar pendiente
-                </Button>
-              </>
-            )}
-            {!isNew && currentStatus === 'DRAFT' && canPerform('PURCHASES_ORDERS', 'edit') && (
               <>
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
                   Guardar borrador
@@ -1575,10 +1553,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 </Button>
               </>
             )}
-            {!isNew && currentStatus === 'PENDING' && canPerform('PURCHASES_ORDERS', 'edit') && (
-              <Button onClick={() => handleSaveDoc()} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar
-              </Button>
+            {!isNew && ['DRAFT', 'PENDING'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
+              <>
+                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                  Guardar borrador
+                </Button>
+                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                  Enviar a pendiente
+                </Button>
+              </>
             )}
           </div>
         </div>

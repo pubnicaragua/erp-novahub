@@ -744,6 +744,7 @@ export interface PaymentMade {
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
+  accountId?: string;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -907,6 +908,7 @@ export interface JournalEntry {
   referenceId?: string;
   costCenterId?: string;
   costCenter?: any;
+  branchLinks?: Array<{ branch?: { id: string; code?: string; name: string } }>;
   createdBy?: { id: string; name: string; email?: string | null } | null;
   referenceNumber?: string | null;
   createdAt: string;

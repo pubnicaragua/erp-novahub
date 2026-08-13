@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil,
-  AlertTriangle, XCircle, ArrowDown, FileText, Upload, Banknote, Calculator, ArrowRight, Ban, CreditCard, Paperclip
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Pencil,
+  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Ban, Paperclip, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -12,7 +12,7 @@ import { Combobox } from '../ui/Combobox';
 import { paymentsService, purchaseOrdersService, purchaseReceiptsService, supplierInvoicesService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import type { PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
+import type { Currency, PaymentMethod, PurchaseReceipt, Supplier, PurchaseOrder, Warehouse } from '../../types';
 import type { SalesPaginationControls, InventoryCostOperation } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -152,10 +152,12 @@ interface ReceiptPaymentDraft {
   receiptNumber: string;
   supplierName: string;
   supplierId: string;
-  supplierInvoiceId: string;
+  supplierInvoiceId?: string;
   invoiceNumber: string;
+  invoiceDate: string;
+  invoiceDueDate: string;
   amount: number;
-  currency: string;
+  currency: Currency;
   exchangeRate?: number;
   reference: string;
   notes: string;
@@ -187,45 +189,86 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
   }
 }
 
-function ReceiptPaymentDialog({ draft, onClose, onSaved }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void }) {
-  const [method, setMethod] = useState('TRANSFER');
+function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
+  const [method, setMethod] = useState<PaymentMethod>('TRANSFER');
+  const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [invoiceId, setInvoiceId] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [invoiceDueDate, setInvoiceDueDate] = useState('');
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!draft) return;
     setMethod('TRANSFER');
+    setAmount(String(Number(draft.amount || 0)));
     setReference(draft.reference || '');
-    setDate(new Date().toISOString().slice(0, 10));
     setNotes(draft.notes || '');
     setFiles([]);
+    setInvoiceId(draft.supplierInvoiceId || '');
+    setInvoiceNumber(draft.invoiceNumber || '');
+    setInvoiceDate(draft.invoiceDate || new Date().toISOString().slice(0, 10));
+    setInvoiceDueDate(draft.invoiceDueDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+    setInvoiceFiles([]);
   }, [draft]);
+
+  const handleRegisterInvoice = async () => {
+    if (!draft) return;
+    if (!invoiceNumber.trim()) return toast.error('Ingresa el número de factura del proveedor.');
+    if (invoiceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
+    setInvoiceSaving(true);
+    const invoiceToastId = toast.loading('Registrando factura y evidencia...');
+    try {
+      const invoice = await onRegisterInvoice({ draft, number: invoiceNumber.trim(), date: invoiceDate, dueDate: invoiceDueDate, files: invoiceFiles });
+      const savedInvoice = invoice?.data ?? invoice;
+      setInvoiceId(String(savedInvoice?.id || ''));
+      setInvoiceNumber(String(savedInvoice?.number || invoiceNumber.trim()));
+      setAmount(String(Number(savedInvoice?.balance ?? savedInvoice?.total ?? draft.amount)));
+      setInvoiceFiles([]);
+      toast.success('Factura y evidencia registradas. Ya puedes confirmar el pago.', { id: invoiceToastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar la factura.', { id: invoiceToastId });
+    } finally {
+      setInvoiceSaving(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!draft) return;
-    if (!reference.trim()) return toast.error('Ingrese el número de referencia del pago.');
+    const resolvedInvoiceId = invoiceId || draft.supplierInvoiceId;
+    if (!resolvedInvoiceId) return toast.error('Registra primero la factura y su evidencia.');
+    const requiresReference = ['TRANSFER', 'CHECK', 'CARD'].includes(method);
+    const paymentReference = reference.trim();
+    if (requiresReference && !paymentReference) {
+      return toast.error('Ingresa el número de referencia para este método de pago.');
+    }
     if (files.length === 0) return toast.error('Adjunte al menos una evidencia del pago.');
+    const paymentAmount = Number(amount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) return toast.error('El monto debe ser mayor que cero.');
+    if (paymentAmount > Number(draft.amount || 0) + 0.01) return toast.error('El monto no puede superar el saldo pendiente.');
     setSaving(true);
     const saveToastId = toast.loading('Registrando pago y generando la integración contable...');
     try {
       const payment = await paymentsService.create({
         supplierId: draft.supplierId,
-        supplierInvoiceId: draft.supplierInvoiceId,
-        date: new Date(`${date}T12:00:00`).toISOString(),
-        amount: draft.amount,
+        supplierInvoiceId: resolvedInvoiceId,
+        date: new Date().toISOString(),
+        amount: paymentAmount,
         currency: draft.currency,
         exchangeRate: draft.exchangeRate,
         method,
-        reference: reference.trim(),
+        reference: paymentReference || undefined,
         notes: notes.trim() || `Pago de la recepción ${draft.receiptNumber}`,
       });
 
       let evidenceError = '';
       try {
-        await uploadReceiptPaymentEvidence(files, draft.supplierInvoiceId, String(payment.id), reference.trim());
+        await uploadReceiptPaymentEvidence(files, resolvedInvoiceId, String(payment.id), paymentReference || 'EFECTIVO');
       } catch (error: any) {
         evidenceError = error?.response?.data?.message || error?.message || 'no se pudieron adjuntar todas las evidencias';
       }
@@ -242,35 +285,56 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved }: { draft: ReceiptPayme
   };
 
   return (
-    <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-3xl border-emerald-500/20 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-emerald-500/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12">
+    <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-xl overflow-y-auto rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12">
           <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
-            <span className="flex size-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"><CreditCard className="size-5" /></span>
-            Registrar pago de recepción
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><CircleDollarSign className="size-5" /></span>
+            Registrar pago de la recepción
           </DialogTitle>
-          <DialogDescription>El pago se guardará automáticamente en Pagos realizados y, al cubrir la cuenta por pagar, se enviará a Finanzas y generará sus asientos contables.</DialogDescription>
+          <DialogDescription>El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.</DialogDescription>
         </DialogHeader>
         {draft && (
           <div className="space-y-5 px-6 py-5">
-            <div className="grid gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:grid-cols-2">
-              <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Recepción</p><p className="mt-1 font-mono text-sm font-black text-primary">{draft.receiptNumber}</p></div>
-              <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Proveedor</p><p className="mt-1 text-sm font-bold">{draft.supplierName || 'Proveedor'}</p></div>
-              <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Factura por pagar</p><p className="mt-1 font-mono text-sm font-black">{draft.invoiceNumber || 'Factura vinculada'}</p></div>
-              <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Saldo a cancelar</p><p className="mt-1 text-lg font-black tabular-nums text-emerald-600">{formatReceiptAmount(draft.amount, draft.currency)}</p></div>
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{draft.receiptNumber} · {draft.supplierName || 'Proveedor'}</p>
+                  <p className="mt-1 text-2xl font-black text-primary">Total a pagar: {formatReceiptAmount(draft.amount, draft.currency)}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Factura: {draft.invoiceNumber || 'Pendiente de registrar'}</p>
+                </div>
+                <Badge className="bg-primary/10 text-primary">Pendiente</Badge>
+              </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Método de pago</p><select value={method} onChange={(event) => setMethod(event.target.value)} disabled={saving} className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-              <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Fecha de pago</p><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} disabled={saving} className="h-10" /></div>
-              <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de referencia *</p><Input value={reference} onChange={(event) => setReference(event.target.value)} disabled={saving} placeholder="Ej. TRANSF-000123, cheque o recibo" className="h-10 font-mono" /></div>
-              <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
-              <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
-            </div>
+            {!invoiceId ? (
+              <div className="space-y-4 rounded-2xl border border-primary/25 bg-primary/[0.03] p-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-foreground">Evidencia de factura y cuenta por pagar</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Registra la factura del proveedor y su evidencia aquí. No volverás al detalle de la recepción.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de factura *</p><Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} placeholder="Ej. A-001-000123" className="h-10 font-mono" /></div>
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Fecha factura</p><Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Vencimiento</p><Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
+                </div>
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
+                <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando evidencia...' : 'Registrar evidencia y continuar'}</Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Monto</p><Input type="text" value={formatReceiptAmount(Number(amount), draft.currency)} readOnly aria-readonly="true" disabled={saving} className="h-10 border-2 border-primary/20 bg-muted/20 font-black tabular-nums text-foreground" /></div>
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Método</p><select value={method} onChange={(event) => { const nextMethod = event.target.value as PaymentMethod; setMethod(nextMethod); if (nextMethod === 'CASH') setReference(''); }} disabled={saving} className="h-10 w-full rounded-xl border-2 border-primary/20 bg-background px-3 text-xs font-bold uppercase outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                {method !== 'CASH' && <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de referencia {['TRANSFER', 'CHECK', 'CARD'].includes(method) ? '*' : '(opcional)'}</p><Input value={reference} onChange={(event) => setReference(event.target.value)} disabled={saving} required={['TRANSFER', 'CHECK', 'CARD'].includes(method)} placeholder={method === 'OTHER' ? 'Opcional: referencia, comprobante o nota' : 'Ej. TRANSF-000123, cheque o voucher'} className="h-10 font-mono" /></div>}
+                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
+                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
+              </div>
+            )}
           </div>
         )}
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4">
-          <Button variant="outline" onClick={onClose} disabled={saving} className="rounded-xl font-black uppercase tracking-widest">Cerrar</Button>
-          <Button onClick={handleSubmit} disabled={saving || !draft} className="rounded-xl bg-emerald-600 font-black uppercase tracking-widest text-white hover:bg-emerald-700">{saving ? 'Registrando...' : 'Registrar pago'}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
+          {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -309,11 +373,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState('');
-  const [invoiceDueDate, setInvoiceDueDate] = useState('');
-  const [invoiceEvidenceFiles, setInvoiceEvidenceFiles] = useState<File[]>([]);
-  const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [inventoryCostOperations, setInventoryCostOperations] = useState<InventoryCostOperation[] | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<ReceiptPaymentDraft | null>(null);
   const [codeEditMode, setCodeEditMode] = useState<Record<number, boolean>>({});
@@ -336,25 +395,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
            supplierId: '',
            purchaseOrderId: '',
            date: new Date().toISOString(),
-           status: 'PENDING' as any,
+         status: 'PENDING' as any,
            items: [],
          });
-          setInvoiceNumber('');
-          setInvoiceDate(new Date().toISOString().slice(0, 10));
-          setInvoiceDueDate(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
-          setInvoiceEvidenceFiles([]);
        } else {
           const found = data.find(x => x.id === editingId);
           setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
-          const linkedInvoice = (found as any)?.supplierInvoices?.find((item: any) => String(item.status || '').toUpperCase() !== 'CANCELLED');
-          setInvoiceNumber(linkedInvoice?.number || '');
-          setInvoiceDate(linkedInvoice?.date ? new Date(linkedInvoice.date).toISOString().slice(0, 10) : (found?.date ? new Date(found.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)));
-          setInvoiceDueDate(linkedInvoice?.dueDate ? new Date(linkedInvoice.dueDate).toISOString().slice(0, 10) : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
-          setInvoiceEvidenceFiles([]);
        }
      } else {
        setLocalDoc(null);
-        setInvoiceEvidenceFiles([]);
       }
   }
 
@@ -466,14 +515,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     }
   };
 
-  const openPaymentModal = (receipt: any, invoice: any) => {
+  const openPaymentModal = (receipt: any, invoice?: any) => {
     if (String(receipt?.status || '').toUpperCase() !== 'RECEIVED') {
       toast.error('El pago solo se puede registrar cuando la recepción está recibida.');
       return;
     }
-    const balance = Number(invoice?.balance || 0);
-    if (!invoice?.id || balance <= 0) {
+    const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
+    const calculatedTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
+    const balance = invoice?.id ? Number(invoice.balance || 0) : calculatedTotal;
+    if (invoice?.id && balance <= 0) {
       toast.error('Esta recepción no tiene una cuenta por pagar con saldo pendiente.');
+      return;
+    }
+    if (!invoice?.id && balance <= 0) {
+      toast.error('Esta recepción no tiene un total recibido válido para registrar la factura.');
       return;
     }
     setPaymentDraft({
@@ -481,12 +536,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       receiptNumber: String(receipt.number || ''),
       supplierName: String(receipt.supplier?.name || ''),
       supplierId: String(receipt.supplierId || ''),
-      supplierInvoiceId: String(invoice.id),
-      invoiceNumber: String(invoice.number || ''),
+      supplierInvoiceId: invoice?.id ? String(invoice.id) : '',
+      invoiceNumber: String(invoice?.number || ''),
+      invoiceDate: invoice?.date ? new Date(invoice.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+      invoiceDueDate: invoice?.dueDate ? new Date(invoice.dueDate).toISOString().slice(0, 10) : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       amount: balance,
-      currency: normalizeReceiptCurrency(invoice.currency || receipt.currency),
-      exchangeRate: Number(invoice.exchangeRate || receipt.exchangeRate || 1),
-      reference: `PAG-${Date.now().toString().slice(-8)}`,
+      currency: normalizeReceiptCurrency(invoice?.currency || receipt.currency),
+      exchangeRate: Number(invoice?.exchangeRate || receipt.exchangeRate || 1),
+      reference: invoice?.id ? `PAG-${Date.now().toString().slice(-8)}` : '',
       notes: `Pago de la recepción ${receipt.number || ''}`,
     });
   };
@@ -552,66 +609,45 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     }
   };
 
-  const handleRegisterInvoiceEvidence = async () => {
-    if (!localDoc?.id || editingId === 'NEW') return;
-    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(localDoc.status || '').toUpperCase())) {
-      toast.error('Primero recepciona al menos un producto antes de registrar la evidencia.');
-      return;
+  const registerInvoiceFromPaymentModal = async ({ draft, number, date, dueDate, files }: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => {
+    const receipt = data.find((item) => String(item.id) === String(draft.receiptId));
+    if (!receipt) throw new Error('No se encontró la recepción seleccionada. Actualiza la lista e inténtalo nuevamente.');
+    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || '').toUpperCase())) {
+      throw new Error('La recepción debe estar recibida antes de registrar la factura.');
     }
-    const linkedInvoice = (localDoc as any)?.supplierInvoices?.find((item: any) => String(item.status || '').toUpperCase() !== 'CANCELLED');
-    const number = invoiceNumber.trim() || linkedInvoice?.number || '';
-    if (!number) return toast.error('Ingresa el número de factura del proveedor.');
-    if (invoiceEvidenceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
 
-    const saveToastId = toast.loading(linkedInvoice ? 'Agregando evidencia a la factura...' : 'Registrando evidencia y cuenta por pagar...');
-    setInvoiceSaving(true);
-    try {
-      const uploaded: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> = [];
-      for (const file of invoiceEvidenceFiles) {
-        const isImage = file.type.startsWith('image/');
-        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-        if (!isImage && !isPdf) throw new Error(`"${file.name}" no es una imagen ni un PDF.`);
-        if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el límite de 2 MB.`);
-        if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el límite de 10 MB.`);
-        const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: `recepciones/${localDoc.id}` });
-        uploaded.push({ fileName: file.name, fileType: file.type || (isPdf ? 'application/pdf' : 'application/octet-stream'), fileSize: file.size, fileUrl: evidence.uri });
-      }
-
-      const receiptTotals = calculateReceiptTotalsForForm(localDoc.items || []);
-      const calculatedInvoiceTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
-      const linkedOrder = orders.find((order) => String(order.id) === String(localDoc.purchaseOrderId));
-      const receiptCurrency = normalizeReceiptCurrency(localDoc.currency || linkedOrder?.currency);
-      const receiptExchangeRate = Number(localDoc.exchangeRate || linkedOrder?.exchangeRate || 1);
-      const response = await purchaseReceiptsService.registerInvoice(String(localDoc.id), {
-        number,
-        date: invoiceDate || undefined,
-        dueDate: invoiceDueDate || undefined,
-        // El total de la factura se deriva de las cantidades recibidas; las
-        // unidades rechazadas quedan fuera del subtotal y de los impuestos.
-        total: calculatedInvoiceTotal,
-        currency: receiptCurrency,
-        exchangeRate: receiptExchangeRate,
-        attachments: uploaded,
+    const uploaded: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> = [];
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      if (!isImage && !isPdf) throw new Error(`"${file.name}" no es una imagen ni un PDF.`);
+      if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el límite de 2 MB.`);
+      if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el límite de 10 MB.`);
+      const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: `recepciones/${draft.receiptId}` });
+      uploaded.push({
+        fileName: file.name,
+        fileType: file.type || (isPdf ? 'application/pdf' : 'application/octet-stream'),
+        fileSize: file.size,
+        fileUrl: evidence.uri,
       });
-      const invoice = (response as any)?.data || response;
-      setLocalDoc((previous) => previous ? { ...previous, supplierInvoices: invoice ? [invoice] : previous.supplierInvoices } : previous);
-      setInvoiceEvidenceFiles([]);
-      toast.success(linkedInvoice ? 'Evidencia agregada' : 'Factura y evidencia registradas', { id: saveToastId });
-      onRefresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar la evidencia', { id: saveToastId });
-    } finally {
-      setInvoiceSaving(false);
     }
-  };
 
-  const openInvoiceEvidence = async (attachment: any) => {
-    try {
-      const url = await storageService.resolveUrl(attachment.fileUrl);
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo abrir la evidencia.');
-    }
+    const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
+    const calculatedInvoiceTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
+    const receiptCurrency = normalizeReceiptCurrency(receipt.currency || receipt.purchaseOrder?.currency || draft.currency);
+    const receiptExchangeRate = Number(receipt.exchangeRate || receipt.purchaseOrder?.exchangeRate || draft.exchangeRate || 1);
+    const response = await purchaseReceiptsService.registerInvoice(draft.receiptId, {
+      number,
+      date: date || undefined,
+      dueDate: dueDate || undefined,
+      total: calculatedInvoiceTotal,
+      currency: receiptCurrency,
+      exchangeRate: receiptExchangeRate,
+      attachments: uploaded,
+    });
+    onRefresh();
+    void queryClient.invalidateQueries({ queryKey: ['purchases'] });
+    return response;
   };
 
   const handleDeleteItem = (idx: number) => {
@@ -690,7 +726,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
   const currentAvailableOrders = orders.filter(o => o.supplierId === localDoc?.supplierId && ['APPROVED'].includes((o.status||'').toUpperCase()) && !(o.receipts || []).some((receipt: any) => String(receipt.status || '').toUpperCase() === 'PENDING'));
 
-  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} />;
+  const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} />;
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
@@ -740,11 +776,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!isNew && ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus) && (
-              <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4" onClick={() => document.getElementById('receipt-invoice-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                <FilePlus2 className="mr-2 size-3.5" /> {((localDoc as any).supplierInvoices || []).length ? 'Agregar evidencia' : 'Registrar factura'}
-              </Button>
-            )}
             {!isNew && localDoc.id && <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={localDoc.id} title="Historial de la recepción" />}
             {canReceiveCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
@@ -869,80 +900,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             </CardContent>
           </Card>
         </div>
-
-        {!isNew && (
-          <Card id="receipt-invoice-evidence" className="rounded-2xl border-primary/20 bg-primary/[0.03]">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-              <p className="text-xs font-black uppercase tracking-widest text-foreground">Evidencia de factura y cuenta por pagar</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Primero se recibe el inventario. Luego se registra la factura del proveedor con sus imágenes o PDF.</p>
-                </div>
-                {linkedInvoice && (
-                  <Badge variant="outline" className="w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
-                    {String(linkedInvoice.status).toUpperCase() === 'PAID' ? 'Pagada' : `Pendiente: ${formatConvertedAmount(Number(linkedInvoice.balance || 0), linkedInvoice.currency, linkedInvoice.exchangeRate)}`}
-                  </Badge>
-                )}
-                {!linkedInvoice && (
-                  <Badge variant="outline" className="w-fit border-amber-500/40 bg-amber-500/10 text-amber-600">
-                    Siguiente paso: registra la factura y su evidencia para habilitar el pago
-                  </Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-foreground">Número de factura</p>
-                  <Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Ej. A-001-000123" disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
-                </div>
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-foreground">Fecha factura</p>
-                  <Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
-                </div>
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-foreground">Vencimiento</p>
-                  <Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={!!linkedInvoice || invoiceSaving} className="h-9 border-border/70" />
-                </div>
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-foreground">Total factura · calculado ({receiptCurrencyMeta.code})</p>
-                  <Input
-                    type="text"
-                    value={formatReceiptAmount(Math.max(0, financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal), receiptCurrency)}
-                    readOnly
-                    aria-readonly="true"
-                    disabled={invoiceSaving}
-                    className="h-9 border-primary/30 bg-primary/5 font-black text-primary"
-                  />
-                  <p className="mt-1 text-[10px] text-muted-foreground">Subtotal recibido + IVA − retenciones. Lo rechazado no se factura.</p>
-                </div>
-              </div>
-              {linkedInvoice && (linkedInvoice.attachments || []).length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {(linkedInvoice.attachments || []).map((attachment: any) => (
-                    <button key={attachment.id} type="button" onClick={() => void openInvoiceEvidence(attachment)} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
-                      <FileText className="size-3.5 shrink-0" /> <span className="truncate">{attachment.fileName}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <Input type="file" multiple accept="application/pdf,image/*,.pdf" disabled={invoiceSaving} onChange={(event) => setInvoiceEvidenceFiles(Array.from(event.target.files || []))} className="h-10 border-border/70 bg-background text-xs" />
-                  {invoiceEvidenceFiles.length > 0 && <p className="mt-1 truncate text-[10px] text-muted-foreground">Archivos seleccionados: {invoiceEvidenceFiles.map((file) => file.name).join(', ')}</p>}
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  {persistedStatus === 'RECEIVED' && linkedInvoice && Number(linkedInvoice.balance || 0) > 0 && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (
-                    <Button variant="outline" className="h-9 rounded-xl border-emerald-500/40 text-emerald-600" onClick={() => openPaymentModal(localDoc, linkedInvoice)}>
-                      <Banknote className="mr-2 size-3.5" /> Registrar pago
-                    </Button>
-                  )}
-                  <Button onClick={handleRegisterInvoiceEvidence} disabled={invoiceSaving || invoiceEvidenceFiles.length === 0} className="h-9 rounded-xl font-black uppercase text-[10px] tracking-widest">
-                    <Upload className="mr-2 size-3.5" /> {invoiceSaving ? 'Procesando...' : linkedInvoice ? 'Agregar evidencia' : 'Registrar evidencia'}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {(localDoc.items || []).some((it: any) => {
           const qOrd = Number(it.quantityOrdered||0);
@@ -1276,12 +1233,17 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           actions={(row) => {
             const receiptStatus = String(row.status || '').toUpperCase();
             const isReceived = receiptStatus === 'RECEIVED';
-            const payableInvoice = isReceived
+            const activeInvoice = isReceived
               ? (row.supplierInvoices || []).find((invoice: any) =>
-                String(invoice.status || '').toUpperCase() !== 'CANCELLED' && Number(invoice.balance || 0) > 0,
+                String(invoice.status || '').toUpperCase() !== 'CANCELLED',
               )
               : undefined;
+            const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
             const canRegisterPayment = Boolean(payableInvoice)
+              && canPerform('PURCHASES_PAYMENTS', 'create')
+              && canPerform('PURCHASES_PAYMENTS', 'approve');
+            const canRegisterInvoice = !activeInvoice
+              && canPerform('PURCHASES_RECEIPTS', 'edit')
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
             return (
@@ -1290,14 +1252,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 <Button title={receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} aria-label={`${receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
                   <PackageCheck className="size-4" />
                 </Button>
-              ) : isReceived && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') ? (
+              ) : isReceived && (canRegisterPayment || canRegisterInvoice) ? (
                 <Button
-                  title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura para habilitar el pago'}
-                  aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepción'}` : `Registrar factura para habilitar el pago de ${row.number || 'recepción'}`}
+                  title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
+                  aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepción'}` : `Registrar factura y pago de ${row.number || 'recepción'}`}
                   variant="ghost"
                   size="icon"
                   className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10"
-                  onClick={() => canRegisterPayment ? openPaymentModal(row, payableInvoice) : setEditingId(row.id)}
+                  onClick={() => openPaymentModal(row, payableInvoice)}
                 >
                   <Banknote className="size-4" />
                 </Button>
@@ -1320,7 +1282,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       {paymentDialog}
 
       <Dialog open={inventoryCostOperations !== null} onOpenChange={(open) => { if (!open) setInventoryCostOperations(null); }}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-3xl border-primary/20 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(96vw,1400px)] overflow-hidden rounded-3xl border-primary/20 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">
           <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.10] via-background to-emerald-500/[0.06] px-6 py-6 pr-12">
             <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
               <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
@@ -1440,13 +1402,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
-                  {missingWarehouse && (
-                    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-500/35 bg-rose-500/10 px-3 py-2 text-rose-600 dark:text-rose-400">
-                      <AlertTriangle className="size-4 shrink-0" />
-                      <span className="text-[10px] font-black uppercase tracking-wider">Selecciona el almacén de este producto</span>
-                      <span className="text-[10px] font-medium text-rose-600/80 dark:text-rose-300/80">Requerido para recibirlo en inventario.</span>
                     </div>
                   )}
                 </section>
