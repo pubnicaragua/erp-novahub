@@ -685,100 +685,6 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     pagination?.onPageChange(1);
   }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, catalogItemType]);
 
-  const filteredProducts = products.filter((p: any) => {
-    const matchesSearch = !searchTerm || 
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(p.categoryId);
-    const productWarehouseIds = [
-      ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
-      ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
-      ...(Array.isArray(p.allocations) ? p.allocations.map((allocation: any) => allocation.warehouseId || allocation.warehouse?.id) : []),
-    ].filter(Boolean);
-    const matchesWarehouse = warehouseFilters.length === 0
-      || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
-    const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
-    const matchesType = pType === catalogItemType;
-    const stock = Number(p.stock || 0);
-    const pMinStock = Number(p.minStock || 0);
-    const stockThreshold = pMinStock > 0 ? pMinStock : 10;
-    const matchesStock = stockFilter === 'all'
-      || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
-      || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
-      || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
-      || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
-    const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
-      || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
-      || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
-    const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
-      || (availabilityFilter === 'available' && p.isActive !== false)
-      || (availabilityFilter === 'unavailable' && p.isActive === false);
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
-      })
-      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
-
-  const colFilters = useColumnFilters();
-  const filterGetters = {
-    code: (p: any) => p.code || '',
-    name: (p: any) => {
-      const sort = colFilters.state.name?.sort;
-      return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
-    },
-    category: (p: any) => p.category?.name || 'Sin categoría',
-    stock: (p: any) => Number(p.stock || 0),
-  };
-  const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
-  const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
-    .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
-
-  const paginatedProducts = useMemo(() => {
-    if (pagination) return filteredData;
-    const start = (page - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, page, pageSize, pagination]);
-
-  const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
-
-  const inventorySummary = useMemo(() => {
-    const stockProducts = products.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
-    const isLow = (p: any) => {
-      const stock = Number(p.stock || 0);
-      if (stock <= 0) return false;
-      const minStock = Number(p.minStock || 0);
-      return minStock > 0 ? stock <= minStock : stock < 10;
-    };
-    return {
-      total: stockProducts.length,
-      available: stockProducts.filter((p: any) => {
-        if (catalogItemType === 'SERVICE') return true;
-        const stock = Number(p.stock || 0);
-        if (stock <= 0) return false;
-        const minStock = Number(p.minStock || 0);
-        return minStock > 0 ? stock > minStock : stock >= 10;
-      }).length,
-      low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
-      out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => Number(p.stock || 0) <= 0).length,
-    };
-  }, [products, catalogItemType]);
-
-  const serviceSummary = useMemo(() => {
-    const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
-    const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
-    const now = Date.now();
-    const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
-    const prices = services.map((service: any) => Number(service.salePrice ?? service.price ?? 0)).filter((price) => Number.isFinite(price));
-    const createdInLastTwelveWeeks = services.filter((service: any) => {
-      const createdAt = new Date(service.createdAt || service.createdDate || service.created_on || '').getTime();
-      return Number.isFinite(createdAt) && createdAt >= twelveWeeksAgo && createdAt <= now;
-    }).length;
-    return {
-      categories: categories.size,
-      weeklyAverage: createdInLastTwelveWeeks / 12,
-      averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
-    };
-  }, [products]);
-
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
   // las sucursales) muestra el stock total del producto. Prioriza el mapa real
@@ -806,6 +712,105 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     return Number(product.stock || 0);
   };
 
+  const filteredProducts = products.filter((p: any) => {
+    const matchesSearch = !searchTerm || 
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(p.categoryId);
+    const productWarehouseIds = [
+      ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
+      ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
+      ...(Array.isArray(p.allocations) ? p.allocations.map((allocation: any) => allocation.warehouseId || allocation.warehouse?.id) : []),
+    ].filter(Boolean);
+    const matchesWarehouse = warehouseFilters.length === 0
+      || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
+    const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
+    const matchesType = pType === catalogItemType;
+    const stock = getProductStock(p);
+    const pMinStock = Number(p.minStock || 0);
+    const stockThreshold = pMinStock > 0 ? pMinStock : 10;
+    const matchesStock = stockFilter === 'all'
+      || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
+      || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
+      || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
+      || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
+    const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
+      || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
+      || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
+    const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
+      || (availabilityFilter === 'available' && p.isActive !== false)
+      || (availabilityFilter === 'unavailable' && p.isActive === false);
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
+      })
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
+
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    code: (p: any) => p.code || '',
+    name: (p: any) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
+    },
+    category: (p: any) => p.category?.name || 'Sin categoría',
+    stock: (p: any) => getProductStock(p),
+  };
+  const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
+  const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
+
+  const paginatedProducts = useMemo(() => {
+    if (pagination) return filteredData;
+    const start = (page - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, page, pageSize, pagination]);
+
+  const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+
+  const inventorySummary = useMemo(() => {
+    const stockProducts = products.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
+    const isLow = (p: any) => {
+      const stock = getProductStock(p);
+      if (stock <= 0) return false;
+      const minStock = Number(p.minStock || 0);
+      return minStock > 0 ? stock <= minStock : stock < 10;
+    };
+    return {
+      total: stockProducts.length,
+      available: stockProducts.filter((p: any) => {
+        if (catalogItemType === 'SERVICE') return true;
+        const stock = getProductStock(p);
+        if (stock <= 0) return false;
+        const minStock = Number(p.minStock || 0);
+        return minStock > 0 ? stock > minStock : stock >= 10;
+      }).length,
+      low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
+      out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
+    };
+  }, [products, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet]);
+
+  const serviceSummary = useMemo(() => {
+    const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
+    const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
+    const now = Date.now();
+    const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
+    const prices = services.map((service: any) => Number(service.salePrice ?? service.price ?? 0)).filter((price) => Number.isFinite(price));
+    const createdInLastTwelveWeeks = services.filter((service: any) => {
+      const createdAt = new Date(service.createdAt || service.createdDate || service.created_on || '').getTime();
+      return Number.isFinite(createdAt) && createdAt >= twelveWeeksAgo && createdAt <= now;
+    }).length;
+    return {
+      categories: categories.size,
+      weeklyAverage: createdInLastTwelveWeeks / 12,
+      averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
+    };
+  }, [products]);
+
+  // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
+  // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
+  // las sucursales) muestra el stock total del producto. Prioriza el mapa real
+  // de /inventory/stock (fresco tras transferencias) y cae a stockLevels o
+  // product.stock si el listado no trae niveles.
   const getStockStatus = (product: any) => {
     const stock = getProductStock(product);
     if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
