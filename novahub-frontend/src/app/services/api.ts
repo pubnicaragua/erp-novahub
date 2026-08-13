@@ -167,6 +167,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   try {
     response = await fetch(buildUrl(path, params), requestInit);
   } catch (error: any) {
+    // Una petición cancelada no es un error real: el usuario cambió de vista,
+    // la query fue invalidada o el componente se desmontó. Se relanza como un
+    // AbortError identificable para que los consumidores puedan filtrarla
+    // (error.name === 'AbortError') y no se muestre como fallo.
+    if (signal?.aborted || error?.name === 'AbortError') {
+      throw new DOMException('La solicitud fue cancelada', 'AbortError');
+    }
     // A lost connection can happen after the server committed the operation.
     // Retrying with the same key safely replays the original response.
     if (headers['Idempotency-Key']) {

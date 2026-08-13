@@ -30,7 +30,7 @@ export const inventoryService = {
   createWarehouse: (data: Partial<Warehouse>) => api.post<Warehouse>('/inventory/warehouses', data),
   updateWarehouse: (id: string, data: Partial<Warehouse>) => api.patch<Warehouse>(`/inventory/warehouses/${id}`, data),
   deleteWarehouse: (id: string) => api.delete(`/inventory/warehouses/${id}`),
-  autoCreateAccountingLink: (id: string) => api.post<Warehouse>(`/inventory/warehouses/${id}/accounting-link/auto-create`, {}),
+  autoCreateAccountingLink: (id: string, branchId?: string) => api.post<Warehouse>(`/inventory/warehouses/${id}/accounting-link/auto-create`, { branchId }),
 
   // ==================== STOCK LEVELS ====================
   getAllStock: () => api.get<any[]>('/inventory/stock'),

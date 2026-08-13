@@ -191,7 +191,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
         setAccounts((chart as any)?.data || chart || []);
       } catch (error: any) {
-        if (error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
+        if (error?.name !== 'AbortError' && !controller.signal.aborted && error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
           toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
         }
       } finally {
