@@ -1042,10 +1042,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     let uploadedImageUri: string | undefined;
     try {
       if (product.imageFile) {
-        const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
-          folder: product.isNew ? 'catalog' : product.id,
-        });
-        uploadedImageUri = uploaded.uri;
+        try {
+          const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
+            folder: product.isNew ? 'catalog' : product.id,
+          });
+          uploadedImageUri = uploaded.uri;
+        } catch (e) {
+          // Si el almacenamiento falla (p. ej. sin permiso DOCUMENTS), el
+          // producto se guarda igual sin la imagen y se avisa al usuario.
+          console.error('No se pudo subir la imagen del producto:', e);
+          toast.warning('El producto se guardará sin imagen: no se pudo subir la imagen (verifica el permiso de Documentos/almacenamiento).');
+        }
       }
       const nextImageUrl = uploadedImageUri ?? (product.removeImage ? null : product.imageStorageUri);
 

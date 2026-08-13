@@ -72,8 +72,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
     if (user.enabledModules.includes(moduleId)) return true;
-    const hasSpecificSubmodules = user.enabledModules.some(m => m.startsWith('FINANCIAL_'));
-    return user.enabledModules.includes('FINANCIAL') && !hasSpecificSubmodules;
+    // La suscripción al módulo padre (FINANCIAL) habilita todas sus vistas,
+    // incluso con submódulos granulares contratados.
+    return user.enabledModules.includes('FINANCIAL');
   };
 
   const subModuleToTab: Record<string, string> = { 

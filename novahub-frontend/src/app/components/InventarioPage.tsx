@@ -404,8 +404,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           </span>
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
-            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
-            const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
+            // La suscripción al módulo padre (INVENTORY) habilita todas sus
+            // vistas, incluso con submódulos granulares contratados.
+            const hasFallback = user?.enabledModules?.includes('INVENTORY');
             const hasAccess = (!user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback)
               && (section.requiredModules.length === 0 || section.requiredModules.some(mod => canPerform(mod, 'view')));
             if (!hasAccess) return null;
