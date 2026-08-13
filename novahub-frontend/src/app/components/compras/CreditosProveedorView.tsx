@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BadgeDollarSign, Plus, Search, Eye, Pencil, TrendingUp, Hash, Trash2, ChevronLeft, Send, CheckCircle2, Lock, FileText } from 'lucide-react';
+import { BadgeDollarSign, Plus, Search, Eye, Pencil, TrendingUp, Hash, Ban, ChevronLeft, Send, CheckCircle2, Lock, FileText, Trash2, Boxes, Wrench, FileSpreadsheet, Upload, Download, Percent } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -21,8 +21,23 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import * as XLSX from 'xlsx';
 
-interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  PARTIAL: 'Parcial',
+  PAID: 'Pagada',
+  OVERDUE: 'Vencida',
+  REFUNDED: 'Reembolsada',
+  CANCELLED: 'Anulada',
+  ISSUED: 'Emitida',
+  OPEN: 'Abierta',
+  RECEIVED: 'Recibida',
+  APPROVED: 'Aprobada',
+};
+const invoiceStatusLabel = (value?: string) => INVOICE_STATUS_LABELS[String(value || '').toUpperCase()] || String(value || '') || '';
 
 const statusOpts = [
   { label: 'Borrador',  value: 'draft',   color: 'bg-muted/20 text-muted-foreground' },
@@ -41,7 +56,7 @@ const PAYMENT_METHOD_OPTIONS = [
   { label: 'Otro', value: 'OTHER' },
 ];
 
-export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], pagination, onSearchChange }: Props) {
+export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
   const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,15 +67,156 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingVoidId, setPendingVoidId] = useState<string | null>(null);
+  const [voidLoading, setVoidLoading] = useState(false);
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
   const [issueLoading, setIssueLoading] = useState(false);
   const [applyTarget, setApplyTarget] = useState<SupplierCredit | null>(null);
   const [applyMethod, setApplyMethod] = useState<string>('CASH');
   const [applyLoading, setApplyLoading] = useState(false);
+  const [itemTypeFilter, setItemTypeFilter] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
+
+  const downloadCreditTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['TIPO', 'PRODUCTO', 'DESCRIPCION', 'CANTIDAD', 'PRECIO'],
+      ['PRODUCTO', 'Código o nombre exacto', 'Cemento Holcim 50kg', '25', '210'],
+      ['SERVICIO', '', 'Flete de entrega', '1', '1500'],
+    ]);
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['PLANTILLA DE CRÉDITO DE PROVEEDOR - REGLAS POR COLUMNA'],
+      [''],
+      ['TIPO (obligatorio)'],
+      ['  PRODUCTO  -> Se vincula al inventario. En la columna PRODUCTO escriba el código o nombre exacto.'],
+      ['  SERVICIO  -> No usa inventario. Deje PRODUCTO vacío y escriba la descripción.'],
+      [''],
+      ['PRODUCTO (obligatorio solo si TIPO = PRODUCTO)'],
+      ['  Código o nombre exacto del artículo en el inventario. Si no coincide, la línea se marca con error.'],
+      [''],
+      ['DESCRIPCION (obligatorio)'],
+      ['  Detalle de la línea. Para PRODUCTO se puede dejar vacío: se toma el nombre del inventario.'],
+      ['  Para SERVICIO es obligatorio escribir la descripción del servicio.'],
+      [''],
+      ['CANTIDAD (obligatorio, mayor a 0)'],
+      ['  Número de unidades. Ejemplo: 25'],
+      [''],
+      ['PRECIO (obligatorio, mayor o igual a 0)'],
+      ['  Precio unitario en la moneda del crédito (C$ o USD). Ejemplo: 210'],
+      [''],
+      ['EJEMPLOS'],
+      ['TIPO=PRODUCTO | PRODUCTO=HOLCIM | DESCRIPCION= | CANTIDAD=25 | PRECIO=210'],
+      ['TIPO=SERVICIO | PRODUCTO= | DESCRIPCION=Flete de entrega | CANTIDAD=1 | PRECIO=1500'],
+      [''],
+      ['NOTA: IVA, retención IR y descuento se configuran en el formulario del crédito, no en el archivo.'],
+      ['El archivo puede ser .xlsx, .xls, .csv o .pdf con estas mismas columnas.'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Crédito');
+    XLSX.utils.book_append_sheet(wb, guide, 'Reglas de llenado');
+    XLSX.writeFile(wb, 'plantilla_creditos_proveedor.xlsx');
+    toast.success('Plantilla descargada');
+  };
+
+  const importCreditItems = async (file: File) => {
+    setImporting(true);
+    setImportErrors([]);
+    try {
+      const isPdf = /\.pdf$/i.test(file.name);
+      const isXls = /\.(xlsx|xls|csv)$/i.test(file.name);
+      if (!isPdf && !isXls) {
+        setImportErrors(['Formato no soportado. Use un archivo Excel (.xlsx, .xls, .csv) o PDF.']);
+        return;
+      }
+
+      let raw: any[][] = [];
+      if (isPdf) {
+        const buffer = await file.arrayBuffer();
+        const text = new TextDecoder('latin1').decode(buffer);
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        raw = lines.map(line => line.split(/[\t;|]+/).map(c => c.trim()));
+      } else {
+        const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+      }
+
+      const normalizeHeader = (h: any) => String(h || '').trim().toLowerCase().replace(/[\s_\-]+/g, '');
+      const header = raw[0]?.map(normalizeHeader) || [];
+      const findCol = (...names: string[]) => {
+        for (const n of names) {
+          const idx = header.indexOf(n);
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+      const iTipo = findCol('tipo');
+      const iProd = findCol('producto', 'productoid');
+      const iDesc = findCol('descripcion', 'descripción');
+      const iCant = findCol('cantidad', 'cant');
+      const iPrecio = findCol('precio', 'preciounitario', 'preciou');
+
+      if (iDesc < 0 || iCant < 0 || iPrecio < 0) {
+        setImportErrors(['El archivo debe tener las columnas: TIPO, PRODUCTO, DESCRIPCION, CANTIDAD, PRECIO. Descargue la plantilla para ver el formato.']);
+        return;
+      }
+
+      const errors: string[] = [];
+      const items: any[] = [];
+      raw.slice(1).forEach((row, r) => {
+        const line = r + 2;
+        const tipo = String(row[iTipo >= 0 ? iTipo : 0] || 'PRODUCTO').trim().toUpperCase();
+        const rawProd = iProd >= 0 ? String(row[iProd] || '').trim() : '';
+        const desc = String(row[iDesc] || '').trim();
+        const cant = Number(row[iCant]);
+        const precio = Number(row[iPrecio]);
+
+        const tipoNorm = tipo.startsWith('PROD') ? 'PRODUCT' : tipo.startsWith('SERV') ? 'SERVICE' : '';
+        if (!tipoNorm) { errors.push(`Fila ${line}: TIPO inválido ("${tipo}"). Use PRODUCTO o SERVICIO.`); return; }
+        if (tipoNorm === 'PRODUCT' && !rawProd) { errors.push(`Fila ${line}: TIPO=PRODUCTO requiere la columna PRODUCTO (código o nombre).`); return; }
+        if (tipoNorm === 'SERVICE' && !desc) { errors.push(`Fila ${line}: TIPO=SERVICIO requiere la descripción.`); return; }
+        if (!(cant > 0)) { errors.push(`Fila ${line}: CANTIDAD inválida ("${row[iCant]}"). Debe ser mayor a 0.`); return; }
+        if (!(precio >= 0)) { errors.push(`Fila ${line}: PRECIO inválido ("${row[iPrecio]}"). Debe ser mayor o igual a 0.`); return; }
+
+        const matched = tipoNorm === 'PRODUCT' ? productCatalog.find((p: any) =>
+          String(p.code || '').toLowerCase() === rawProd.toLowerCase() ||
+          String(p.name || '').toLowerCase() === rawProd.toLowerCase()) : undefined;
+        if (tipoNorm === 'PRODUCT' && !matched) {
+          errors.push(`Fila ${line}: el producto "${rawProd}" no existe en el inventario.`);
+          return;
+        }
+
+        items.push({
+          itemType: tipoNorm,
+          productId: matched?.id || null,
+          description: matched ? matched.name : desc,
+          quantity: cant,
+          unitPrice: precio,
+          total: cant * precio,
+        });
+      });
+
+      if (errors.length > 0) {
+        setImportErrors(errors.slice(0, 10));
+        if (items.length === 0) return;
+      }
+      if (items.length === 0) {
+        setImportErrors(['No se encontraron líneas válidas en el archivo.']);
+        return;
+      }
+      const existing = localDoc?.items || [];
+      setLocalDoc({ ...(localDoc as any), items: [...existing, ...items] });
+      toast.success(`${items.length} línea(s) importada(s)` + (errors.length ? `, ${errors.length} con error` : ''));
+      setImportOpen(false);
+    } catch (e: any) {
+      setImportErrors([e?.message || 'No se pudo leer el archivo. Verifique que sea un Excel o PDF válido.']);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const openEditor = (id: string | null) => {
     setEditingId(id);
@@ -68,6 +224,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       setLocalDoc({
         supplierId: '',
         date: new Date().toISOString(),
+        dueDate: null,
+        interestRate: 0,
+        hasInterest: false,
         reason: '',
         status: 'draft',
         items: [],
@@ -93,7 +252,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
 
   const columns: ColumnDef<SupplierCredit>[] = [
-    { key: 'number',   header: 'Nota #',     width: '110px',
+    { key: 'number',   header: 'Crédito #',  width: '110px',
       render: (_v, row) => <span className="font-black font-mono text-primary text-xs">{row.number||row.id?.slice(0,8)}</span> },
     { key: 'supplier', header: 'Proveedor',  width: '160px',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
@@ -146,6 +305,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   };
 
   const recalculatedTotal = (localDoc?.items || []).reduce((acc, it) => acc + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
+  const creditSubtotal = recalculatedTotal;
+  const creditDiscountRate = Number(localDoc?.discountRate || 0);
+  const creditDiscountAmount = creditSubtotal * creditDiscountRate / 100;
+  const creditTaxBase = Math.max(0, creditSubtotal - creditDiscountAmount);
+  const isGravado = String(localDoc?.taxType || 'EXENTO').toUpperCase() === 'GRAVADO';
+  const creditTaxRate = isGravado ? Number(localDoc?.taxRate || 15) : 0;
+  const creditTaxAmount = creditTaxBase * creditTaxRate / 100;
+  const hasWithholding = String(localDoc?.withholdingType || 'NONE').toUpperCase() !== 'NONE';
+  const creditWithholdingRate = hasWithholding ? Number(localDoc?.withholdingRate || 0) : 0;
+  const creditWithholdingTotal = creditTaxBase * creditWithholdingRate / 100;
+  const creditGrandTotal = Math.max(0, creditTaxBase + creditTaxAmount - creditWithholdingTotal);
   
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
@@ -153,15 +323,25 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando crédito de proveedor...' : 'Guardando crédito de proveedor...');
     try {
       const creditCurrency = localDoc.currency || displayCurrency;
-      const creditRate = creditCurrency === baseCurrency
-        ? 1
-        : (Number(localDoc.exchangeRate || 0) > 1 ? Number(localDoc.exchangeRate) : exchangeRate);
+      const creditRate = creditCurrency === baseCurrency ? 1 : (Number(exchangeRate) > 0 ? Number(exchangeRate) : 1);
       const finalDoc = {
           ...localDoc,
-          total: recalculatedTotal,
+          total: creditGrandTotal,
+          subtotal: creditSubtotal,
+          discountRate: creditDiscountRate,
+          discountAmount: creditDiscountAmount,
+          taxType: isGravado ? 'GRAVADO' : 'EXENTO',
+          taxRate: isGravado ? creditTaxRate : 0,
+          taxAmount: creditTaxAmount,
+          withholdingType: hasWithholding ? (localDoc.withholdingType || 'IR_2') : 'NONE',
+          withholdingRate: hasWithholding ? creditWithholdingRate : 0,
+          withholdingTotal: creditWithholdingTotal,
           currency: creditCurrency,
           exchangeRate: creditRate,
-          baseTotal: toBaseAmount(recalculatedTotal, creditCurrency, creditRate),
+          baseTotal: toBaseAmount(creditGrandTotal, creditCurrency, creditRate),
+          dueDate: localDoc.dueDate ? new Date(localDoc.dueDate).toISOString() : null,
+          interestRate: Number(localDoc.interestRate ?? 0),
+          hasInterest: Boolean(localDoc.hasInterest) || Number(localDoc.interestRate ?? 0) > 0,
           status: editingId === 'NEW' ? 'draft' : (localDoc.status || 'draft'),
       };
       if (editingId === 'NEW') {
@@ -178,20 +358,20 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!pendingDeleteId) return;
-    setDeleteLoading(true);
-    const deleteToastId = toast.loading('Eliminando crédito de proveedor...');
+  const handleVoidConfirm = async () => {
+    if (!pendingVoidId) return;
+    setVoidLoading(true);
+    const voidToastId = toast.loading('Anulando crédito de proveedor...');
     try {
-      await vendorCreditsService.delete(pendingDeleteId);
-      toast.success('Crédito eliminado exitosamente', { id: deleteToastId });
-      setPendingDeleteId(null);
+      await vendorCreditsService.void(pendingVoidId);
+      toast.success('Crédito anulado correctamente', { id: voidToastId });
+      setPendingVoidId(null);
       openEditor(null);
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error al eliminar', { id: deleteToastId });
+      toast.error(error?.response?.data?.message || 'Error al anular el crédito', { id: voidToastId });
     } finally {
-      setDeleteLoading(false);
+      setVoidLoading(false);
     }
   };
 
@@ -215,6 +395,23 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     setLocalDoc({ ...localDoc, items: newItems as any });
   };
 
+  const handleItemProductPick = (idx: number, productId: string) => {
+    if (!localDoc) return;
+    const p = productCatalog.find((x: any) => x.id === productId);
+    const price = [p?.lastPurchasePrice, p?.costPrice, p?.cost, p?.price, p?.salePrice]
+      .map((v) => Number(v))
+      .find((v) => Number.isFinite(v) && v > 0) ?? 0;
+    const newItems = [...(localDoc.items || [])];
+    newItems[idx] = {
+      ...newItems[idx],
+      productId: productId || null,
+      description: p?.name || newItems[idx].description || '',
+      unitPrice: price,
+      total: Number(newItems[idx].quantity || 0) * price,
+    };
+    setLocalDoc({ ...localDoc, items: newItems as any });
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toLowerCase());
@@ -223,7 +420,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const invoiceOptions = supplierInvoices
       .filter(inv => !localDoc.supplierId || inv.supplierId === localDoc.supplierId)
       .filter(inv => String(inv.status || '').toUpperCase() !== 'CANCELLED')
-      .map(inv => ({ label: `${inv.number} · ${inv.status || ''}`, value: inv.id, description: `${new Date(inv.date || Date.now()).toLocaleDateString()} · ${formatConvertedAmount(Number(inv.total || 0), resolveSourceCurrency((inv as any)?.currency), (inv as any)?.exchangeRate)}` }));
+      .map(inv => ({ label: `${inv.number} · ${invoiceStatusLabel(inv.status)}`, value: inv.id, description: `${new Date(inv.date || Date.now()).toLocaleDateString()} · ${formatConvertedAmount(Number(inv.total || 0), resolveSourceCurrency((inv as any)?.currency), (inv as any)?.exchangeRate)}` }));
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -233,15 +430,15 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Nota de Crédito' : `Nota ${localDoc.number || 'de Crédito'}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor de proveedores</p>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nuevo Crédito de Proveedor' : `Crédito ${localDoc.number || ''}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Crédito otorgado por el proveedor a favor de la empresa</p>
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
              {!isNew && canPerform('PURCHASES_RETURNS', 'delete') && !isLocked && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
+                  onClick={() => setPendingVoidId(editingId)}>
+                  <Ban className="size-3 mr-2" /> Anular
                 </Button>
              )}
             {isLocked && (
@@ -251,7 +448,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             )}
             {((isNew && canPerform('PURCHASES_RETURNS', 'create')) || (!isNew && canPerform('PURCHASES_RETURNS', 'edit'))) && !isLocked && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Nota
+                Guardar Crédito
               </Button>
             )}
           </div>
@@ -298,8 +495,41 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Borrador'}</Badge></div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Fecha Límite</p>
+                  <Input 
+                    disabled={!canMutate}
+                    type="date" 
+                    value={localDoc.dueDate ? new Date(localDoc.dueDate).toISOString().split('T')[0] : ''} 
+                    onChange={(e) => setLocalDoc({ ...localDoc, dueDate: e.target.value ? new Date(e.target.value).toISOString() : null })} 
+                    className="h-8 text-xs" 
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">¿Genera intereses?</p>
+                  <div className="flex h-8 items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!canMutate}
+                      onClick={() => setLocalDoc({ ...localDoc, hasInterest: !localDoc.hasInterest, interestRate: !localDoc.hasInterest ? (localDoc.interestRate || 0) : 0 })}
+                      className={cn('flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        localDoc.hasInterest ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : 'border-border/50 bg-background text-muted-foreground')}
+                    >
+                      <Percent className="size-3" /> {localDoc.hasInterest ? 'Sí' : 'No'}
+                    </button>
+                    {localDoc.hasInterest && (
+                      <Input
+                        disabled={!canMutate}
+                        type="number" min="0" step="0.01"
+                        value={localDoc.interestRate || 0}
+                        onChange={(e) => setLocalDoc({ ...localDoc, interestRate: Number(e.target.value) })}
+                        className="h-8 w-24 text-xs font-bold tabular-nums"
+                        placeholder="% mensual"
+                      />
+                    )}
+                  </div>
+                  {localDoc.hasInterest && (
+                    <p className="mt-1 text-[10px] text-muted-foreground/70">Interés {localDoc.interestRate || 0}% por período vencido</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
@@ -311,22 +541,20 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                       setLocalDoc({
                         ...localDoc,
                         currency: newCurrency as any,
-                        exchangeRate: newCurrency === 'NIO' ? 1 : (localDoc.exchangeRate || 1),
+                        exchangeRate: newCurrency === 'NIO' ? 1 : (Number(exchangeRate) > 0 ? Number(exchangeRate) : 1),
                       });
                     }}
                     className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     <option value="NIO">C$ (NIO)</option>
                     <option value="USD">$ (USD)</option>
                   </select>
+                  {localDoc.currency && localDoc.currency !== baseCurrency && (
+                    <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa global: {Number(exchangeRate) > 0 ? exchangeRate : '—'}</p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">T.C.</p>
-                  <Input
-                    disabled={!canMutate || localDoc.currency === 'NIO'}
-                    type="number" min="0" step="0.01"
-                    value={localDoc.exchangeRate || 1}
-                    onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
-                    className="h-8 text-xs font-bold tabular-nums" />
+                  <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
+                  <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Borrador'}</Badge></div>
                 </div>
                 <div className="md:col-span-4">
                   <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
@@ -344,35 +572,156 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Impuestos y descuentos</p>
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">IVA</p>
+                  <select
+                    disabled={!canMutate}
+                    value={String(localDoc.taxType || 'EXENTO').toUpperCase()}
+                    onChange={(e) => {
+                      const gravado = e.target.value === 'GRAVADO';
+                      setLocalDoc({ ...localDoc, taxType: gravado ? 'GRAVADO' : 'EXENTO', taxRate: gravado ? (Number(localDoc.taxRate) || 15) : 0 });
+                    }}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                    <option value="EXENTO">Exento</option>
+                    <option value="GRAVADO">Gravado</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Tasa IVA (%)</p>
+                  <Input
+                    disabled={!canMutate || String(localDoc.taxType || 'EXENTO').toUpperCase() !== 'GRAVADO'}
+                    type="number" min="0" step="0.01"
+                    value={String(localDoc.taxType || 'EXENTO').toUpperCase() === 'GRAVADO' ? (localDoc.taxRate || 15) : 0}
+                    onChange={(e) => setLocalDoc({ ...localDoc, taxRate: Number(e.target.value) })}
+                    className="h-8 text-xs font-bold tabular-nums" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Retención IR</p>
+                  <div className="flex h-8 items-center gap-2">
+                    <select
+                      disabled={!canMutate}
+                      value={String(localDoc.withholdingType || 'NONE').toUpperCase()}
+                      onChange={(e) => {
+                        const withRetention = e.target.value !== 'NONE';
+                        setLocalDoc({
+                          ...localDoc,
+                          withholdingType: withRetention ? e.target.value : 'NONE',
+                          withholdingRate: withRetention ? (Number(localDoc.withholdingRate) || Number(e.target.value.split('_')[1] || 2)) : 0,
+                        });
+                      }}
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                      <option value="NONE">Sin retención</option>
+                      <option value="IR_1">IR 1%</option>
+                      <option value="IR_2">IR 2%</option>
+                      <option value="IR_5">IR 5%</option>
+                      <option value="IR_10">IR 10%</option>
+                      <option value="IR_15">IR 15%</option>
+                      <option value="IR_20">IR 20%</option>
+                      <option value="IR_25">IR 25%</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Tasa IR (%)</p>
+                  <Input
+                    disabled={!canMutate || String(localDoc.withholdingType || 'NONE').toUpperCase() === 'NONE'}
+                    type="number" min="0" step="0.01"
+                    value={String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0}
+                    onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: Number(e.target.value) })}
+                    className="h-8 text-xs font-bold tabular-nums" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Descuento (%)</p>
+                  <Input
+                    disabled={!canMutate}
+                    type="number" min="0" step="0.01"
+                    value={localDoc.discountRate || 0}
+                    onChange={(e) => setLocalDoc({ ...localDoc, discountRate: Number(e.target.value) })}
+                    className="h-8 text-xs font-bold tabular-nums" />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-border/50 bg-muted/10 p-3 text-xs">
+                    <span className="text-muted-foreground">Subtotal</span><b className="text-right tabular-nums">{formatConvertedAmount(creditSubtotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</b>
+                    <span className="text-muted-foreground">Descuento ({creditDiscountRate}%)</span><b className="text-right tabular-nums text-rose-500">− {formatConvertedAmount(creditDiscountAmount, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</b>
+                    <span className="text-muted-foreground">IVA ({isGravado ? creditTaxRate + '%' : 'Exento'})</span><b className="text-right tabular-nums text-blue-500">+ {formatConvertedAmount(creditTaxAmount, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</b>
+                    <span className="text-muted-foreground">Retención IR ({hasWithholding ? creditWithholdingRate + '%' : '—'})</span><b className="text-right tabular-nums text-amber-500">− {formatConvertedAmount(creditWithholdingTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</b>
+                    <span className="pt-1 font-black uppercase text-[10px] tracking-widest">Total</span><b className="pt-1 text-right text-sm text-primary tabular-nums">{formatConvertedAmount(creditGrandTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</b>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-border/50 col-span-2">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
-                {canMutate && (
-                  <Button variant="outline" size="sm" onClick={() => {
-                    const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, total: 0 }];
-                    setLocalDoc({ ...localDoc, items: newItems as any });
-                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
-                    <Plus className="size-3 mr-2" /> Agregar Item
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {canMutate && (
+                    <>
+                      <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/60 p-1">
+                        <button type="button" onClick={() => setItemTypeFilter('PRODUCT')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'PRODUCT' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Boxes className="size-3" /> Producto</button>
+                        <button type="button" onClick={() => setItemTypeFilter('SERVICE')} className={cn('flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-widest transition-colors', itemTypeFilter === 'SERVICE' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}><Wrench className="size-3" /> Servicio</button>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                        <Upload className="size-3 mr-1.5" /> Importar
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={downloadCreditTemplate} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                        <FileSpreadsheet className="size-3 mr-1.5" /> Plantilla
+                      </Button>
+                    </>
+                  )}
+                  {canMutate && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const newItems = [...(localDoc.items || []), { id: `new-${Date.now()}`, itemType: itemTypeFilter, productId: null, description: '', quantity: 1, unitPrice: 0, total: 0 }];
+                      setLocalDoc({ ...localDoc, items: newItems as any });
+                    }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                      <Plus className="size-3 mr-2" /> Agregar {itemTypeFilter === 'PRODUCT' ? 'Producto' : 'Servicio'}
+                    </Button>
+                  )}
+                </div>
               </div>
               
               <div className="space-y-2">
                 <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
-                  <div className="col-span-5">Descripción</div>
+                  <div className="col-span-1">Tipo</div>
+                  <div className="col-span-4">Descripción / Item</div>
                   <div className="col-span-2 text-right">Cant.</div>
-                  <div className="col-span-3 text-right">Precio Unitario</div>
+                  <div className="col-span-2 text-right">Precio Unitario</div>
                   <div className="col-span-2 text-right">Total</div>
+                  <div className="col-span-1" />
                 </div>
                 {(localDoc.items || []).map((item: any, idx: number) => (
                   <div key={item.id || idx} data-item-layout="credit" className="purchase-item-row grid min-w-0 grid-cols-12 gap-2 items-center">
-                    <div className="col-span-5">
-                      <Input 
+                    <div className="col-span-1">
+                      <select
                         disabled={!canMutate}
-                        value={item.description || ''} 
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
-                        className="h-8 text-xs" 
-                        placeholder="Concepto" 
-                      />
+                        value={item.itemType || 'PRODUCT'}
+                        onChange={(e) => handleItemChange(idx, 'itemType', e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[9px] font-black uppercase">
+                        <option value="PRODUCT">Prod.</option>
+                        <option value="SERVICE">Serv.</option>
+                      </select>
+                    </div>
+                    <div className="col-span-4">
+                      {canMutate && String(item.itemType || 'PRODUCT') === 'PRODUCT' ? (
+                        <Combobox
+                          options={productCatalog.map((p: any) => ({ label: `${p.code || ''} - ${p.name || ''}`.trim(), value: p.id, description: p.category?.name || p.productType || '' }))}
+                          value={item.productId || ''}
+                          onChange={(val) => handleItemProductPick(idx, val)}
+                          placeholder="Buscar en inventario..."
+                        />
+                      ) : (
+                        <Input 
+                          disabled={!canMutate}
+                          value={item.description || ''} 
+                          onChange={(e) => handleItemChange(idx, 'description', e.target.value)} 
+                          className="h-8 text-xs" 
+                          placeholder={String(item.itemType || '') === 'SERVICE' ? 'Descripción del servicio' : 'Descripción del producto'}
+                        />
+                      )}
                     </div>
                     <div className="col-span-2">
                       <Input 
@@ -385,7 +734,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                         placeholder="0" 
                       />
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-2">
                       <Input 
                         disabled={!canMutate}
                         type="number" 
@@ -398,6 +747,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                     </div>
                     <div className="col-span-2 flex items-center justify-end gap-2">
                       <span className="text-xs font-black w-20 text-right tabular-nums">{formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
                       {canMutate && (
                         <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 rounded-md" onClick={() => handleDeleteItem(idx)}>
                           <Trash2 className="size-3" />
@@ -406,16 +757,73 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                     </div>
                   </div>
                 ))}
+                {(localDoc.items || []).length === 0 && (
+                  <div className="rounded-xl border border-dashed border-border/60 p-6 text-center text-xs text-muted-foreground">
+                    Sin líneas. Use <b>Agregar</b> para registrar un producto o servicio, o <b>Importar</b> un Excel/PDF con las columnas esperadas.
+                  </div>
+                )}
               </div>
               
                <div className="flex justify-end mt-4">
-                  <div className="w-64 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
-                     <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">{formatConvertedAmount(recalculatedTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                  <div className="w-72 space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
+                     {creditDiscountAmount > 0 && (
+                       <div className="flex justify-between text-xs text-muted-foreground"><span className="uppercase text-[10px] tracking-widest">Descuento</span><span className="text-rose-500">− {formatConvertedAmount(creditDiscountAmount, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                     )}
+                     {creditTaxAmount > 0 && (
+                       <div className="flex justify-between text-xs text-muted-foreground"><span className="uppercase text-[10px] tracking-widest">IVA ({creditTaxRate}%)</span><span className="text-blue-500">+ {formatConvertedAmount(creditTaxAmount, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                     )}
+                     {creditWithholdingTotal > 0 && (
+                       <div className="flex justify-between text-xs text-muted-foreground"><span className="uppercase text-[10px] tracking-widest">Retención IR</span><span className="text-amber-500">− {formatConvertedAmount(creditWithholdingTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                     )}
+                     {localDoc.hasInterest && Number(localDoc.interestRate) > 0 && (
+                       <div className="flex justify-between text-xs text-muted-foreground"><span className="uppercase text-[10px] tracking-widest">Interés ({localDoc.interestRate}%)</span><span>{formatConvertedAmount(creditGrandTotal * Number(localDoc.interestRate) / 100, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
+                     )}
+                     <div className="flex justify-between pt-2 border-t font-black"><span className="uppercase text-[10px] tracking-widest">Total</span><span className="text-lg text-primary">{formatConvertedAmount(creditGrandTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}</span></div>
                   </div>
                </div>
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar líneas del crédito</DialogTitle>
+              <DialogDescription>
+                Sube un Excel (.xlsx, .xls, .csv) o PDF con las columnas: <b>TIPO, PRODUCTO, DESCRIPCION, CANTIDAD, PRECIO</b>. Descarga la plantilla para ver las reglas por columna.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Button variant="outline" className="w-full rounded-xl text-[10px] font-black uppercase tracking-widest gap-2" onClick={downloadCreditTemplate}>
+                <Download className="size-4" /> Descargar plantilla Excel
+              </Button>
+              <label className="flex h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 text-xs text-muted-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors">
+                <FileSpreadsheet className="size-8 text-muted-foreground/40" />
+                <span className="font-bold">Seleccionar archivo</span>
+                <span className="text-[10px]">.xlsx · .xls · .csv · .pdf</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    await importCreditItems(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {importErrors.length > 0 && (
+                <div className="max-h-40 overflow-auto rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] text-rose-600 space-y-1">
+                  {importErrors.map((err, i) => <p key={i}>{err}</p>)}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </div>
     );
@@ -479,7 +887,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               )}
               <PurchaseAuditButton entity="SUPPLIER_CREDIT" entityId={row.id} title="Auditoria del Credito" />
               {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular crédito (lo marca como anulado sin borrarlo)" aria-label="Anular crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingVoidId(row.id)}><Ban className="size-4" /></Button>
               )}
             </div>
           );
@@ -535,12 +943,13 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       </Dialog>
 
       <ConfirmDialog
-        open={!!pendingDeleteId}
-        onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        loading={deleteLoading}
-        title="Eliminar Crédito"
-        description="¿Estás seguro de eliminar esta nota de crédito? Esta acción no se puede deshacer y los montos a favor del proveedor serán revertidos."
-        onConfirm={handleDeleteConfirm}
+        open={pendingVoidId !== null}
+        onOpenChange={(open) => !open && setPendingVoidId(null)}
+        loading={voidLoading}
+        title="Anular Crédito de Proveedor"
+        description="El crédito quedará marcado como ANULADO y se devolverá el saldo a la factura vinculada (si la tiene). Esta acción no se puede deshacer."
+        confirmLabel="Anular crédito"
+        onConfirm={handleVoidConfirm}
       />
     </div>
   );

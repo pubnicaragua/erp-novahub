@@ -72,11 +72,16 @@ const fieldLabel = (value?: string) => ({
 } as Record<string, string>)[String(value || '')] || value || 'Cambio';
 
 const changeValueLabel = (field?: string, value?: string) => {
-  if (!value) return 'Vacío';
+  if (!value || value === 'null' || value === '') return 'Vacío';
   if (field === 'employmentStatus') return statusLabel(value);
   if (field === 'approvalStatus') return approvalLabel(value);
   if (field === 'payFrequency') return payFrequencyLabel(value);
   if (field === 'contractType') return contractLabel(value);
+  if (field === 'salary') {
+    const amount = Number(value);
+    if (!Number.isNaN(amount)) return `C$ ${amount.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`;
+  }
+  if (field === 'isSeller') return value === 'true' ? 'Sí' : value === 'false' ? 'No' : value;
   return value;
 };
 

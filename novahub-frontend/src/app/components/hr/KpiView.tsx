@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -7,7 +7,6 @@ import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -24,8 +23,19 @@ interface KpiViewProps {
   onRefresh?: () => void;
 }
 
-const PERIOD_TYPES = ['MONTHLY', 'QUARTERLY', 'SEMESTRAL', 'YEARLY'];
-const ASSIGN_TYPES = ['INDIVIDUAL', 'DEPARTMENT', 'ALL'];
+const PERIOD_TYPES = [
+  { value: 'MONTHLY', label: 'Mensual' },
+  { value: 'QUARTERLY', label: 'Trimestral' },
+  { value: 'SEMESTRAL', label: 'Semestral' },
+  { value: 'YEARLY', label: 'Anual' },
+];
+const PERIOD_LABELS: Record<string, string> = { MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', SEMESTRAL: 'Semestral', YEARLY: 'Anual' };
+const ASSIGN_TYPES = [
+  { value: 'INDIVIDUAL', label: 'Individual' },
+  { value: 'DEPARTMENT', label: 'Departamento' },
+  { value: 'ALL', label: 'Toda la empresa' },
+];
+const ASSIGN_LABELS: Record<string, string> = { INDIVIDUAL: 'Individual', DEPARTMENT: 'Departamento', ALL: 'Toda la empresa' };
 
 const defaultKpiDef = () => ({
   name: '',
@@ -196,7 +206,7 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                       <Select value={defForm.periodType} onValueChange={v => setDefForm({ ...defForm, periodType: v })}>
                         <SelectTrigger className="rounded-xl h-11"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {PERIOD_TYPES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                          {PERIOD_TYPES.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -205,7 +215,7 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                       <Select value={defForm.assignToType} onValueChange={v => setDefForm({ ...defForm, assignToType: v })}>
                         <SelectTrigger className="rounded-xl h-11"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {ASSIGN_TYPES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                          {ASSIGN_TYPES.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -273,10 +283,10 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                           {d.description && <p className="text-xs text-muted-foreground mt-1">{d.description}</p>}
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <Calendar className="size-3" /> {d.periodType}
+                              <Calendar className="size-3" /> {PERIOD_LABELS[d.periodType] || d.periodType}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Users className="size-3" /> {d.assignToType}
+                              <Users className="size-3" /> {ASSIGN_LABELS[d.assignToType] || d.assignToType}
                             </span>
                             <span className="flex items-center gap-1">
                               <Target className="size-3" /> Meta: <strong className="text-foreground">{d.target ?? '—'}</strong>
@@ -287,11 +297,33 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                           </div>
                         </div>
                       </div>
-                      {canPerform('HR_PERFORMANCE', 'edit') && (
-                        <Button size="sm" variant="outline" onClick={() => openEditDef(d)} className="rounded-xl h-9 text-xs font-bold shrink-0">
-                          <Edit3 className="size-3 mr-1" /> Editar
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {canPerform('HR_PERFORMANCE', 'edit') && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => openEditDef(d)} className="rounded-xl h-9 text-xs font-bold">
+                              <Edit3 className="size-3 mr-1" /> Editar
+                            </Button>
+                            <button
+                              title={d.isActive ? 'Desactivar' : 'Activar'}
+                              onClick={async () => {
+                                try {
+                                  await hrService.updateKpiDefinition(d.id, { isActive: !d.isActive });
+                                  toast.success(d.isActive ? 'KPI desactivado' : 'KPI activado');
+                                  fetchAll();
+                                } catch (e: any) {
+                                  toast.error(e?.response?.data?.message || 'Error al cambiar estado');
+                                }
+                              }}
+                              className={cn(
+                                "size-9 rounded-xl border flex items-center justify-center transition-all",
+                                d.isActive ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/20" : "bg-muted border-border text-muted-foreground hover:bg-muted/60",
+                              )}
+                            >
+                              <Check className="size-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -402,6 +434,7 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                     <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold">Definición</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold">Período</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold">Cumplimiento</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold">Meta</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold">Real</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold">Evaluador</th>
@@ -425,6 +458,19 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                         <td className="px-4 py-3 text-sm">
                           {r.periodStart ? new Date(r.periodStart).toLocaleDateString() : ''} - {r.periodEnd ? new Date(r.periodEnd).toLocaleDateString() : ''}
                         </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 min-w-[110px]">
+                            <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-red-500')}
+                                style={{ width: `${Math.min(pct, 100)}%` }}
+                              />
+                            </div>
+                            <span className={cn('text-[10px] font-black', pct >= 100 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-red-600')}>
+                              {pct}%
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-center text-sm font-medium">{r.target ?? r.kpiDefinition?.target ?? '—'}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={cn(
@@ -433,7 +479,7 @@ export function KpiView({ employees = [], onRefresh }: KpiViewProps) {
                           )}>
                             {r.actual}
                           </span>
-                          {r.target > 0 && (
+                          {Number(r.target ?? 0) > 0 && (
                             <span className={cn(
                               "ml-1 text-[10px] font-black",
                               pct >= 100 ? "text-green-600" : pct >= 70 ? "text-amber-600" : "text-red-600"

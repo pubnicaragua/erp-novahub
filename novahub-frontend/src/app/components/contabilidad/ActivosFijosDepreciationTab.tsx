@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
-import { Combobox } from '../ui/Combobox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Calculator } from 'lucide-react';
+import { RefreshCw, Calculator, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
+import { cn } from '../ui/utils';
+import { Input } from '../ui/input';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -16,6 +17,7 @@ interface AssetSummary {
   id: string;
   code: string;
   name: string;
+  status?: string;
   category?: { id: string; name: string; depreciable: boolean };
   derived?: any;
 }
@@ -30,16 +32,26 @@ interface ProjectionRow {
   processedAt?: string | null;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Activo',
+  DEPRECIATED: 'Depreciado',
+  INACTIVE: 'Inactivo',
+  RETIRED: 'Retirado',
+};
+
 export function ActivosFijosDepreciationTab() {
   const queryClient = useQueryClient();
   const { baseCurrency, formatConvertedAmount } = useCurrency();
-  const [selectedId, setSelectedId] = useState('');
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [processing, setProcessing] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailMap, setDetailMap] = useState<Record<string, any>>({});
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const assetsQuery = useAccountingQuery<AssetSummary[]>(['fixed-asset-details'], async (signal) =>
     accountingList(await contabilidadService.getFixedAssetsDetail(signal)) as AssetSummary[],
@@ -47,36 +59,18 @@ export function ActivosFijosDepreciationTab() {
   const assets = assetsQuery.data || [];
   const loading = assetsQuery.isLoading || assetsQuery.isFetching;
 
-  const assetOptions = useMemo(() =>
-    assets.map((a) => ({ label: `${a.code} · ${a.name}`, value: a.id, description: a.category?.name })),
-    [assets],
-  );
-
-  const detailQuery = useAccountingQuery<any>(
-    ['fixed-asset-detail', selectedId],
-    async (signal) => (selectedId ? contabilidadService.getFixedAssetDetail(selectedId, signal) : null),
-    { enabled: !!selectedId },
-  );
-  const detail = detailQuery.data;
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return assets;
+    const q = searchTerm.trim().toLowerCase();
+    return assets.filter(a =>
+      a.name.toLowerCase().includes(q) ||
+      a.code.toLowerCase().includes(q) ||
+      (a.category?.name || '').toLowerCase().includes(q),
+    );
+  }, [assets, searchTerm]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['accounting'] });
   const fmt = (value: number) => formatConvertedAmount(value, baseCurrency);
-
-
-  async function handleGenerate() {
-    if (!selectedId) { toast.error('Selecciona un activo'); return; }
-    setGenerating(true);
-    try {
-      await contabilidadService.generateFixedAssetProjection(selectedId);
-      toast.success('Proyección generada');
-      await invalidate();
-      detailQuery.refetch();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al generar proyección');
-    } finally {
-      setGenerating(false);
-    }
-  }
 
   async function handleProcess() {
     if (!period) { toast.error('Selecciona un período'); return; }
@@ -88,12 +82,10 @@ export function ActivosFijosDepreciationTab() {
       if (res?.errors?.length) {
         res.errors.slice(0, 5).forEach((e: string) => toast.error(e));
       }
-      if (skipped.length) {
-        skipped.slice(0, 5).forEach((s: string) => toast.info(s));
-      }
+      if (skipped.length) skipped.slice(0, 5).forEach((s: string) => toast.info(s));
       await invalidate();
       assetsQuery.refetch();
-      detailQuery.refetch();
+      setDetailMap({});
     } catch (err: any) {
       toast.error(err.message || 'Error al procesar depreciación');
     } finally {
@@ -101,9 +93,50 @@ export function ActivosFijosDepreciationTab() {
     }
   }
 
-  const derived = detail?.derived;
-  const projection: ProjectionRow[] = detail?.projection || [];
-  const processedCount = projection.filter((p) => p.status === 'PROCESSED').length;
+  async function handleGenerate(id: string) {
+    setGeneratingId(id);
+    try {
+      await contabilidadService.generateFixedAssetProjection(id);
+      toast.success('Proyección generada');
+      await invalidate();
+      assetsQuery.refetch();
+      setDetailMap(prev => { const next = { ...prev }; delete next[id]; return next; });
+    } catch (err: any) {
+      toast.error(err.message || 'Error al generar proyección');
+    } finally {
+      setGeneratingId(null);
+    }
+  }
+
+  async function toggleDetail(asset: AssetSummary) {
+    if (expandedId === asset.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(asset.id);
+    if (!detailMap[asset.id]) {
+      setLoadingDetail(asset.id);
+      try {
+        const detail = await contabilidadService.getFixedAssetDetail(asset.id);
+        setDetailMap(prev => ({ ...prev, [asset.id]: detail }));
+      } catch (e: any) {
+        toast.error(e?.message || 'Error al cargar el detalle del activo');
+      } finally {
+        setLoadingDetail(null);
+      }
+    }
+  }
+
+  const totals = useMemo(() => {
+    const sum = (key: string) => assets.reduce((s, a) => s + Number(a.derived?.[key] || 0), 0);
+    return {
+      count: assets.length,
+      cost: sum('cost'),
+      monthly: sum('monthly'),
+      accumulated: sum('accumulated'),
+      bookValue: sum('bookValue'),
+    };
+  }, [assets]);
 
   return (
     <div className="space-y-4">
@@ -133,85 +166,170 @@ export function ActivosFijosDepreciationTab() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base font-bold">
-            <div className="flex min-w-0 flex-col gap-2 sm:w-72 sm:flex-row sm:items-center sm:gap-3">
-              <span className="shrink-0">Activo</span>
-              <Combobox
-                options={assetOptions}
-                value={selectedId}
-                onChange={setSelectedId}
-                placeholder={loading ? 'Cargando activos...' : 'Seleccionar activo'}
-                emptyMessage="Sin activos registrados"
+            <span className="font-black tracking-tight uppercase italic">
+              Depreciación de Todos los Activos
+            </span>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+              <Input
+                placeholder="Buscar activo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-8 w-56 pl-8 text-xs"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating || !selectedId} className="h-8 gap-1.5">
-                <RefreshCw className={generating ? 'size-3.5 animate-spin' : 'size-3.5'} /> Generar proyección
-              </Button>
-            </div>
           </CardTitle>
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            {totals.count} activos · Costo {fmt(totals.cost)} · Dep. mensual {fmt(totals.monthly)} · Dep. acumulada {fmt(totals.accumulated)} · Valor en libros {fmt(totals.bookValue)}
+          </p>
         </CardHeader>
-        <CardContent>
-          {!detail ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Calculator className="size-10 mb-2 opacity-30" />
-              <p className="text-sm font-medium">Selecciona un activo para ver su depreciación</p>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-xs text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Cargando activos fijos...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-xs text-muted-foreground">
+              {assets.length === 0 ? 'No hay activos fijos registrados.' : 'Sin resultados para la búsqueda.'}
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                <MiniStat label="Costo de adquisición" value={fmt(derived?.cost ?? 0)} />
-                <MiniStat label="Base depreciable" value={fmt(derived?.base ?? 0)} />
-                <MiniStat label="Depreciación mensual" value={fmt(derived?.monthly ?? 0)} />
-                <MiniStat label="Depreciación anual" value={fmt(derived?.annual ?? 0)} />
-                <MiniStat label="Dep. acumulada" value={fmt(derived?.accumulated ?? 0)} tone="emerald" />
-                <MiniStat label="Valor en libros" value={fmt(derived?.bookValue ?? 0)} tone="primary" />
-                <MiniStat label="Meses transcurridos" value={`${derived?.monthsElapsed ?? 0}`} />
-                <MiniStat label="Meses pendientes" value={`${derived?.monthsRemaining ?? 0}`} />
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-black tracking-tight uppercase italic text-muted-foreground">
-                  Proyección de depreciación ({projection.length} períodos · {processedCount} procesados)
-                </p>
-                {projection.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border/40 py-8 text-center text-sm text-muted-foreground">
-                    No hay proyección. Pulsa "Generar proyección".
-                  </div>
-                ) : (
-                  <div className="max-h-[420px] overflow-y-auto rounded-xl border border-border/40">
-                    <Table>
-                      <TableHeader className="bg-muted/50 sticky top-0">
-                        <TableRow className="hover:bg-transparent border-border/50">
-                          <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Período</TableHead>
-                          <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Depreciación</TableHead>
-                          <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Acumulada</TableHead>
-                          <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground text-right">Valor en libros</TableHead>
-                          <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Estado</TableHead>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent border-border/50">
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Activo</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Categoría</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Costo</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Dep. mensual</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Dep. acumulada</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Valor en libros</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Meses restantes</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(asset => {
+                    const d = asset.derived || {};
+                    const expanded = expandedId === asset.id;
+                    const detail = detailMap[asset.id];
+                    const projection: ProjectionRow[] = detail?.projection || [];
+                    const processedCount = projection.filter(p => p.status === 'PROCESSED').length;
+                    return (
+                      <>
+                        <TableRow
+                          key={asset.id}
+                          className={cn('cursor-pointer border-border/30 hover:bg-muted/30', expanded && 'bg-muted/40')}
+                          onClick={() => toggleDetail(asset)}
+                        >
+                          <TableCell className="py-2.5">
+                            {loadingDetail === asset.id ? (
+                              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
+                            )}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <span className="text-xs font-bold">{asset.name}</span>
+                            <p className="text-[9px] font-mono text-muted-foreground">{asset.code}</p>
+                          </TableCell>
+                          <TableCell className="py-2.5 text-xs">{asset.category?.name || '—'}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.cost || 0))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.monthly || 0))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums text-amber-600">{fmt(Number(d.accumulated || 0))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs font-bold tabular-nums text-primary">{fmt(Number(d.bookValue || 0))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{d.monthsRemaining ?? '—'}</TableCell>
+                          <TableCell className="py-2.5">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-[9px] font-black uppercase tracking-widest px-2 py-0.5',
+                                asset.status === 'DEPRECIATED'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                  : 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+                              )}
+                            >
+                              {STATUS_LABELS[asset.status || ''] || asset.status || 'Activo'}
+                            </Badge>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {projection.map((row) => (
-                          <TableRow key={row.id} className="hover:bg-muted/30 border-border/30">
-                            <TableCell className="font-mono text-xs">{row.period}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{fmt(row.depreciationAmount)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{fmt(row.accumulatedDepreciation)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs font-bold">{fmt(row.bookValue)}</TableCell>
-                            <TableCell>
-                              <Badge variant={row.status === 'PROCESSED' ? 'default' : 'secondary'} className="text-[10px]">
-                                {row.status === 'PROCESSED' ? 'Procesado' : 'Pendiente'}
-                              </Badge>
+                        {expanded && (
+                          <TableRow key={`${asset.id}-detail`}>
+                            <TableCell colSpan={9} className="p-0">
+                              <div className="rounded-xl border border-border/40 bg-muted/10 m-2 p-3">
+                                {!detail ? (
+                                  <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                                    <Loader2 className="size-3.5 animate-spin" /> Cargando detalle...
+                                  </div>
+                                ) : (
+                                  <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                                      <MiniStat label="Costo" value={fmt(Number(d.cost || 0))} />
+                                      <MiniStat label="Base dep." value={fmt(Number(d.base || 0))} />
+                                      <MiniStat label="Dep. mensual" value={fmt(Number(d.monthly || 0))} />
+                                      <MiniStat label="Dep. anual" value={fmt(Number(d.annual || 0))} />
+                                      <MiniStat label="Dep. acum." value={fmt(Number(d.accumulated || 0))} tone="emerald" />
+                                      <MiniStat label="Valor en libros" value={fmt(Number(d.bookValue || 0))} tone="primary" />
+                                      <MiniStat label="Meses trans." value={`${d.monthsElapsed ?? 0}`} />
+                                      <MiniStat label="Meses rest." value={`${d.monthsRemaining ?? 0}`} />
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                        Proyección ({projection.length} períodos · {processedCount} procesados)
+                                      </p>
+                                      <Button variant="outline" size="sm" onClick={() => handleGenerate(asset.id)} disabled={generatingId === asset.id} className="h-7 gap-1.5">
+                                        <RefreshCw className={generatingId === asset.id ? 'size-3 animate-spin' : 'size-3'} /> Generar proyección
+                                      </Button>
+                                    </div>
+                                    {projection.length === 0 ? (
+                                      <div className="rounded-xl border border-dashed border-border/40 py-4 text-center text-xs text-muted-foreground">
+                                        No hay proyección. Pulsa "Generar proyección".
+                                      </div>
+                                    ) : (
+                                      <div className="max-h-[320px] overflow-y-auto rounded-xl border border-border/40">
+                                        <Table>
+                                          <TableHeader className="bg-muted/50 sticky top-0">
+                                            <TableRow className="hover:bg-transparent border-border/50">
+                                              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Período</TableHead>
+                                              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Depreciación</TableHead>
+                                              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Acumulada</TableHead>
+                                              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Valor en libros</TableHead>
+                                              <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {projection.map(row => (
+                                              <TableRow key={row.id} className="hover:bg-muted/30 border-border/30">
+                                                <TableCell className="font-mono text-xs">{row.period}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs">{fmt(row.depreciationAmount)}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs">{fmt(row.accumulatedDepreciation)}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs font-bold">{fmt(row.bookValue)}</TableCell>
+                                                <TableCell>
+                                                  <Badge variant={row.status === 'PROCESSED' ? 'default' : 'secondary'} className="text-[9px]">
+                                                    {row.status === 'PROCESSED' ? 'Procesado' : 'Pendiente'}
+                                                  </Badge>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
+                        )}
+                      </>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
       </Card>
-
     </div>
   );
 }
@@ -219,9 +337,9 @@ export function ActivosFijosDepreciationTab() {
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'primary' | 'emerald' }) {
   const color = tone === 'emerald' ? 'text-emerald-600' : tone === 'primary' ? 'text-primary' : '';
   return (
-    <div className="rounded-xl border border-border/40 bg-muted/20 p-3">
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-base font-black ${color}`}>{value}</p>
+    <div className="rounded-xl border border-border/40 bg-background/60 p-2.5">
+      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className={cn('mt-0.5 text-sm font-black', color)}>{value}</p>
     </div>
   );
 }

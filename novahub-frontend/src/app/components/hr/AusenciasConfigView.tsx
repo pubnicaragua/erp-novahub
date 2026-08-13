@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -16,6 +15,13 @@ import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AbsenceType } from '../../types';
+
+const SALARY_BASE_LABELS: Record<string, string> = {
+  MONTHLY: 'Mensual',
+  DAILY: 'Diario',
+  MINIMUM_WAGE: 'Salario Mínimo',
+  CONTRACTUAL: 'Contractual',
+};
 
 interface AbsenceTypeForm {
   code: string;
@@ -86,6 +92,10 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const handleSave = async () => {
     if (!form.code || !form.name) {
       toast.error('Código y nombre son requeridos');
+      return;
+    }
+    if (form.paidByCompanyPct + form.paidByThirdPartyPct > 100) {
+      toast.error('La suma de pagos (empresa + tercero) no puede superar el 100%');
       return;
     }
     try {
@@ -261,12 +271,12 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
                           <Percent className="size-3" /> Tercero: <strong className="text-foreground">{at.paidByThirdPartyPct}%</strong>
                         </span>
                         <span className="flex items-center gap-1">
-                          <Shield className="size-3" /> Base: <strong className="text-foreground">{at.salaryBase}</strong>
+                          <Shield className="size-3" /> Base: <strong className="text-foreground">{SALARY_BASE_LABELS[at.salaryBase] || at.salaryBase}</strong>
                         </span>
-                        {at.maxDays > 0 && <span>Máx: <strong className="text-foreground">{at.maxDays} días</strong></span>}
-                        {at.cap > 0 && (
+                        {Number(at.maxDays ?? 0) > 0 && <span>Máx: <strong className="text-foreground">{at.maxDays} días</strong></span>}
+                        {Number(at.cap ?? 0) > 0 && (
                           <span className="flex items-center gap-1">
-                            <DollarSign className="size-3" /> Tope: <strong className="text-foreground">C${at.cap.toLocaleString()}</strong>
+                            <DollarSign className="size-3" /> Tope: <strong className="text-foreground">C${Number(at.cap).toLocaleString()}</strong>
                           </span>
                         )}
                         <span className={cn("flex items-center gap-1", at.requiresDoc ? "text-amber-600" : "")}>

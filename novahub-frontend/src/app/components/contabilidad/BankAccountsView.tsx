@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, Trash2, Edit2, Loader2, Landmark } from 'lucide-react';
+import { Building2, Plus, Trash2, Edit2, Loader2, Landmark, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -8,19 +8,26 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
 import { api, getApiErrorMessage } from '../../services/api';
+import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ACCOUNT_TYPES = [
-  { value: 'CHECKING', label: 'Monetaria' },
-  { value: 'SAVINGS', label: 'Ahorro' },
-  { value: 'LOAN', label: 'Préstamo' },
-  { value: 'CREDIT_CARD', label: 'Tarjeta de Crédito' },
+  { value: 'CHECKING', label: 'Cuenta Corriente' },
+  { value: 'SAVINGS', label: 'Cuenta de Ahorro' },
 ];
 
 const CURRENCIES = ['NIO', 'USD'];
+
+const SUBTYPE_LABELS: Record<string, string> = {
+  MAIN_GROUP: 'Grupo principal',
+  GROUP: 'Grupo',
+  DETAIL_ACCOUNT: 'Cuenta de detalle',
+  SUBACCOUNT: 'Subcuenta',
+};
 
 export function BankAccountsView() {
   const { canPerform } = useAuth();
@@ -37,6 +44,55 @@ export function BankAccountsView() {
   const accounts = accountsQuery.data || [];
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
   const fetch = () => accountsQuery.refetch();
+
+  // Plan de cuentas del tenant: solo cuentas de activo, de detalle/subcuenta
+  // (hojas), activas y posteables. Se priorizan las de la misma moneda que el
+  // banco (C$ para NIO, US$ para USD) y se muestra la jerarquía código + nombre.
+  const chartQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  const chartAccounts = useMemo(() => {
+    const flat: any[] = [];
+    const flatten = (items: any[]) => items.forEach((item: any) => {
+      flat.push({
+        id: item.id, code: item.code, name: item.name, type: item.type,
+        subtype: item.subtype, currency: item.currency || 'NIO',
+        parentId: item.parentId, parentCode: item.parentCode || item.parent?.code || null,
+        isLeaf: !(Array.isArray(item.children) && item.children.length > 0),
+        isActive: item.isActive !== false,
+        acceptsPostings: item.acceptsPostings !== false,
+      });
+      if (Array.isArray(item.children)) flatten(item.children);
+    });
+    flatten(chartQuery.data || []);
+    return flat;
+  }, [chartQuery.data]);
+
+  const accountOptions = useMemo(() => {
+    const options = chartAccounts
+      .filter((a) => String(a.type || '').toUpperCase() === 'ASSET' && a.isLeaf && a.isActive && a.acceptsPostings)
+      .map((a) => ({
+        value: a.id,
+        code: a.code,
+        name: a.name,
+        currency: a.currency,
+        subtype: a.subtype,
+        parentCode: a.parentCode,
+      }))
+      .sort((x, y) => {
+        const mx = x.currency === form.currency ? 0 : 1;
+        const my = y.currency === form.currency ? 0 : 1;
+        return mx - my || x.code.localeCompare(y.code);
+      });
+    return options.map((a) => ({
+      value: a.value,
+      label: `${a.code} · ${a.name}`,
+      description: `${a.currency}${a.parentCode ? ` · Hijo de ${a.parentCode}` : ''} · ${SUBTYPE_LABELS[a.subtype] || 'Cuenta de detalle'}${a.currency === form.currency ? ' · Coincide con la moneda del banco' : ''}`,
+    }));
+  }, [chartAccounts, form.currency]);
+
+  const selectedChartAccount = useMemo(() => {
+    if (!form.accountId) return null;
+    return chartAccounts.find((a) => a.id === form.accountId) || null;
+  }, [form.accountId, chartAccounts]);
 
   const openCreate = () => {
     if (!canCreateBankAccount) return;
@@ -107,28 +163,42 @@ export function BankAccountsView() {
                 <TableHead className="text-[10px] font-bold">Número de Cuenta</TableHead>
                 <TableHead className="text-[10px] font-bold">Tipo</TableHead>
                 <TableHead className="text-[10px] font-bold">Moneda</TableHead>
+                <TableHead className="text-[10px] font-bold">Cuenta Contable</TableHead>
                 <TableHead className="text-[10px] font-bold">Estado</TableHead>
                 <TableHead className="text-[10px] font-bold text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="size-5 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="size-5 animate-spin mx-auto" /></TableCell></TableRow>
               ) : accounts.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-xs text-muted-foreground">Sin cuentas bancarias registradas</TableCell></TableRow>
-              ) : accounts.map(a => (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">Sin cuentas bancarias registradas</TableCell></TableRow>
+              ) : accounts.map(a => {
+                const linked = chartAccounts.find((acc) => acc.id === a.accountId);
+                return (
                 <TableRow key={a.id}>
                   <TableCell className="text-xs font-medium">{a.bankName}</TableCell>
                   <TableCell className="text-xs font-mono">{a.accountNumber}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[9px]">{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType}</Badge></TableCell>
                   <TableCell className="text-xs">{a.currency}</TableCell>
+                  <TableCell className="text-xs">
+                    {linked ? (
+                      <>
+                        <span className="font-mono font-bold">{linked.code}</span>
+                        <span className="text-muted-foreground"> · {linked.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/60">Sin vincular</span>
+                    )}
+                  </TableCell>
                   <TableCell><Badge variant={a.isActive ? 'default' : 'secondary'} className="text-[9px]">{a.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>
                   <TableCell className="text-right">
                     {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
                     {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -148,6 +218,15 @@ export function BankAccountsView() {
                   {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
                   {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                 </span>
+              </div>
+              <div className="mt-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
+                <span className="block text-muted-foreground">Cuenta contable</span>
+                {(() => {
+                  const linked = chartAccounts.find((acc) => acc.id === a.accountId);
+                  return linked
+                    ? <span className="font-mono font-bold text-foreground">{linked.code} · {linked.name}</span>
+                    : <span className="text-muted-foreground/60">Sin vincular</span>;
+                })()}
               </div>
             </div>
           ))}
@@ -191,6 +270,31 @@ export function BankAccountsView() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-bold">Cuenta Contable (para conciliaciones)</label>
+              <Combobox
+                options={accountOptions}
+                value={form.accountId || ''}
+                onChange={(v) => setForm({ ...form, accountId: v })}
+                placeholder="Seleccionar cuenta del plan (ej. 1101-001-001 LAFISE)"
+                searchPlaceholder="Buscar por código o nombre..."
+                maxVisibleOptions={200}
+                className="h-9 text-xs"
+                emptyMessage="No hay cuentas de activo de detalle disponibles. Crea la cuenta en el Plan de Cuentas."
+              />
+              {selectedChartAccount && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-border/40 bg-muted/10 p-2 text-[10px]">
+                  {selectedChartAccount.currency === form.currency ? (
+                    <span className="text-emerald-600">✓ {selectedChartAccount.code} · {selectedChartAccount.name} · Moneda {selectedChartAccount.currency} coincide con el banco.</span>
+                  ) : (
+                    <span className="flex items-start gap-1.5 text-amber-600">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      {selectedChartAccount.code} · {selectedChartAccount.name} es de moneda {selectedChartAccount.currency}, pero el banco es {form.currency}. Si el plan separa cuentas por moneda (ej. Cuentas Córdobas vs Cuentas Dólares), vincula la correcta.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold">Notas</label>

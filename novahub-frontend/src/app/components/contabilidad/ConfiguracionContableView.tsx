@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, Link2, BookOpen, Eye, X,
   Plus, Info, Trash2,
   FileText, Receipt, Package, Wallet,
-  Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight,
+  Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight, Landmark, Sparkles, GitBranch,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
@@ -21,8 +21,9 @@ import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react'
 import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
+import { ActividadModulosView } from './ActividadModulosView'
 import { contabilidadService } from '../../services/contabilidad.service'
-import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadCsv, templateRows } from '../../utils/chartOfAccountsCsv'
+import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -224,6 +225,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
+    id: 'hrExpense', label: 'Gastos de Recursos Humanos', icon: Users,
+    description: 'Gasto auxiliar genérico de RR. HH. cuando el proceso no tiene subvista propia',
+    fields: [
+      { key: 'expense', label: 'Cuenta de Gasto RR.HH.', side: 'debit', description: 'Se debita el gasto de personal no asociado a nómina ni subvista', defaultCode: '5700', defaultName: 'Gastos de Recursos Humanos', defaultType: 'EXPENSE' },
+    ],
+  },
+  {
     id: 'financialExpense', label: 'Gastos de Finanzas', icon: Wallet,
     description: 'Gastos manuales y recurrentes → cuenta de gasto configurada',
     fields: [
@@ -247,6 +255,30 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'unrealizedLoss', label: 'Pérdida cambiaria no realizada', side: 'debit', description: 'Se debita cuando la revaluación reduce el valor económico', defaultCode: '5400', defaultName: 'Pérdida Cambiaria No Realizada', defaultType: 'EXPENSE' },
     ],
   },
+  {
+    id: 'inventory', label: 'Inventario de Mercancías', icon: Package,
+    description: 'Cuenta control de inventario: el motor crea y postea a subcuentas por almacén a partir de ella',
+    fields: [
+      { key: 'control', label: 'Cuenta Control de Inventario', side: 'debit', description: 'Se debita al recibir mercancía y se acredita al salir; nunca se postea directamente (solo consolida)', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'fixedAsset', label: 'Activos Fijos', icon: Building2,
+    description: 'Registro de activos y depreciación del período: DEBE gasto de depreciación / HABER depreciación acumulada',
+    fields: [
+      { key: 'asset', label: 'Activos Fijos', side: 'debit', description: 'Se debita al registrar la adquisición de un activo', defaultCode: '1300', defaultName: 'Activos Fijos', defaultType: 'ASSET' },
+      { key: 'depreciationExpense', label: 'Gasto de Depreciación', side: 'debit', description: 'Se debita la depreciación del período', defaultCode: '5320', defaultName: 'Depreciación', defaultType: 'EXPENSE' },
+      { key: 'accumulatedDepreciation', label: 'Depreciación Acumulada', side: 'credit', description: 'Se acredita la depreciación acumulada (contracuenta de activo)', defaultCode: '1280', defaultName: 'Depreciación Acumulada', defaultType: 'ASSET' },
+    ],
+  },
+  {
+    id: 'bankReconciliation', label: 'Conciliación Bancaria', icon: Landmark,
+    description: 'Ajustes detectados al conciliar el estado de cuenta: comisiones del banco e intereses a favor',
+    fields: [
+      { key: 'bankFees', label: 'Gastos Bancarios', side: 'debit', description: 'Comisiones y cargos del banco que no estaban en el libro', defaultCode: '5350', defaultName: 'Gastos Bancarios', defaultType: 'EXPENSE' },
+      { key: 'interestIncome', label: 'Ingresos por Intereses', side: 'credit', description: 'Intereses a favor registrados en el estado de cuenta', defaultCode: '4040', defaultName: 'Ingresos por Intereses', defaultType: 'INCOME' },
+    ],
+  },
 ]
 
 const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
@@ -266,7 +298,7 @@ const ACCOUNTING_MODULE_GROUPS = [
     label: 'Cuentas contables de Recursos Humanos',
     description: 'Nómina, obligaciones laborales y gastos de RRHH.',
     icon: Users,
-    moduleIds: ['payroll', 'hrTraining', 'hrBenefit'],
+    moduleIds: ['payroll', 'hrTraining', 'hrBenefit', 'hrExpense'],
   },
   {
     id: 'finance',
@@ -276,11 +308,18 @@ const ACCOUNTING_MODULE_GROUPS = [
     moduleIds: ['financialIncome', 'financialExpense'],
   },
   {
+    id: 'banking',
+    label: 'Cuentas de Activos Fijos y Bancos',
+    description: 'Adquisición y depreciación de activos fijos, y ajustes de la conciliación bancaria.',
+    icon: Landmark,
+    moduleIds: ['fixedAsset', 'bankReconciliation'],
+  },
+  {
     id: 'operations',
     label: 'Cuentas contables de Inventario y operaciones',
-    description: 'Ajustes de inventario y diferencias cambiarias.',
+    description: 'Cuenta control de inventario, ajustes, cierre de caja y diferencias cambiarias.',
     icon: Link2,
-    moduleIds: ['inventoryAdjustment', 'cashRegister', 'currencyRevaluation'],
+    moduleIds: ['inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation'],
   },
   {
     id: 'other',
@@ -332,6 +371,89 @@ function getAccountOptionState(account: AccountInfo, field: ModuleField) {
   return getAccountOptionStateForType(account, field.defaultType)
 }
 
+const normalizeText = (value: string) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+
+// Palabras clave por rol funcional (espejo del backend) para recomendar
+// cuentas por nombre cuando el código semilla no existe en el plan.
+const FIELD_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
+  income: ['venta', 'ingreso', 'servicio', 'honorario', 'producto'],
+  returns: ['devolucion', 'descuento', 'venta'],
+  ivaPayable: ['iva', 'impuesto', 'por pagar'],
+  ivaCreditable: ['iva', 'acreditable', 'impuesto'],
+  ivaWithholdingPayable: ['iva', 'retencion'],
+  irWithholdingPayable: ['retencion', 'renta', 'ir '],
+  otherWithholdingPayable: ['retencion', 'otra'],
+  cash: ['caja', 'efectivo', 'banco', 'bancos'],
+  card: ['tarjeta', 'tarjetas'],
+  transfer: ['transferencia', 'banco', 'bancos'],
+  check: ['cheque', 'cheques'],
+  other: ['otro', 'otros', 'varios'],
+  receivable: ['cobrar', 'cliente', 'clientes', 'deuda'],
+  payable: ['pagar', 'proveedor', 'proveedores', 'acreedor', 'acreedores'],
+  inventory: ['inventario', 'mercancia', 'mercaderia', 'existencias', 'almacen', 'productos'],
+  inTransit: ['transito', 'inventario', 'mercancia'],
+  control: ['inventario', 'mercancia', 'existencias'],
+  expense: ['gasto', 'operativo', 'administrativo', 'financiero'],
+  adjustment: ['ajuste', 'perdida', 'ganancia'],
+  shortage: ['faltante', 'faltantes', 'caja'],
+  surplus: ['sobrante', 'sobrantes', 'caja'],
+  unrealizedGain: ['ganancia', 'cambiaria', 'diferencia'],
+  unrealizedLoss: ['perdida', 'cambiaria', 'diferencia'],
+  salaryExpense: ['salario', 'sueldo', 'nomina'],
+  bonusesExpense: ['bonificacion', 'bono'],
+  overtimeExpense: ['horas extra', 'extra'],
+  commissionsExpense: ['comision'],
+  inssPatronalExpense: ['inss', 'patronal'],
+  inatecExpense: ['inatec'],
+  thirteenthExpense: ['aguinaldo', 'decimo', 'treceavo'],
+  vacationExpense: ['vacacion', 'vacaciones'],
+  indemnityExpense: ['indemnizacion', 'cesantia'],
+  inssLaboralPayable: ['inss', 'laboral'],
+  inssPatronalPayable: ['inss', 'patronal'],
+  inatecPayable: ['inatec'],
+  irPayable: ['ir ', 'renta', 'retencion'],
+  otherDeductionsPayable: ['deduccion', 'otra'],
+  netPayable: ['neto', 'salario', 'nomina'],
+  thirteenthPayable: ['aguinaldo', 'decimo'],
+  vacationPayable: ['vacacion'],
+  indemnityPayable: ['indemnizacion'],
+  asset: ['activo', 'mobiliario', 'equipo', 'vehiculo', 'maquinaria', 'propiedad', 'inmueble', 'edificio', 'terreno'],
+  depreciationExpense: ['depreciacion', 'gasto'],
+  accumulatedDepreciation: ['depreciacion', 'acumulada'],
+  bankFees: ['bancario', 'comision', 'cargo', 'gasto'],
+  interestIncome: ['interes', 'intereses', 'ingreso', 'financiero'],
+}
+
+const TYPE_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
+  ASSET: ['caja', 'bancos', 'inventario', 'cobrar', 'proveedor'],
+  LIABILITY: ['pagar', 'iva', 'retencion', 'impuesto'],
+  INCOME: ['ingreso', 'venta', 'interes'],
+  EXPENSE: ['gasto', 'depreciacion', 'bancario'],
+}
+
+function getRecommendedAccounts(field: ModuleField, accountOptions: AccountOption[]): { option: AccountOption; hits: string[] }[] {
+  const keywords = [
+    ...(FIELD_RECOMMENDATION_KEYWORDS[field.key] || []),
+    ...(TYPE_RECOMMENDATION_KEYWORDS[field.defaultType] || []),
+  ]
+  return accountOptions
+    .filter(option => !option.disabled)
+    .map(option => {
+      const name = normalizeText(option.name)
+      const code = normalizeText(option.code)
+      const hits = keywords.filter(keyword => name.includes(keyword) || code.includes(keyword))
+      return { option, hits, score: hits.length }
+    })
+    .filter(row => row.score > 0)
+    .sort((a, b) => b.score - a.score || a.option.code.localeCompare(b.option.code))
+    .slice(0, 3)
+}
+
 function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   code: string
   field: ModuleField
@@ -343,13 +465,30 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   const accountUnavailable = Boolean(accountState?.disabled)
   const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
   const accountIsGroup = account?.isLeaf === false
+  const recommended = useMemo(() => getRecommendedAccounts(field, accountOptions), [field, accountOptions])
+  const recommendedCodes = useMemo(() => new Set(recommended.map(entry => entry.option.code)), [recommended])
+  const topRecommendation = recommended[0]?.option
   const accountSelectOptions = useMemo(() => {
-    const options = accountOptions.map(accountOption => ({
-      value: accountOption.code,
-      label: `${accountOption.code} · ${accountOption.name}`,
-      description: `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`,
-      disabled: accountOption.disabled,
-    }))
+    const options = accountOptions.map(accountOption => {
+      const recommendation = recommended.find(entry => entry.option.code === accountOption.code)
+      const baseDescription = `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`
+      return {
+        value: accountOption.code,
+        label: `${accountOption.code} · ${accountOption.name}`,
+        description: recommendation
+          ? `★ Recomendada · coincide con ${recommendation.hits.map(hit => `"${hit}"`).join(', ')} · ${accountTypeLabel(accountOption.type)}`
+          : baseDescription,
+        disabled: accountOption.disabled,
+      }
+    })
+
+    const order = (optionA: (typeof options)[number], optionB: (typeof options)[number]) => {
+      const ra = recommendedCodes.has(optionA.value) ? 0 : 1
+      const rb = recommendedCodes.has(optionB.value) ? 0 : 1
+      if (ra !== rb) return ra - rb
+      return Number(optionA.disabled) - Number(optionB.disabled)
+    }
+    options.sort(order)
 
     // Mantiene visible una configuración antigua aunque la cuenta ya no exista
     // en el catálogo, sin convertirla en una opción seleccionable.
@@ -363,7 +502,7 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
     }
 
     return options
-  }, [accountOptions, code])
+  }, [accountOptions, code, recommended, recommendedCodes])
 
   return (
     <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
@@ -381,6 +520,7 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
       <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
         <span>Referencia: <span className="font-mono font-bold">{field.defaultCode}</span> · {field.defaultName}</span>
         <span>La cuenta elegida debe ser de detalle y aceptar movimientos.</span>
+        {recommended.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
       </div>
       <Combobox
         options={accountSelectOptions}
@@ -406,6 +546,11 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
           </span>
         ) : code ? (
           <span className="text-[10px] text-red-500">La cuenta no existe en el plan</span>
+        ) : topRecommendation ? (
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-emerald-600">
+            <Sparkles className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">Recomendación: {topRecommendation.code} · {topRecommendation.name}</span>
+          </span>
         ) : (
           <span className="text-[10px] text-muted-foreground">Sugerida: {field.defaultCode} · {accountTypeLabel(field.defaultType)}</span>
         )}
@@ -468,6 +613,7 @@ export function ConfiguracionContableView() {
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
   const [salesExpanded, setSalesExpanded] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [activityExpanded, setActivityExpanded] = useState(false)
 
   useEffect(() => {
     const res = configQuery.data
@@ -671,8 +817,8 @@ export function ConfiguracionContableView() {
     try {
       const raw = await contabilidadService.exportAccounts()
       if (!Array.isArray(raw) || raw.length === 0) throw new Error('El servidor no devolvió cuentas para exportar')
-      downloadCsv('plan_cuentas.csv', raw)
-      toast.success('Plan de cuentas exportado')
+      downloadXlsx('plan_cuentas.xlsx', raw)
+      toast.success('Plan de cuentas exportado en Excel (.xlsx)')
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al exportar')
     }
@@ -680,8 +826,8 @@ export function ConfiguracionContableView() {
 
   const handleDownloadTemplate = () => {
     if (!canExportAccounting) return
-    downloadCsv('plantilla_cuentas.csv', templateRows())
-    toast.success('Plantilla descargada')
+    downloadXlsx('plantilla_cuentas.xlsx', templateRows())
+    toast.success('Plantilla descargada en Excel (.xlsx)')
   }
 
   const [showPreviewCatalog, setShowPreviewCatalog] = useState(false)
@@ -1189,6 +1335,51 @@ export function ConfiguracionContableView() {
         })}
       </div>
         </CardContent>}
+      </Card>
+
+      {/* Actividad por Módulo (trazabilidad de conexiones) */}
+      <Card id="actividad-modulos" className="min-w-0 border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
+        <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <button
+              type="button"
+              onClick={() => setActivityExpanded(value => !value)}
+              className="flex min-w-0 items-start gap-3 text-left"
+              aria-expanded={activityExpanded}
+              aria-controls="actividad-modulos-content"
+            >
+              <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><GitBranch className="size-5" /></div>
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-black uppercase tracking-tight">Actividad por Módulo</CardTitle>
+                <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                  Conexiones reales entre los módulos y la contabilidad: cada documento origen (cierre de caja, factura pagada, nómina...) genera su asiento automático con las cuentas configuradas arriba. Expande una fila para ver el flujo completo y las cuentas usadas.
+                </p>
+              </div>
+            </button>
+            <div className="flex items-center gap-2 self-end lg:self-start">
+              <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
+                Conexiones en vivo
+              </Badge>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                onClick={() => setActivityExpanded(value => !value)}
+                aria-label={activityExpanded ? 'Contraer actividad por módulo' : 'Expandir actividad por módulo'}
+                aria-expanded={activityExpanded}
+                aria-controls="actividad-modulos-content"
+              >
+                {activityExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        {activityExpanded && (
+          <CardContent id="actividad-modulos-content" className="p-5">
+            <ActividadModulosView />
+          </CardContent>
+        )}
       </Card>
 
       {/* Catálogo por Defecto */}

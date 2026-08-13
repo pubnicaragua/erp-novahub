@@ -5,12 +5,22 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Printer, RefreshCw, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Search, Printer, RefreshCw, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
+import { ReportSettingsDialog, type ConfigField } from './ReportSettingsDialog';
+
+const COMPROBACION_CONFIG_FIELDS: ConfigField[] = [
+  { moduleKey: 'invoice', fieldKey: 'receivable', label: 'Cuentas por cobrar' },
+  { moduleKey: 'invoice', fieldKey: 'ivaPayable', label: 'IVA por pagar' },
+  { moduleKey: 'supplierInvoice', fieldKey: 'payable', label: 'Cuentas por pagar' },
+  { moduleKey: 'supplierInvoice', fieldKey: 'ivaCreditable', label: 'IVA acreditable' },
+  { moduleKey: 'inventory', fieldKey: 'control', label: 'Inventario (cuenta control)' },
+  { moduleKey: 'cashRegister', fieldKey: 'cash', label: 'Caja (efectivo)' },
+];
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -40,6 +50,7 @@ export function BalanceComprobacionView() {
   const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10));
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const query = useAccountingQuery<TrialBalanceRow[]>(
     ['trial-balance', dateFrom, dateTo],
     async (signal) => {
@@ -191,6 +202,9 @@ export function BalanceComprobacionView() {
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
             <Printer className="size-4" /> Imprimir
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
+            <Settings2 className="size-4" /> Configuración
           </Button>
         </div>
       </div>
@@ -374,6 +388,13 @@ export function BalanceComprobacionView() {
           </div>
         </CardContent>
       </Card>
+      <ReportSettingsDialog
+        open={showSettings}
+        onOpenChange={setShowSettings}
+        title="Configuración · Balance de Comprobación"
+        description="Cuentas contables que alimentan el balance. Solo se muestran cuentas de detalle: las agrupadoras se omiten para no repetir movimientos."
+        fields={COMPROBACION_CONFIG_FIELDS}
+      />
     </div>
   );
 }

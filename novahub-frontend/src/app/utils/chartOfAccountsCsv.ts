@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import type { ChartAccountCsvRow } from '../types/accounting';
 
 export const CHART_ACCOUNT_CSV_HEADERS = [
@@ -25,6 +26,11 @@ export const CHART_ACCOUNT_CSV_TEMPLATE: ChartAccountCsvRow[] = [
     codigo: '1101-001', nombre: 'CTA. XXX', tipo_cuenta: 'Activos',
     subtipo: 'Subcuenta', tipo_detalle: 'Balance General',
     moneda: 'NIO', codigo_padre: '1101', permite_manual: '1', activa: '1', notas: '',
+  },
+  {
+    codigo: '1101-001-001', nombre: 'LAFISE', tipo_cuenta: 'Activos',
+    subtipo: 'Cuenta auxiliar', tipo_detalle: 'Balance General',
+    moneda: 'NIO', codigo_padre: '1101-001', permite_manual: '1', activa: '1', notas: '',
   },
   {
     codigo: '200', nombre: 'Pasivo', tipo_cuenta: 'Pasivos',
@@ -99,17 +105,11 @@ export function downloadCsv(filename: string, rows: readonly (readonly unknown[]
 }
 
 export function downloadXlsx(filename: string, rows: readonly (readonly unknown[])[]): void {
-  const XLSX = (window as any).XLSX;
-  if (!XLSX) {
-    // Fallback to CSV if XLSX not available
-    downloadCsv(filename.replace(/\.xlsx$/i, '.csv'), rows);
-    return;
-  }
-  const ws = XLSX.utils.aoa_to_sheet([...rows]);
+  const ws = XLSX.utils.aoa_to_sheet(rows.map((row) => [...row]));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Cuentas');
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], { type: 'application/octet-stream' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = filename;

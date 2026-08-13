@@ -718,6 +718,18 @@ export interface SupplierCredit {
   supplierInvoiceId?: string;
   supplierInvoice?: { id: string; number: string; date?: string; total?: number; status?: string } | null;
   date: string;
+  dueDate?: string | null;
+  interestRate?: number;
+  hasInterest?: boolean;
+  subtotal?: number;
+  discountRate?: number;
+  discountAmount?: number;
+  taxType?: string;
+  taxRate?: number;
+  taxAmount?: number;
+  withholdingType?: string;
+  withholdingRate?: number;
+  withholdingTotal?: number;
   total: number;
   currency?: string;
   exchangeRate?: number;
@@ -732,6 +744,8 @@ export interface SupplierCredit {
 export interface SupplierCreditItem {
   id: string;
   supplierCreditId: string;
+  itemType?: 'PRODUCT' | 'SERVICE' | 'MANUAL' | string;
+  productId?: string | null;
   description: string;
   quantity: number;
   unitPrice: number;

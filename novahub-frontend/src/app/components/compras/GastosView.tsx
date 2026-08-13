@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, Trash2, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban, Lock
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban, Lock
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -27,7 +27,7 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; }
+interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
@@ -48,7 +48,6 @@ const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 const paymentSourceLabel = (value?: string | null) => PAYMENT_SOURCE_LABELS[String(value || '').toUpperCase()] || value || '-';
-const toIsoDate = (d: Date) => d.toISOString().split('T')[0];
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -59,7 +58,7 @@ const statusOpts = [
   { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange }: Props) {
+export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
@@ -77,21 +76,13 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
   const [appliedRange, setAppliedRange] = useState<{ from: string; to: string } | null>(null);
 
   useEffect(() => {
-    if (datePreset === 'month' || datePreset === 'year') {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const from = new Date(today);
-      if (datePreset === 'month') from.setMonth(from.getMonth() - 1);
-      else from.setFullYear(from.getFullYear() - 1);
-      onDateChange?.(toIsoDate(from), toIsoDate(today));
-    } else if (datePreset === 'range') {
+    if (datePreset === 'range') {
       onDateChange?.(appliedRange?.from, appliedRange?.to);
     } else {
       onDateChange?.(undefined, undefined);
     }
   }, [datePreset, appliedRange, onDateChange]);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
-  const [accounts, setAccounts] = useState<any[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -102,17 +93,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
-    const flatten = (items: any[]): any[] => {
-      const result: any[] = [];
-      for (const item of items) {
-        const { children, ...rest } = item;
-        result.push(rest);
-        if (Array.isArray(children) && children.length > 0) result.push(...flatten(children));
-      }
-      return result;
-    };
-    setAccounts(flatten(accountCatalog));
-  }, [supplierCatalog, accountCatalog]);
+  }, [supplierCatalog]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -467,7 +448,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
              {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
+                  <Ban className="size-3 mr-2" /> Anular
                 </Button>
              )}
             {isPaidLocked && (
@@ -749,11 +730,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
           <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
-            <div className="flex min-w-0 w-full items-center gap-0 rounded-xl border border-border/50 bg-background/60 p-1 sm:w-auto">
-              <Button variant={datePreset === 'all' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('all')}>Todo</Button>
-              <Button variant={datePreset === 'month' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('month')}>Último mes</Button>
-              <Button variant={datePreset === 'year' ? 'default' : 'ghost'} size="sm" className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={() => setDatePreset('year')}>Último año</Button>
-            </div>
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
               <Popover>
                 <PopoverTrigger asChild>
@@ -873,8 +849,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
                 <Button title="Ver (gasto pagado y contabilizado, solo lectura)" aria-label="Ver gasto" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted/40" onClick={() => setEditingId(row.id)}><Lock className="size-4" /></Button>
               )}
               <PurchaseAuditButton entity="EXPENSE" entityId={row.id} title="Auditoria del Gasto" />
-              {canPerform('PURCHASES_EXPENSES', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+              {canPerform('PURCHASES_EXPENSES', 'delete') && String(row.status || '').toUpperCase() !== 'PAID' && (
+                <Button title="Anular gasto" aria-label="Anular gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -882,9 +858,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], acc
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Gasto"
-          description="¿Estás seguro de que deseas eliminar este gasto? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Gasto"
+          title="Anular Gasto"
+          description="¿Estás seguro de que deseas anular este gasto? Esta acción no se puede deshacer y revierte su efecto contable."
+          confirmLabel="Anular Gasto"
           onConfirm={handleDeleteConfirm}
           loading={deleteLoading}
         />

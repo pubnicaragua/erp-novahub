@@ -1,14 +1,13 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ShoppingCart, Truck, Wallet, CalendarClock,
+  Truck, Wallet, CalendarClock,
   ClipboardList, PackageCheck, RotateCcw,
   Banknote, BadgeDollarSign,
   ClipboardPen,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { cn } from './ui/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,7 +51,7 @@ const COMPRAS_SECTIONS = [
   { id: 'recepciones',   label: 'Recepciones',          icon: PackageCheck,   description: 'Entrada de mercancía', requiredModules: ['PURCHASES_RECEIPTS', 'PURCHASES'] },
   { id: 'facturas-rec',  label: 'Facturas Recurrentes', icon: RotateCcw,      description: 'Contratos periódicos', requiredModules: ['PURCHASES_INVOICES_REC', 'PURCHASES'] },
   { id: 'pagos',         label: 'Pagos Realizados',    icon: Banknote,       description: 'Histórico de pagos', requiredModules: ['PURCHASES_PAYMENTS', 'PURCHASES'] },
-  { id: 'creditos',      label: 'Créditos Proveedor',  icon: BadgeDollarSign, description: 'Notas de crédito', requiredModules: ['PURCHASES_RETURNS', 'PURCHASES'] },
+  { id: 'creditos',      label: 'Créditos Proveedor',  icon: BadgeDollarSign, description: 'Créditos que el proveedor otorga a favor de la empresa', requiredModules: ['PURCHASES_RETURNS', 'PURCHASES'] },
 ];
 
 interface ComprasPageProps {
@@ -230,7 +229,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const productCatalogQuery = useQuery({
     queryKey: ['purchases', 'products-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => inventoryService.getProducts({ page: 1, pageSize: 200 }, signal),
-    enabled: ['ordenes', 'recepciones'].includes(activeSection),
+    enabled: ['ordenes', 'recepciones', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
@@ -485,7 +484,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                  >
                     {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} warehouseCatalog={warehouseCatalog} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} />}
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
-                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
+                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
                       {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} onRegisterPaymentFromReceipt={handleRegisterPaymentFromInvoice} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
@@ -504,7 +503,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                       onSearchChange={(value) => updateSearch('pagos', value)}
                     />
                   )}
-                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} supplierInvoices={invoiceCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
+                   {section.id === 'creditos'      && <CreditosProveedorView {...commonProps} supplierCatalog={supplierCatalog} supplierInvoices={invoiceCatalog} productCatalog={productCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} />}
                  </motion.div>
                );
             })}

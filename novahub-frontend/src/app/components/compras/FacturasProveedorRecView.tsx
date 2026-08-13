@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, PlayCircle, PauseCircle } from 'lucide-react';
+import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Ban, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -182,7 +182,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
              {!isNew && canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
+                  <Ban className="size-3 mr-2" /> Anular
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_INVOICES_REC', 'create')) || (!isNew && canPerform('PURCHASES_INVOICES_REC', 'edit'))) && (
@@ -358,11 +358,11 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
           loading={deleteLoading}
-          title="Eliminar Factura Recurrente"
-          description="¿Estás seguro de eliminar esta factura recurrente? No se generarán más facturas automáticamente."
+          title="Anular Factura Recurrente"
+          description="¿Estás seguro de anular esta factura recurrente? No se generarán más facturas automáticamente."
           onConfirm={async () => {
             if (!pendingDeleteId) return;
-            const deleteToastId = toast.loading('Eliminando factura recurrente...');
+            const deleteToastId = toast.loading('Anulando factura recurrente...');
             setDeleteLoading(true);
             try {
                await recurringSupplierInvoicesService.delete(pendingDeleteId);
@@ -370,7 +370,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                setPendingDeleteId(null);
                openEditor(null);
                onRefresh();
-             } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); }
+              } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: deleteToastId }); }
             finally { setDeleteLoading(false); }
           }}
         />
@@ -443,7 +443,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
               <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_INVOICES_REC', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
               <PurchaseAuditButton entity="RECURRING_SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura Recurrente" />
               {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular factura recurrente" aria-label="Anular factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}

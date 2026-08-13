@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
@@ -164,7 +164,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   PROJECTS_MILESTONES: 'Hitos',
   REPORTS_SALES: 'Ventas',
   REPORTS_FINANCIAL: 'Finanzas',
-  REPORTS_INVENTORY: 'Inventario',
+  REPORTS_INVENTORY: 'Inventario de Mercancías',
   REPORTS_PURCHASES: 'Compras',
   REPORTS_CLIENTS: 'Clientes',
   REPORTS_PROVIDERS: 'Proveedores',
@@ -211,7 +211,7 @@ const PARENT_KEYS = new Set(Object.keys(PARENT_SUBMODULES));
 const PARENT_NAMES_ES: Record<string, string> = {
   SALES: 'Ventas',
   PURCHASES: 'Compras',
-  INVENTORY: 'Inventario',
+  INVENTORY: 'Inventario de Mercancías',
   FINANCIAL: 'Finanzas',
   HR: 'Recursos Humanos',
   PROJECTS: 'Proyectos',
@@ -982,7 +982,7 @@ export function RegisterTenantPage() {
                       {
                         mod === 'SALES' ? 'Ventas' :
                         mod === 'PURCHASES' ? 'Compras' :
-                        mod === 'INVENTORY' ? 'Inventario' :
+                        mod === 'INVENTORY' ? 'Inventario de Mercancías' :
                         mod === 'FINANCIAL' ? 'Finanzas' :
                         mod === 'ACCOUNTING' ? 'Contabilidad' :
                         mod === 'HR' ? 'Recursos Humanos' :

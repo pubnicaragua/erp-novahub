@@ -246,7 +246,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'inventario',
-    label: 'Inventario',
+    label: 'Inventario de Mercancías',
     icon: <Package className="size-5" />,
     submenu: [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
@@ -257,6 +257,7 @@ const menuItems: MenuItem[] = [
       { id: 'auditorias', label: 'Auditorías', icon: <ClipboardCheck className="size-4" /> },
       { id: 'perdidas', label: 'Pérdidas', icon: <TrendingDown className="size-4" /> },
       { id: 'movimientos', label: 'Movimientos', icon: <History className="size-4" /> },
+      { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: <Building2 className="size-4" /> },
     ]
   },
   {
@@ -388,7 +389,7 @@ const menuItems: MenuItem[] = [
       { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
       { id: 'reportes-compras', label: 'Compras', icon: <ShoppingCart className="size-4" /> },
       { id: 'reportes-financieros', label: 'Financiero', icon: <DollarSign className="size-4" /> },
-      { id: 'reportes-inventario', label: 'Inventario', icon: <Package className="size-4" /> },
+      { id: 'reportes-inventario', label: 'Inventario de Mercancías', icon: <Package className="size-4" /> },
       { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
       { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
       { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },

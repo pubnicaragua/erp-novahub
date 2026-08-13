@@ -27,6 +27,34 @@ const TYPE_OPTIONS = [
   { value: 'ADJUSTMENT', label: 'Ajuste' },
 ];
 
+// Referencias compuestas (p. ej. "PURCHASE_RECEIPT:uuid:uuid:uuid") se
+// muestran de forma legible: tipo en español + primeros 8 caracteres del id.
+const REFERENCE_TYPE_LABELS: Record<string, string> = {
+  PURCHASE_RECEIPT: 'Recepción de compra',
+  SALE: 'Venta',
+  SALE_RETURN: 'Devolución de venta',
+  INVENTORY_ADJUSTMENT: 'Ajuste de inventario',
+  TRANSFER: 'Transferencia',
+  PURCHASE: 'Compra',
+  STOCK_INITIAL: 'Stock inicial',
+  SALES_ORDER: 'Orden de venta',
+  SUPPLIER_INVOICE: 'Factura de compra',
+};
+
+export function formatMovementReference(reference: string | null | undefined): { label: string; full: string } {
+  const raw = reference || '';
+  const full = raw;
+  if (!raw) return { label: '—', full: '' };
+  const parts = raw.split(':');
+  if (parts.length > 1) {
+    const type = parts[0].toUpperCase();
+    const label = REFERENCE_TYPE_LABELS[type] || type;
+    const shortId = parts[1]?.slice(0, 8);
+    return { label: shortId ? `${label} · ${shortId}` : label, full };
+  }
+  return { label: raw, full };
+}
+
 const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="movements-title"]', title: 'Movimientos de inventario', description: 'Consulta las entradas, salidas, transferencias y ajustes que modifican las existencias.', placement: 'bottom' },
   { target: '[data-tour="movements-filters"]', title: 'Buscar y filtrar', description: 'Busca por producto o referencia y combina el tipo de movimiento con el almacén. Al cambiar un criterio se reinicia la página.', placement: 'bottom' },
@@ -124,7 +152,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
       <div className="space-y-3 lg:hidden" data-tour="movements-table">
         {filteredMovements.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredMovements.map((move: any) => (
           <Card key={move.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground">{move.reference || 'Sin referencia'}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
+            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
             <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{new Date(move.date).toLocaleDateString('es-ES')}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Hora</p><p>{new Date(move.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
           </Card>
         ))}
@@ -169,7 +197,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
                       {move.type === 'OUT' ? '-' : '+'}{move.quantity}
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">{move.reference || '-'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</TableCell>
                 </TableRow>
               ))
             )}

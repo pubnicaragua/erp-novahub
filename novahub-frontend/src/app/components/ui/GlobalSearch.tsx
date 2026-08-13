@@ -12,7 +12,7 @@ interface SearchOption {
 const SEARCH_MODULES: SearchOption[] = [
   { id: 'ventas', label: 'Ventas', module: 'ventas', subModule: 'facturas' },
   { id: 'compras', label: 'Compras', module: 'compras', subModule: 'ordenes-compra' },
-  { id: 'inventario', label: 'Inventario', module: 'inventario', subModule: 'productos' },
+  { id: 'inventario', label: 'Inventario de Mercancías', module: 'inventario', subModule: 'productos' },
   { id: 'contabilidad', label: 'Contabilidad', module: 'contabilidad', subModule: 'cuentas' },
   { id: 'finanzas', label: 'Finanzas', module: 'finanzas', subModule: 'ingresos' },
   { id: 'clientes', label: 'Clientes', module: 'ventas', subModule: 'clientes' },

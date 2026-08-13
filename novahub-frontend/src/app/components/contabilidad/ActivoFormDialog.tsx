@@ -6,6 +6,7 @@ import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { mobiliarioService } from '../../services/mobiliario.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -36,6 +37,7 @@ interface ActivoForm {
   residualValue: string;
   initialAccumDepreciation: string;
   cutoffDate: string;
+  sourceAssetId: string;
 }
 
 function emptyForm(): ActivoForm {
@@ -44,6 +46,7 @@ function emptyForm(): ActivoForm {
     branchId: '', costCenterId: '', responsibleText: '', invoiceNumber: '',
     acquisitionDate: '', inUseDate: '', currency: 'NIO', exchangeRate: '1',
     cost: '', residualValue: '0', initialAccumDepreciation: '0', cutoffDate: '',
+    sourceAssetId: '',
   };
 }
 
@@ -57,11 +60,38 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
     accountingList(await contabilidadService.getFixedAssetCategories(signal)),
   );
   const categories = categoriesQuery.data || [];
+  const [companyAssets, setCompanyAssets] = useState<any[]>([]);
 
   useEffect(() => {
     api.get<any[]>('/sucursales').then((res) => setBranches(Array.isArray(res) ? res : [])).catch(() => {});
     api.get<any[]>('/accounting/cost-centers').then((res) => setCostCenters(Array.isArray(res) ? res : [])).catch(() => {});
+    mobiliarioService.getAssets({ page: 1, pageSize: 200 }).then((res: any) => {
+      const data = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setCompanyAssets(data);
+    }).catch(() => {});
   }, []);
+
+  const applySourceAsset = (assetId: string) => {
+    if (!assetId) { setForm(prev => ({ ...prev, sourceAssetId: '' })); return; }
+    const asset = companyAssets.find((a) => a.id === assetId);
+    if (!asset) return;
+    setForm(prev => ({
+      ...prev,
+      sourceAssetId: assetId,
+      name: prev.name || asset.name || '',
+      brand: prev.brand || asset.brand || '',
+      model: prev.model || asset.model || '',
+      serialNumber: prev.serialNumber || asset.serialNumber || '',
+      branchId: prev.branchId || asset.branchId || '',
+      location: prev.location || asset.location || '',
+      invoiceNumber: prev.invoiceNumber || asset.documentNumber || '',
+      acquisitionDate: prev.acquisitionDate || (asset.acquisitionDate ? String(asset.acquisitionDate).slice(0, 10) : ''),
+      inUseDate: prev.inUseDate || (asset.acquisitionDate ? String(asset.acquisitionDate).slice(0, 10) : ''),
+      currency: asset.currency || prev.currency,
+      exchangeRate: prev.exchangeRate || (asset.exchangeRate ? String(asset.exchangeRate) : '1'),
+      cost: prev.cost || String(asset.cost ?? ''),
+    }));
+  };
 
   useEffect(() => {
     const selectedCategory = categories.find((c) => c.id === form.categoryId);
@@ -95,6 +125,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
         branchId: form.branchId || null,
         costCenterId: form.costCenterId || null,
         cutoffDate: form.cutoffDate || null,
+        sourceAssetId: form.sourceAssetId || null,
       });
       toast.success('Activo fijo creado');
       onOpenChange(false);
@@ -116,6 +147,25 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
         </DialogHeader>
         <Card className="border-0 shadow-none">
           <CardContent className="grid grid-cols-1 gap-3 p-0 sm:grid-cols-3">
+            <div className="space-y-2 sm:col-span-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
+              <Label>Origen: ¿desde Mobiliario y Equipos?</Label>
+              <Combobox
+                options={[
+                  { label: 'Nuevo (ingreso manual)', value: '__none' },
+                  ...companyAssets.map((a) => ({ label: `${a.code} · ${a.name}`, value: a.id })),
+                ]}
+                value={form.sourceAssetId || '__none'}
+                onChange={(v) => applySourceAsset(v === '__none' ? '' : v)}
+                placeholder="Seleccionar activo de Mobiliario y Equipos"
+                emptyMessage="No hay activos registrados en Inventario → Mobiliario y Equipos"
+                searchPlaceholder="Buscar por código o nombre..."
+              />
+              {form.sourceAssetId && (
+                <p className="text-[10px] text-emerald-700">
+                  Vinculado al activo de Mobiliario y Equipos: al seleccionarlo se precargaron los datos. Se guarda la relación para no duplicar registros.
+                </p>
+              )}
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="af-name">Nombre *</Label>
               <Input id="af-name" value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="Ej: Laptop HP ProBook" />

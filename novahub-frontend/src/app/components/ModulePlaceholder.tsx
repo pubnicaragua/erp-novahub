@@ -1,11 +1,11 @@
-import { Module } from '../contexts/AuthContext';
+﻿import { Module } from '../contexts/AuthContext';
 
 interface ModulePlaceholderProps {
   module: Module;
 }
 
 const moduleInfo: Record<Module, { title: string; description: string }> = {
-  inventario: { title: 'Inventario', description: 'Gestiona tu inventario de productos' },
+  inventario: { title: 'Inventario de Mercancías', description: 'Gestiona tu inventario de productos' },
   ventas: { title: 'Ventas', description: 'Administra ventas, facturas y clientes' },
   compras: { title: 'Compras', description: 'Gestiona ordenes de compra y proveedores' },
   finanzas: { title: 'Finanzas', description: 'Control de ingresos y gastos' },

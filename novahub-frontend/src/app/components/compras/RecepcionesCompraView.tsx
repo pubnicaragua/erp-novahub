@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil,
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
   AlertTriangle, XCircle, ArrowDown, FileText, Upload, Banknote
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -783,9 +783,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const st = String(row.status||'').toUpperCase();
                 const isDeletable = st === 'PENDING' || st === '';
                 return isDeletable ? (
-                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                  <Button title="Anular recepción" aria-label="Anular recepción" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
                 ) : (
-                  <Button title="Las recepciones procesadas solo se anulan, no se eliminan" variant="ghost" size="icon" className="size-8 rounded-lg opacity-30 cursor-not-allowed" disabled><Trash2 className="size-4" /></Button>
+                  <Button title="Las recepciones procesadas solo se anulan, no se eliminan" variant="ghost" size="icon" className="size-8 rounded-lg opacity-30 cursor-not-allowed" disabled><Ban className="size-4" /></Button>
                 );
               })()}
             </div>
@@ -796,9 +796,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-        title={"¿Eliminar recepción?"}
-        description="¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
+        title={"¿Anular recepción?"}
+        description="¿Estás seguro de que deseas anular esta recepción? Esta acción no se puede deshacer y revertirá el inventario registrado."
+        confirmLabel="Anular"
         variant="destructive"
         loading={deleteLoading}
         onConfirm={async () => {

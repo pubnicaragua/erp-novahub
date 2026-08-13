@@ -16,9 +16,15 @@ export const REFERENCE_TYPE_LABELS: Record<string, string> = {
   FINANCIAL_EXPENSE: 'Gasto financiero',
   INVENTORY_ADJUSTMENT: 'Ajuste de inventario',
   CASH_REGISTER_SESSION: 'Cierre de caja',
+  CASH_REGISTER_DEPOSIT: 'Depósito a banco',
   RECONCILIATION: 'Conciliación bancaria',
+  BANK_RECONCILIATION: 'Conciliación bancaria',
+  FIXED_ASSET_DEPRECIATION: 'Depreciación de activo',
+  FX_REVALUATION: 'Revaluación cambiaria',
+  FX_REVALUATION_REVERSAL: 'Reversión cambiaria',
   EXCHANGE_DIFFERENCE: 'Diferencia cambiaria',
   OTHER: 'Otra operación',
+  MANUAL: 'Asiento manual',
 };
 
 export const REFERENCE_TYPES = Object.entries(REFERENCE_TYPE_LABELS).map(([value, label]) => ({ value, label }));

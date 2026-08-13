@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ClipboardCheck, Search, RefreshCw, CheckCircle2, AlertTriangle, ShieldQuestion,
-  ShieldCheck, FileWarning, X, Loader2, Send, Ban, FilePlus2, History, Plus, Trash2,
+  ShieldCheck, FileWarning, X, Loader2, Send, Ban, FilePlus2, History,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -49,15 +49,6 @@ const HISTORY_ACTIONS = [
   { value: 'REISSUED', label: 'Reemitidas' },
 ];
 
-interface ReissueDraft {
-  loading: boolean;
-  invoice: any | null;
-  customerId: string;
-  date: string;
-  dueDate: string;
-  items: { key: string; description: string; quantity: number; unitPrice: number; taxRate: number; discount: number }[];
-}
-
 export function InvoiceAuditView() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('invoices');
@@ -72,8 +63,6 @@ export function InvoiceAuditView() {
   const [auditModal, setAuditModal] = useState<{ invoiceIds: string[]; observations: string; results: AuditResult[] | null; saving: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; number: string; reason: string; saving: boolean } | null>(null);
-  const [reissueTarget, setReissueTarget] = useState<{ id: string; number: string; saving: boolean } | null>(null);
-  const [reissue, setReissue] = useState<ReissueDraft | null>(null);
 
   const listQuery = useQuery({
     queryKey: ['invoice-audit', kind, search, auditStatus, dateFrom, dateTo, page],
@@ -176,80 +165,17 @@ export function InvoiceAuditView() {
       const reason = cancelTarget.reason.trim() || 'Anulada desde auditoría de facturas';
       if (kind === 'SALE') {
         await invoicesService.cancel(cancelTarget.id, reason);
-        await contabilidadService.cancelAuditedInvoice({ kind, invoiceId: cancelTarget.id, reason });
       } else {
         await supplierInvoicesService.cancel(cancelTarget.id, reason);
-        await contabilidadService.cancelAuditedInvoice({ kind, invoiceId: cancelTarget.id, reason });
       }
-      toast.success('Factura anulada y asiento contable revertido');
+      const result = await contabilidadService.cancelAuditedInvoice({ kind, invoiceId: cancelTarget.id, reason });
+      const journalReversed = Boolean((result as any)?.journalReversed);
+      toast.success(journalReversed ? 'Factura anulada y asiento contable revertido' : 'Factura anulada (no tenía asiento contable pendiente)');
       setCancelTarget(null);
       refreshAll();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo anular la factura');
       setCancelTarget((t) => (t ? { ...t, saving: false } : t));
-    }
-  };
-
-  const openReissue = async (item: any) => {
-    setReissueTarget({ id: item.id, number: item.number, saving: false });
-    setReissue({ loading: true, invoice: null, customerId: '', date: '', dueDate: '', items: [] });
-    try {
-      const invoice = kind === 'SALE' ? await invoicesService.getById(item.id) : await supplierInvoicesService.getById(item.id);      const toDate = (d?: string | null) => d ? String(d).slice(0, 10) : '';
-      const sourceItems = Array.isArray((invoice as any).items) ? (invoice as any).items : [];
-      setReissue({
-        loading: false,
-        invoice,
-        customerId: (invoice as any).customerId || '',
-        date: toDate((invoice as any).date) || new Date().toISOString().slice(0, 10),
-        dueDate: toDate((invoice as any).dueDate) || '',
-        items: sourceItems.map((i: any, idx: number) => ({
-          key: `item-${idx}`,
-          description: i.description || i.product?.name || '',
-          quantity: Number(i.quantity || 0),
-          unitPrice: Number(i.unitPrice || 0),
-          taxRate: Number(i.taxRate || 0),
-          discount: Number(i.discount || 0),
-        })),
-      });
-    } catch (e: any) {
-      setReissueTarget(null);
-      setReissue(null);
-      toast.error(e?.message || 'No se pudo cargar la factura para reemitir');
-    }
-  };
-
-  const updateReissueItem = (key: string, patch: Partial<{ description: string; quantity: number; unitPrice: number; taxRate: number; discount: number }>) => {
-    setReissue((current) => current ? { ...current, items: current.items.map((i) => i.key === key ? { ...i, ...patch } : i) } : current);
-  };
-
-  const handleReissue = async () => {
-    if (!reissueTarget || !reissue) return;
-    try {
-      setReissueTarget((t) => (t ? { ...t, saving: true } : t));
-      const items = reissue.items.filter((i) => i.description.trim() && i.quantity > 0 && i.unitPrice >= 0);
-      if (items.length === 0) { toast.error('La factura corregida debe tener al menos una línea válida'); return; }
-      const payload: any = {
-        customerId: reissue.customerId || undefined,
-        date: reissue.date || undefined,
-        dueDate: reissue.dueDate || undefined,
-        items,
-      };
-      let created: any;
-      if (kind === 'SALE') {
-        created = await invoicesService.create(payload);
-      } else {
-        toast.error('La reemisión de facturas de compra debe hacerse desde el módulo de Compras (requiere orden de compra)');
-        setReissueTarget((t) => (t ? { ...t, saving: false } : t));
-        return;
-      }
-      await contabilidadService.registerReissue({ kind, invoiceId: reissueTarget.id, newInvoiceId: created.id, observations: `Reemitida como ${created.number}` });
-      toast.success(`Factura corregida ${created.number} registrada como reemisión`);
-      setReissueTarget(null);
-      setReissue(null);
-      refreshAll();
-    } catch (e: any) {
-      toast.error(e?.message || 'No se pudo reemitir la factura');
-      setReissueTarget((t) => (t ? { ...t, saving: false } : t));
     }
   };
 
@@ -288,7 +214,7 @@ export function InvoiceAuditView() {
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest">Auditoría de Facturas</h3>
             <p className="text-[10px] text-muted-foreground">
-              Selecciona facturas de venta o compra, valida su proceso, envía a corregir, anula (reviertiendo el asiento contable) o reemite la corregida.
+              Selecciona facturas de venta o compra, valida su proceso, envía a corregir o anula (revirtiendo el asiento contable). La factura corregida se crea nuevamente en su módulo; no se reemite sobre la misma.
             </p>
           </div>
         </div>
@@ -385,11 +311,6 @@ export function InvoiceAuditView() {
                               <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-lg text-destructive" disabled={busyId === item.id} onClick={() => setCancelTarget({ id: item.id, number: item.number, reason: '', saving: false })} title="Anular factura y revertir asiento">
                                 <Ban className="size-3.5" /> Anular
                               </Button>
-                              {kind === 'SALE' && (
-                                <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-lg text-violet-600" disabled={busyId === item.id} onClick={() => openReissue(item)} title="Reemitir factura corregida">
-                                  <FilePlus2 className="size-3.5" /> Reemitir
-                                </Button>
-                              )}
                             </>
                           )}
                         </div>
@@ -573,76 +494,13 @@ export function InvoiceAuditView() {
             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Motivo de anulación</Label>
             <textarea value={cancelTarget?.reason || ''} onChange={(e) => setCancelTarget((t) => (t ? { ...t, reason: e.target.value } : t))} rows={3}
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary/50"
-              placeholder="Ej: Factura mal emitida, se reemitirá corregida…" />
+              placeholder="Ej: Factura mal emitida, se creará la corregida en Ventas…" />
           </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" disabled={cancelTarget?.saving} onClick={() => setCancelTarget(null)}>Cancelar</Button>
             <Button className="gap-2 rounded-xl bg-destructive text-white hover:bg-destructive/90" disabled={cancelTarget?.saving} onClick={handleCancel}>
               {cancelTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
               Anular y revertir asiento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!reissueTarget} onOpenChange={(open) => { if (!open && !reissueTarget?.saving) { setReissueTarget(null); setReissue(null); } }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black uppercase tracking-tight">Reemitir factura corregida · {reissueTarget?.number}</DialogTitle>
-            <DialogDescription className="text-xs">
-              Corrige los datos y líneas; se creará una factura nueva y la original quedará registrada como reemitida.
-            </DialogDescription>
-          </DialogHeader>
-          {reissue?.loading ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Cargando factura original…
-            </div>
-          ) : reissue && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha</Label>
-                  <Input type="date" value={reissue.date} onChange={(e) => setReissue({ ...reissue, date: e.target.value })} className="h-9 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vencimiento</Label>
-                  <Input type="date" value={reissue.dueDate} onChange={(e) => setReissue({ ...reissue, dueDate: e.target.value })} className="h-9 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cliente</Label>
-                  <div className="flex h-9 items-center rounded-xl border border-border px-3 text-xs font-bold">{reissue.invoice?.customer?.name || reissue.invoice?.customCustomerName || (reissue.customerId || '—')}</div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Líneas de la factura corregida</Label>
-                  <Button variant="outline" size="sm" className="h-7 gap-1 rounded-lg text-xs" onClick={() => setReissue({ ...reissue, items: [...reissue.items, { key: `item-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: reissue.items[0]?.taxRate || 0, discount: 0 }] })}>
-                    <Plus className="size-3.5" /> Línea
-                  </Button>
-                </div>
-                {reissue.items.map((item, idx) => (
-                  <div key={item.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 p-2">
-                    <span className="text-[10px] font-black text-muted-foreground w-4">{idx + 1}</span>
-                    <Input value={item.description} onChange={(e) => updateReissueItem(item.key, { description: e.target.value })} placeholder="Descripción" className="h-8 flex-1 min-w-40 text-xs" />
-                    <Input type="number" min={0} step="0.01" value={item.quantity} onChange={(e) => updateReissueItem(item.key, { quantity: Number(e.target.value) })} className="h-8 w-20 text-xs" title="Cantidad" />
-                    <Input type="number" min={0} step="0.01" value={item.unitPrice} onChange={(e) => updateReissueItem(item.key, { unitPrice: Number(e.target.value) })} className="h-8 w-28 text-xs" title="Precio" />
-                    <Input type="number" min={0} step="0.01" value={item.taxRate} onChange={(e) => updateReissueItem(item.key, { taxRate: Number(e.target.value) })} className="h-8 w-20 text-xs" title="IVA %" />
-                    <Input type="number" min={0} step="0.01" value={item.discount} onChange={(e) => updateReissueItem(item.key, { discount: Number(e.target.value) })} className="h-8 w-20 text-xs" title="Descuento %" />
-                    <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => setReissue({ ...reissue, items: reissue.items.filter((i) => i.key !== item.key) })}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                ))}
-                {reissue.items.length === 0 && <p className="text-center text-[10px] text-muted-foreground">Agrega al menos una línea.</p>}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" disabled={reissueTarget?.saving} onClick={() => { setReissueTarget(null); setReissue(null); }}>Cancelar</Button>
-            <Button className="gap-2 rounded-xl" disabled={reissueTarget?.saving || reissue?.loading} onClick={handleReissue}>
-              {reissueTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
-              Crear factura corregida
             </Button>
           </DialogFooter>
         </DialogContent>

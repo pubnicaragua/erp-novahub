@@ -5,12 +5,21 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { Search, RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
+import { ReportSettingsDialog, type ConfigField } from './ReportSettingsDialog';
+
+const RESULT_CONFIG_FIELDS: ConfigField[] = [
+  { moduleKey: 'invoice', fieldKey: 'income', label: 'Ingresos por ventas', hint: 'Facturas de clientes' },
+  { moduleKey: 'cashSale', fieldKey: 'income', label: 'Ingresos por ventas de caja', hint: 'Ventas directas POS' },
+  { moduleKey: 'financialIncome', fieldKey: 'income', label: 'Ingresos financieros', hint: 'Ingresos manuales y recurrentes' },
+  { moduleKey: 'expense', fieldKey: 'expense', label: 'Gastos operativos', hint: 'Gastos y compras de servicios' },
+  { moduleKey: 'cashRegister', fieldKey: 'shortage', label: 'Faltantes de caja', hint: 'Cierres de caja con sobrante/faltante' },
+];
 
 interface PnLAccount {
   accountId: string;
@@ -44,6 +53,7 @@ export function EstadoResultadosView() {
   const [showPreviousYear, setShowPreviousYear] = useState(false);
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
   const query = useAccountingQuery<PnLData | null>(
     ['profit-loss', dateFrom, dateTo, showPreviousYear],
     async (signal) => {
@@ -295,7 +305,10 @@ export function EstadoResultadosView() {
             </button>
           )}
         </div>
-        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
+        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
+            <Settings2 className="size-4" /> Configuración
+          </Button>
           <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
@@ -369,6 +382,13 @@ export function EstadoResultadosView() {
           )}
         </CardContent>
       </Card>
+      <ReportSettingsDialog
+        open={showSettings}
+        onOpenChange={setShowSettings}
+        title="Configuración · Estado de Resultados"
+        description="Cuentas contables vinculadas a los ingresos y gastos. Este reporte solo muestra cuentas de resultado (ingresos y gastos de detalle): las cuentas de balance (Caja y Bancos, cuentas por cobrar, etc.) nunca aparecen aquí."
+        fields={RESULT_CONFIG_FIELDS}
+      />
     </div>
   );
 }

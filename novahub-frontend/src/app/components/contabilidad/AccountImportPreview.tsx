@@ -25,7 +25,7 @@ const fieldClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background
 const normalizeImportValue = (value: unknown) => String(value ?? '').trim().toUpperCase()
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const ACCOUNT_TYPE_ALIASES = new Set(['ASSET', 'ACTIVO', 'ACTIVOS', 'LIABILITY', 'PASIVO', 'PASIVOS', 'EQUITY', 'PATRIMONIO', 'CAPITAL', 'INCOME', 'INGRESO', 'INGRESOS', 'EXPENSE', 'GASTO', 'GASTOS', 'COSTO', 'COSTOS']);
-const SUBTYPE_ALIASES = new Set(['MAIN_GROUP', 'GRUPO PRINCIPAL', 'GROUP', 'GRUPO', 'DETAIL_ACCOUNT', 'CUENTA DE DETALLE', 'SUBACCOUNT', 'SUBCUENTA']);
+const SUBTYPE_ALIASES = new Set(['MAIN_GROUP', 'GRUPO PRINCIPAL', 'GROUP', 'GRUPO', 'DETAIL_ACCOUNT', 'CUENTA DE DETALLE', 'SUBACCOUNT', 'SUBCUENTA', 'CUENTA AUXILIAR', 'AUXILIAR']);
 const DETAIL_TYPE_ALIASES = new Set(['BALANCE_SHEET', 'BALANCE GENERAL', 'INCOME_STATEMENT', 'ESTADO DE RESULTADOS']);
 
 function validateImportRows(rows: ChartAccountCsvRow[], existingAccountCodes: string[]) {
@@ -55,7 +55,7 @@ function validateImportRows(rows: ChartAccountCsvRow[], existingAccountCodes: st
     if (!code) addMessage(index, 'El código es obligatorio');
     if (!row.nombre.trim()) addMessage(index, 'El nombre es obligatorio');
     if (!ACCOUNT_TYPE_ALIASES.has(normalizeImportValue(row.tipo_cuenta))) addMessage(index, `Tipo de cuenta inválido '${row.tipo_cuenta}'`);
-    if (!SUBTYPE_ALIASES.has(subtype) && !subtype.includes('GRUPO') && !subtype.includes('DETALLE') && !subtype.includes('SUB')) addMessage(index, `Subtipo inválido '${row.subtipo}'`);
+    if (!SUBTYPE_ALIASES.has(subtype) && !subtype.includes('GRUPO') && !subtype.includes('DETALLE') && !subtype.includes('SUB') && !subtype.includes('AUXILIAR')) addMessage(index, `Subtipo inválido '${row.subtipo}'`);
     if (detailType && !DETAIL_TYPE_ALIASES.has(detailType)) addMessage(index, `Tipo de detalle inválido '${row.tipo_detalle}'`);
     if (manual && !['1', '0', 'TRUE', 'FALSE'].includes(manual)) addMessage(index, 'permite_manual debe ser 1 o 0');
     if (active && !['1', '0', 'TRUE', 'FALSE'].includes(active)) addMessage(index, 'activa debe ser 1 o 0');

@@ -1,4 +1,4 @@
-import { cn } from './ui/utils';
+﻿import { cn } from './ui/utils';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -129,7 +129,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
             { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
             { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },
             { id: 'reportes-financieros', label: 'Financiero', module: 'REPORTS_FINANCIAL' },
-            { id: 'reportes-inventario', label: 'Inventario', module: 'REPORTS_INVENTORY' },
+            { id: 'reportes-inventario', label: 'Inventario de Mercancías', module: 'REPORTS_INVENTORY' },
             { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
             { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
             { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },

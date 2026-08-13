@@ -26,7 +26,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
-import { downloadCsv, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
+import { downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
 import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
@@ -201,6 +201,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [pendingStatusAccount, setPendingStatusAccount] = useState<AccountNode | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
 
+  const [mergeSource, setMergeSource] = useState<AccountNode | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [merging, setMerging] = useState(false);
+
+  const mergeCandidates = useMemo(() => {
+    if (!mergeSource) return [];
+    const sourceId = mergeSource.id;
+    return flatList.filter(a => a.id !== sourceId && a.type === mergeSource.type);
+  }, [mergeSource, flatList]);
+
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -263,6 +273,26 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       toast.error(e?.message || 'No se pudo actualizar el estado de la cuenta');
     } finally {
       setStatusChanging(false);
+    }
+  };
+
+  const handleMergeAccount = async () => {
+    if (!mergeSource || !mergeTargetId) return;
+    const source = mergeSource;
+    const target = flatList.find(a => a.id === mergeTargetId);
+    setMerging(true);
+    try {
+      const res = await contabilidadService.mergeAccount(source.id, mergeTargetId);
+      await fetchAccounts(true);
+      setSelectedAccount((current) => current?.id === source.id ? null : current);
+      setSelectedTransaction(null);
+      setMergeSource(null);
+      setMergeTargetId('');
+      toast.success(`Cuenta eliminada. Se transfirieron ${res?.transferredRecords ?? 0} registros a ${target ? `${target.code} · ${target.name}` : 'la cuenta destino'}.`);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo transferir y eliminar la cuenta');
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -399,8 +429,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       const raw = await contabilidadService.exportAccounts();
       const rows = Array.isArray(raw) ? raw : (raw as any)?.data;
       if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolvió cuentas para exportar');
-      downloadCsv('plan_cuentas.csv', rows);
-      toast.success('Plan de cuentas exportado');
+      downloadXlsx('plan_cuentas.xlsx', rows);
+      toast.success('Plan de cuentas exportado en Excel (.xlsx)');
     } catch (e: any) {
       toast.error(e?.message || 'Error al exportar');
     }
@@ -876,6 +906,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                       >
                         {selectedAccount.isActive ? <Ban className="mr-1 size-3.5" /> : <CircleCheck className="mr-1 size-3.5 text-emerald-500" />} {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
                       </Button>
+                      {(selectedAccount.children?.length ?? 0) === 0 && (
+                        <Button variant="outline" size="sm" className="flex-1 text-rose-600 hover:text-rose-600" onClick={() => { setMergeSource(selectedAccount); setMergeTargetId(''); }}>
+                          <ArrowDownLeft className="mr-1 size-3.5" /> Transferir y eliminar
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1078,6 +1113,45 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         loading={statusChanging}
         onConfirm={toggleAccountStatus}
       />
+
+      {/* Transfer and delete dialog */}
+      <Dialog open={mergeSource !== null} onOpenChange={(open) => { if (!open && !merging) { setMergeSource(null); setMergeTargetId(''); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Transferir y eliminar cuenta</DialogTitle>
+            <DialogDescription>
+              {mergeSource
+                ? `Se eliminará la cuenta ${mergeSource.code} · ${mergeSource.name} y TODOS sus datos (saldos, transacciones, asientos, facturas, almacenes, conciliaciones, presupuestos) se transferirán a la cuenta destino.`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
+              <p className="text-xs text-rose-600">
+                <strong>Advertencia:</strong> la cuenta origen se eliminará de forma permanente. Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Cuenta destino (mismo tipo: {mergeSource ? getTypeLabel(mergeSource.type) : ''})</Label>
+              <Combobox
+                value={mergeTargetId}
+                onChange={setMergeTargetId}
+                options={mergeCandidates.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                placeholder="Buscar cuenta destino..."
+                emptyMessage="No hay cuentas del mismo tipo disponibles"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => { setMergeSource(null); setMergeTargetId(''); }} disabled={merging}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleMergeAccount} disabled={!mergeTargetId || merging}>
+              {merging ? <Loader2 className="size-4 animate-spin mr-1" /> : null} Transferir y eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

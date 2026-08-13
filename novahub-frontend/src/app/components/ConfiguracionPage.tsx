@@ -57,7 +57,7 @@ const AVAILABLE_MODULES = [
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
-  { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU' },
+  { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
   { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
@@ -162,7 +162,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'REPORTS_SALES', label: 'Ventas', parent: 'REPORTS' },
   { id: 'REPORTS_PURCHASES', label: 'Compras', parent: 'REPORTS' },
   { id: 'REPORTS_FINANCIAL', label: 'Financiero', parent: 'REPORTS' },
-  { id: 'REPORTS_INVENTORY', label: 'Inventario', parent: 'REPORTS' },
+  { id: 'REPORTS_INVENTORY', label: 'Inventario de Mercancías', parent: 'REPORTS' },
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
@@ -404,7 +404,7 @@ const PRICING_MODULES = [
   { category: 'Operaciones', modules: [
     { id: 'SALES', label: 'Ventas', icon: TrendingUp },
     { id: 'PURCHASES', label: 'Compras', icon: HandCoins },
-    { id: 'INVENTORY', label: 'Inventario', icon: Package },
+    { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package },
   ]},
   { category: 'Administración', modules: [
     { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign },
@@ -1190,7 +1190,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </div>
                     </div>
                     <div className="p-2 space-y-1">
-                      {['Dashboard', 'Ventas', 'Compras', 'Inventario'].map((item, i) => (
+                      {['Dashboard', 'Ventas', 'Compras', 'Inventario de Mercancías'].map((item, i) => (
                         <div key={item} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
                           style={i === 0 ? { backgroundColor: primaryHex, color: primaryFgHex } : { color: `${sidebarFgHex}99` }}>
                           {item}

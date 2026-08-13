@@ -1,12 +1,10 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Sun, Cloud, CalendarDays } from 'lucide-react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Filter } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Separator } from '../ui/separator';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -17,9 +15,21 @@ import type { AbsenceType, VacationBalance } from '../../types';
 import { PromptDialog } from '../ui/PromptDialog';
 import { useQuery } from '@tanstack/react-query';
 
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  VACATION: 'Vacaciones',
+  SICK: 'Enfermedad',
+  PERSONAL: 'Personal',
+  MATERNITY: 'Maternidad',
+  PATERNITY: 'Paternidad',
+  UNPAID: 'Sin goce de sueldo',
+  BEREAVEMENT: 'Duelo',
+  OTHER: 'Otro',
+};
+
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const [showNewForm, setShowNewForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [newRequest, setNewRequest] = useState({
     employeeId: '',
     leaveType: 'VACATION',
@@ -96,6 +106,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         employeeId: '',
         leaveType: 'VACATION',
         leaveTypeCustom: '',
+        absenceTypeId: '',
         startDate: '',
         endDate: '',
         days: 1,
@@ -109,7 +120,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
   const handleApprove = async (id: string) => {
     try {
-      await hrService.approveLeaveRequest(id, 'current-user-id');
+      await hrService.approveLeaveRequest(id, user?.id || 'system');
       toast.success('Solicitud aprobada');
       onRefresh();
     } catch (e: any) {
@@ -137,6 +148,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const pendingRequests = leaveRequests.filter((r: any) => r.status === 'PENDING');
   const approvedRequests = leaveRequests.filter((r: any) => r.status === 'APPROVED');
   const rejectedRequests = leaveRequests.filter((r: any) => r.status === 'REJECTED');
+  const filteredRequests = statusFilter === 'ALL' ? leaveRequests : leaveRequests.filter((r: any) => r.status === statusFilter);
 
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -144,10 +156,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [pageSize]);
+  }, [pageSize, statusFilter]);
 
-  const totalPages = Math.ceil(leaveRequests.length / pageSize);
-  const paginatedRequests = leaveRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(filteredRequests.length / pageSize);
+  const paginatedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-4">
@@ -219,12 +231,27 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
         </motion.div>
       )}
 
-      {/* New Request Button */}
-      <div className="flex justify-end">
+      {/* New Request Button + Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter className="size-4 text-muted-foreground" />
+          {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider border transition-all',
+                statusFilter === s ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'border-border text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {s === 'ALL' ? 'Todas' : s === 'PENDING' ? 'Pendientes' : s === 'APPROVED' ? 'Aprobadas' : 'Rechazadas'}
+            </button>
+          ))}
+        </div>
         {canPerform('HR_LEAVES', 'create') && (
           <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
             <Plus className="size-4 mr-2" />
-            Nueva Solicitud
+            {showNewForm ? 'Cancelar' : 'Nueva Solicitud'}
           </Button>
         )}
       </div>
@@ -250,43 +277,39 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Tipo de Ausencia</label>
-              <Select value={newRequest.leaveType} onValueChange={(v) => setNewRequest({ ...newRequest, leaveType: v })}>
-                <SelectTrigger className="bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="VACATION">Vacaciones</SelectItem>
-                  <SelectItem value="SICK">Enfermedad</SelectItem>
-                  <SelectItem value="PERSONAL">Personal</SelectItem>
-                  <SelectItem value="MATERNITY">Maternidad</SelectItem>
-                  <SelectItem value="PATERNITY">Paternidad</SelectItem>
-                  <SelectItem value="UNPAID">Sin goce de sueldo</SelectItem>
-                  <SelectItem value="BEREAVEMENT">Duelo</SelectItem>
-                  <SelectItem value="OTHER">Otro</SelectItem>
-                </SelectContent>
-              </Select>
-              {newRequest.leaveType === 'OTHER' && (
+              {absenceTypes.length > 0 ? (
+                <Select value={newRequest.absenceTypeId} onValueChange={(v) => {
+                  const selected = absenceTypes.find(at => at.id === v);
+                  setNewRequest({ ...newRequest, absenceTypeId: v, leaveType: selected?.code === 'VAC' ? 'VACATION' : (selected ? 'OTHER' : newRequest.leaveType), leaveTypeCustom: selected ? selected.name : '' });
+                }}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Seleccionar tipo de ausencia..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {absenceTypes.filter(at => at.isActive).map(at => (
+                      <SelectItem key={at.id} value={at.id}>{at.code} - {at.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select value={newRequest.leaveType} onValueChange={(v) => setNewRequest({ ...newRequest, leaveType: v })}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LEAVE_TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {newRequest.leaveType === 'OTHER' && !newRequest.absenceTypeId && (
                 <Input 
                   placeholder="Especifica el tipo de ausencia..."
                   value={newRequest.leaveTypeCustom}
                   onChange={e => setNewRequest({...newRequest, leaveTypeCustom: e.target.value})}
                   className="mt-2 bg-background"
                 />
-              )}
-              {newRequest.leaveType === 'VACATION' && absenceTypes.length > 0 && (
-                <div className="mt-2">
-                  <label className="text-xs font-medium mb-1 block text-muted-foreground">Tipo de Ausencia (config)</label>
-                  <Select value={newRequest.absenceTypeId} onValueChange={(v) => setNewRequest({ ...newRequest, absenceTypeId: v })}>
-                    <SelectTrigger className="bg-background h-9 text-xs">
-                      <SelectValue placeholder="Seleccionar tipo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {absenceTypes.filter(at => at.isActive).map(at => (
-                        <SelectItem key={at.id} value={at.id}>{at.code} - {at.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               )}
             </div>
             <div>
@@ -369,7 +392,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                      {request.leaveType === 'VACATION' ? 'Vacaciones' : request.leaveType === 'SICK' ? 'Enfermedad' : request.leaveType === 'PERSONAL' ? 'Personal' : request.leaveType === 'MATERNITY' ? 'Maternidad' : request.leaveType === 'PATERNITY' ? 'Paternidad' : request.leaveType === 'UNPAID' ? 'Sin Goce' : request.leaveType === 'BEREAVEMENT' ? 'Duelo' : request.leaveTypeCustom || 'Otro'}
+                      {LEAVE_TYPE_LABELS[request.leaveType] || (request.leaveType === 'OTHER' ? request.leaveTypeCustom : 'Otro')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
@@ -448,7 +471,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Tipo</span>
-                  <span className="font-semibold">{request.type === 'VACATION' ? 'Vacaciones' : request.type === 'SICK' ? 'Enfermedad' : request.type === 'UNPAID' ? 'Sin Goce' : request.type}</span>
+                  <span className="font-semibold">{LEAVE_TYPE_LABELS[request.leaveType] || request.leaveTypeCustom || 'Otro'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">

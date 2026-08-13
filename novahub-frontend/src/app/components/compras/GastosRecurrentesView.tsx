@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Trash2, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
+import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -187,7 +187,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
              {!isNew && canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
-                  <Trash2 className="size-3 mr-2" /> Eliminar
+                  <Ban className="size-3 mr-2" /> Anular
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_EXPENSES_REC', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES_REC', 'edit'))) && (
@@ -387,7 +387,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
               <Button title={canPerform('PURCHASES_EXPENSES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
               <PurchaseAuditButton entity="RECURRING_EXPENSE" entityId={row.id} title="Auditoria del Gasto Recurrente" />
               {canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
-                <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
+                <Button title="Anular configuración recurrente" aria-label="Anular gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -395,9 +395,9 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
-          title="Eliminar Gasto Recurrente"
-          description="¿Estás seguro de que deseas eliminar este gasto recurrente? Esta acción no se puede deshacer."
-          confirmLabel="Eliminar Gasto"
+          title="Anular Gasto Recurrente"
+          description="¿Estás seguro de que deseas anular este gasto recurrente? Dejará de generar ejecuciones automáticas."
+          confirmLabel="Anular Gasto"
           onConfirm={handleDeleteConfirm}
           loading={deleteLoading}
         />

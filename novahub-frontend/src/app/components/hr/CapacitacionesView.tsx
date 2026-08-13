@@ -1,13 +1,35 @@
 import { useRef, useState } from 'react';
-import { GraduationCap, Plus, Calendar } from 'lucide-react';
+import { GraduationCap, Plus, Calendar, CheckCircle2, PlayCircle, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
+import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
+import { cn } from '../ui/utils';
+
+const TRAINING_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: 'Programada',
+  IN_PROGRESS: 'En Progreso',
+  COMPLETED: 'Completada',
+  CANCELLED: 'Cancelada',
+};
+
+const TRAINING_STATUS_STYLES: Record<string, string> = {
+  SCHEDULED: 'bg-blue-100 text-blue-700',
+  IN_PROGRESS: 'bg-orange-100 text-orange-700',
+  COMPLETED: 'bg-green-100 text-green-700',
+  CANCELLED: 'bg-gray-100 text-gray-700',
+};
+
+const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: 'Inscrito',
+  IN_PROGRESS: 'En curso',
+  COMPLETED: 'Completado',
+};
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Efectivo / Caja' },
@@ -75,6 +97,36 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   const scheduledTrainings = trainings.filter((t: any) => t.status === 'SCHEDULED').length;
   const inProgressTrainings = trainings.filter((t: any) => t.status === 'IN_PROGRESS').length;
   const completedTrainings = trainings.filter((t: any) => t.status === 'COMPLETED').length;
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [completingEnrollment, setCompletingEnrollment] = useState<string | null>(null);
+  const [changingStatus, setChangingStatus] = useState<string | null>(null);
+
+  const handleTrainingStatus = async (training: any, status: string) => {
+    setChangingStatus(training.id);
+    try {
+      await hrService.updateTraining(training.id, { status });
+      toast.success(status === 'IN_PROGRESS' ? 'Capacitación iniciada' : status === 'COMPLETED' ? 'Capacitación completada' : 'Estado actualizado');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
+    } finally {
+      setChangingStatus(null);
+    }
+  };
+
+  const handleCompleteEnrollment = async (trainingId: string, employeeId: string) => {
+    setCompletingEnrollment(`${trainingId}:${employeeId}`);
+    try {
+      await hrService.completeTraining(trainingId, employeeId, { status: 'COMPLETED' });
+      toast.success('Empleado marcado como completado');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al marcar completado');
+    } finally {
+      setCompletingEnrollment(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -208,7 +260,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
               <label className="text-sm font-medium mb-1 block">Moneda</label>
               <select
                 value={newTraining.currency}
-                onChange={(e) => setNewTraining({ ...newTraining, currency: e.target.value })}
+                onChange={(e) => setNewTraining({ ...newTraining, currency: e.target.value as 'NIO' | 'USD' })}
                 disabled={isCreating}
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-medium"
               >
@@ -275,6 +327,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
           const enrolledCount = training.enrollments?.length || 0;
           const completedCount = training.enrollments?.filter((e: any) => e.status === 'COMPLETED').length || 0;
           const progress = training.capacity > 0 ? (enrolledCount / training.capacity) * 100 : 0;
+          const isExpanded = expandedId === training.id;
 
           return (
             <div key={training.id} className="border rounded-lg p-6 hover:shadow-lg transition-shadow bg-card text-card-foreground">
@@ -283,14 +336,9 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   <h3 className="font-semibold text-lg mb-1">{training.title}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-2">{training.description}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded ml-2 ${
-                  training.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' :
-                  training.status === 'IN_PROGRESS' ? 'bg-orange-100 text-orange-700' :
-                  training.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {training.status}
-                </span>
+                <Badge className={cn('ml-2 text-[10px] font-black uppercase tracking-wider', TRAINING_STATUS_STYLES[training.status] || 'bg-gray-100 text-gray-700')}>
+                  {TRAINING_STATUS_LABELS[training.status] || training.status}
+                </Badge>
               </div>
 
               <div className="space-y-3 mb-4">
@@ -327,21 +375,65 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 </div>
               </div>
 
-              {training.status === 'COMPLETED' && (
-                <div className="pt-3 border-t">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Completaron</span>
-                    <span className="font-medium text-green-600">{completedCount} empleados</span>
-                  </div>
-                </div>
-              )}
-
               {training.cost > 0 && (
                 <div className="pt-3 border-t mt-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Costo</span>
                     <CurrencyValuationAmount amount={Number(training.cost ?? training.baseCost ?? 0)} sourceCurrency={training.currency || 'USD'} sourceExchangeRate={training.exchangeRate} className="font-bold text-primary" />
                   </div>
+                </div>
+              )}
+
+              {canPerform('HR_TRAINING', 'edit') && training.status !== 'COMPLETED' && (
+                <div className="flex items-center gap-2 pt-3 mt-3 border-t border-border/40">
+                  {training.status === 'SCHEDULED' && (
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'IN_PROGRESS')}>
+                      <PlayCircle className="size-3 mr-1" /> Iniciar
+                    </Button>
+                  )}
+                  {(training.status === 'IN_PROGRESS' || training.status === 'SCHEDULED') && (
+                    <Button size="sm" className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'COMPLETED')}>
+                      <CheckCircle2 className="size-3 mr-1" /> Completar
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {training.enrollments && training.enrollments.length > 0 && (
+                <div className="pt-3 mt-3 border-t border-border/40">
+                  <button
+                    className="flex w-full items-center justify-between text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setExpandedId(isExpanded ? null : training.id)}
+                  >
+                    <span className="flex items-center gap-1.5"><Users className="size-3.5" /> Empleados inscritos ({enrolledCount}{completedCount > 0 ? ` · ${completedCount} completados` : ''})</span>
+                    {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                      {training.enrollments.map((enrollment: any) => {
+                        const emp = employees.find((e: any) => e.id === enrollment.employeeId) || enrollment.employee;
+                        const name = emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : 'Empleado';
+                        return (
+                          <div key={enrollment.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
+                            <span className="text-xs font-medium truncate">{name}</span>
+                            {training.status !== 'COMPLETED' && enrollment.status !== 'COMPLETED' && canPerform('HR_TRAINING', 'edit') ? (
+                              <button
+                                className="text-[10px] font-black uppercase text-green-600 hover:text-green-700 flex items-center gap-1 shrink-0"
+                                disabled={completingEnrollment === `${training.id}:${enrollment.employeeId}`}
+                                onClick={() => handleCompleteEnrollment(training.id, enrollment.employeeId)}
+                              >
+                                <CheckCircle2 className="size-3" /> Completar
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-black uppercase text-muted-foreground shrink-0">
+                                {ENROLLMENT_STATUS_LABELS[enrollment.status] || enrollment.status}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

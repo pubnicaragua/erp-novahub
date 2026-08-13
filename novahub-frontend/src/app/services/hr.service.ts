@@ -60,6 +60,8 @@ export const hrService = {
   createPerformanceReview: (data: any) => api.post('/hr/performance/reviews', data),
   updatePerformanceReview: (id: string, data: any) => api.patch(`/hr/performance/reviews/${id}`, data),
   getPerformanceMetrics: (signal?: AbortSignal) => api.get('/hr/performance/metrics', withSignal(undefined, signal)),
+  checkPerformanceAbsence: (employeeId: string, start: string, end: string, signal?: AbortSignal) =>
+    api.get('/hr/performance/absence-check', withSignal({ employeeId, start, end }, signal)),
 
   // ===== TRAINING =====
   getTrainings: (statusOrFilters?: string | any, signal?: AbortSignal) => api.get('/hr/training', withSignal(typeof statusOrFilters === 'object' ? statusOrFilters : { status: statusOrFilters }, signal)),
@@ -102,7 +104,7 @@ export const hrService = {
   // ─── VACATION BALANCE ────────────────────────────────────────────────
   getVacationBalance: (employeeId: string, year?: number, signal?: AbortSignal) => api.get(`/hr/vacation-balance/${employeeId}`, withSignal({ year }, signal)),
   getVacationBalances: (year?: number, signal?: AbortSignal) => api.get('/hr/vacation-balance', withSignal({ year }, signal)),
-  recalcVacationBalance: (employeeId: string, year?: number) => api.post(`/hr/vacation-balance/${employeeId}/recalc`, {}, { params: { year } }),
+  recalcVacationBalance: (employeeId: string, year?: number) => api.post(`/hr/vacation-balance/${employeeId}/recalc?year=${year ?? new Date().getFullYear()}`, {}),
 
   // ─── ABSENCE TYPE ────────────────────────────────────────────────────
   createAbsenceType: (data: any) => api.post('/hr/absence-types', data),

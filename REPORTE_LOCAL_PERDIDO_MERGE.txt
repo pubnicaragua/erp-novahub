@@ -1,0 +1,1217 @@
+
+===== novahub-frontend/src/app/components/ActividadesPage.tsx (LOCAL side) =====
+import { useState, useEffect } from 'react';
+  const currentTab = activeSubModule || activeTab;
+          <Tabs value={currentTab} className="w-full" onValueChange={(val) => {
+
+===== novahub-frontend/src/app/components/ClientesPage.tsx (LOCAL side) =====
+  const fetchData = async () => {
+
+===== novahub-frontend/src/app/components/ComprasPage.tsx (LOCAL side) =====
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Truck, Wallet, CalendarClock,
+  }
+
+  const toArr = (r: any) => Array.isArray(r) ? r : (r?.data || []);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [sup, exp, expRec, ord, rec, inv, invRec, pay, cred, req] = await Promise.all([
+        suppliersService.getAll().catch(() => []),
+        expensesService.getAll().catch(() => []),
+        recurringExpensesService.getAll().catch(() => []),
+        purchaseOrdersService.getAll().catch(() => []),
+        purchaseReceiptsService.getAll().catch(() => []),
+        supplierInvoicesService.getAll().catch(() => []),
+        recurringSupplierInvoicesService.getAll().catch(() => []),
+        paymentsMadeService.getAll().catch(() => []),
+        supplierCreditsService.getAll().catch(() => []),
+        purchaseRequestsService.getAll().catch(() => []),
+      ]);
+      setData({
+        proveedores:   toArr(sup),
+        gastos:        toArr(exp),
+        gastosRec:     toArr(expRec),
+        ordenes:       toArr(ord),
+        recepciones:   toArr(rec),
+        facturasProv:  toArr(inv),
+        facturasRec:   toArr(invRec),
+        pagos:         toArr(pay),
+        creditos:      toArr(cred),
+        solicitudes:   toArr(req),
+      });
+    } catch {
+      toast.error('Error al cargar módulo de Compras');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, fetchData]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (activeSection === 'solicitudes' && tabsRef.current) {
+        tabsRef.current.scrollLeft = 0;
+        return;
+      }
+      const activeTab = tabsRef.current?.querySelector<HTMLElement>('[data-state="active"]');
+      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection]);
+
+===== novahub-frontend/src/app/components/ConfiguracionPage.tsx (LOCAL side) =====
+  // Load branding and currency on mount
+  // Pricing state
+  const [pricingData, setPricingData] = useState<ModulePriceItem[]>([]);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingSearch, setPricingSearch] = useState('');
+  const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (scenario !== 'superadmin') return;
+    const timer = setTimeout(() => { void fetchPricing(); }, 0);
+    return () => clearTimeout(timer);
+  }, [scenario]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (user?.tenantId && canViewRoles) {
+        (async () => {
+          setIsLoadingRoles(true);
+          try {
+            console.log('[Config] Fetching roles for tenant:', user?.tenantId);
+            const res = await rolesService.getAll({ clientTenantId: user?.tenantId });
+            let rolesList = Array.isArray(res) ? res : (res as any)?.data || [];
+
+            console.log('[Config] Roles received:', rolesList.length);
+
+            if (!user?.isPlatformAdmin) {
+              rolesList = rolesList.filter((r: any) => r.clientTenantId === user?.tenantId);
+            }
+
+            setRoles(rolesList);
+          } catch (error) {
+            console.error('Error fetching roles:', error);
+          } finally {
+            setIsLoadingRoles(false);
+          }
+        })();
+      }
+      if (user?.tenantId) {
+        (async () => {
+          setIsLoadingModules(true);
+          try {
+            const res = await subscriptionsService.getEnabledModules(user.tenantId);
+            setEnabledModules(res);
+          } catch (error) {
+            console.error('Error fetching modules:', error);
+          } finally {
+            setIsLoadingModules(false);
+          }
+        })();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [user?.tenantId, canViewRoles, user?.isPlatformAdmin]);
+
+
+===== novahub-frontend/src/app/components/DocumentosPage.tsx (LOCAL side) =====
+  const [data, setData] = useState<any>({
+    contratos: [],
+    facturas: [],
+    reportes: [],
+    archivos: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = () => {
+    Promise.all([
+      contractsService.getAll().catch(() => []),
+      legalInvoicesService.getAll().catch(() => []),
+      reportsService.getAll().catch(() => []),
+      filesService.getAll().catch(() => [])
+    ]).then(
+      ([contratos, facturas, reportes, archivos]) => {
+        setData({ contratos, facturas, reportes, archivos });
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching documentos:', error);
+        setLoading(false);
+      }
+    );
+  };
+
+  const handleRefresh = () => {
+    setLoading(true);
+    fetchData();
+
+===== novahub-frontend/src/app/components/FinanzasPage.tsx (LOCAL side) =====
+import { cn } from './ui/utils';
+import { useState, useEffect } from 'react';
+  const { filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const { exchangeRate: globalRate, convertAmount } = useCurrency();
+    const load = async () => {
+      try {
+        const [incRes, expRes, rexpRes, accRes, rincRes] = await Promise.allSettled([
+          incomeService.getAll(),
+          expensesService.getAll(),
+          recurringExpensesService.getAll(),
+          accountsService.getAll(),
+          recurringIncomesService.getAll(),
+        ]);
+
+        setIncomes(incRes.status === 'fulfilled' ? normalizeListResponse(incRes.value) : []);
+        setExpenses(expRes.status === 'fulfilled' ? normalizeListResponse(expRes.value) : []);
+        setRecurringExpenses(rexpRes.status === 'fulfilled' ? normalizeListResponse(rexpRes.value) : []);
+        setAccounts(accRes.status === 'fulfilled' ? normalizeListResponse(accRes.value) : []);
+        setRecurringIncomes(rincRes.status === 'fulfilled' ? normalizeListResponse(rincRes.value) : []);
+
+        if ([incRes, expRes, rexpRes, accRes].every((res) => res.status === 'rejected')) {
+          toast.error('Error al cargar datos financieros');
+        }
+      } catch (error) {
+        console.error('Error fetching finance data:', error);
+        toast.error('Error al cargar datos financieros');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, []);
+      <Tabs value={currentTab} className="w-full" onValueChange={handleTabChange}>
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
+
+===== novahub-frontend/src/app/components/InventarioPage.tsx (LOCAL side) =====
+  const [activeTab, setActiveTab] = useState(activeSubModule || 'productos');
+  const currentTab = activeSubModule && INVENTORY_SECTIONS.some((section) => section.id === activeSubModule) ? activeSubModule : activeTab;
+    queryKey: ['inventory', 'products', tenantKey],
+    queryFn: () => inventoryService.getProducts(),
+    enabled: Boolean(user) && ['dashboard', 'productos', 'servicios', 'transferencias', 'ajustes'].includes(currentTab),
+    queryFn: inventoryService.getWarehouses,
+    enabled: Boolean(user) && currentTab !== 'dashboard',
+    queryFn: inventoryService.getCategories,
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(currentTab),
+  });
+  const transfersQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'transfers', tenantKey],
+    queryFn: inventoryService.getTransfers,
+    enabled: Boolean(user) && currentTab === 'transferencias',
+  });
+  const adjustmentsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'adjustments', tenantKey],
+    queryFn: inventoryService.getAdjustments,
+    enabled: Boolean(user) && currentTab === 'ajustes',
+  });
+  const seriesQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'series', tenantKey],
+    queryFn: inventoryService.getSeries,
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(currentTab),
+  });
+  const movementsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'movements', tenantKey],
+    queryFn: inventoryService.getMovements,
+    enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes', 'movimientos'].includes(currentTab),
+  });
+  const dashboardQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'dashboard', tenantKey],
+    queryFn: inventoryService.getDashboardStats,
+    enabled: Boolean(user) && currentTab === 'dashboard',
+
+===== novahub-frontend/src/app/components/NotificacionesPage.tsx (LOCAL side) =====
+  const [loading, setLoading] = useState(true);
+
+  const currentTab = activeSubModule && tabIds.includes(activeSubModule) ? activeSubModule : activeTab;
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [alertas, mensajes, push] = await Promise.all([
+        alertsService.getAll().catch(() => []),
+        messagesService.getAll().catch(() => []),
+        pushNotificationsService.getAll().catch(() => []),
+      ]);
+      setData({ alertas, mensajes, push });
+    } catch (error) {
+      console.error('Error fetching notificaciones:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchData();
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (currentTab !== 'mensajes') return;
+    let active = true;
+    const syncMessages = async () => {
+      try {
+        const mensajes = await messagesService.getAll();
+        if (active) setData((current) => ({ ...current, mensajes }));
+      } catch {
+        // Keep the last successful inbox visible and retry on the next cycle.
+      }
+    };
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') void syncMessages();
+    };
+    const syncWhenFocused = () => void syncMessages();
+
+    void syncMessages();
+    const timer = window.setInterval(syncMessages, 5000);
+    window.addEventListener('focus', syncWhenFocused);
+    document.addEventListener('visibilitychange', syncWhenVisible);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', syncWhenFocused);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+    };
+  }, [currentTab]);
+
+===== novahub-frontend/src/app/components/RecursosHumanosPage.tsx (LOCAL side) =====
+  const [loading, setLoading] = useState(true);
+  const [, setRefreshing] = useState(false);
+  const currentTab = activeSubModule && subModuleToTab[activeSubModule] ? subModuleToTab[activeSubModule] : activeTab;
+  const fetchData = useCallback(async (showRefresh = false) => {
+    try {
+      if (showRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const results = await Promise.allSettled([
+        hrService.getEmployees(),
+        hrService.getDepartments(),
+        hrService.getPositions(),
+        hrService.getPayrolls(),
+        hrService.getAttendanceRecords(),
+        hrService.getLeaveRequests(),
+        hrService.getPerformanceReviews(),
+        hrService.getTrainings(),
+        hrService.getBenefits(),
+        hrService.getDashboardStats(),
+      ]);
+
+      const safeVal = (i: number) => {
+        const r = results[i];
+        if (r.status !== 'fulfilled') return [];
+        const v = (r as any).value;
+        return Array.isArray(v) ? v : (v?.data || []);
+      };
+
+      setData({
+        employees: safeVal(0),
+        departments: safeVal(1),
+        positions: safeVal(2),
+        payrolls: safeVal(3),
+        attendance: safeVal(4),
+        leaveRequests: safeVal(5),
+        reviews: safeVal(6),
+        trainings: safeVal(7),
+        benefits: safeVal(8),
+        stats: results[9].status === 'fulfilled' ? (results[9] as any).value : null,
+      });
+    } catch (error) {
+      console.error('Error fetching HR data:', error);
+      toast.error('Error al cargar datos de Recursos Humanos');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
+
+===== novahub-frontend/src/app/components/SuscripcionesPage.tsx (LOCAL side) =====
+(vacio)
+
+===== novahub-frontend/src/app/components/TicketsPage.tsx (LOCAL side) =====
+import { useState, useEffect, useCallback } from 'react';
+  const normalizeList = useCallback(<T,>(response: any): T[] => {
+    if (Array.isArray(response)) return response as T[];
+    if (Array.isArray(response?.data)) return response.data as T[];
+    return [];
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ticketsRes, kbRes, agentsRes] = await Promise.allSettled([
+        supportService.getAll(),
+        knowledgeBaseService.getAll(),
+        supportAgentsService.getAll(),
+      ]);
+
+      setData({
+        tickets: ticketsRes.status === 'fulfilled' ? normalizeList<Ticket>(ticketsRes.value) : [],
+        knowledgeBase: kbRes.status === 'fulfilled' ? normalizeList<KnowledgeArticle>(kbRes.value) : [],
+        agents: agentsRes.status === 'fulfilled' ? normalizeList<SupportAgent>(agentsRes.value) : [],
+      });
+
+      if (ticketsRes.status === 'rejected') console.error('Error fetching tickets:', ticketsRes.reason);
+      if (kbRes.status === 'rejected') console.error('Error fetching knowledge base:', kbRes.reason);
+      if (agentsRes.status === 'rejected') console.error('Error fetching agents:', agentsRes.reason);
+    } catch (error) {
+      console.error('Error fetching support data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [normalizeList]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
+
+===== novahub-frontend/src/app/components/VentasPage.tsx (LOCAL side) =====
+    queryFn: () => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }),
+    enabled: currentSection === 'clientes',
+    queryFn: () => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates }),
+    enabled: currentSection === 'estimaciones',
+    queryFn: () => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), ...ordersDates }),
+    enabled: currentSection === 'ordenes-venta',
+    queryFn: () => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates }),
+    enabled: currentSection === 'pagos-recibidos',
+    queryFn: () => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates }),
+    enabled: currentSection === 'facturas-recurrentes',
+    queryFn: () => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates }),
+    enabled: currentSection === 'devoluciones-venta',
+    queryFn: () => creditNotesService.getAll({ page: creditNotesPage.page, pageSize: creditNotesPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates }),
+    enabled: currentSection === 'notas-credito',
+    queryFn: () => hrService.getEmployees(),
+    enabled: ['ordenes-venta', 'facturas'].includes(currentSection),
+
+===== novahub-frontend/src/app/components/auth/RegisterTenantPage.tsx (LOCAL side) =====
+  const { register, handleSubmit, formState: { errors }, control, setError: setFormError } = useForm<Step1Data>({
+
+===== novahub-frontend/src/app/components/compras/OrdenesCompraView.tsx (LOCAL side) =====
+const daysFromNow = (days: number) => new Date(Date.now() + days * 86400000).toISOString();
+
+===== novahub-frontend/src/app/components/compras/PagosRealizadosView.tsx (LOCAL side) =====
+const fallbackPaymentReference = () => `PAG-${Date.now().toString().slice(-5)}`;
+
+export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], draftPaymentFromInvoice, onDraftConsumed }: Props) {
+
+===== novahub-frontend/src/app/components/compras/ProveedoresView.tsx (LOCAL side) =====
+import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, ArrowUpDown, Upload, FileDown, Info, Ban } from 'lucide-react';
+
+===== novahub-frontend/src/app/components/compras/SolicitudCompraView.tsx (LOCAL side) =====
+  ClipboardList, Search, Eye, X,
+  CheckCircle, Clock, Printer,
+  Building2, ArrowUpRight, Plus,
+  Loader2, Package,
+
+===== novahub-frontend/src/app/components/compras/SupplierHistoryModal.tsx (LOCAL side) =====
+  const loadHistory = async () => {
+
+===== novahub-frontend/src/app/components/contabilidad/ActivosFijosView.tsx (LOCAL side) =====
+  const loadAssets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await contabilidadService.getFixedAssets();
+      setAssets(data as FixedAsset[]);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cargar activos fijos');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await loadAssets();
+    };
+    load();
+  }, [loadAssets]);
+
+===== novahub-frontend/src/app/components/contabilidad/BalanceComprobacionView.tsx (LOCAL side) =====
+  useEffect(() => {
+    const timeout = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timeout);
+  }, [fetchData]);
+
+  const grouped = ACCOUNT_TYPE_ORDER.map(type => ({
+
+===== novahub-frontend/src/app/components/contabilidad/BalanceGeneralView.tsx (LOCAL side) =====
+      setData(result);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar balance general');
+    } finally {
+      setLoading(false);
+    }
+  }, [date, showPreviousYear]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchData]);
+
+===== novahub-frontend/src/app/components/contabilidad/BankAccountsView.tsx (LOCAL side) =====
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, Edit2, Loader2, Landmark } from 'lucide-react';
+  const fetch = async () => {
+    setLoading(true);
+    try {
+      const res: any = await api.get('/bank-accounts');
+      setAccounts(Array.isArray(res) ? res : (res?.data || []));
+    } catch (e: any) {
+      toast.error(getApiErrorMessage(e, 'Error al cargar cuentas bancarias'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { Promise.resolve().then(fetch); }, []);
+
+===== novahub-frontend/src/app/components/contabilidad/CambiosPatrimonioView.tsx (LOCAL side) =====
+    if (!dateFrom || !dateTo) return;
+    const timer = window.setTimeout(fetchData, 0);
+    return () => window.clearTimeout(timer);
+  }, [dateFrom, dateTo, fetchData]);
+
+===== novahub-frontend/src/app/components/contabilidad/ConciliacionView.tsx (LOCAL side) =====
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await Promise.all([fetchReconciliations(), fetchAccounts()]);
+    };
+    load();
+  }, []);
+
+
+===== novahub-frontend/src/app/components/contabilidad/ConfiguracionContableView.tsx (LOCAL side) =====
+  const loadConfig = async () => {
+    setLoading(true)
+    try {
+      const res = await contabilidadService.getConfig()
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadConfig()
+      void loadAccounts()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true)
+    try {
+      const res = await contabilidadService.testConnections()
+      setConnections(res)
+    } catch {
+      setConnections(null)
+    } finally {
+      setConnectionsLoading(false)
+    }
+  }, [])
+
+===== novahub-frontend/src/app/components/contabilidad/DiarioView.tsx (LOCAL side) =====
+  const loadJournals = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = {};
+      if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
+      if (filterDateFrom) params.dateFrom = filterDateFrom;
+      if (filterDateTo) params.dateTo = filterDateTo;
+      if (filterAccountId) params.accountId = filterAccountId;
+      if (filterRefType) params.referenceType = filterRefType;
+      if (filterRefId) params.referenceId = filterRefId;
+      if (filterSearch) params.search = filterSearch;
+      const data = await contabilidadService.getJournals(params);
+      setJournals(data as JournalEntry[]);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cargar asientos');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, filterSearch]);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data = await contabilidadService.getChartOfAccounts();
+      const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
+      setAccounts(flatten(data));
+    } catch {
+      // non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await loadJournals();
+    };
+    load();
+  }, [loadJournals]);
+  useEffect(() => {
+    const load = async () => {
+      await loadAccounts();
+    };
+    load();
+  }, [loadAccounts]);
+
+===== novahub-frontend/src/app/components/contabilidad/EstadoResultadosView.tsx (LOCAL side) =====
+    if (!dateFrom || !dateTo) return;
+    const timer = setTimeout(() => { void fetchData(); }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchData, dateFrom, dateTo]);
+
+===== novahub-frontend/src/app/components/contabilidad/FlujoEfectivoView.tsx (LOCAL side) =====
+    if (dateFrom && dateTo) {
+      const load = async () => {
+        setLoading(true);
+        await fetchData();
+      };
+      load();
+    }
+  }, [fetchData]);
+
+===== novahub-frontend/src/app/components/contabilidad/LibroMayorView.tsx (LOCAL side) =====
+  const loadEntries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: { accountId?: string; dateFrom?: string; dateTo?: string } = {};
+      if (filterAccountId) params.accountId = filterAccountId;
+      if (filterDateFrom) params.dateFrom = filterDateFrom;
+      if (filterDateTo) params.dateTo = filterDateTo;
+      const data = await contabilidadService.getLedger(params);
+      setEntries(data as LedgerEntry[]);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cargar libro mayor');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterAccountId, filterDateFrom, filterDateTo]);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const data: any = await contabilidadService.getChartOfAccounts();
+      setAccounts(data.map((a: any) => ({ id: a.id, code: a.code, name: a.name })));
+    } catch {
+      // non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadEntries, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadEntries]);
+  useEffect(() => {
+    const timer = window.setTimeout(loadAccounts, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAccounts]);
+
+===== novahub-frontend/src/app/components/contabilidad/PeriodosView.tsx (LOCAL side) =====
+  const fetchPeriods = async () => {
+    try {
+      setLoading(true);
+      const res = await contabilidadService.getPeriods();
+      setPeriods(res || []);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar períodos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    Promise.resolve().then(fetchPeriods);
+  }, []);
+
+===== novahub-frontend/src/app/components/contabilidad/PlanCuentasView.tsx (LOCAL side) =====
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchAccounts(true);
+    };
+    load();
+  }, [fetchAccounts]);
+
+===== novahub-frontend/src/app/components/contabilidad/ReportesFiscalesView.tsx (LOCAL side) =====
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const res = await contabilidadService.getFiscalReports();
+      setReports(res || []);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar reportes fiscales');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    Promise.resolve().then(fetchReports);
+  }, []);
+
+===== novahub-frontend/src/app/components/contabilidad/TaxCatalogView.tsx (LOCAL side) =====
+import { useState, useEffect, useCallback } from 'react'
+  const fetchEntries = useCallback(() => {
+    setLoading(true)
+    contabilidadService.getTaxCatalog().then((res: any) => {
+      setEntries(res?.data || res || [])
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchEntries, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchEntries])
+
+===== novahub-frontend/src/app/components/documentos/ContratosView.tsx (LOCAL side) =====
+    { title: 'Por Vencer',      value: data.filter(c => c.endDate && new Date(c.endDate) < new Date(nowMs + 30*86400000) && (c.status||'').toUpperCase() === 'ACTIVE').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { title: `Valor Total (${displayCurrency})`, value: formatConvertedAmount(totalValue, displayCurrency), icon: AlertTriangle, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+
+===== novahub-frontend/src/app/components/finanzas/FinanceCashView.tsx (LOCAL side) =====
+import { useState, useEffect } from 'react'
+import { Wallet } from 'lucide-react'
+
+===== novahub-frontend/src/app/components/help/SoporteTecnicoAdminView.tsx (LOCAL side) =====
+import { useState, useEffect, useCallback } from 'react';
+  const fetchAll = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [ticketsRes, statsRes] = await Promise.all([
+        soporteTecnicoService.getAll(),
+        soporteTecnicoService.getStats(),
+      ]);
+      setTickets(Array.isArray(ticketsRes) ? ticketsRes : []);
+      setStats(statsRes || {});
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cargar soporte técnico'); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAll, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAll]);
+
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (prevSubModule !== activeSubModule) {
+    setPrevSubModule(activeSubModule);
+    if (activeSubModule && activeSubModule !== filterStatus) {
+      setFilterStatus(activeSubModule);
+    }
+  }
+
+  const handleStatusChange = (status: string) => {
+    setFilterStatus(status);
+    if (onSubModuleChange) {
+      onSubModuleChange(status);
+
+===== novahub-frontend/src/app/components/help/SoporteTecnicoView.tsx (LOCAL side) =====
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const res = await soporteTecnicoService.getMyTickets();
+      setTickets(Array.isArray(res) ? res : []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al cargar tickets');
+    }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { Promise.resolve().then(fetchTickets); }, []);
+
+  const [prevSubModule, setPrevSubModule] = useState(activeSubModule);
+  if (activeSubModule !== prevSubModule) {
+    setPrevSubModule(activeSubModule);
+    if (activeSubModule && activeSubModule !== activeCategory) {
+      setActiveCategory(activeSubModule);
+    }
+  }
+
+===== novahub-frontend/src/app/components/help/TrainingHubView.tsx (LOCAL side) =====
+  const fetchVideos = async () => {
+    try {
+      setLoading(true);
+      const res = await trainingService.getVideos();
+      setVideos(Array.isArray(res) ? res : []);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar centro de capacitación');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+===== novahub-frontend/src/app/components/hr/AusenciasConfigView.tsx (LOCAL side) =====
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+  const fetchAbsenceTypes = async () => {
+    try {
+      setLoading(true);
+      const res = await hrService.getAbsenceTypes() as any;
+      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
+    } catch (error) {
+      console.error('Error fetching absence types:', error);
+      toast.error('Error al cargar tipos de ausencia');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+===== novahub-frontend/src/app/components/hr/AusenciasView.tsx (LOCAL side) =====
+  const loadVacationBalance = useCallback(async () => {
+    if (!newRequest.employeeId) { setVacationBalance(null); return; }
+    try {
+      setBalanceLoading(true);
+      const res = await hrService.getVacationBalance(newRequest.employeeId, new Date().getFullYear()) as any;
+      setVacationBalance(res || null);
+    } catch { setVacationBalance(null); }
+    finally { setBalanceLoading(false); }
+  }, [newRequest.employeeId]);
+
+  const loadAbsenceTypes = useCallback(async () => {
+    try {
+      const res = await hrService.getAbsenceTypes() as any;
+      setAbsenceTypes(Array.isArray(res) ? res : res?.data || []);
+    } catch { /* intentionally empty */ }
+  }, []);
+
+  useEffect(() => {
+    const t1 = window.setTimeout(loadVacationBalance, 0);
+    const t2 = window.setTimeout(loadAbsenceTypes, 0);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, [loadVacationBalance, loadAbsenceTypes]);
+
+===== novahub-frontend/src/app/components/hr/ConfigNominaView.tsx (LOCAL side) =====
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await hrService.getActivePayrollConfig() as any;
+        if (res && res.id) {
+          setConfig({
+            id: res.id,
+            name: res.name || 'Configuración Default',
+            inssLaboralPct: Number(res.inssLaboralPct),
+            irEnabled: res.irEnabled ?? true,
+            irTramo1Limite: Number(res.irTramo1Limite), irTramo1Pct: Number(res.irTramo1Pct),
+            irTramo2Limite: Number(res.irTramo2Limite), irTramo2Base: Number(res.irTramo2Base), irTramo2Pct: Number(res.irTramo2Pct),
+            irTramo3Limite: Number(res.irTramo3Limite), irTramo3Base: Number(res.irTramo3Base), irTramo3Pct: Number(res.irTramo3Pct),
+            irTramo4Limite: Number(res.irTramo4Limite), irTramo4Base: Number(res.irTramo4Base), irTramo4Pct: Number(res.irTramo4Pct),
+            irTramo5Base: Number(res.irTramo5Base), irTramo5Pct: Number(res.irTramo5Pct),
+            inssPatronalPct: Number(res.inssPatronalPct),
+            inatecPct: Number(res.inatecPct),
+            trecenoMesPct: Number(res.trecenoMesPct),
+            vacacionesPct: Number(res.vacacionesPct),
+            indemnizacionPct: Number(res.indemnizacionPct),
+            isActive: res.isActive ?? true,
+          });
+          setHasExisting(true);
+        }
+      } catch (error) {
+        console.error('Error fetching payroll config:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
+===== novahub-frontend/src/app/components/hr/EmpleadosView.tsx (LOCAL side) =====
+import { Plus, Search, Filter, Grid, List, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban } from 'lucide-react';
+
+===== novahub-frontend/src/app/components/hr/KpiView.tsx (LOCAL side) =====
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+  const fetchAll = useCallback(async () => {
+    try {
+      setLoading(true);
+      setDefinitions(Array.isArray(defRes) ? defRes : defRes?.data || []);
+      setResults(Array.isArray(resRes) ? resRes : resRes?.data || []);
+    } catch (error) {
+      console.error('Error fetching KPI data:', error);
+      toast.error('Error al cargar datos de KPI');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAll, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAll]);
+
+===== novahub-frontend/src/app/components/inventory/AlmacenesView.tsx (LOCAL side) =====
+    Promise.resolve().then(fetchCajas);
+    Promise.resolve().then(fetchSucursales);
+    contabilidadService.getChartOfAccounts().then(res => setAccounts(res.data || [])).catch(() => {});
+
+===== novahub-frontend/src/app/components/inventory/ProductDetailDrawer.tsx (LOCAL side) =====
+      (async () => {
+        try {
+          // Fetch del producto completo
+          const resp: any = await inventoryService.getProduct(productId);
+          const product = resp?.data?.data || resp?.data || resp;
+          if (cancelled) return;
+          setDetail(product);
+
+          // Intentar traer movimientos frescos para el kardex
+          try {
+            const movResp: any = await inventoryService.getMovements({ limit: 200 });
+            const list = Array.isArray(movResp) ? movResp : movResp?.data?.data || movResp?.data || [];
+            if (!cancelled) setKardexMovements(Array.isArray(list) ? list : []);
+          } catch {
+            // Si falla, dejamos que se use el fallback desde props
+            if (!cancelled) setKardexMovements([]);
+          }
+        } catch (e: any) {
+          if (!cancelled) {
+            // El snapshot de la tabla sigue siendo suficiente para mostrar el detalle
+            // cuando falla la consulta complementaria. No tapar la vista con un error.
+            if (!productSnapshot) setError(e?.message || 'No se pudo cargar el producto');
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+
+===== novahub-frontend/src/app/components/inventory/ProductosView.tsx (LOCAL side) =====
+    contabilidadService.getChartOfAccounts()
+  }
+  const paginatedProducts = (() => {
+    const start = (page - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  })();
+        <div className="flex items-center gap-1">
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(1)} disabled={page <= 1} aria-label="Primera página"><ChevronsLeft className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Página anterior"><ChevronLeft className="size-4" /></button>
+          <span className="min-w-24 text-center font-bold text-foreground">Pág. {page} / {Math.max(1, totalPages)}</span>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="size-4" /></button>
+          <button type="button" className="rounded-lg border border-border/50 p-2 disabled:opacity-30" onClick={() => setPage(totalPages)} disabled={page >= totalPages} aria-label="�altima página"><ChevronsRight className="size-4" /></button>
+
+===== novahub-frontend/src/app/components/inventory/SucursalesView.tsx (LOCAL side) =====
+    const timeout = setTimeout(() => { void fetchBranches(); }, 0);
+    return () => clearTimeout(timeout);
+
+===== novahub-frontend/src/app/components/novachat/NovaChatView.tsx (LOCAL side) =====
+      setChannels(chans);
+      setConversations(convs);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos de NovaChat');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await loadData();
+    };
+    load();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (selectedConversation) {
+      novachatService.getMessages(selectedConversation.id).then(setMessages).catch(() => {});
+    }
+  }, [selectedConversation]);
+
+===== novahub-frontend/src/app/components/public/PublicAccessPage.tsx (LOCAL side) =====
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => typeof window !== 'undefined' && localStorage.getItem(themeStorageKey) === 'light' ? 'light' : 'dark');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(themeStorageKey);
+    const configuredTheme = data?.company?.portalDefaultTheme === 'light' ? 'light' : 'dark';
+    Promise.resolve().then(() => setThemeMode(savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : configuredTheme));
+  }, [data?.company?.portalDefaultTheme, themeStorageKey]);
+
+  useEffect(() => { localStorage.setItem(themeStorageKey, themeMode); }, [themeMode, themeStorageKey]);
+
+===== novahub-frontend/src/app/components/reportes/HRReportTab.tsx (LOCAL side) =====
+  const employerCost = useCallback((p: any) => {
+    const total = Number(p.costoTotalEmpresa || 0);
+    if (total > 0) return total;
+    return Number(p.grossPay || 0) + Number(p.inssPatronal || 0) + Number(p.inatec || 0) + Number(p.trecenoMes || 0) + Number(p.vacacionesProv || 0) + Number(p.indemnizacion || 0);
+  }, []);
+
+===== novahub-frontend/src/app/components/support/AsesoriaLegalView.tsx (LOCAL side) =====
+  const [localTab, setLocalTab] = useState('cases');
+  const activeTab = activeSubModule || localTab;
+  const [cases, setCases] = useState<LegalCase[]>([]);
+  const [reminders, setReminders] = useState<LegalReminder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [casesRes, remindersRes]: any[] = await Promise.all([
+        legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined),
+        legalService.listReminders(),
+      ]);
+      setCases(casesRes?.data || casesRes || []);
+      setReminders(remindersRes?.data || remindersRes || []);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar datos legales');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+===== novahub-frontend/src/app/components/support/LegalChatPanel.tsx (LOCAL side) =====
+  const fetchMessages = async () => {
+    try {
+      const res: any = await legalService.listMessages(caseId);
+      setMessages(res?.data || res || []);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      await fetchMessages();
+    };
+    load();
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, [caseId]);
+
+
+===== novahub-frontend/src/app/components/support/TicketsView.tsx (LOCAL side) =====
+  const loadTicketDetails = useCallback(async (ticketId: string) => {
+    try {
+      setDetailLoading(true);
+      const [commentsRes, auditRes] = await Promise.all([
+        supportService.getComments(ticketId),
+        supportService.getAudit(ticketId),
+      ]);
+      setComments(Array.isArray(commentsRes) ? commentsRes : []);
+      setAudit(Array.isArray(auditRes) ? auditRes : []);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Error al cargar detalle del ticket');
+      setComments([]);
+      setAudit([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTicket?.id) return;
+    const timer = window.setTimeout(() => loadTicketDetails(selectedTicket.id), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTicketDetails, selectedTicket?.id]);
+
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
+    if (selectedTicket?.id) {
+      const updated = data.find((item) => item.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+    }
+  }
+
+===== novahub-frontend/src/app/components/suscripciones/TeamAccessPanel.tsx (LOCAL side) =====
+  useEffect(() => { void Promise.resolve().then(load); }, [tenantId]);
+
+
+===== novahub-frontend/src/app/components/suscripciones/TeamManagementPanel.tsx (LOCAL side) =====
+  useEffect(() => { Promise.resolve().then(load) }, [])
+
+===== novahub-frontend/src/app/components/suscripciones/TenantSubscriptionView.tsx (LOCAL side) =====
+  Zap, Building2, CircleHelp, Globe, LayoutGrid, Check, Clock, Plus, Users, Trash2, KeyRound, X, Mail, Shield, Store, Info, Crown
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoadingUsers(true);
+      const res = await tenantsService.getUsers(tenant.id);
+      setUsers(Array.isArray(res) ? res : (res as any)?.data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [tenant]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (tenant?.id) {
+        void fetchUsers();
+        inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => setWarehouses([]));
+        setCompanyName(tenant.name || '');
+        setCompanySlug(tenant.slug || '');
+        setCompanyIndustry(tenant.industry || 'OTHER');
+        brandingService.getCurrent().then((branding) => {
+          if (branding.companyName) setCompanyName(branding.companyName);
+          if (branding.industry) setCompanyIndustry(branding.industry);
+        }).catch(() => undefined);
+        api.get<any[]>(`/tenants/${tenant.id}/industries`).then((response) => setIndustryOptions(Array.isArray(response) ? response : [])).catch(() => setIndustryOptions([]));
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [tenant?.id, tenant?.name, tenant?.industry, tenant?.slug, fetchUsers]);
+
+===== novahub-frontend/src/app/components/suscripciones/TrialExtensionRequestsPanel.tsx (LOCAL side) =====
+
+  const fetchRequests = async () => {
+    setLoading(true)
+    try {
+      const res = await api.get<any[]>('/admin/trial-extension-requests')
+      setRequests(res || [])
+    } catch { setRequests([]) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await api.get<any[]>('/admin/trial-extension-requests')
+        setRequests(res || [])
+      } catch { setRequests([]) }
+      finally { setLoading(false) }
+    }
+    void load()
+  }, [])
+
+===== novahub-frontend/src/app/components/ui/EditableDataTable.tsx (LOCAL side) =====
+    element.scrollTo({ left: nextPosition, behavior: 'smooth' });
+  }, [getColumnScrollTargets]);
+
+  useEffect(() => {
+    if (!showHorizontalControls || layoutMode === 'cards') return;
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      const element = tableScrollRef.current;
+      const target = event.target as HTMLElement | null;
+      const tableHasFocus = Boolean(element && document.activeElement && element.contains(document.activeElement));
+      if (!element || (!pointerInsideTable.current && !tableHasFocus)) return;
+      if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
+    };
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown);
+  }, [layoutMode, showHorizontalControls, scrollTable]);
+
+  const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      scrollTable(event.key === 'ArrowRight' ? 'right' : 'left');
+    }
+
+===== novahub-frontend/src/app/components/ventas/CustomerDetailDrawer.tsx (LOCAL side) =====
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!customerId) {
+        setDetail(null);
+        setInvoices([]);
+        setHistory([]);
+        setError(null);
+        return;
+      setLoading(true);
+      setError(null);
+
+      (async () => {
+        try {
+          const resp: any = await customersService.getById(customerId);
+          const cust = resp?.data?.data || resp?.data || resp;
+          if (cancelled) return;
+          if (cust && typeof cust === 'object' && cust.id) {
+            setDetail(cust);
+          }
+        } catch (e: any) {
+          if (!cancelled) {
+            setError(e?.message || 'No se pudo cargar la información del cliente');
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+      (async () => {
+        try {
+          const response: any = await auditService.getEntityHistory('CUSTOMER', customerId);
+          const list = response?.data?.data || response?.data || response;
+          if (!cancelled) setHistory(Array.isArray(list) ? list : []);
+        } catch {
+          if (!cancelled) setHistory([]);
+        }
+      })();
+
+      (async () => {
+        setPublicLinksLoading(true);
+        try { const links = await publicAccessService.list(customerId); if (!cancelled) setPublicLinks(links || []); }
+        catch { if (!cancelled) setPublicLinks([]); }
+        finally { if (!cancelled) setPublicLinksLoading(false); }
+      })();
+    }, 0);
+              {error && !customerSnapshot && (
+                <Card className="p-4 bg-rose-500/10 border-rose-500/20 text-rose-500 flex items-center gap-3">
+
+===== novahub-frontend/src/app/components/ventas/FacturacionCajaView.tsx (LOCAL side) =====
+    accountsService.getAll({ page: 1, pageSize: 100 }).then((response: any) => {
+      const items = response?.data ?? response?.items ?? response;
+      setBankAccounts(Array.isArray(items) ? items.filter((account: Account) => account.isActive && String(account.type || '').toUpperCase() === 'ASSET') : []);
+    }).catch(() => setBankAccounts([]));
+    return () => window.clearTimeout(timer);
+
+===== novahub-frontend/src/app/components/ventas/FacturasView.tsx (LOCAL side) =====
+    const timer = window.setTimeout(() => {
+      if (invoiceDraft) {
+        setIsCreating(true);
+        setEditingId(null);
+        const draftSnapshot = { paymentMethod: 'CASH', accountId: '', ...JSON.parse(JSON.stringify(invoiceDraft)) };
+        setLocalDoc(draftSnapshot);
+        setPricingMode(inferPricingMode(draftSnapshot));
+
+        const sub = Number(invoiceDraft.subtotal || 0);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [editingId, invoiceDraft, data, isCreating, onClearInvoiceDraft]);
+
+===== novahub-frontend/src/app/contexts/ThemeContext.tsx (LOCAL side) =====
+    try {
+      const saved = localStorage.getItem('erp-theme-config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Force update if old theme
+        if (parsed.tenantName === 'Solcom ERP') return defaultTheme;
+        return parsed;
+      }
+    } catch { /* intentionally empty */ }
+    return defaultTheme;
+
+===== novahub-frontend/src/app/hooks/useNotifications.ts (LOCAL side) =====
+
+export function useNotifications() {
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const data = await notificationsService.getAll();
+            setNotifications(data);
+            setUnreadCount(data.filter((n: Notification) => !n.read).length);
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        const initialTimer = window.setTimeout(fetchNotifications, 0);
+        // Polling for new notifications every 30 seconds
+        const interval = setInterval(fetchNotifications, 30000);
+        return () => { window.clearTimeout(initialTimer); clearInterval(interval); };
+    }, [fetchNotifications]);
+

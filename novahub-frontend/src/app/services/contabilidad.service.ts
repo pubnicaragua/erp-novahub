@@ -8,6 +8,7 @@ export const contabilidadService = {
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => api.delete(`/accounting/accounts/${id}`),
+  mergeAccount: (id: string, targetAccountId: string) => api.post<any>(`/accounting/accounts/${id}/merge`, { targetAccountId }),
   importAccounts: (data: ChartAccountCsvRow[], replace = false) => api.post<any>(`/accounting/accounts/import${replace ? '?replace=true' : ''}`, data),
   exportAccounts: () => api.get<string[][]>('/accounting/accounts/export'),
   getDefaultAccountsByIndustry: (industry: string) => api.get<any[]>(`/accounting/accounts/defaults/${industry}`),
@@ -40,8 +41,12 @@ export const contabilidadService = {
     api.get<any>('/accounting/reports/profit-loss', { params, signal }),
   getBalanceSheet: (params: { date: string; previousYear?: boolean }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/balance-sheet', { params, signal }),
-  getCashFlow: (params: { dateFrom: string; dateTo: string }, signal?: AbortSignal) =>
+  getCashFlow: (params: { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/cash-flow', { params, signal }),
+  getModuleActivity: (limit = 60, signal?: AbortSignal) =>
+    api.get<any>('/accounting/module-activity', { params: { limit }, signal }),
+  getBankDailyBook: (params: { bankAccountId?: string; dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
+    api.get<any>('/accounting/bank-daily-book', { params, signal }),
 
   // Diferencias cambiarias
   getExchangeDifferencesPreview: (params?: { asOfDate?: string; rate?: number }, signal?: AbortSignal) =>
@@ -62,7 +67,9 @@ export const contabilidadService = {
   // Conciliación Bancaria
   getReconciliations: (signal?: AbortSignal) => api.get<any[]>('/accounting/reconciliations', { signal }),
   getReconciliation: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/reconciliations/${id}`, { signal }),
+  getReconciliationPreview: (accountId: string, period: string, signal?: AbortSignal) => api.get<any>(`/accounting/reconciliations/preview?accountId=${encodeURIComponent(accountId)}&period=${encodeURIComponent(period)}`, { signal }),
   createReconciliation: (data: any) => api.post<any>('/accounting/reconciliations', data),
+  updateReconciliation: (id: string, data: any) => api.patch<any>(`/accounting/reconciliations/${id}`, data),
   autoMatchReconciliation: (id: string) => api.post<any>(`/accounting/reconciliations/${id}/auto-match`, {}),
   updateReconciliationItem: (id: string, itemId: string, data: any) => api.patch<any>(`/accounting/reconciliations/${id}/items/${itemId}`, data),
   addReconciliationItem: (id: string, data: any) => api.post<any>(`/accounting/reconciliations/${id}/items`, data),

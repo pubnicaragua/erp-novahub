@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Upload, FileDown, Info, UserCheck, UserX } from 'lucide-react';
+import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -9,6 +9,41 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Input } from '../ui/input';
 import * as XLSX from 'xlsx';
+
+const TEMPLATE_COLUMNS = [
+  { key: 'codigo_empleado', label: 'CÓDIGO EMPLEADO', example: 'EMP-001', rule: 'Obligatorio. Código o nombre completo del empleado tal como aparece en el módulo Empleados.' },
+  { key: 'fecha', label: 'FECHA', example: '2026-08-12', rule: 'Obligatorio. Formato AAAA-MM-DD (año-mes-día).' },
+  { key: 'entrada', label: 'ENTRADA', example: '08:00', rule: 'Opcional. Hora de entrada en formato HH:MM (24 h).' },
+  { key: 'salida', label: 'SALIDA', example: '17:00', rule: 'Opcional. Hora de salida en formato HH:MM (24 h).' },
+  { key: 'estado', label: 'ESTADO', example: 'PRESENTE', rule: 'Obligatorio. PRESENTE, AUSENTE, TARDANZA, REMOTO o MEDIO_DIA.' },
+  { key: 'horas_trabajadas', label: 'HORAS TRABAJADAS', example: '9.0', rule: 'Opcional. Horas trabajadas en el día (decimales con punto).' },
+  { key: 'horas_extra', label: 'HORAS EXTRA', example: '1.5', rule: 'Opcional. Horas extra (decimales con punto).' },
+  { key: 'ubicacion', label: 'UBICACIÓN', example: 'Oficina Central', rule: 'Opcional. Lugar o sede del registro.' },
+];
+
+const normalizeHeader = (value: any): string => String(value ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[\s-]+/g, '_').trim();
+
+const pickRowValue = (row: any, ...keys: string[]): string => {
+  for (const key of keys) {
+    const normalized = normalizeHeader(key);
+    for (const [rowKey, value] of Object.entries(row)) {
+      if (normalizeHeader(rowKey) === normalized && value !== undefined && value !== null && String(value).trim() !== '') {
+        return String(value).trim();
+      }
+    }
+  }
+  return '';
+};
+
+const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
+  PRESENTE: 'PRESENT', PRESENT: 'PRESENT',
+  AUSENTE: 'ABSENT', ABSENT: 'ABSENT',
+  TARDANZA: 'LATE', TARDIO: 'LATE', LATE: 'LATE',
+  REMOTO: 'REMOTE', REMOTE: 'REMOTE',
+  MEDIO_DIA: 'HALF_DAY', HALF_DAY: 'HALF_DAY',
+};
 
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -69,13 +104,30 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   };
 
   const downloadAttendanceTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([{
-      employeeNumber: 'EMP-001', date: '2026-07-29', checkIn: '08:00', checkOut: '17:00',
-      status: 'PRESENT', hoursWorked: '9', overtimeHours: '1', location: 'Oficina Central'
-    }]);
+    const rows = [{
+      codigo_empleado: 'EMP-001', fecha: '2026-08-12', entrada: '08:00', salida: '17:00',
+      estado: 'PRESENTE', horas_trabajadas: '9.0', horas_extra: '1.5', ubicacion: 'Oficina Central',
+    }];
+    const ws = XLSX.utils.json_to_sheet(rows, { header: TEMPLATE_COLUMNS.map(c => c.key) });
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 20 }];
+    const rulesWs = XLSX.utils.aoa_to_sheet([
+      ['REGLAS DE LLENADO — ASISTENCIA'],
+      [],
+      ...TEMPLATE_COLUMNS.map(c => ['Columna: ' + c.label, c.example, c.rule]),
+      [],
+      ['EJEMPLO DE FILA'],
+      ['codigo_empleado', 'fecha', 'entrada', 'salida', 'estado', 'horas_trabajadas', 'horas_extra', 'ubicacion'],
+      ['EMP-001', '2026-08-12', '08:00', '17:00', 'PRESENTE', '9.0', '1.5', 'Oficina Central'],
+      [],
+      ['Valores válidos de ESTADO: PRESENTE, AUSENTE, TARDANZA, REMOTO, MEDIO_DIA'],
+      ['La fecha usa formato AAAA-MM-DD. Las horas usan formato HH:MM (24 horas).'],
+      ['Se aceptan también encabezados en inglés (employeeNumber, date, checkIn, checkOut, status, hoursWorked, overtimeHours, location).'],
+    ]);
+    rulesWs['!cols'] = [{ wch: 28 }, { wch: 24 }, { wch: 60 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Asistencia');
-    XLSX.writeFile(wb, 'plantilla_asistencia.xlsx');
+    XLSX.utils.book_append_sheet(wb, rulesWs, 'Reglas de llenado');
+    XLSX.writeFile(wb, 'plantilla_asistencia_es.xlsx');
     toast.success('Plantilla descargada');
   };
 
@@ -94,24 +146,24 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
       for (let idx = 0; idx < rows.length; idx++) {
         const row = rows[idx];
         const rowNum = idx + 2;
-        const empNum = String(row.employeeNumber || row.employeenumber || row.codigo || '').trim();
+        const empNum = pickRowValue(row, 'codigo_empleado', 'employeeNumber', 'empleado', 'codigo');
         const employee = employees.find((e: any) =>
-          (e.employeeNumber && (e.employeeNumber+'').toLowerCase() === empNum.toLowerCase()) ||
+          (e.employeeNumber && (e.employeeNumber + '').toLowerCase() === empNum.toLowerCase()) ||
           ((e.firstName + ' ' + e.lastName).toLowerCase() === empNum.toLowerCase())
         );
         if (!employee) { skipped++; errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); continue; }
-        const dateRaw = String(row.date || row.fecha || '').trim();
+        const dateRaw = pickRowValue(row, 'fecha', 'date');
         const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
-        const checkInRaw = String(row.checkIn || row.checkin || row.entrada || '').trim();
-        const checkOutRaw = String(row.checkOut || row.checkout || row.salida || '').trim();
+        const checkInRaw = pickRowValue(row, 'entrada', 'checkIn', 'checkin', 'hora_entrada');
+        const checkOutRaw = pickRowValue(row, 'salida', 'checkOut', 'checkout', 'hora_salida');
         const checkIn = checkInRaw ? new Date(`${dateRaw || date.split('T')[0]}T${checkInRaw}`).toISOString() : undefined;
         const checkOut = checkOutRaw ? new Date(`${dateRaw || date.split('T')[0]}T${checkOutRaw}`).toISOString() : undefined;
-        const statusRaw = String(row.status || row.estado || 'PRESENT').trim().toUpperCase();
-        const status = ['PRESENT', 'ABSENT', 'LATE', 'REMOTE'].includes(statusRaw) ? statusRaw : 'PRESENT';
-        const hoursWorked = Number(String(row.hoursWorked || row.horastrabajadas || row.horas || '0').replace(',', '.'));
-        const overtimeHours = Number(String(row.overtimeHours || row.horasextra || '0').replace(',', '.'));
-        const location = String(row.location || row.ubicacion || '').trim();
+        const statusRaw = pickRowValue(row, 'estado', 'status') || 'PRESENT';
+        const status = ATTENDANCE_STATUS_LABELS[statusRaw.toUpperCase()] || 'PRESENT';
+        const hoursWorked = Number(pickRowValue(row, 'horas_trabajadas', 'horas', 'hoursWorked').replace(',', '.') || '0');
+        const overtimeHours = Number(pickRowValue(row, 'horas_extra', 'overtimeHours', 'extra').replace(',', '.') || '0');
+        const location = pickRowValue(row, 'ubicacion', 'location');
         try {
           await hrService.createAttendance({
             employeeId: employee.id, date, checkIn, checkOut, status, hoursWorked, overtimeHours: overtimeHours || 0, location: location || undefined,
@@ -399,17 +451,36 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
-              <p className="text-xs text-muted-foreground">
-                Columnas: <span className="font-mono">employeeNumber (código), date (fecha), checkIn (entrada), checkOut (salida), status (estado), hoursWorked (horas), overtimeHours (extra), location (ubicación)</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                estado: PRESENT (Presente) / ABSENT (Ausente) / LATE (Tardanza) / REMOTE (Remoto) · employeeNumber: código del empleado
-              </p>
-              <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadAttendanceTemplate}>
-                <FileDown className="size-4" /> Descargar plantilla Excel
-              </Button>
+            <div className="rounded-xl border border-border/60 bg-muted/20">
+              <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-2">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><Info className="size-3.5" /> Formato esperado del archivo</p>
+                <Button variant="ghost" size="sm" className="gap-2 h-8 text-primary" onClick={downloadAttendanceTemplate}>
+                  <FileDown className="size-4" /> Descargar plantilla Excel
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left">
+                  <thead>
+                    <tr className="border-b border-border/40 bg-muted/40">
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Columna</th>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ejemplo</th>
+                      <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Regla</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/30">
+                    {TEMPLATE_COLUMNS.map(col => (
+                      <tr key={col.key}>
+                        <td className="px-4 py-2"><span className="font-mono text-xs font-bold text-primary">{col.label}</span></td>
+                        <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{col.example}</span></td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground">{col.rule}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-4 py-2.5 border-t border-border/40 text-[11px] text-muted-foreground">
+                Valores de <span className="font-mono font-bold text-foreground">ESTADO</span>: PRESENTE · AUSENTE · TARDANZA · REMOTO · MEDIO_DIA. Se aceptan también encabezados en inglés (employeeNumber, date, checkIn, checkOut, status, hoursWorked, overtimeHours, location).
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
@@ -419,7 +490,11 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
             {importResult && (
               <div className="rounded-xl border border-border/60 p-4 bg-background">
                 <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
-                <p className="text-sm">Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b></p>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4 text-emerald-500" /> Creados: <b className="text-emerald-500">{importResult.created}</b></span>
+                  <span className="inline-flex items-center gap-1.5"><XCircle className="size-4 text-amber-500" /> Omitidos: <b className="text-amber-500">{importResult.skipped}</b></span>
+                  <span>Total: <b>{importResult.total}</b></span>
+                </div>
                 {importResult.errors.length > 0 && (
                   <div className="mt-2 text-xs text-amber-600 space-y-1">
                     <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>

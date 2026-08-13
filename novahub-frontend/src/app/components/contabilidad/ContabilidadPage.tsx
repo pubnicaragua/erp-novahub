@@ -18,6 +18,7 @@ import { EstadoResultadosView } from './EstadoResultadosView';
 import { BalanceGeneralView } from './BalanceGeneralView';
 import { FlujoEfectivoView } from './FlujoEfectivoView';
 import { ConciliacionView } from './ConciliacionView';
+import { LibroBancosView } from './LibroBancosView';
 import { PeriodosView } from './PeriodosView';
 import { ReportesFiscalesView } from './ReportesFiscalesView';
 import { LibroMayorView } from './LibroMayorView';
@@ -42,6 +43,7 @@ const SECTIONS = [
   { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: ArrowLeftRight },
   { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: FileSpreadsheet },
   { id: 'activos-fijos', label: 'Activos Fijos', icon: Building2 },
+  { id: 'libro-bancos', label: 'Libro Diario de Bancos', icon: Landmark },
   { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
   { id: 'periodos', label: 'Períodos Contables', icon: Calendar },
   { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: FileBarChart },
@@ -62,6 +64,7 @@ const SECTION_PERMISSIONS: Record<string, string> = {
   'diferencias-cambiarias': 'ACCOUNTING_EXCHANGE_DIFFERENCES',
   'cambios-patrimonio': 'ACCOUNTING_EQUITY',
   'activos-fijos': 'ACCOUNTING_ASSETS',
+  'libro-bancos': 'ACCOUNTING_LEDGER',
   conciliacion: 'ACCOUNTING_RECONCILIATION',
   periodos: 'ACCOUNTING_PERIODS',
   'reportes-fiscales': 'ACCOUNTING_FISCAL',
@@ -202,6 +205,20 @@ const HELP_DATA: Record<string, {
       { q: '¿Por qué hay diferencias?', a: 'Causas: cheques emitidos no cobrados, depósitos en tránsito, comisiones bancarias no registradas, transferencias entre cuentas sin conciliar.' },
     ],
   },
+  'libro-bancos': {
+    description: 'Libro Diario de Bancos: por cada día del período muestra saldo inicial, ingresos (depósitos de caja), cheques/egresos y saldo final. Se alimenta directamente de las transacciones de la cuenta bancaria y es independiente de la Conciliación Bancaria.',
+    model: 'BankAccount → Account (cuenta contable) + Transaction (movimientos del día)',
+    relationships: [
+      { parent: 'BankAccount', child: 'Account', relation: 'accountId → id (cuenta contable del banco)' },
+      { parent: 'Account', child: 'Transaction', relation: 'accountId → id (débitos = ingresos, créditos = cheques/egresos)' },
+      { parent: 'Transaction', child: 'JournalEntry', relation: 'reference → number (asiento origen: depósito de caja, pago, etc.)' },
+    ],
+    faq: [
+      { q: '¿De dónde salen los ingresos del día?', a: 'De los cierres de caja diarios: el depósito de caja a banco debita la cuenta bancaria vinculada y aparece como Ingreso en el libro del día.' },
+      { q: '¿Dónde salen los cheques/egresos?', a: 'Todo crédito a la cuenta bancaria: cheques girados, pagos a proveedores, transferencias salientes y gastos pagados desde el banco.' },
+      { q: '¿Cómo se relaciona con la Conciliación Bancaria?', a: 'Son independientes. El libro diario de bancos se alimenta del libro contable; la conciliación solo valida mensualmente el cuadre contra el estado de cuenta.' },
+    ],
+  },
   'periodos': {
     description: 'Gestión de períodos contables: apertura, cierre mensual/anual y congelación de datos.',
     model: 'AccountingPeriod',
@@ -252,6 +269,21 @@ const HELP_DATA: Record<string, {
       { q: '¿Qué son los asientos automáticos?', a: 'Al activar esta opción, cada factura, cobro, gasto o nómina genera su asiento contable en tiempo real. Puedes configurar qué cuentas contables se usan para cada tipo de transacción.' },
       { q: '¿Cómo importar un catálogo de cuentas?', a: 'Selecciona tu industria en la sección "Catálogo por Defecto" y haz clic en Importar. El sistema creará la jerarquía completa de cuentas padre-hijo automáticamente.' },
       { q: '¿Puedo cambiar las cuentas de los asientos automáticos?', a: 'Sí. En la sección "Mapeo de Cuentas Contables" puedes editar los códigos de cuenta que el sistema usará para cada tipo de transacción.' },
+    ],
+  },
+  'actividad-modulos': {
+    description: 'Trazabilidad de la contabilidad: cada documento de un módulo (cierre de caja, factura pagada, nómina, etc.) genera un asiento automático en el Libro Diario, cuyas líneas alimentan el Balance de Comprobación, el Balance General, el Estado de Resultados y el Flujo de Efectivo. Esta vista vive dentro de Contabilidad > Configuración > Actividad por Módulo, junto al mapeo de cuentas que define cada conexión.',
+    model: 'Módulos (Ventas, Caja, Compras...) → JournalEntry → JournalEntryLine → Transaction',
+    relationships: [
+      { parent: 'Documento origen', child: 'JournalEntry', relation: 'referenceType + referenceId (asiento automático del módulo)' },
+      { parent: 'JournalEntry', child: 'JournalEntryLine', relation: 'entryId → id (líneas débito/crédito por cuenta)' },
+      { parent: 'JournalEntryLine', child: 'Transaction', relation: 'accountId (transacciones que alimentan los reportes)' },
+      { parent: 'Transaction', child: 'Reportes', relation: 'Balance de Comprobación, Balance General, Resultados, Flujo de Efectivo' },
+    ],
+    faq: [
+      { q: '¿Cómo se conecta un cierre de caja?', a: 'Al cerrar la caja: el asiento CASH_REGISTER_SESSION registra sobrante/faltante (Caja vs Otros ingresos/Gastos) y el asiento CASH_REGISTER_DEPOSIT traslada el efectivo: DEBE Banco (cuenta contable vinculada) / HABER Caja. Ambos alimentan Comprobación, Balance General y Flujo de Efectivo automáticamente.' },
+      { q: '¿Por qué no veo un movimiento?', a: 'Si el documento no aparece aquí, el asiento no se generó o fue anulado. El Libro Diario, el Balance y los reportes se alimentan únicamente de los asientos publicados.' },
+      { q: '¿Puedo ver el detalle de cuentas de cada asiento?', a: 'Sí: haz clic en la fila y se expande el flujo del documento con sus líneas de cuenta (Debe/Haber).' },
     ],
   },
   'diferencias-cambiarias': {
@@ -393,7 +425,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
                   {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
                   {activeSection === 'activos-fijos' && <ActivosFijosView />}
-                  {activeSection === 'conciliacion' && <ConciliacionView />}
+                  {activeSection === 'libro-bancos' && <LibroBancosView />}
+                  {activeSection === 'conciliacion' && <ConciliacionView onGoToConfig={() => setActiveSection('configuracion')} />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
                   {activeSection === 'auditoria-facturas' && <InvoiceAuditView />}

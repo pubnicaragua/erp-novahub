@@ -12,7 +12,8 @@ import {
   Settings2,
   AlertTriangle,
   ClipboardCheck,
-  TrendingDown
+  TrendingDown,
+  Building2
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -26,6 +27,7 @@ import { AlmacenesView } from './inventory/AlmacenesView';
 import { TransferenciasView } from './inventory/TransferenciasView';
 import { ControlStockView } from './inventory/ControlStockView';
 import { MovimientosView } from './inventory/MovimientosView';
+import { MobiliarioEquiposView } from './inventory/MobiliarioEquiposView';
 import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
 import { InventoryAuditsView } from './inventory/InventoryAuditsView';
 import { InventoryLossesView } from './inventory/InventoryLossesView';
@@ -46,6 +48,7 @@ const INVENTORY_SECTIONS = [
   { id: 'perdidas',        label: 'Pérdidas',        icon: TrendingDown, requiredModules: ['INVENTORY_ADJUSTMENTS'] },
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
   { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_WAREHOUSES'] },
+  { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: Building2, requiredModules: [] },
 ];
 
 interface InventarioPageProps {
@@ -291,7 +294,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           </div>
           <div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
-              Inventario <span className="text-primary">&amp; Stock</span>
+              Inventario <span className="text-primary">de Mercancías</span>
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">Gestiona existencias, precios, almacenes y movimientos en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
@@ -344,7 +347,18 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       >
         <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
         <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground sm:min-w-0">
+          <span className="flex shrink-0 items-center gap-1.5 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary/80">
+            <Package className="size-3" /> Inventario de Mercancías
+          </span>
           {INVENTORY_SECTIONS.map((section) => {
+            if (section.id === 'mobiliario-equipos') {
+              return (
+                <span key="group-divider" className="mx-1 flex shrink-0 items-center gap-1.5 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-amber-600/90">
+                  <span className="h-6 w-px bg-border/60" />
+                  <Building2 className="size-3" /> Mobiliario y Equipos
+                </span>
+              );
+            }
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
             const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
@@ -538,6 +552,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <InventoryLossesView
                     warehouses={data.warehouses}
                   />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="mobiliario-equipos" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <MobiliarioEquiposView />
                 </motion.div>
               </TabsContent>
             </>

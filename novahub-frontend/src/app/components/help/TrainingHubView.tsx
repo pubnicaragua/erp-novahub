@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { 
   GraduationCap, 
   Play, 
@@ -38,7 +38,7 @@ const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
   { id: 'SALES', label: 'Ventas', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', gradient: 'from-emerald-500 to-teal-600', icon: DollarSign },
   { id: 'PURCHASES', label: 'Compras', color: 'bg-blue-100 text-blue-700 border-blue-200', gradient: 'from-blue-500 to-indigo-600', icon: ShoppingCart },
-  { id: 'INVENTORY', label: 'Inventario', color: 'bg-orange-100 text-orange-700 border-orange-200', gradient: 'from-orange-500 to-red-600', icon: Package },
+  { id: 'INVENTORY', label: 'Inventario de Mercancías', color: 'bg-orange-100 text-orange-700 border-orange-200', gradient: 'from-orange-500 to-red-600', icon: Package },
   { id: 'FINANCIAL', label: 'Finanzas', color: 'bg-purple-100 text-purple-700 border-purple-200', gradient: 'from-purple-500 to-violet-600', icon: Wallet },
   { id: 'HR', label: 'Recursos Humanos', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', gradient: 'from-indigo-500 to-blue-700', icon: Users },
   { id: 'ACTIVITIES', label: 'Actividades', color: 'bg-amber-100 text-amber-700 border-amber-200', gradient: 'from-amber-400 to-orange-500', icon: Activity },

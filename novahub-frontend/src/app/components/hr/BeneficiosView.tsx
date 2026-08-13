@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { HandHeart, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle } from 'lucide-react';
+import { HandHeart, Plus, Save, X, Edit2, Trash2, Users, DollarSign, CheckCircle, Building2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Switch } from '../ui/switch';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { hrService } from '../../services/hr.service';
@@ -39,7 +40,7 @@ const PAYMENT_METHODS = [
   { value: 'OTHER', label: 'Otro medio' },
 ];
 
-const EMPTY_FORM = { name: '', description: '', type: 'OTHER', cost: '', currency: 'NIO', paymentSource: 'CASH', isActive: true, employeeIds: [] as string[] };
+const EMPTY_FORM = { name: '', description: '', type: 'OTHER', provider: '', cost: '', currency: 'NIO', paymentSource: 'CASH', isActive: true, employeeIds: [] as string[] };
 
 export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
@@ -60,7 +61,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     createInFlightRef.current = true;
     setIsCreating(true);
     try {
-      await hrService.createBenefit({ ...form, cost: form.cost ? Number(form.cost) : null, currency: form.currency || 'USD' });
+      await hrService.createBenefit({ ...form, provider: form.provider?.trim() || null, cost: form.cost ? Number(form.cost) : null, currency: form.currency || 'USD', isActive: form.isActive !== false });
       toast.success('Beneficio creado');
       setAddingNew(false);
       setForm({ ...EMPTY_FORM, currency: displayCurrency });
@@ -78,7 +79,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     updateInFlightRef.current = id;
     setSavingUpdateId(id);
     try {
-      await hrService.updateBenefit(id, { ...editForm, cost: editForm.cost ? Number(editForm.cost) : null });
+      await hrService.updateBenefit(id, { ...editForm, provider: editForm.provider?.trim() || null, cost: editForm.cost ? Number(editForm.cost) : null, isActive: editForm.isActive !== false });
       toast.success('Beneficio actualizado');
       setEditingId(null);
       onRefresh();
@@ -97,7 +98,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   const startEdit = (b: any) => {
     setEditingId(b.id);
     const existingEmployeeIds = b.employeeBenefits ? b.employeeBenefits.map((eb: any) => eb.employeeId) : (b.assignments ? b.assignments.map((eb: any) => eb.employeeId) : []);
-    setEditForm({ name: b.name, description: b.description || '', type: b.type, cost: b.cost ?? '', currency: b.currency || 'USD', employeeIds: existingEmployeeIds });
+    setEditForm({ name: b.name, description: b.description || '', type: b.type, provider: b.provider || '', cost: b.cost ?? '', currency: b.currency || 'USD', isActive: b.isActive !== false, employeeIds: existingEmployeeIds });
   };
 
   const totalCost = benefits.reduce((sum: number, b: any) => {
@@ -177,9 +178,20 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                        {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
                      </select>
                    </div>
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor</label>
+                     <Input value={form.provider || ''} onChange={e => setForm({ ...form, provider: e.target.value })} placeholder="Ej: Seguros América" className="rounded-xl h-10" />
+                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Descripción</label>
                     <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Cobertura médica completa para empleado y familia" className="rounded-xl h-10" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Activo</label>
+                    <div className="flex items-center h-10 gap-2 px-3 rounded-xl border border-border/50 bg-background">
+                      <Switch checked={form.isActive !== false} onCheckedChange={v => setForm({ ...form, isActive: v })} />
+                      <span className="text-xs text-muted-foreground">{form.isActive === false ? 'Inactivo' : 'Activo'}</span>
+                    </div>
                   </div>
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
@@ -250,6 +262,14 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       <Input type="number" value={editForm.cost} onChange={e => setEditForm({ ...editForm, cost: e.target.value })} placeholder="Costo" disabled={savingUpdateId === benefit.id} className="rounded-xl h-9 text-sm pl-6" />
                     </div>
                     <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor</label>
+                      <Input value={editForm.provider || ''} onChange={e => setEditForm({ ...editForm, provider: e.target.value })} placeholder="Ej: Seguros América" className="rounded-xl h-9 text-sm" />
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground cursor-pointer">Activo</label>
+                      <Switch checked={editForm.isActive !== false} onCheckedChange={v => setEditForm({ ...editForm, isActive: v })} />
+                    </div>
+                    <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleados Asignados</label>
                       <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
                         {employees?.map((emp: any) => (
@@ -285,10 +305,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge className={`text-[9px] font-black uppercase ${typeColor}`}>{typeLabel}</Badge>
-                            {benefit.isActive && <CheckCircle className="size-3 text-emerald-500 flex-shrink-0" />}
+                            {benefit.isActive === false ? <Badge className="text-[9px] font-black uppercase bg-muted text-muted-foreground">Inactivo</Badge> : <CheckCircle className="size-3 text-emerald-500 flex-shrink-0" />}
                           </div>
                           <h4 className="font-black text-sm leading-tight">{benefit.name}</h4>
                           {benefit.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{benefit.description}</p>}
+                          {benefit.provider && <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground"><Building2 className="size-3" /> {benefit.provider}</p>}
                         </div>
                       </div>
                     </div>
@@ -344,7 +365,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
         variant="destructive"
         onConfirm={async () => {
           try {
-            await hrService.deleteBenefit(pendingDeleteId);
+            if (pendingDeleteId) await hrService.deleteBenefit(pendingDeleteId);
             toast.success('Beneficio eliminado');
             onRefresh();
           } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar beneficio'); }
