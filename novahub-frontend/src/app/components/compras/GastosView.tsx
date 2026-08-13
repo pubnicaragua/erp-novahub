@@ -26,6 +26,8 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; }
 type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -86,6 +88,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -227,24 +231,48 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     return 'PENDING';
   };
 
+  const isValidExpenseImportRow = (row: Record<string, string>) => {
+    const description = String(row.description || row.descripcion || '').trim();
+    const amount = Number(String(row.amount || row.monto || '0').replace(',', '.'));
+    const category = normalizeExpenseCategory(String(row.category || row.categoria || ''));
+    const categoryCustom = category === 'OTRO' ? String(row.categorycustom || row.categoriacustom || '').trim() : '';
+    return Boolean(description) && Number.isFinite(amount) && amount > 0 && (category !== 'OTRO' || Boolean(categoryCustom));
+  };
+
+  const handleExpenseFileChange = async (file: File | undefined) => {
+    setImportFile(file || null);
+    setImportFileStats(null);
+    if (!file) return;
+    try {
+      const rows = await parseExpensesCsv(file);
+      const valid = rows.filter(isValidExpenseImportRow).length;
+      setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
+    } catch {
+      setImportFileStats(null);
+    }
+  };
+
   const handleImportExpenses = async () => {
     if (!importFile) {
       toast.error('Selecciona un archivo CSV');
       return;
     }
     setImporting(true);
+    setImportProgress(8);
     setImportResult(null);
-    const importToastId = toast.loading('Importando gastos...');
     try {
       const rows = await parseExpensesCsv(importFile);
+      setImportProgress(28);
       if (rows.length === 0) {
-        toast.error('El archivo no contiene filas para importar', { id: importToastId });
+        toast.error('El archivo no contiene filas para importar');
         return;
       }
+      setImportProgress(35);
 
       let created = 0;
       let skipped = 0;
       const errors: string[] = [];
+      const updateRowProgress = (index: number) => setImportProgress(35 + Math.round(((index + 1) / rows.length) * 60));
 
       for (let idx = 0; idx < rows.length; idx++) {
         const row = rows[idx];
@@ -268,16 +296,19 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         if (!description) {
           skipped++;
           errors.push(`Fila ${rowNumber}: descripción es obligatoria`);
+          updateRowProgress(idx);
           continue;
         }
         if (!Number.isFinite(amount) || amount <= 0) {
           skipped++;
           errors.push(`Fila ${rowNumber}: monto inválido`);
+          updateRowProgress(idx);
           continue;
         }
         if (category === 'OTRO' && !categoryCustom) {
           skipped++;
           errors.push(`Fila ${rowNumber}: categoría OTRO requiere categoryCustom`);
+          updateRowProgress(idx);
           continue;
         }
 
@@ -301,15 +332,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           skipped++;
           errors.push(`Fila ${rowNumber}: ${e?.response?.data?.message || e?.message || 'no se pudo crear'}`);
         }
+        updateRowProgress(idx);
       }
 
+      setImportProgress(100);
       setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
       if (created > 0) onRefresh();
-      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`, { id: importToastId });
+      toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`, { id: importToastId });
+      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
     } finally {
       setImporting(false);
+      window.setTimeout(() => setImportProgress(0), 180);
     }
   };
 
@@ -865,7 +899,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           loading={deleteLoading}
         />
 
-        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
@@ -890,16 +924,16 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-muted-foreground">Archivo CSV</label>
-                <Input type="file" accept=".csv,text/csv" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+                <Input type="file" accept=".csv,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
                 {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+                {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
+                {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="gastos" />}
               </div>
 
               {importResult && (
                 <div className="rounded-xl border border-border/60 p-4 bg-background">
                   <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
-                  <p className="text-sm">
-                    Total: <b>{importResult.total}</b> · Creados: <b className="text-emerald-500">{importResult.created}</b> · Omitidos: <b className="text-amber-500">{importResult.skipped}</b>
-                  </p>
+                  <ImportReviewSummary total={importResult.total} valid={importResult.created} skipped={importResult.skipped} entityLabel="gastos" />
                   {importResult.errors.length > 0 && (
                     <div className="mt-2 space-y-1 text-xs text-amber-500">
                       <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
@@ -913,11 +947,17 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             <DialogFooter>
               <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
               <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
-                <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar gastos'}
+                <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <ImportProgressOverlay
+          open={importing}
+          progress={importProgress}
+          title="Importando gastos"
+          description="Leyendo el CSV, validando cada fila y registrando los gastos en la base de datos."
+        />
       </div>
     </div>
   );

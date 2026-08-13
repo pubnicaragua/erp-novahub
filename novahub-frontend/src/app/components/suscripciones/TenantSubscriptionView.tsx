@@ -75,6 +75,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const canViewUsers = canPerform('CONFIG_USERS', 'view');
   const canManageRoles = canPerform('CONFIG_ROLES', 'edit');
   const canViewRoles = canPerform('CONFIG_ROLES', 'view');
+  const canViewDepartments = canPerform('CONFIG_DEPARTMENTS', 'view');
+  const canViewOrgChart = canPerform('CONFIG_ORG_CHART', 'view');
   const canEditEmployees = canPerform('HR_EMPLOYEES', 'edit');
   const canViewEmployees = canPerform('HR_EMPLOYEES', 'view');
   const canViewCompanyBranches = canPerform('COMPANY_BRANCHES', 'view');
@@ -733,10 +735,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
               </Button>}
-              {canViewUsers && canViewEmployees && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
+              {canViewUsers && canViewEmployees && canViewDepartments && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
               </Button>}
-              {canViewUsers && canViewEmployees && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
+              {canViewUsers && canViewEmployees && canViewOrgChart && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
               <GitBranch className="size-4" /> Organigrama
               </Button>}
             </div>

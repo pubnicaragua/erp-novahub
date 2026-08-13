@@ -403,17 +403,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const tabTriggerClass = "flex min-w-10 shrink-0 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all sm:min-w-0 sm:justify-start sm:px-4";
 
   const tabs = [
-    { id: 'resumen', label: 'Resumen', icon: BarChart3, module: 'FINANCIAL_DASHBOARD' },
-    { id: 'caja-bancos', label: 'Caja y Bancos', icon: Landmark, module: 'FINANCIAL_DASHBOARD' },
-    { id: 'cuentas-cobrar', label: 'CxC', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
-    { id: 'cuentas-pagar', label: 'CxP', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
-    { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES' },
-    { id: 'gastos', label: 'Gastos', icon: Wallet, module: 'FINANCIAL_EXPENSES' },
-    { id: 'recurrentes', label: 'Recurrentes', icon: RotateCcw, module: 'FINANCIAL_EXPENSES_REC' },
-    { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD' },
-    { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE' },
-    { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE' },
-    { id: 'perdidas', label: 'Pérdidas', icon: TrendingDown, module: 'FINANCIAL_EXPENSES' },
+    { id: 'resumen', label: 'Resumen', icon: BarChart3, module: 'FINANCIAL_DASHBOARD', permission: ['FINANCIAL_DASHBOARD'] },
+    { id: 'caja-bancos', label: 'Caja y Bancos', icon: Landmark, module: 'FINANCIAL_BANK', permission: ['FINANCIAL_BANK', 'FINANCIAL_DASHBOARD'] },
+    { id: 'cuentas-cobrar', label: 'CxC', icon: TrendingUp, module: 'FINANCIAL_INCOMES', permission: ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES'] },
+    { id: 'cuentas-pagar', label: 'CxP', icon: TrendingDown, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_PAYABLES', 'FINANCIAL_EXPENSES'] },
+    { id: 'ingresos', label: 'Ingresos', icon: TrendingUp, module: 'FINANCIAL_INCOMES', permission: ['FINANCIAL_INCOMES'] },
+    { id: 'gastos', label: 'Gastos', icon: Wallet, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_EXPENSES'] },
+    { id: 'recurrentes', label: 'Recurrentes', icon: RotateCcw, module: 'FINANCIAL_EXPENSES_REC', permission: ['FINANCIAL_EXPENSES_REC'] },
+    { id: 'calendario', label: 'Calendario', icon: CalendarClock, module: 'FINANCIAL_DASHBOARD', permission: ['FINANCIAL_CALENDAR', 'FINANCIAL_DASHBOARD'] },
+    { id: 'analisis', label: 'Análisis', icon: BarChart3, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'] },
+    { id: 'balance-general', label: 'Balance Gral', icon: Landmark, module: 'FINANCIAL_BALANCE', permission: ['FINANCIAL_BALANCE'] },
+    { id: 'perdidas', label: 'Pérdidas', icon: TrendingDown, module: 'FINANCIAL_EXPENSES', permission: ['FINANCIAL_LOSSES', 'FINANCIAL_EXPENSES'] },
   ];
 
   return (
@@ -464,7 +464,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <TabsList className="w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
           {tabs.map((tab) => {
-            if (!hasAccess(tab.module)) return null;
+            if (!hasAccess(tab.module) || !tab.permission.some((module) => canPerform(module, 'view'))) return null;
             return (
               <TabsTrigger key={tab.id} value={tab.id} className={tabTriggerClass}>
                 <tab.icon className="size-4" />

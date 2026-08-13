@@ -27,6 +27,7 @@ export interface ColumnDef<T> {
   type?: 'text' | 'number' | 'select' | 'date' | 'datetime-local' | 'badge';
   options?: { label: string; value: string; color?: string }[];
   render?: (value: any, row: T) => React.ReactNode;
+  headerExtra?: React.ReactNode;
 }
 
 interface EditableDataTableProps<T> {
@@ -501,6 +502,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   className="h-12 whitespace-nowrap align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
                 >
                   {col.header}
+                  {col.headerExtra}
                 </TableHead>
               ))}
               <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>

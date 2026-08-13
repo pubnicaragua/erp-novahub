@@ -37,4 +37,13 @@ export const notificationsService = {
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),
   markAllAsRead: () => api.patch('/notifications/inbox/read-all', {}),
   delete: (id: string) => api.delete(`/notifications/inbox/${id}`),
+  getViewAlertReadIds: async (namespace: string, signal?: AbortSignal) => {
+    const data = await api.get<{ itemIds?: string[] }>('/notifications/view-alerts/read', {
+      params: { namespace },
+      signal,
+    });
+    return Array.isArray(data?.itemIds) ? data.itemIds.map(String) : [];
+  },
+  markViewAlertsRead: (namespace: string, itemIds: string[]) =>
+    api.post<{ success: boolean; count: number }>('/notifications/view-alerts/read', { namespace, itemIds }),
 };

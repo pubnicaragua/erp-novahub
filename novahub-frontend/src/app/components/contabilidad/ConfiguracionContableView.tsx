@@ -109,8 +109,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
-    id: 'supplierInvoice', label: 'Facturas de proveedor pagadas', icon: Package,
-    description: 'Solo al pagar la factura → inventario/gasto + IVA acreditable + IR + IVA retenido + otras retenciones + medio de pago',
+    id: 'purchaseReceipt', label: 'Recepciones de compra pagadas', icon: Package,
+    description: 'Solo al registrar el pago de la recepción → inventario/gasto + IVA acreditable + retenciones + medio de pago',
     fields: [
       { key: 'inventory', label: 'Inventario / Gasto', side: 'debit', description: 'Se debita el costo del inventario o gasto', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
       { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
@@ -283,15 +283,15 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
 
 const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'saleReturn', 'creditNote', 'cashRegister'])
 
-const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade', 'purchaseReceipt'])
+const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade'])
 
 const ACCOUNTING_MODULE_GROUPS = [
   {
     id: 'purchases',
     label: 'Cuentas contables de Compras',
-    description: 'Solo procesos que generan asiento: facturas pagadas, gastos pagados y créditos de proveedor aplicados.',
+    description: 'Solo procesos que generan asiento: gastos pagados, recepciones pagadas y créditos de proveedor aplicados.',
     icon: Package,
-    moduleIds: ['supplierInvoice', 'expense', 'supplierCredit'],
+    moduleIds: ['purchaseReceipt', 'expense', 'supplierCredit'],
   },
   {
     id: 'hr',
@@ -357,10 +357,16 @@ type AccountOption = AccountInfo & {
   optionState: AccountOptionState
 }
 
+const GROUP_ACCOUNT_SUBTYPES = new Set(['MAIN_GROUP', 'GROUP'])
+
+function isGroupingAccount(account: Pick<AccountInfo, 'isLeaf' | 'subtype'>) {
+  return account.isLeaf === false || GROUP_ACCOUNT_SUBTYPES.has(String(account.subtype || '').toUpperCase())
+}
+
 function getAccountOptionStateForType(account: AccountInfo, expectedType: ModuleField['defaultType']): AccountOptionState {
   if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
   if (account.acceptsPostings === false) return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
-  if (account.isLeaf === false) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
+  if (isGroupingAccount(account)) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
   if (String(account.type).toUpperCase() !== expectedType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
   }
@@ -490,13 +496,17 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
     }
     options.sort(order)
 
-    // Mantiene visible una configuración antigua aunque la cuenta ya no exista
-    // en el catálogo, sin convertirla en una opción seleccionable.
+    // Mantiene visible la configuración actual inválida, aunque sea una cuenta
+    // agrupadora/inactiva o ya no exista en el catálogo, sin convertirla en una
+    // opción seleccionable.
     if (code && !options.some(option => option.value === code)) {
+      const currentOption = accountOptions.find(option => option.code === code)
       options.push({
         value: code,
-        label: `${code} · Cuenta configurada no encontrada`,
-        description: 'No encontrada en el plan de cuentas',
+        label: `${code} · ${currentOption?.name || 'Cuenta configurada'}`,
+        description: currentOption
+          ? `${accountTypeLabel(currentOption.type)} · ${currentOption.optionState.label}`
+          : 'No encontrada en el plan de cuentas',
         disabled: true,
       })
     }
@@ -639,6 +649,13 @@ export function ConfiguracionContableView() {
       if (mergedMappings.supplierInvoice) {
         const { withholdingPayable: _legacyWithholding, ...supplierInvoiceMapping } = mergedMappings.supplierInvoice
         mergedMappings.supplierInvoice = supplierInvoiceMapping
+        // Las configuraciones anteriores usaban `supplierInvoice` para el
+        // mismo asiento. Se muestran y editan ahora bajo el evento correcto:
+        // recepción de compra pagada.
+        mergedMappings.purchaseReceipt = {
+          ...supplierInvoiceMapping,
+          ...(mergedMappings.purchaseReceipt || {}),
+        }
       }
       accountMappingsRef.current = mergedMappings
       setAccountMappings(mergedMappings)
@@ -671,7 +688,10 @@ export function ConfiguracionContableView() {
     }
   }
 
-  const persistAccountMappings = useCallback((nextMappings: Record<string, any>) => {
+  const persistAccountMappings = useCallback((
+    nextMappings: Record<string, any>,
+    patch?: { moduleId: string; fieldKey: string; value: string },
+  ) => {
     if (!canEditAccounting) return Promise.resolve()
     const saveTask = accountMappingSaveQueueRef.current
       .catch(() => undefined)
@@ -684,6 +704,7 @@ export function ConfiguracionContableView() {
             taxRate,
             industry,
             accountMappings: nextMappings,
+            ...(patch ? { accountMappingPatch: patch } : {}),
             customModules,
           })
           toast.success('Cuenta contable guardada automáticamente', { id: 'account-mapping-save' })
@@ -734,7 +755,7 @@ export function ConfiguracionContableView() {
     }
     accountMappingsRef.current = next
     setAccountMappings(next)
-    void persistAccountMappings(next)
+    void persistAccountMappings(next, { moduleId, fieldKey, value })
   }
 
   const toggleGroup = (id: string) => {

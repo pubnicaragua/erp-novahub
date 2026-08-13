@@ -4,7 +4,6 @@ import {
   ClipboardList, Search, Eye, X, AlertTriangle,
   CheckCircle, FileDown, Send, Ban,
   Building2,
-  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -28,26 +27,27 @@ import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseRequestPDF } from '../../utils/pdfGenerator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
+import { EditableDataTable, type ColumnDef } from '../ui/EditableDataTable';
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: 'bg-muted/50 text-muted-foreground border-border/50',
-  SUBMITTED: 'bg-primary/10 text-primary border-primary/20',
-  RECEIVED: 'bg-primary/10 text-primary border-primary/20',
-  IN_REVIEW: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-  IN_QUOTATION: 'bg-primary/10 text-primary border-primary/20',
-  PENDING_APPROVAL: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  APPROVED: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-  REJECTED: 'bg-red-500/10 text-red-500 border-red-500/20',
-  RETURNED_FOR_CORRECTION: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary border-primary/20',
-  CLOSED: 'bg-muted/50 text-muted-foreground border-border/50',
-  CANCELLED: 'bg-muted/50 text-muted-foreground border-border/50',
+  DRAFT: 'bg-muted/20 text-muted-foreground',
+  SUBMITTED: 'bg-primary/10 text-primary',
+  RECEIVED: 'bg-primary/10 text-primary',
+  IN_REVIEW: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  IN_QUOTATION: 'bg-primary/10 text-primary',
+  PENDING_APPROVAL: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  APPROVED: 'bg-primary/10 text-primary',
+  REJECTED: 'bg-destructive/10 text-destructive',
+  RETURNED_FOR_CORRECTION: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary',
+  CLOSED: 'bg-muted/20 text-muted-foreground',
+  CANCELLED: 'bg-destructive/10 text-destructive',
 };
 
 const PRIORITY_STYLES: Record<string, string> = {
   NORMAL: 'bg-primary/10 text-primary',
-  URGENT: 'bg-amber-500/10 text-amber-500',
-  CRITICAL: 'bg-red-500/10 text-red-500',
+  URGENT: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  CRITICAL: 'bg-destructive/10 text-destructive',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -90,9 +90,11 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const canExportRequests = canPerform('PURCHASES_REQUESTS', 'export');
   const canApproveRequests = canPerform('PURCHASES_REQUESTS', 'approve');
   const canCancelRequests = canPerform('PURCHASES_REQUESTS', 'cancel');
-  const canApproveManagement = canPerform('PURCHASES_MANAGEMENT', 'approve');
-  const canRejectManagement = canPerform('PURCHASES_MANAGEMENT', 'reject');
-  const canConvertManagement = canPerform('PURCHASES_MANAGEMENT', 'convert');
+  // La gestión ocurre dentro de la vista Solicitudes; no es una vista
+  // independiente del sidebar ni necesita una fila propia en la matriz.
+  const canApproveManagement = canPerform('PURCHASES_REQUESTS', 'approve');
+  const canRejectManagement = canPerform('PURCHASES_REQUESTS', 'reject');
+  const canConvertManagement = canPerform('PURCHASES_REQUESTS', 'convert');
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
@@ -135,6 +137,82 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const getRequestSupplierId = (pr: PurchaseRequest) => pr.supplierId || getActiveManagement(pr)?.supplierId || '';
   const actionButtonClass = 'rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors';
   const actionIconClass = 'size-3.5';
+
+  const columns: ColumnDef<PurchaseRequest>[] = [
+    {
+      key: 'number',
+      header: 'N°',
+      width: '140px',
+      render: (value) => <span className="font-mono text-xs font-black text-primary">{value}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      width: '150px',
+      render: (_value, row) => {
+        const mgmt = getActiveManagement(row);
+        const status = normalizeRequestStatus(row.status);
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge variant="outline" className={cn('whitespace-nowrap border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[status])}>
+              {STATUS_LABELS[status]}
+            </Badge>
+            {mgmt && mgmt.status === 'PENDING_APPROVAL' && (
+              <Badge className="border-orange-500/20 bg-orange-500/10 text-[8px] text-orange-500">Gestión</Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'priority',
+      header: 'Prioridad',
+      width: '115px',
+      render: (value) => (
+        <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[String(value || 'NORMAL').toUpperCase()] || PRIORITY_STYLES.NORMAL)}>
+          {value || 'NORMAL'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'supplier',
+      header: 'Proveedor',
+      width: '210px',
+      render: (_value, row) => {
+        const mgmt = getActiveManagement(row);
+        return <span className="text-sm font-bold">{row.supplier?.name || mgmt?.supplier?.name || <span className="text-muted-foreground/50">—</span>}</span>;
+      },
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      width: '150px',
+      render: (_value, row) => {
+        const mgmt = getActiveManagement(row);
+        return mgmt
+          ? <span className="font-mono text-xs font-black tabular-nums">{formatRequestAmount(mgmt.total, mgmt.currency, mgmt.exchangeRate)}</span>
+          : <span className="text-muted-foreground/50">—</span>;
+      },
+    },
+    {
+      key: 'items',
+      header: 'Ítems',
+      width: '85px',
+      render: (_value, row) => <span className="text-xs font-semibold tabular-nums">{row.items?.length || 0}</span>,
+    },
+    {
+      key: 'requestedBy',
+      header: 'Solicitante',
+      width: '190px',
+      render: (_value, row) => <span className="text-xs">{`${row.requestedBy?.firstName || ''} ${row.requestedBy?.lastName || ''}`.trim() || '—'}</span>,
+    },
+    {
+      key: 'date',
+      header: 'Fecha',
+      width: '115px',
+      render: (value) => <span className="text-xs text-muted-foreground">{value ? new Date(value).toLocaleDateString() : '—'}</span>,
+    },
+  ];
 
   const handleApproveManagement = (mgmt: PurchaseManagement) => {
     if (!canApproveManagement) return;
@@ -363,16 +441,6 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />
         </div>
         {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
-        {pagination && (
-          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground" data-tour="purchases-list-pagination">
-            <span>Mostrando {filtered.length} de {pagination.total} solicitudes</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page - 1)} disabled={pagination.page <= 1}><ChevronLeft className="size-4" /></Button>
-              <span className="min-w-20 text-center font-bold text-foreground">Pág. {pagination.page} / {Math.max(1, pagination.totalPages)}</span>
-              <Button variant="outline" size="icon" className="size-8" onClick={() => pagination.onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ChevronRight className="size-4" /></Button>
-            </div>
-          </div>
-        )}
         <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); onStatusChange?.(value); }}>
           <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
           <SelectContent>
@@ -384,87 +452,47 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
       {loading ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">Cargando...</CardContent></Card>
+      ) : layoutMode === 'table' ? (
+        <EditableDataTable
+          data={filtered}
+          columns={columns}
+          isLoading={loading}
+          pagination={pagination}
+          layoutMode={layoutMode}
+          highlightedRowId={highlightedAlertId}
+          actionsWidth="w-48"
+          actions={(req) => {
+            const mgmt = getActiveManagement(req);
+            return (
+              <div className="flex gap-1">
+                {canExportRequests && <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadRequestPdf(req)}>
+                  <FileDown className="size-4" />
+                </Button>}
+                <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailOpen(req)}>
+                  <Eye className="size-4" />
+                </Button>
+                {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
+                  <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
+                    <Send className="size-4" />
+                  </Button>
+                  {canCancelRequests && <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
+                    <Ban className="size-4" />
+                  </Button>}
+                </>}
+                {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && <>
+                  {canApproveManagement && <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                    <CheckCircle className="size-4" />
+                  </Button>}
+                  {canRejectManagement && <Button title="Rechazar gestión" aria-label="Rechazar gestión" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
+                    <X className="size-4" />
+                  </Button>}
+                </>}
+              </div>
+            );
+          }}
+        />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">No hay solicitudes de compra</CardContent></Card>
-      ) : layoutMode === 'table' ? (
-        <div className="rounded-xl border border-border/40 overflow-hidden" data-tour="sales-data-table">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b border-border/30">
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">N°</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Prioridad</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Proveedor</th>
-                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total</th>
-                  <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Items</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Solicitante</th>
-                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</th>
-                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((req) => {
-                  const mgmt = getActiveManagement(req);
-                  return (
-                    <motion.tr key={req.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className={cn(
-                        'border-b border-border/10 hover:bg-muted/10 transition-colors',
-                        highlightedAlertId === String(req.id) && 'bg-primary/10 ring-1 ring-inset ring-primary/50',
-                      )}
-                    >
-                      <td className="px-4 py-3 font-mono font-bold text-xs">{req.number}</td>
-                      <td className="px-4 py-3">
-                        <Badge className={cn('text-[9px] font-bold border whitespace-nowrap', STATUS_STYLES[normalizeRequestStatus(req.status)])}>
-                          {STATUS_LABELS[normalizeRequestStatus(req.status)]}
-                        </Badge>
-                        {mgmt && mgmt.status === 'PENDING_APPROVAL' && (
-                          <Badge className="ml-1 border-orange-500/20 bg-orange-500/10 text-[8px] text-orange-500">Gestión</Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={cn('text-[9px]', PRIORITY_STYLES[req.priority])}>{req.priority}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-xs">{req.supplier?.name || mgmt?.supplier?.name || <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="px-4 py-3 text-right text-xs font-mono font-bold">{mgmt ? formatRequestAmount(mgmt.total, mgmt.currency, mgmt.exchangeRate) : <span className="text-muted-foreground/50">—</span>}</td>
-                      <td className="px-4 py-3 text-center text-xs">{req.items?.length || 0}</td>
-                      <td className="px-4 py-3 text-xs">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(req.date).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 flex-wrap">
-                          {canExportRequests && <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => void handleDownloadRequestPdf(req)}>
-                            <FileDown className={actionIconClass} />
-                          </Button>}
-                          <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => setDetailOpen(req)}>
-                            <Eye className={actionIconClass} />
-                          </Button>
-                          {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
-                            <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
-                              <Send className={actionIconClass} />
-                            </Button>
-                            {canCancelRequests && <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
-                              <Ban className={actionIconClass} />
-                            </Button>}
-                          </>}
-                          {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
-                            <>
-                              {canApproveManagement && <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
-                                <CheckCircle className={actionIconClass} />
-                              </Button>}
-                              {canRejectManagement && <Button title="Rechazar gestión" aria-label="Rechazar gestión" variant="ghost" size="sm" className={cn(actionButtonClass, 'h-7 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
-                                <X className={actionIconClass} />
-                              </Button>}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" data-tour="sales-data-cards">
           {filtered.map((req) => {
@@ -477,7 +505,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       <p className="font-mono text-sm font-black text-primary">{req.number}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">{new Date(req.date).toLocaleDateString()}</p>
                     </div>
-                    <Badge className={cn('shrink-0 text-[9px] font-bold border', STATUS_STYLES[normalizeRequestStatus(req.status)])}>
+                    <Badge variant="outline" className={cn('shrink-0 border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[normalizeRequestStatus(req.status)])}>
                       {STATUS_LABELS[normalizeRequestStatus(req.status)]}
                     </Badge>
                   </div>
@@ -492,7 +520,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prioridad</p>
-                      <Badge className={cn('mt-1 text-[9px]', PRIORITY_STYLES[req.priority])}>{req.priority}</Badge>
+                      <Badge variant="outline" className={cn('mt-1 border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[req.priority] || PRIORITY_STYLES.NORMAL)}>{req.priority}</Badge>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Artículos</p>
@@ -554,7 +582,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     <div className="min-w-0 flex-1">
                       <SheetTitle className="flex flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
                     Solicitud {detailOpen.number}
-                        <Badge className={cn('text-[10px] font-bold border', STATUS_STYLES[requestStatus])}>
+                        <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[requestStatus])}>
                           {STATUS_LABELS[requestStatus]}
                         </Badge>
                       </SheetTitle>
@@ -566,7 +594,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   {mgmt && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>Gestión de compra</span>
-                      <Badge className={cn('text-[10px] font-bold border', STATUS_STYLES[mgmt.status])}>
+                      <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[mgmt.status])}>
                         {STATUS_LABELS[mgmt.status] || mgmt.status.replace(/_/g, ' ')}
                       </Badge>
                     </div>
@@ -577,7 +605,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Solicitante</span><p className="mt-1 break-words font-medium">{detailOpen.requestedBy?.firstName} {detailOpen.requestedBy?.lastName}</p></div>
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Bodega</span><p className="mt-1 break-words font-medium">{detailOpen.warehouse?.name || '—'}</p></div>
-                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Prioridad</span><p className="mt-1"><Badge className={cn('text-[9px]', PRIORITY_STYLES[detailOpen.priority])}>{detailOpen.priority}</Badge></p></div>
+                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Prioridad</span><p className="mt-1"><Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[detailOpen.priority] || PRIORITY_STYLES.NORMAL)}>{detailOpen.priority}</Badge></p></div>
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Fecha requerida</span><p className="mt-1 font-medium">{detailOpen.requiredDate ? new Date(detailOpen.requiredDate).toLocaleDateString() : '—'}</p></div>
                   </div>
 

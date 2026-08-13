@@ -6,6 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 
 export type CustomerImportRow = {
   name: string;
@@ -58,6 +61,7 @@ export function CustomerImportPreview({
   onConfirm,
   onDone,
 }: CustomerImportPreviewProps) {
+  useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const validRows = rows.filter((row) => !row.error).length;
@@ -79,18 +83,14 @@ export function CustomerImportPreview({
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar clientes</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear los clientes. El número de cliente se genera automáticamente y no se importa desde el archivo.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <Badge variant="outline">{rows.length} registros</Badge>
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">{validRows} válidos</Badge>
-            <Badge variant="outline" className={warningRows ? 'border-amber-500/30 text-amber-600' : ''}>{warningRows} avisos</Badge>
-            <Badge variant="outline" className={errorRows ? 'border-rose-500/30 text-rose-600' : ''}>{errorRows} errores</Badge>
-          </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
           <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Código automático</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Avisos no bloquean</Badge></div>
         </div>
+
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
 
         <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="w-[3100px] min-w-[3100px]">
@@ -142,23 +142,19 @@ export function CustomerImportPreview({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
-          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} clientes`}</Button>
+          <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
       </div>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se crearán {validRows} clientes. Las filas con errores se omitirán y los avisos se importarán conservando el dato válido. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se importarán {validRows} clientes válidos y se omitirán {errorRows} con errores. Los {warningRows} avisos no bloquean la carga. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
           <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importing} onOpenChange={() => undefined}>
-        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-          <div className="flex flex-col items-center gap-5 py-5 text-center"><div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5"><div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" /><span className="text-xl font-black text-primary">{progress}%</span></div><div><DialogTitle className="text-xl">Importando clientes</DialogTitle><DialogDescription className="mt-2">Generando números de cliente y guardando la información. No cierres esta ventana.</DialogDescription></div><div className="h-3 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(progress, 3)}%` }} /></div></div>
-        </DialogContent>
-      </Dialog>
+      <ImportProgressOverlay open={importing} progress={progress} title="Importando clientes" description="Generando números de cliente y guardando la información. No cierres esta ventana." />
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
         <DialogContent className="max-w-md">

@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -57,6 +58,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<SupplierImportResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -141,7 +144,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const readImportFile = async (file: File) => {
     try {
       if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
-      const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
       const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'proveedores') || workbook.SheetNames[0];
       const rawSheet = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
       const raw = rawSheet[0]?.length === 1 && String(rawSheet[0][0] || '').toLowerCase().startsWith('sep=') ? rawSheet.slice(1) : rawSheet;
@@ -177,6 +181,24 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       setImportRows([]);
       toast.error(error?.message || 'No se pudo leer el archivo');
     }
+  };
+
+  const handleOpenImportPreview = () => {
+    if (!importFile || !importRows.length || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewProgress(20);
+    setImportOpen(false);
+    window.setTimeout(() => {
+      setPreviewProgress(65);
+      window.setTimeout(() => {
+        setPreviewProgress(100);
+        window.setTimeout(() => {
+          setImportPreviewOpen(true);
+          setPreviewLoading(false);
+          setPreviewProgress(0);
+        }, 120);
+      }, 120);
+    }, 40);
   };
 
   const updateImportRow = (index: number, field: keyof SupplierImportRow, value: string) => {
@@ -228,17 +250,17 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   ];
 
   const columns: ColumnDef<Supplier>[] = [
-    { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('proveedores', 'edit') },
-    { key: 'name',        header: 'Nombre',    editable: canPerform('proveedores', 'edit') },
-    { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('proveedores', 'edit'),
+    { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
       render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
     },
-    { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('proveedores', 'edit'),
+    { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
       render: (val) => <span className={cn('font-mono text-xs', val ? 'text-foreground' : 'text-muted-foreground/50')}>{val || '—'}</span>
     },
-    { key: 'contactName', header: 'Contacto',  editable: canPerform('proveedores', 'edit') },
-    { key: 'email',       header: 'Email',     editable: canPerform('proveedores', 'edit') },
-    { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('proveedores', 'edit') },
+    { key: 'contactName', header: 'Contacto',  editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'email',       header: 'Email',     editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
     { key: 'balance', header: 'Saldo', width: '170px',
       render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
     },
@@ -390,7 +412,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} />
             </div>
-            {canPerform('proveedores', 'create') && (
+            {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <Button
                 variant="outline"
                 onClick={() => { setImportOpen(true); setImportPreviewOpen(false); setImportRows([]); setImportFile(null); setImportResult(null); }}
@@ -399,7 +421,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <Upload className="size-4" /> Importar
               </Button>
             )}
-            {canPerform('proveedores', 'create') && (
+            {canPerform('PURCHASES_PROVIDERS', 'create') && (
               <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-sm hover:shadow-md transition-all">
                 <Plus className="size-4" /> Nuevo Proveedor
               </Button>
@@ -407,7 +429,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
         </div>
         <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
-          onAddRow={canPerform('proveedores', 'create') ? handleAdd : undefined}
+          onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
               onClick={async () => {
@@ -422,11 +444,11 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           actions={(row) => (
             <div className="flex gap-1">
               <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
-              {canPerform('proveedores', 'edit') && (
+              {canPerform('PURCHASES_PROVIDERS', 'edit') && (
                 <Button title="Editar proveedor" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
               )}
-              {canPerform('proveedores', 'delete') && (
-                <Button title={isSupplierInactive(row) ? 'Activar proveedor' : 'Desactivar proveedor'} variant="ghost" size="icon" className={`size-8 rounded-lg ${isSupplierInactive(row) ? 'hover:bg-emerald-500/10 hover:text-emerald-500' : 'hover:bg-rose-500/10 hover:text-rose-500'}`} onClick={() => setPendingToggle(row)}>{isSupplierInactive(row) ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}</Button>
+              {canPerform('PURCHASES_PROVIDERS', 'edit') && (
+                <Button title={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} aria-label={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingToggle(row)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -468,9 +490,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del proveedor.</li><li>Carga el archivo; el sistema lo valida sin guardar todavía.</li><li>Presiona “Previsualizar proveedores” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; solo se guardarán las filas válidas.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar proveedores</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar proveedores</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los proveedores para revisión." />
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">

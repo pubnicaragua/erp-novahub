@@ -8,6 +8,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import * as XLSX from 'xlsx';
 
 const TEMPLATE_COLUMNS = [
@@ -52,6 +54,8 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
 
 const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
@@ -74,6 +78,28 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
     placement: 'top',
   },
 ];
+
+  const handleAttendanceFileChange = async (file: File | undefined) => {
+    setImportFile(file || null);
+    setImportFileStats(null);
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const valid = rows.filter((row: any) => {
+        const employeeNumber = String(row.employeeNumber || row.employeenumber || row.codigo || '').trim().toLowerCase();
+        return employees.some((employee: any) =>
+          (employee.employeeNumber && String(employee.employeeNumber).toLowerCase() === employeeNumber) ||
+          `${employee.firstName} ${employee.lastName}`.toLowerCase() === employeeNumber
+        );
+      }).length;
+      setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
+    } catch {
+      setImportFileStats(null);
+    }
+  };
 
   const handleClockIn = async () => {
     if (!selectedEmployee) {
@@ -134,15 +160,20 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   const handleImportAttendance = async () => {
     if (!importFile) return toast.error('Selecciona un archivo');
     setImporting(true);
+    setImportProgress(8);
     setImportResult(null);
     try {
       const buffer = await importFile.arrayBuffer();
+      setImportProgress(22);
       const wb = XLSX.read(buffer, { type: 'array' });
+      setImportProgress(36);
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows: any[] = XLSX.utils.sheet_to_json(sheet);
       if (rows.length === 0) { toast.error('El archivo no contiene filas'); return; }
+      setImportProgress(40);
       let created = 0, skipped = 0;
       const errors: string[] = [];
+      const updateRowProgress = (index: number) => setImportProgress(40 + Math.round(((index + 1) / rows.length) * 55));
       for (let idx = 0; idx < rows.length; idx++) {
         const row = rows[idx];
         const rowNum = idx + 2;
@@ -151,7 +182,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           (e.employeeNumber && (e.employeeNumber + '').toLowerCase() === empNum.toLowerCase()) ||
           ((e.firstName + ' ' + e.lastName).toLowerCase() === empNum.toLowerCase())
         );
-        if (!employee) { skipped++; errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); continue; }
+        if (!employee) { skipped++; errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); updateRowProgress(idx); continue; }
         const dateRaw = pickRowValue(row, 'fecha', 'date');
         const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
@@ -173,7 +204,9 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           skipped++;
           errors.push(`Fila ${rowNum}: ${e?.response?.data?.message || e?.message || 'error al crear'}`);
         }
+        updateRowProgress(idx);
       }
+      setImportProgress(100);
       setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
       if (created > 0) onRefresh();
       toast.success(`Importación finalizada: ${created} registros, ${skipped} omitidos`);
@@ -181,6 +214,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
       toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
     } finally {
       setImporting(false);
+      window.setTimeout(() => setImportProgress(0), 180);
     }
   };
 
@@ -442,7 +476,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
       )}
       {showTutorial && <GuidedTour steps={ASISTENCIA_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Asistencia" />}
 
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar asistencia</DialogTitle>
@@ -484,8 +518,10 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-muted-foreground">Archivo Excel</label>
-              <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+              <Input type="file" accept=".xlsx,.xls" onChange={(e) => { void handleAttendanceFileChange(e.target.files?.[0]); e.target.value = ''; }} />
               {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+              {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
+              {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="registros de asistencia" />}
             </div>
             {importResult && (
               <div className="rounded-xl border border-border/60 p-4 bg-background">
@@ -507,11 +543,17 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
             <Button onClick={handleImportAttendance} disabled={importing || !importFile} className="gap-2">
-              <Upload className="size-4" /> {importing ? 'Importando...' : 'Importar asistencia'}
+              <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar asistencia'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ImportProgressOverlay
+        open={importing}
+        progress={importProgress}
+        title="Importando asistencia"
+        description="Procesando cada fila, validando el empleado y registrando la asistencia en la base de datos."
+      />
     </div>
   );
 }

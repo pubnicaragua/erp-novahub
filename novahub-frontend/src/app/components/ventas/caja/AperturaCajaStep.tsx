@@ -25,11 +25,16 @@ export function AperturaCajaStep({ selectedRegister, onOpenSession }: AperturaCa
 
   const calcTotalNIO = () => nioDenominations.reduce((acc, d) => acc + (d.value * d.quantity), 0);
   const calcTotalUSD = () => usdDenominations.reduce((acc, d) => acc + (d.value * d.quantity), 0);
+  const totalOpening = calcTotalNIO() + calcTotalUSD();
 
   const handleOpenSession = async () => {
     try {
       if (!selectedRegister) {
         toast.error('Seleccione una caja primero');
+        return;
+      }
+      if (totalOpening <= 0) {
+        toast.error('La caja no se puede abrir sin un fondo inicial. Registra la cantidad en efectivo (córdobas o dólares) con la que se abre.');
         return;
       }
       const initialNIO = calcTotalNIO();
@@ -62,7 +67,7 @@ export function AperturaCajaStep({ selectedRegister, onOpenSession }: AperturaCa
             <CardTitle className="text-lg">Ingreso de Efectivo: Apertura</CardTitle>
             <CardDescription>Ingrese el fondo inicial en físico para comenzar a operar.</CardDescription>
           </div>
-          <Button onClick={handleOpenSession} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all shadow-sm">
+          <Button onClick={handleOpenSession} disabled={totalOpening <= 0} title={totalOpening <= 0 ? 'Registra un fondo inicial mayor que cero' : undefined} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all shadow-sm">
             <Lock className="size-4 mr-2" /> Aperturar Caja
           </Button>
         </div>

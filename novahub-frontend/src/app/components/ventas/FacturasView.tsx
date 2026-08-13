@@ -296,6 +296,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   const handlePayInvoice = async (invoice: Invoice, closeDetail = false) => {
+    if (!canPerform('SALES_INVOICES', 'approve') || !canPerform('SALES_PAYMENTS', 'create') || !canPerform('SALES_PAYMENTS', 'approve')) {
+      toast.error('No tienes permisos para aprobar y registrar el pago de esta factura');
+      return;
+    }
     const invoiceStatus = String(invoice.status || '').toUpperCase();
     if (invoiceStatus === 'PAID') return;
     if (!['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE'].includes(invoiceStatus)) {
@@ -652,6 +656,27 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       }
     },
     {
+      key: 'paymentMethod',
+      header: 'Forma de Pago',
+      width: '130px',
+      render: (val, row) => {
+        const method = String(val || row.paymentMethod || '').toUpperCase();
+        if (!method) return <span className="text-[11px] font-medium text-muted-foreground">—</span>;
+        const isCredit = method === 'CREDIT';
+        const labels: Record<string, string> = {
+          CREDIT: 'Crédito', CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CHECK: 'Cheque', OTHER: 'Otro',
+        };
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black uppercase tracking-widest', isCredit ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400')}>
+              {isCredit ? 'A Crédito' : 'Contado'}
+            </Badge>
+            {!isCredit && <span className="text-[9px] font-bold uppercase text-muted-foreground/70">{labels[method] || method}</span>}
+          </div>
+        );
+      }
+    },
+    {
       key: 'status',
       header: 'Estado',
       width: '110px',
@@ -864,11 +889,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Forma sugerida para el cobro</p>
                      <select disabled={isInvoiceLocked} value={localDoc?.paymentMethod || 'CASH'} onChange={(event) => setLocalDoc({ ...localDoc, paymentMethod: event.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                      <option value="CASH">Efectivo</option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="TRANSFER">Transferencia</option>
-                      <option value="CHECK">Cheque</option>
+                      <option value="CASH">Efectivo (Contado)</option>
+                      <option value="CARD">Tarjeta (Contado)</option>
+                      <option value="TRANSFER">Transferencia (Contado)</option>
+                      <option value="CHECK">Cheque (Contado)</option>
+                      <option value="CREDIT">Crédito (a plazos)</option>
                     </select>
+                    {localDoc?.paymentMethod === 'CREDIT' && (
+                      <p className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">Al emitir se creará un registro en el módulo Créditos para el seguimiento de cobranza.</p>
+                    )}
                     {localDoc?.paymentMethod === 'TRANSFER' && (
                       <div className="mt-2 space-y-2">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cuentas de destino (pueden ser varias)</p>
@@ -1313,7 +1342,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   })();
                 }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
-                {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
+                {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
                   !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
                   getInvoiceBalance(row) > 0 && (
                   <Button type="button" title="Pagar factura" variant="ghost" size="icon" disabled={payingInvoiceId === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => void handlePayInvoice(row)}>

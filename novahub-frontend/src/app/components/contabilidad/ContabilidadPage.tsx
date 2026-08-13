@@ -68,6 +68,7 @@ const SECTION_PERMISSIONS: Record<string, string> = {
   conciliacion: 'ACCOUNTING_RECONCILIATION',
   periodos: 'ACCOUNTING_PERIODS',
   'reportes-fiscales': 'ACCOUNTING_FISCAL',
+  'auditoria-facturas': 'ACCOUNTING_INVOICE_AUDIT',
   presupuestos: 'ACCOUNTING_BUDGET',
   'categorias-gastos': 'ACCOUNTING_EXPENSE_CATEGORIES',
   configuracion: 'ACCOUNTING_CONFIG',

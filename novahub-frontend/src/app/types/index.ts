@@ -22,6 +22,8 @@ export interface PaginatedResponse<T> {
 
 export interface ApiFilters {
   search?: string;
+  /** Códigos/SKU separados por coma para resolver coincidencias exactas en cargas masivas. */
+  codes?: string;
   categoryId?: string;
   type?: string;
   warehouseId?: string;
@@ -184,6 +186,7 @@ export interface SalesOrder {
   warehouseId?: string;
   status: 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
+  paymentMethod?: string;
   items: SalesOrderItem[];
   createdAt: string;
   updatedAt: string;
@@ -250,6 +253,7 @@ export interface Invoice {
   sourceLabel?: string | null;
   status: PaymentStatus;
   notes?: string;
+  paymentMethod?: string;
   sellerEmployeeId?: string | null;
   commissionRate?: number | null;
   commissionType?: 'PERCENTAGE' | 'FIXED' | null;
@@ -534,6 +538,7 @@ export interface PurchaseOrderItem {
   categoryId?: string;
   stockApplies?: boolean;
   stock?: number;
+  currentStock?: number;
   quantity: number;
   unitPrice: number;
   taxRate?: number;
@@ -549,6 +554,46 @@ export interface PurchaseOrderItem {
 }
 
 // ---- Purchase Receipts ----
+export interface InventoryCostOperationLine {
+  description: string;
+  quantity: number;
+  sourceUnitCost: number;
+  sourceSubtotal: number;
+  sourceTaxAmount: number;
+  sourceWithholdingAmount: number;
+  sourceEffectiveTotal: number;
+  taxRate: number;
+  withholdingRate: number;
+  baseUnitCost: number;
+  totalCost: number;
+  warehouseId?: string;
+}
+
+export interface InventoryCostOperation {
+  productId: string;
+  productCode?: string | null;
+  productName: string;
+  baseCurrency: Currency;
+  sourceCurrency: Currency;
+  exchangeRate: number;
+  previousQuantity: number;
+  previousUnitCost: number;
+  previousTotalCost: number;
+  receivedQuantity: number;
+  receivedUnitCost: number;
+  receivedSubtotal: number;
+  receivedTaxAmount: number;
+  receivedWithholdingTotal: number;
+  receivedTotalCost: number;
+  sourceReceivedSubtotal: number;
+  sourceReceivedTaxAmount: number;
+  sourceReceivedWithholdingTotal: number;
+  sourceReceivedTotalCost: number;
+  finalQuantity: number;
+  newAverageCost: number;
+  lines: InventoryCostOperationLine[];
+}
+
 export interface PurchaseReceipt {
   id: string;
   tenantId: string;
@@ -568,6 +613,7 @@ export interface PurchaseReceipt {
   exchangeRate?: number;
   baseTotal?: number;
   inventoryProcessedAt?: string;
+  inventoryCostOperations?: InventoryCostOperation[];
   notes?: string;
   items: PurchaseReceiptItem[];
   supplierInvoices?: SupplierInvoice[];
@@ -700,6 +746,7 @@ export interface PaymentMade {
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
+  accountId?: string;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -877,6 +924,7 @@ export interface JournalEntry {
   referenceId?: string;
   costCenterId?: string;
   costCenter?: any;
+  branchLinks?: Array<{ branch?: { id: string; code?: string; name: string } }>;
   createdBy?: { id: string; name: string; email?: string | null } | null;
   referenceNumber?: string | null;
   createdAt: string;

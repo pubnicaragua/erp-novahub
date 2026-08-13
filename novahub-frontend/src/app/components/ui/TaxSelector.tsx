@@ -69,6 +69,7 @@ interface TaxDetailProps {
   lineTotal: number
   currency?: string
   disabled?: boolean
+  calculatedFieldsReadOnly?: boolean
 }
 
 const formatTwoDecimals = (value: unknown) => {
@@ -76,7 +77,7 @@ const formatTwoDecimals = (value: unknown) => {
   return Number.isFinite(numeric) ? numeric.toFixed(2) : '0.00'
 }
 
-export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrency, disabled = false }: TaxDetailProps) {
+export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrency, disabled = false, calculatedFieldsReadOnly = false }: TaxDetailProps) {
   const [taxEntries, setTaxEntries] = useState<TaxCatalogEntry[]>([])
   const [whEntries, setWhEntries] = useState<TaxCatalogEntry[]>([])
   const sym = (item.currency || propCurrency) === 'USD' ? '$' : 'C$'
@@ -144,8 +145,10 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 step="0.01"
                 min="0"
                 value={formatTwoDecimals(item.taxBase || 0)}
-                disabled={disabled}
-                className="h-8 min-w-0 px-2 text-right text-xs"
+                disabled={disabled || calculatedFieldsReadOnly}
+                readOnly={calculatedFieldsReadOnly}
+                aria-readonly={calculatedFieldsReadOnly}
+                className={`h-8 min-w-0 px-2 text-right text-xs ${calculatedFieldsReadOnly ? 'cursor-not-allowed border-border/70 bg-muted/40 text-muted-foreground' : ''}`}
                 onChange={(e) => {
                   const base = Number(e.target.value || 0)
                   onItemChange('taxBase', base)
@@ -156,15 +159,17 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
             <div className="min-w-0 xl:col-start-3">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
                 Tasa %
-                {isTaxManual && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
+                {isTaxManual && !calculatedFieldsReadOnly && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
               </Label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 value={formatTwoDecimals(effectiveTaxRate)}
-                disabled={disabled}
-                className="h-8 min-w-0 px-2 text-right text-xs"
+                disabled={disabled || calculatedFieldsReadOnly}
+                readOnly={calculatedFieldsReadOnly}
+                aria-readonly={calculatedFieldsReadOnly}
+                className={`h-8 min-w-0 px-2 text-right text-xs ${calculatedFieldsReadOnly ? 'cursor-not-allowed border-border/70 bg-muted/40 text-muted-foreground' : ''}`}
                 onChange={(e) => {
                   const rate = Number(e.target.value || 0)
                   onItemChange('taxRate', rate)
@@ -215,23 +220,27 @@ export function TaxDetail({ item, onItemChange, lineTotal, currency: propCurrenc
                 step="0.01"
                 min="0"
                 value={formatTwoDecimals(item.withholdingBase || 0)}
-                disabled={disabled}
-                className="h-8 min-w-0 px-2 text-right text-xs"
+                disabled={disabled || calculatedFieldsReadOnly}
+                readOnly={calculatedFieldsReadOnly}
+                aria-readonly={calculatedFieldsReadOnly}
+                className={`h-8 min-w-0 px-2 text-right text-xs ${calculatedFieldsReadOnly ? 'cursor-not-allowed border-border/70 bg-muted/40 text-muted-foreground' : ''}`}
                 onChange={(e) => onItemChange('withholdingBase', Number(e.target.value || 0))}
               />
             </div>
             <div className="min-w-0 xl:col-start-7">
               <Label className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-foreground">
                 Tasa %
-                {isWhManual && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
+                {isWhManual && !calculatedFieldsReadOnly && <ShieldAlert className="ml-1 inline size-3 text-amber-500" />}
               </Label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 value={formatTwoDecimals(effectiveWhRate)}
-                disabled={disabled}
-                className="h-8 min-w-0 px-2 text-right text-xs"
+                disabled={disabled || calculatedFieldsReadOnly}
+                readOnly={calculatedFieldsReadOnly}
+                aria-readonly={calculatedFieldsReadOnly}
+                className={`h-8 min-w-0 px-2 text-right text-xs ${calculatedFieldsReadOnly ? 'cursor-not-allowed border-border/70 bg-muted/40 text-muted-foreground' : ''}`}
                 onChange={(e) => onItemChange('withholdingRate', Number(e.target.value || 0))}
               />
             </div>

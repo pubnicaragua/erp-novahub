@@ -35,7 +35,8 @@ export const purchaseReceiptsService = {
   getById: (id: string) => api.get<PurchaseReceipt>(`/purchases/receipts/${id}`),
   create: (data: Partial<PurchaseReceipt>) => api.post<PurchaseReceipt>('/purchases/receipts', data),
   update: (id: string, data: Partial<PurchaseReceipt>) => api.patch<PurchaseReceipt>(`/purchases/receipts/${id}`, data),
-  delete: (id: string) => api.delete<void>(`/purchases/receipts/${id}`),
+  approve: (id: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/approve`, {}),
+  cancel: (id: string, reason?: string) => api.post<PurchaseReceipt>(`/purchases/receipts/${id}/cancel`, { reason }),
   registerInvoice: (id: string, data: { number: string; date?: string; dueDate?: string; subtotal?: number; taxAmount?: number; withholdingTotal?: number; withholdingBase?: number; total?: number; currency?: string; exchangeRate?: number; notes?: string; attachments: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> }) =>
     api.post<SupplierInvoice>(`/purchases/receipts/${id}/invoice`, data),
 };

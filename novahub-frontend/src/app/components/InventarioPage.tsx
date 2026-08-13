@@ -135,7 +135,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productCatalogQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-catalog', tenantKey],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000 }, signal),
     enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
@@ -171,7 +171,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const seriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'series', tenantKey, activeTab],
-    queryFn: ({ signal }) => inventoryService.getSeries({ page: 1, pageSize: 200 }, signal),
+    queryFn: ({ signal }) => inventoryService.getSeries({ report: true, page: 1, pageSize: 5000 }, signal),
     enabled: Boolean(user) && ['productos', 'servicios', 'transferencias', 'ajustes'].includes(activeTab),
   });
   const movementsQuery = useQuery({

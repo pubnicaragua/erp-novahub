@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 import {
   Plus, Search, Upload, FileDown, Pencil,
   ChevronRight, ChevronDown, FolderTree,
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   Info, Activity, ArrowDownLeft, ArrowUpRight,
-  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck
+  ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
 import { downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
@@ -64,7 +65,7 @@ interface AccountTransaction {
 }
 
 const ACCOUNT_COLUMN_DEFS = [
-  { key: 'code', label: 'Código', width: 'minmax(48px,.7fr)' },
+  { key: 'code', label: 'CÃ³digo', width: 'minmax(48px,.7fr)' },
   { key: 'name', label: 'Nombre', width: 'minmax(90px,1.45fr)' },
   { key: 'type', label: 'Tipo', width: 'minmax(54px,.75fr)' },
   { key: 'subtype', label: 'Subtipo', width: 'minmax(78px,1fr)' },
@@ -200,6 +201,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const [pendingStatusAccount, setPendingStatusAccount] = useState<AccountNode | null>(null);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [pendingDeleteAccount, setPendingDeleteAccount] = useState<AccountNode | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const [mergeSource, setMergeSource] = useState<AccountNode | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState('');
@@ -220,6 +223,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [importPreviewErrors, setImportPreviewErrors] = useState<string[]>([]);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importFileName, setImportFileName] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
 
   const accounts = useMemo(() => {
       const raw = accountsQuery.data || [];
@@ -288,11 +293,28 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       setSelectedTransaction(null);
       setMergeSource(null);
       setMergeTargetId('');
-      toast.success(`Cuenta eliminada. Se transfirieron ${res?.transferredRecords ?? 0} registros a ${target ? `${target.code} · ${target.name}` : 'la cuenta destino'}.`);
+      toast.success(`Cuenta eliminada. Se transfirieron ${res?.transferredRecords ?? 0} registros a ${target ? `${target.code} Â· ${target.name}` : 'la cuenta destino'}.`);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo transferir y eliminar la cuenta');
     } finally {
       setMerging(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!pendingDeleteAccount) return;
+    const account = pendingDeleteAccount;
+    setDeletingAccount(true);
+    try {
+      await contabilidadService.deleteAccount(account.id);
+      setSelectedAccount((current) => current?.id === account.id ? null : current);
+      setPendingDeleteAccount(null);
+      await fetchAccounts(true);
+      toast.success(`Cuenta ${account.code} eliminada`);
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo eliminar la cuenta');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -428,7 +450,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     try {
       const raw = await contabilidadService.exportAccounts();
       const rows = Array.isArray(raw) ? raw : (raw as any)?.data;
-      if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolvió cuentas para exportar');
+      if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolviÃ³ cuentas para exportar');
       downloadXlsx('plan_cuentas.xlsx', rows);
       toast.success('Plan de cuentas exportado en Excel (.xlsx)');
     } catch (e: any) {
@@ -438,12 +460,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const parseImportFile = async () => {
     if (!importFile) { toast.error('Selecciona un archivo Excel'); return null; }
+    setPreviewLoading(true);
+    setPreviewProgress(5);
     try {
       const fileName = importFile.name.toLowerCase();
 
       if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) { toast.error('El archivo debe ser Excel (.xlsx o .xls)'); return null; }
       const buffer = await importFile.arrayBuffer();
+      setPreviewProgress(24);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const workbook = XLSX.read(buffer, { type: 'array' });
+      setPreviewProgress(48);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const sheetCandidates = workbook.SheetNames.map((sheetName) => {
         const sheet = workbook.Sheets[sheetName];
         const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
@@ -479,7 +507,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         const tipoCuenta = r.tipo_cuenta || r.type || r.tipo || 'ASSET';
         const permiteManual = r.permite_manual ?? r.allowmanualentry ?? '1';
         const activa = r.activa ?? r.isactive ?? '1';
-        if (!nombre || !codigo) { errors.push(`Fila ${rowNum}: nombre y código son obligatorios`); continue; }
+        if (!nombre || !codigo) { errors.push(`Fila ${rowNum}: nombre y cÃ³digo son obligatorios`); continue; }
         valid.push({
           codigo, nombre, tipo_cuenta: tipoCuenta,
           subtipo: r.subtipo || r.subtype || 'Cuenta de detalle',
@@ -492,10 +520,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         });
       }
 
-      return { valid, errors, fileName: `${importFile.name} · Hoja: ${selectedSheet.sheetName}` };
+      setPreviewProgress(90);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      setPreviewProgress(100);
+      return { valid, errors, fileName: `${importFile.name} Â· Hoja: ${selectedSheet.sheetName}` };
     } catch (e: any) {
       toast.error(e?.message || 'Error al leer el archivo');
       return null;
+    } finally {
+      window.setTimeout(() => { setPreviewLoading(false); setPreviewProgress(0); }, 180);
     }
   };
 
@@ -509,14 +542,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   };
 
   const handleConfirmImport = async () => {
-    if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
+    if (importPreviewRows.length === 0) { toast.error('No hay cuentas vÃ¡lidas para importar'); return; }
     setImporting(true);
     setImportProgress(5);
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      // La petición de importación es atómica en el backend; avanzamos de
-      // forma continua mientras termina, igual que la importación masiva de
-      // productos, sin afirmar que ya terminó antes de recibir la respuesta.
+      // La peticiÃ³n de importaciÃ³n es atÃ³mica en el backend; avanzamos de
+      // forma continua mientras termina, igual que la importaciÃ³n masiva de
+      // productos, sin afirmar que ya terminÃ³ antes de recibir la respuesta.
       let progress = 5;
       progressTimer = setInterval(() => {
         progress = Math.min(progress + 3, 92);
@@ -594,7 +627,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               {account.name}
             </p>
             <p className="mt-1 truncate text-[10px] text-muted-foreground">
-              {getSubtypeLabel(account.subtype)} · {getDetailTypeLabel(account.detailType)} · {account.currency}
+              {getSubtypeLabel(account.subtype)} Â· {getDetailTypeLabel(account.detailType)} Â· {account.currency}
             </p>
           </div>
 
@@ -688,12 +721,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualizaciÃ³n" description="Leyendo las hojas, validando la jerarquÃ­a y preparando las cuentas para revisiÃ³n." />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Catálogo de cuentas contables del sistema
+            CatÃ¡logo de cuentas contables del sistema
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -718,7 +752,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <div className="relative min-w-[min(100%,16rem)] max-w-sm flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por código o nombre..."
+            placeholder="Buscar por cÃ³digo o nombre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-8 h-9"
@@ -757,7 +791,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <FolderTree className="w-4 h-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium">Jerarquía de Cuentas</CardTitle>
+                  <CardTitle className="text-sm font-medium">JerarquÃ­a de Cuentas</CardTitle>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setColumnConfigOpen(true)} title="Elegir columnas visibles">
@@ -782,7 +816,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <FolderTree className="w-10 h-10 mb-2 opacity-40" />
                   <p className="text-sm">
                     {searchTerm
-                      ? 'Sin resultados de búsqueda'
+                      ? 'Sin resultados de bÃºsqueda'
                       : statusFilter === 'ACTIVE'
                         ? 'No hay cuentas activas'
                         : statusFilter === 'INACTIVE'
@@ -840,7 +874,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada · {selectedAccount.code}</p>
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada Â· {selectedAccount.code}</p>
                       <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={selectedAccount.name}>{selectedAccount.name}</h3>
                     </div>
                     <Badge variant={selectedAccount.isActive ? 'default' : 'secondary'} className="shrink-0">
@@ -887,13 +921,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   </div>
                 </div>
 
-                {selectedAccount.notes && (
-                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notas</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">{selectedAccount.notes}</p>
-                  </div>
-                )}
-
                 <div className="flex flex-wrap gap-2">
                   {canPerform('ACCOUNTING_CHART', 'edit') && (
                     <>
@@ -911,6 +938,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                           <ArrowDownLeft className="mr-1 size-3.5" /> Transferir y eliminar
                         </Button>
                       )}
+                      <Button
+                        variant="outline" size="sm" className="flex-1 text-red-600 hover:text-red-700"
+                        onClick={() => setPendingDeleteAccount(selectedAccount)}
+                      >
+                        <Trash2 className="mr-1 size-3.5" /> Eliminar
+                      </Button>
                     </>
                   )}
                 </div>
@@ -924,7 +957,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         <Activity className="size-4 text-primary" />
                         <h3 id="account-transactions-title" className="truncate text-sm font-black uppercase tracking-tight">Transacciones de la cuenta</h3>
                       </div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Últimos movimientos registrados, actualizados automáticamente.</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Ãšltimos movimientos registrados, actualizados automÃ¡ticamente.</p>
                     </div>
                     {accountTransactionsQuery.isFetching && <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Actualizando transacciones" />}
                   </div>
@@ -937,7 +970,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                     <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
                       <Activity className="mx-auto size-8 text-muted-foreground/40" />
                       <p className="mt-2 text-sm font-semibold">Sin transacciones</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Esta cuenta todavía no tiene movimientos.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Esta cuenta todavÃ­a no tiene movimientos.</p>
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-xl border border-border/60">
@@ -950,7 +983,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                               key={transaction.id}
                               role="button"
                               tabIndex={0}
-                              aria-label={`Ver detalles de la transacción ${transaction.reference || transaction.id}`}
+                              aria-label={`Ver detalles de la transacciÃ³n ${transaction.reference || transaction.id}`}
                               onClick={() => setSelectedTransaction(transaction)}
                               onKeyDown={(event) => {
                                 if (event.key === 'Enter' || event.key === ' ') {
@@ -964,15 +997,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                                 {debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
                               </div>
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripción'}>{transaction.description || 'Sin descripción'}</p>
+                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripciÃ³n'}>{transaction.description || 'Sin descripciÃ³n'}</p>
                                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
-                                  {new Date(transaction.date).toLocaleDateString('es-NI')} · {transaction.reference || 'Sin referencia'}
+                                  {new Date(transaction.date).toLocaleDateString('es-NI')} Â· {transaction.reference || 'Sin referencia'}
                                 </p>
                               </div>
                               <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
                                 {debit > 0 && <p className="text-emerald-600">+{formatConvertedAmount(debit, baseCurrency)}</p>}
                                 {credit > 0 && <p className="text-rose-500">-{formatConvertedAmount(credit, baseCurrency)}</p>}
-                                {debit === 0 && credit === 0 && <p className="text-muted-foreground">—</p>}
+                                {debit === 0 && credit === 0 && <p className="text-muted-foreground">â€”</p>}
                               </div>
                             </div>
                           );
@@ -988,18 +1021,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         value={transactionsPageSize}
                         onChange={(event) => { setTransactionsPageSize(Number(event.target.value)); setTransactionsPage(1); }}
                         className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
-                        aria-label="Transacciones por página"
+                        aria-label="Transacciones por pÃ¡gina"
                       >
                         {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
                       </select>
-                      <span>por página · {accountTransactionsMeta.total ?? 0} total</span>
+                      <span>por pÃ¡gina Â· {accountTransactionsMeta.total ?? 0} total</span>
                     </div>
                     <div className="flex items-center justify-between gap-1 sm:justify-end">
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(1)} disabled={transactionsPage <= 1} aria-label="Primera página de transacciones"><ChevronsLeft className="size-3.5" /></Button>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.max(1, page - 1))} disabled={transactionsPage <= 1} aria-label="Página anterior de transacciones"><ChevronRight className="size-3.5 rotate-180" /></Button>
-                      <span className="min-w-20 text-center font-bold text-foreground">Pág. {transactionsPage} / {Math.max(1, accountTransactionsMeta.totalPages ?? 1)}</span>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.min(accountTransactionsMeta.totalPages ?? 1, page + 1))} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Página siguiente de transacciones"><ChevronRight className="size-3.5" /></Button>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(accountTransactionsMeta.totalPages ?? 1)} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Última página de transacciones"><ChevronsRight className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(1)} disabled={transactionsPage <= 1} aria-label="Primera pÃ¡gina de transacciones"><ChevronsLeft className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.max(1, page - 1))} disabled={transactionsPage <= 1} aria-label="PÃ¡gina anterior de transacciones"><ChevronRight className="size-3.5 rotate-180" /></Button>
+                      <span className="min-w-20 text-center font-bold text-foreground">PÃ¡g. {transactionsPage} / {Math.max(1, accountTransactionsMeta.totalPages ?? 1)}</span>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.min(accountTransactionsMeta.totalPages ?? 1, page + 1))} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="PÃ¡gina siguiente de transacciones"><ChevronRight className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(accountTransactionsMeta.totalPages ?? 1)} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Ãšltima pÃ¡gina de transacciones"><ChevronsRight className="size-3.5" /></Button>
                     </div>
                   </div>
                 </section>
@@ -1013,10 +1046,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 pr-8">
               <Activity className="size-5 text-primary" />
-              Detalle de transacción
+              Detalle de transacciÃ³n
             </DialogTitle>
             <DialogDescription>
-              Información general del movimiento registrado en la cuenta seleccionada.
+              InformaciÃ³n general del movimiento registrado en la cuenta seleccionada.
             </DialogDescription>
           </DialogHeader>
 
@@ -1029,7 +1062,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <div className="space-y-4">
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
-                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripción'}</p>
+                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripciÃ³n'}</p>
                   <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">ID: {selectedTransaction.id}</p>
                 </div>
 
@@ -1046,11 +1079,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Débito</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">DÃ©bito</p>
                     <p className="mt-1 break-words font-mono text-sm font-bold text-emerald-600">{formatConvertedAmount(debit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Crédito</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">CrÃ©dito</p>
                     <p className="mt-1 break-words font-mono text-sm font-bold text-rose-500">{formatConvertedAmount(credit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
@@ -1062,7 +1095,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 </div>
 
                 <div className="rounded-xl border border-border/60 px-4 py-3 text-xs text-muted-foreground">
-                  Cuenta: <span className="font-semibold text-foreground">{selectedAccount?.code} · {selectedAccount?.name}</span>
+                  Cuenta: <span className="font-semibold text-foreground">{selectedAccount?.code} Â· {selectedAccount?.name}</span>
                 </div>
               </div>
             );
@@ -1074,7 +1107,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas.</DialogDescription>
+            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquÃ­a de cuentas.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACCOUNT_COLUMN_DEFS.map((column) => {
@@ -1104,9 +1137,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <ConfirmDialog
         open={pendingStatusAccount !== null}
         onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusAccount(null); }}
-        title={pendingStatusAccount?.isActive ? '¿Inhabilitar cuenta?' : '¿Habilitar cuenta?'}
+        title={pendingStatusAccount?.isActive ? 'Â¿Inhabilitar cuenta?' : 'Â¿Habilitar cuenta?'}
         description={pendingStatusAccount
-          ? `${pendingStatusAccount.code} · ${pendingStatusAccount.name}. ${pendingStatusAccount.isActive ? 'La cuenta no estará disponible para nuevos movimientos, pero conservará su historial.' : 'La cuenta volverá a estar disponible para nuevos movimientos.'}`
+          ? `${pendingStatusAccount.code} Â· ${pendingStatusAccount.name}. ${pendingStatusAccount.isActive ? 'La cuenta no estarÃ¡ disponible para nuevos movimientos, pero conservarÃ¡ su historial.' : 'La cuenta volverÃ¡ a estar disponible para nuevos movimientos.'}`
           : ''}
         confirmLabel={pendingStatusAccount?.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}
         variant={pendingStatusAccount?.isActive ? 'warning' : 'default'}
@@ -1114,21 +1147,20 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         onConfirm={toggleAccountStatus}
       />
 
-      {/* Transfer and delete dialog */}
       <Dialog open={mergeSource !== null} onOpenChange={(open) => { if (!open && !merging) { setMergeSource(null); setMergeTargetId(''); } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Transferir y eliminar cuenta</DialogTitle>
             <DialogDescription>
               {mergeSource
-                ? `Se eliminará la cuenta ${mergeSource.code} · ${mergeSource.name} y TODOS sus datos (saldos, transacciones, asientos, facturas, almacenes, conciliaciones, presupuestos) se transferirán a la cuenta destino.`
+                ? `Se eliminarÃ¡ la cuenta ${mergeSource.code} Â· ${mergeSource.name} y TODOS sus datos (saldos, transacciones, asientos, facturas, almacenes, conciliaciones, presupuestos) se transferirÃ¡n a la cuenta destino.`
                 : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
               <p className="text-xs text-rose-600">
-                <strong>Advertencia:</strong> la cuenta origen se eliminará de forma permanente. Esta acción no se puede deshacer.
+                <strong>Advertencia:</strong> la cuenta origen se eliminarÃ¡ de forma permanente. Esta acciÃ³n no se puede deshacer.
               </p>
             </div>
             <div className="space-y-2">
@@ -1136,7 +1168,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <Combobox
                 value={mergeTargetId}
                 onChange={setMergeTargetId}
-                options={mergeCandidates.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
+                options={mergeCandidates.map(a => ({ value: a.id, label: `${a.code} Â· ${a.name}` }))}
                 placeholder="Buscar cuenta destino..."
                 emptyMessage="No hay cuentas del mismo tipo disponibles"
               />
@@ -1153,6 +1185,19 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         </DialogContent>
       </Dialog>
 
+      <ConfirmDialog
+        open={pendingDeleteAccount !== null}
+        onOpenChange={(open) => { if (!open && !deletingAccount) setPendingDeleteAccount(null); }}
+        title="Â¿Eliminar cuenta?"
+        description={pendingDeleteAccount
+          ? `${pendingDeleteAccount.code} Â· ${pendingDeleteAccount.name}. Esta acciÃ³n es definitiva y no se puede deshacer. Solo se eliminan cuentas sin hijos ni movimientos.`
+          : ''}
+        confirmLabel="Eliminar cuenta"
+        variant="destructive"
+        loading={deletingAccount}
+        onConfirm={handleDeleteAccount}
+      />
+
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1165,7 +1210,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="code">Código</Label>
+                <Label htmlFor="code">CÃ³digo</Label>
                 <Input
                   id="code" value={formData.code}
                   onChange={(e) => setFormData(p => ({ ...p, code: e.target.value }))}
@@ -1202,13 +1247,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 <Label htmlFor="parentId">Cuenta Padre</Label>
                 <Combobox
                   options={[
-                    { label: 'Ninguna (Raíz)', value: 'NONE' },
+                    { label: 'Ninguna (RaÃ­z)', value: 'NONE' },
                     ...getParentOptions(editingAccount?.id).map(opt => ({ label: opt.label, value: opt.id })),
                   ]}
                   value={formData.parentId ?? 'NONE'}
                   onChange={(v) => setFormData(p => ({ ...p, parentId: v === 'NONE' ? undefined : v }))}
-                  placeholder="Ninguna (Raíz)"
-                  searchPlaceholder="Buscar por nombre o código..."
+                  placeholder="Ninguna (RaÃ­z)"
+                  searchPlaceholder="Buscar por nombre o cÃ³digo..."
                   emptyMessage="Sin cuentas coincidentes"
                   className="h-8"
                 />
@@ -1286,7 +1331,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </Dialog>
 
       {/* Import Dialog */}
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+      <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1294,7 +1339,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               Importar Cuentas desde Excel
             </DialogTitle>
             <DialogDescription>
-              Descarga la plantilla Excel y súbela. El sistema crea o actualiza las cuentas por código dentro de esta empresa.
+              Descarga la plantilla Excel y sÃºbela. El sistema crea o actualiza las cuentas por cÃ³digo dentro de esta empresa.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -1302,14 +1347,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <p className="text-xs font-medium text-foreground">Columnas requeridas</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
-                  { key: 'codigo', label: 'Código de la cuenta' },
+                  { key: 'codigo', label: 'CÃ³digo de la cuenta' },
                   { key: 'nombre', label: 'Nombre' },
-                  { key: 'tipo_cuenta', label: 'Activos, Pasivos, Patrimonio…' },
-                  { key: 'subtipo', label: 'Grupo, detalle, subcuenta…' },
+                  { key: 'tipo_cuenta', label: 'Activos, Pasivos, Patrimonioâ€¦' },
+                  { key: 'subtipo', label: 'Grupo, detalle, subcuentaâ€¦' },
                   { key: 'tipo_detalle', label: 'Balance General / Resultados' },
                   { key: 'moneda', label: 'Ej. NIO, USD' },
-                  { key: 'codigo_padre', label: 'Código del padre (opcional)' },
-                  { key: 'permite_manual', label: '1 = sí, 0 = no' },
+                  { key: 'codigo_padre', label: 'CÃ³digo del padre (opcional)' },
+                  { key: 'permite_manual', label: '1 = sÃ­, 0 = no' },
                   { key: 'activa', label: '1 = activa, 0 = inactiva' },
                   { key: 'notas', label: 'Observaciones (opcional)' },
                 ].map((col) => (
@@ -1345,7 +1390,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               />
               <div>
                 <p className="text-sm font-medium">Reemplazar cuentas existentes</p>
-                <p className="text-xs text-muted-foreground">Elimina cuentas que no están en el archivo importado (solo si no tienen movimientos)</p>
+                <p className="text-xs text-muted-foreground">Elimina cuentas que no estÃ¡n en el archivo importado (solo si no tienen movimientos)</p>
               </div>
             </label>
 

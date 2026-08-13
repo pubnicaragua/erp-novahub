@@ -25,26 +25,15 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
     });
   }, []);
 
-  const getColumnTargets = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) return [0];
-    const headers = Array.from(element.querySelectorAll<HTMLElement>('thead th'));
-    const containerLeft = element.getBoundingClientRect().left;
-    const targets = [0, ...headers.map((header) => Math.max(0, header.getBoundingClientRect().right - containerLeft + element.scrollLeft))];
-    targets.push(Math.max(0, element.scrollWidth - element.clientWidth));
-    return [...new Set(targets)].sort((a, b) => a - b);
-  }, []);
-
   const scrollByColumn = useCallback((direction: 'left' | 'right') => {
     const element = scrollRef.current;
     if (!element) return;
-    const targets = getColumnTargets();
-    const current = element.scrollLeft;
-    const next = direction === 'right'
-      ? targets.find((target) => target > current + 4) ?? targets[targets.length - 1]
-      : [...targets].reverse().find((target) => target < current - 4) ?? targets[0];
-    element.scrollTo({ left: next, behavior: 'smooth' });
-  }, [getColumnTargets]);
+    // Mover un tramo visible hace que el desplazamiento sea evidente incluso
+    // cuando la siguiente columna es muy estrecha. La barra inferior sigue
+    // permitiendo llegar a cualquier columna con precisión.
+    const amount = Math.max(240, Math.floor(element.clientWidth * 0.78));
+    element.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' });
+  }, []);
 
   useEffect(() => {
     const element = scrollRef.current;

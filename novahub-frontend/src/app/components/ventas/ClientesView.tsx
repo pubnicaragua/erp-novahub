@@ -23,6 +23,7 @@ import { CustomerDetailDrawer } from './CustomerDetailDrawer';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CustomerImportPreview, type CustomerImportResult, type CustomerImportRow } from './CustomerImportPreview';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -107,6 +108,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -189,7 +192,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       if (!/\.(xlsx|xls)$/i.test(file.name)) {
         throw new Error('Solo se permiten archivos Excel (.xlsx o .xls)');
       }
-      const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
       const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
       const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
@@ -228,6 +232,24 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       setImportRows([]);
       toast.error(error?.message || 'No se pudo leer el archivo');
     }
+  };
+
+  const handleOpenImportPreview = () => {
+    if (!importFile || !importRows.length || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewProgress(20);
+    setImportOpen(false);
+    window.setTimeout(() => {
+      setPreviewProgress(65);
+      window.setTimeout(() => {
+        setPreviewProgress(100);
+        window.setTimeout(() => {
+          setImportPreviewOpen(true);
+          setPreviewLoading(false);
+          setPreviewProgress(0);
+        }, 120);
+      }, 120);
+    }, 40);
   };
 
   const updateImportRow = (index: number, field: keyof CustomerImportRow, value: string) => {
@@ -876,9 +898,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de clientes</label><Input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar clientes</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar clientes</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los clientes para revisión." />
       {showTutorial && <GuidedTour steps={CUSTOMERS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Clientes" allowTargetInteraction />}
     </div>
   );

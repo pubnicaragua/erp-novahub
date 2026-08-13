@@ -6,12 +6,14 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox } from '../ui/Combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { InventoryDetailPanel } from './InventoryDetailPanel';
 import type { SalesPaginationControls } from '../../types';
 
 interface ControlStockViewProps {
@@ -102,6 +104,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   ]);
   const [saving, setSaving] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [selectedAdjustment, setSelectedAdjustment] = useState<any>(null);
   const [serialAdjustment, setSerialAdjustment] = useState({
     action: 'ADD',
     productId: '',
@@ -136,6 +139,51 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     () => products.find((p: any) => p.id === newReception.productId),
     [products, newReception.productId],
   );
+
+  const productWarehouseIds = (product: any): Set<string> => {
+    const ids: string[] = [
+      ...(Array.isArray(product?.stockLevels) ? product.stockLevels.map((l: any) => l.warehouseId || l.warehouse?.id) : []),
+      ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs.map((c: any) => c.warehouseId || c.warehouse?.id) : []),
+      ...(Array.isArray(product?.allocations) ? product.allocations.map((a: any) => a.warehouseId || a.warehouse?.id) : []),
+    ];
+    return new Set(ids.filter(Boolean));
+  };
+
+  const isProductInWarehouse = (productId: string, warehouseId: string) => {
+    const product = products.find((p: any) => p.id === productId);
+    return Boolean(product && warehouseId && productWarehouseIds(product).has(warehouseId));
+  };
+
+  // Solo productos presentes en el almacén seleccionado.
+  const adjustmentProductOptions = useMemo(() => {
+    const warehouseId = newAdjustment.warehouseId;
+    return products
+      .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
+  }, [products, newAdjustment.warehouseId]);
+
+  const serialProductOptions = useMemo(() => {
+    const warehouseId = serialAdjustment.warehouseId;
+    return products
+      .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
+  }, [products, serialAdjustment.warehouseId]);
+
+  const handleAdjustmentWarehouseChange = (value: string) => {
+    setNewAdjustment((prev) => ({
+      ...prev,
+      warehouseId: value,
+      productId: prev.productId && isProductInWarehouse(prev.productId, value) ? prev.productId : '',
+    }));
+  };
+
+  const handleSerialWarehouseChange = (value: string) => {
+    setSerialAdjustment((prev) => ({
+      ...prev,
+      warehouseId: value,
+      productId: prev.productId && isProductInWarehouse(prev.productId, value) ? prev.productId : '',
+    }));
+  };
 
   const existingSeriesNumbers = useMemo(
     () => new Set(series.map((s: any) => String(s.number || '').trim()).filter(Boolean)),
@@ -406,20 +454,23 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </div>
       </div>
 
-      <div className="space-y-3 lg:hidden" data-tour="stock-table">
-        {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4"><div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, warehouseId: value })}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.productId} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })}><SelectTrigger className="sm:col-span-2"><SelectValue placeholder="Producto" /></SelectTrigger><SelectContent>{products.map((product: any) => <SelectItem key={product.id} value={product.id}>{product.code} — {product.name}</SelectItem>)}</SelectContent></Select><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" /><div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div></div></Card>}
-        {adjustments.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : adjustments.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div></div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={() => handleApproveAdjustment(adjustment.id)} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
-      </div>
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+        <div className="min-w-0">
+          <div className="space-y-3 lg:hidden" data-tour="stock-table">
+        {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4"><div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={newAdjustment.productId} onChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" /><div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div></div></Card>}
+        {adjustments.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : adjustments.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div></div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
+        </div>
 
-      <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="stock-table">
+        <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="stock-table">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Número</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Razón</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24">Cant. Ajuste</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Costo Ref.</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-28">Cant. Ajuste</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-28">Costo Ref.</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24">Estado</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -429,8 +480,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <TableRow className="bg-blue-500/5">
                 <TableCell className="text-xs text-muted-foreground">Auto</TableCell>
                 <TableCell>
-                  <Select value={newAdjustment.warehouseId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, warehouseId: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Almacén" /></SelectTrigger>
+                  <Select value={newAdjustment.warehouseId} onValueChange={(v) => handleAdjustmentWarehouseChange(v)}>
+                    <SelectTrigger className="h-8 text-xs min-w-44"><SelectValue placeholder="Almacén" /></SelectTrigger>
                     <SelectContent>
                       {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
@@ -438,19 +489,23 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 </TableCell>
                 <TableCell>
                   <Select value={newAdjustment.reason} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, reason: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs min-w-36"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {REASON_OPTIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Select value={newAdjustment.productId} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Producto" /></SelectTrigger>
-                    <SelectContent>
-                      {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={adjustmentProductOptions}
+                    value={newAdjustment.productId}
+                    onChange={(v) => setNewAdjustment({ ...newAdjustment, productId: v })}
+                    placeholder="Buscar producto..."
+                    searchPlaceholder="Buscar por código o nombre..."
+                    emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
+                    maxVisibleOptions={adjustmentProductOptions.length}
+                    className="w-60 min-w-60"
+                  />
                 </TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
@@ -459,7 +514,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       min={0}
                       value={newAdjustment.actualStock} 
                       onChange={(e) => setNewAdjustment({ ...newAdjustment, actualStock: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                      className="h-8 text-xs w-16"
+                      className="h-8 text-xs w-28"
                     />
                   </div>
                 </TableCell>
@@ -471,11 +526,11 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       step="0.01"
                       value={newAdjustment.unitCost}
                       onChange={(e) => setNewAdjustment({ ...newAdjustment, unitCost: parseFloat(e.target.value) || 0 })}
-                      className="h-8 text-xs w-20"
+                      className="h-8 text-xs w-28"
                       placeholder="0.00"
                     />
                     <Select value={newAdjustment.currency} onValueChange={(v) => setNewAdjustment({ ...newAdjustment, currency: v })}>
-                      <SelectTrigger className="h-8 text-xs w-16 px-2"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs w-20 px-2"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="NIO">NIO</SelectItem>
                         <SelectItem value="USD">USD</SelectItem>
@@ -508,10 +563,18 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               adjustments.map((adj: any) => {
                 const isApproving = approvingId === adj.id;
                 return (
-                  <TableRow key={adj.id} className="group hover:bg-muted/30">
+                  <TableRow key={adj.id} className="group cursor-pointer hover:bg-muted/30" onClick={() => setSelectedAdjustment(adj)}>
                     <TableCell className="font-mono text-xs">{adj.number}</TableCell>
                     <TableCell className="text-sm">{adj.warehouse?.name || '-'}</TableCell>
                     <TableCell className="text-xs">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
+                    <TableCell className="text-xs">
+                      {adj.items?.[0]?.product ? (
+                        <span className="flex items-center gap-1.5" title={`${adj.items[0].product.code} - ${adj.items[0].product.name}`}>
+                          <span className="truncate max-w-40">{adj.items[0].product.name}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{adj.items[0].product.code}</span>
+                        </span>
+                      ) : '—'}
+                    </TableCell>
                     <TableCell className="text-center font-medium">{adj.items?.length || 0}</TableCell>
                     <TableCell className="text-right text-xs">
                       {adj.items && adj.items[0] && (
@@ -531,7 +594,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                           size="sm" 
                           variant="ghost" 
                           className="h-7 text-xs text-green-600 hover:bg-green-500/10 gap-1"
-                          onClick={() => handleApproveAdjustment(adj.id)}
+                          onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adj.id); }}
                           disabled={isApproving}
                         >
                           {isApproving ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="size-3" />}
@@ -558,6 +621,15 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
         Los ajustes en borrador deben ser aprobados para aplicar cambios al stock
       </div>
+        </div>
+        {selectedAdjustment && (
+          <InventoryDetailPanel
+            kind="adjustment"
+            data={selectedAdjustment}
+            onClose={() => setSelectedAdjustment(null)}
+          />
+        )}
+      </div>
 
       <Dialog open={isSerialAdjustOpen} onOpenChange={setIsSerialAdjustOpen}>
         <DialogContent className="sm:max-w-xl">
@@ -581,18 +653,22 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               </div>
               <div className="md:col-span-2">
                 <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
-                <Select value={serialAdjustment.productId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, productId: v })}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
-                  <SelectContent>
-                    {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={serialProductOptions}
+                  value={serialAdjustment.productId}
+                  onChange={(v) => setSerialAdjustment({ ...serialAdjustment, productId: v })}
+                  placeholder="Buscar producto..."
+                  searchPlaceholder="Buscar por código o nombre..."
+                  emptyMessage={serialAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
+                  maxVisibleOptions={serialProductOptions.length}
+                  className="h-9 w-full"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div>
                 <p className="text-[10px] text-muted-foreground mb-1">Almacén</p>
-                <Select value={serialAdjustment.warehouseId} onValueChange={(v) => setSerialAdjustment({ ...serialAdjustment, warehouseId: v })}>
+                <Select value={serialAdjustment.warehouseId} onValueChange={(v) => handleSerialWarehouseChange(v)}>
                   <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
                   <SelectContent>
                     {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}

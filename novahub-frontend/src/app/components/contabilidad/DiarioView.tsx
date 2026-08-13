@@ -21,8 +21,10 @@ import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useBranchScope } from '../../hooks/useBranchScope';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
+import { BranchScopeFilter } from '../ui/BranchScopeFilter';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -56,6 +58,7 @@ function referenceDisplay(journal: JournalEntry): string {
 export function DiarioView() {
   const { canPerform } = useAuth();
   const { baseCurrency, formatAmount } = useCurrency();
+  const { selectedBranchId } = useBranchScope();
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -82,9 +85,10 @@ export function DiarioView() {
     ...(filterRefType ? { referenceType: filterRefType } : {}),
     ...(filterRefId ? { referenceId: filterRefId } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
     page: journalPage,
     pageSize: journalPageSize,
-  }), [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, journalPage]);
+  }), [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, selectedBranchId, journalPage]);
   const journalsQuery = useAccountingQuery<any>(['journals', journalParams], async (signal) => await contabilidadService.getJournals(journalParams, signal));
   const accountsQuery = useAccountingQuery<ChartAccount[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)) as ChartAccount[]);
   const journalDetailQuery = useAccountingQuery<JournalEntry | null>(
@@ -183,7 +187,7 @@ export function DiarioView() {
 
   useEffect(() => {
     setJournalPage(1);
-  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch]);
+  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, selectedBranchId]);
 
   return (
     <div className="min-w-0 space-y-6">
@@ -209,6 +213,7 @@ export function DiarioView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <BranchScopeFilter className="min-w-0" />
             <div className="min-w-0 space-y-1 sm:min-w-[180px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Buscar
@@ -496,6 +501,16 @@ export function DiarioView() {
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Descripción</p>
                     <p className="mt-1 whitespace-pre-wrap text-sm">{viewJournal.description}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Origen por sucursal</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {(viewJournal as any).branchLinks?.length
+                        ? (viewJournal as any).branchLinks.map((link: any) => link.branch?.name).filter(Boolean).join(' · ')
+                        : 'General / sin sucursal vinculada'}
+                    </p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Es el mismo asiento contable; esta vinculación solo permite consultar y filtrar su origen.</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">

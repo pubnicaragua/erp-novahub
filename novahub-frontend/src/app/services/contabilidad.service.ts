@@ -17,8 +17,10 @@ export const contabilidadService = {
     api.get<any>('/financials/transactions', { params: { accountId, ...params }, signal }),
 
   // Asientos Contables
-  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+  getJournals: (params?: { status?: string; dateFrom?: string; dateTo?: string; accountId?: string; referenceType?: string; referenceId?: string; search?: string; costCenterId?: string; branchId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
     api.get<any>('/accounting/journals', { params, signal }),
+  getWarehouseAccountingAllocations: (params?: { warehouseId?: string; accountId?: string; productId?: string; sourceType?: string; sourceId?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+    api.get<any>('/accounting/warehouse-allocations', { params, signal }),
   getJournal: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/journals/${id}`, { signal }),
   updateJournal: (id: string, data: any) => api.put<any>(`/accounting/journals/${id}`, data),
   postJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/post`, {}),
@@ -92,7 +94,7 @@ export const contabilidadService = {
   deleteFiscalReport: (id: string) => api.delete<any>(`/accounting/fiscal-reports/${id}`),
 
   // Libro Mayor
-  getLedger: (params?: { accountId?: string; dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
+  getLedger: (params?: { accountId?: string; dateFrom?: string; dateTo?: string; branchId?: string }, signal?: AbortSignal) =>
     api.get<any[]>('/accounting/ledger', { params, signal }),
 
   // Estado de Cambios en el Patrimonio

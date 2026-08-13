@@ -61,37 +61,30 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { 
-  SALES_SUBMODULES, 
-  PURCHASES_SUBMODULES, 
-  INVENTORY_SUBMODULES, 
-  FINANCIAL_SUBMODULES, 
-  HR_SUBMODULES, 
-  NOTIFICATIONS_SUBMODULES,
-  ACTIVITIES_SUBMODULES,
-  DOCUMENTS_SUBMODULES,
-  REPORTS_SUBMODULES,
-  ACCOUNTING_SUBMODULES,
-  type Submodule 
-} from '../types/modules';
+import type { Submodule } from '../types/modules';
+import { SIDEBAR_PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { storageService } from '../services/storage.service';
 import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 
+const submodulesFor = (parent: string): Submodule[] => SIDEBAR_PERMISSION_SUBMODULES
+  .filter((sub) => sub.parent === parent && sub.subscription !== false)
+  .map((sub) => ({ ...sub, description: `Vista de ${sub.label}` }));
+
 const AVAILABLE_MODULES = [
-  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: SALES_SUBMODULES },
-  { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU', submodules: INVENTORY_SUBMODULES },
-  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: FINANCIAL_SUBMODULES },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra', submodules: PURCHASES_SUBMODULES },
-  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: HR_SUBMODULES },
-  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: ACTIVITIES_SUBMODULES },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: DOCUMENTS_SUBMODULES },
+  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes', submodules: submodulesFor('SALES') },
+  { id: 'INVENTORY', label: 'Inventario', icon: Package, description: 'Stock, Almacenes y SKU', submodules: submodulesFor('INVENTORY') },
+  { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General', submodules: submodulesFor('FINANCIAL') },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra', submodules: submodulesFor('PURCHASES') },
+  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados', submodules: submodulesFor('HR') },
+  { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades', submodules: submodulesFor('ACTIVITIES') },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental', submodules: submodulesFor('DOCUMENTS') },
   { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
-  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: NOTIFICATIONS_SUBMODULES },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: REPORTS_SUBMODULES },
-  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: ACCOUNTING_SUBMODULES },
+  { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema', submodules: submodulesFor('NOTIFICATIONS') },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis', submodules: submodulesFor('REPORTS') },
+  { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Plan de Cuentas, Asientos y Reportes Fiscales', submodules: submodulesFor('ACCOUNTING') },
   { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },

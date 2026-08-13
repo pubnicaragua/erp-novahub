@@ -5,7 +5,10 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dia
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import type { ChartAccountCsvRow } from '../../types/accounting';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 
 interface AccountImportPreviewProps {
   rows: ChartAccountCsvRow[];
@@ -88,9 +91,12 @@ function validateImportRows(rows: ChartAccountCsvRow[], existingAccountCodes: st
 }
 
 export function AccountImportPreview({ rows, errors, existingAccountCodes, fileName, isSidebarCollapsed, importing, progress, onRowUpdate, onBack, onConfirm }: AccountImportPreviewProps) {
+  useImportPreviewLayout();
   const rowValidationErrors = validateImportRows(rows, existingAccountCodes);
   const invalidRowCount = rowValidationErrors.size;
   const validRowCount = Math.max(0, rows.length - invalidRowCount);
+  const skippedRowCount = invalidRowCount + errors.length;
+  const totalRowCount = rows.length + errors.length;
   const validationMessages = [
     ...errors,
     ...Array.from(rowValidationErrors.entries()).map(([index, message]) => `Fila ${index + 2}: ${message}`),
@@ -104,17 +110,14 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar cuentas</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Revisa y corrige las cuentas antes de cargarlas al plan de cuentas de esta empresa.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <Badge variant="outline">{rows.length} registros</Badge>
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">{validRowCount} válidos</Badge>
-            <Badge variant="outline" className={validationMessages.length ? 'border-rose-500/30 text-rose-600' : ''}>{validationMessages.length} errores</Badge>
-          </div>
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
           <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Archivo Excel cargado</p><p className="truncate text-sm font-bold" title={fileName}>{fileName}</p></div>
           <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Códigos únicos por empresa</Badge><Badge variant="secondary">Importación repetible</Badge><Badge variant="secondary">Jerarquía por código padre</Badge></div>
         </div>
+
+        <ImportReviewSummary total={totalRowCount} valid={validRowCount} skipped={skippedRowCount} entityLabel="cuentas" />
 
         <HorizontalTableScroller className="hidden min-h-0 flex-1 sm:flex" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '2200px', minWidth: '2200px', maxWidth: 'none' }} className="w-[2200px] min-w-[2200px]">
@@ -201,19 +204,11 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
-          <Button onClick={onConfirm} disabled={importing || rows.length === 0 || invalidRowCount > 0 || errors.length > 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRowCount} cuenta(s)`}</Button>
+          <Button onClick={onConfirm} disabled={importing || rows.length === 0 || invalidRowCount > 0 || errors.length > 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRowCount} válidas · omitir ${skippedRowCount}`}</Button>
         </div>
       </div>
 
-      <Dialog open={importing} onOpenChange={() => undefined}>
-        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-          <div className="flex flex-col items-center gap-5 py-5 text-center">
-            <div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5"><div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" /><span className="text-xl font-black text-primary">{progress}%</span></div>
-            <div><DialogTitle className="text-xl">Importando cuentas</DialogTitle><DialogDescription className="mt-2">Guardando las cuentas en la empresa actual. No cierres esta ventana.</DialogDescription></div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(progress, 3)}%` }} /></div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportProgressOverlay open={importing} progress={progress} title="Importando cuentas" description="Guardando las cuentas en la empresa actual. No cierres esta ventana." />
     </div>
   );
 }

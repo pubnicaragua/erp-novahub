@@ -15,6 +15,9 @@ import { priceListsService, type PriceListItem } from '../../services/price-list
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
@@ -66,6 +69,7 @@ function PriceImportPreviewPage({
   onConfirm: () => void;
   onDone: () => void;
 }) {
+  useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const validRows = rows.filter((row) => !row.error).length;
@@ -87,9 +91,7 @@ function PriceImportPreviewPage({
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los precios antes de actualizar las listas seleccionadas.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-            <Badge variant="outline">{rows.length} registros</Badge>
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">{validRows} válidos</Badge>
-            <Badge variant="outline" className={issueRows ? 'border-rose-500/30 text-rose-600' : ''}>{issueRows} con incidencias</Badge>
+            <Badge variant="outline" className="border-primary/40 text-primary">Moneda: {currencyLabel(currency)}</Badge>
           </div>
         </div>
 
@@ -99,11 +101,12 @@ function PriceImportPreviewPage({
             <p className="truncate text-sm font-bold" title={fileName}>{fileName}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="secondary">Moneda: {currencyLabel(currency)}</Badge>
             <Badge variant="secondary">Tasa: {currency === baseCurrency ? '1' : Number(rate || 1).toFixed(4)}</Badge>
             {lists.map((list) => <Badge key={list.id} variant="outline">{list.name}</Badge>)}
           </div>
         </div>
+
+        <ImportReviewSummary total={rows.length} valid={validRows} skipped={issueRows} entityLabel="actualizaciones de precio" />
 
         <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1050px]">
@@ -136,31 +139,23 @@ function PriceImportPreviewPage({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}>Volver a la carga</Button>
           <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold">
-            {importing ? `Actualizando… ${progress}%` : `Actualizar ${validRows} registros`}
+            {importing ? `Actualizando… ${progress}%` : `Actualizar ${validRows} válidos · omitir ${issueRows}`}
           </Button>
         </div>
       </div>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirmar actualización de precios</DialogTitle>
-            <DialogDescription>Se actualizarán {lists.length} listas para {validRows} registros. Las filas con errores se omitirán. Escribe ACTUALIZAR para continuar.</DialogDescription>
+            <DialogDescription>Se actualizarán {lists.length} listas para {validRows} registros válidos y se omitirán {issueRows} con incidencias. Escribe ACTUALIZAR para continuar.</DialogDescription>
           </DialogHeader>
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="ACTUALIZAR" autoFocus />
           <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'ACTUALIZAR'}>Confirmar actualización</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importing} onOpenChange={() => undefined}>
-        <DialogContent className="max-w-md [&>button]:hidden" onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()}>
-          <div className="flex flex-col items-center gap-5 py-5 text-center">
-            <div className="relative flex size-24 items-center justify-center rounded-full border-4 border-primary/20 bg-primary/5"><div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" /><span className="text-xl font-black text-primary">{progress}%</span></div>
-            <div><DialogTitle className="text-xl">Actualizando precios</DialogTitle><DialogDescription className="mt-2">Estamos guardando los cambios en las listas. No cierres esta ventana.</DialogDescription></div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.max(progress, 3)}%` }} /></div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ImportProgressOverlay open={importing} progress={progress} title="Actualizando precios" description="Estamos guardando los cambios en las listas. No cierres esta ventana." />
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
         <DialogContent className="max-w-md">
@@ -212,6 +207,8 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<PriceImportResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState(0);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importFile, setImportFile] = useState('');
   const [_importScopeIds, setImportScopeIds] = useState<string[]>([]);
@@ -444,7 +441,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const readFile = (file: File) => {
     if (!canImportPriceLists) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const workbook = XLSX.read(new Uint8Array(event.target?.result as ArrayBuffer), { type: 'array' });
         const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[workbook.SheetNames.find((name) => normalize(name) === 'precios') || workbook.SheetNames[0]], { header: 1 });
@@ -466,7 +463,28 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
         setImportRows(rows); setImportFile(file.name); toast.success(`${rows.length} filas encontradas`);
       } catch (error: any) { toast.error(error.message || 'No se pudo leer el archivo'); }
     };
+    reader.onerror = () => {
+      toast.error('No se pudo leer el archivo seleccionado');
+    };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleOpenImportPreview = () => {
+    if (!importFile || !importRows.length || previewLoading) return;
+    setPreviewLoading(true);
+    setPreviewProgress(20);
+    setImportOpen(false);
+    window.setTimeout(() => {
+      setPreviewProgress(65);
+      window.setTimeout(() => {
+        setPreviewProgress(100);
+        window.setTimeout(() => {
+          setImportPreviewOpen(true);
+          setPreviewLoading(false);
+          setPreviewProgress(0);
+        }, 120);
+      }, 120);
+    }, 40);
   };
 
   const updateImportRow = (index: number, field: string, value: string) => {
@@ -571,10 +589,11 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
         <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-3"><span className="text-xs font-bold uppercase">Moneda</span><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-xs font-bold uppercase">Tasa</span><Input className="h-9 w-28" type="number" min="0.0001" step="any" value={importRate} onChange={(event) => setImportRate(Number(event.target.value) || 1)} disabled={importCurrency === baseCurrency} /><div className="flex w-full min-w-0 flex-wrap gap-1 sm:ml-auto sm:w-auto sm:justify-end">{importLists.map((list) => <Badge key={list.id} variant="secondary" className="max-w-full">{list.name}</Badge>)}</div></div>
         {!importFile ? <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center sm:p-12"><FileSpreadsheet className="size-12 text-primary" /><p className="font-bold">Carga el archivo Excel de precios</p><p className="text-xs text-muted-foreground">La tabla editable aparecerá en una vista completa después de cargarlo.</p><Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-2 size-4" />Seleccionar archivo</Button><input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => event.target.files?.[0] && readFile(event.target.files[0])} /></div> : <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5"><CheckCircle2 className="size-8 shrink-0 text-emerald-500" /><div className="min-w-0 flex-1"><p className="font-bold">Archivo listo para previsualizar</p><p className="break-words text-sm text-muted-foreground">{importFile} · {importRows.length} filas detectadas</p></div><Button variant="ghost" size="sm" className="shrink-0" onClick={() => { setImportFile(''); setImportRows([]); }}>Cambiar</Button></div>}
         <div className="rounded-xl border bg-card p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Listas incluidas</p><p className="mt-1 break-words">{importLists.map((list) => list.name).join(' · ')}</p><p className="mt-2 break-words">El costo se conserva como referencia. Las celdas vacías no modifican precios existentes.</p></div>
-        <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={() => { setImportOpen(false); setImportPreviewOpen(true); }}>Previsualizar actualización</Button>}</DialogFooter>
+        <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar actualización</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={newListOpen} onOpenChange={setNewListOpen}><DialogContent><DialogHeader><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription></DialogHeader><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /><DialogFooter><Button variant="outline" onClick={() => setNewListOpen(false)}>Cancelar</Button><Button onClick={createList} disabled={!newListName.trim()}>Crear lista</Button></DialogFooter></DialogContent></Dialog>
+    <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
     {showTutorial && <GuidedTour steps={PRICE_LISTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Listas de precios" allowTargetInteraction />}
   </div>;
 }

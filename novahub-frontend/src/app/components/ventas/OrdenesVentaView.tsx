@@ -485,6 +485,27 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         </div>
       )
     },
+    {
+      key: 'paymentMethod',
+      header: 'Forma de Pago',
+      width: '130px',
+      render: (val, row) => {
+        const method = String(val || row.paymentMethod || '').toUpperCase();
+        if (!method) return <span className="text-[11px] font-medium text-muted-foreground">—</span>;
+        const isCredit = method === 'CREDIT';
+        const labels: Record<string, string> = {
+          CREDIT: 'Crédito', CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CHECK: 'Cheque', OTHER: 'Otro',
+        };
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black uppercase tracking-widest', isCredit ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400')}>
+              {isCredit ? 'A Crédito' : 'Contado'}
+            </Badge>
+            {!isCredit && <span className="text-[9px] font-bold uppercase text-muted-foreground/70">{labels[method] || method}</span>}
+          </div>
+        );
+      }
+    },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
     { key: 'invoicedAt', header: 'Fecha facturación', render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '—'}</span> },
     { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
@@ -516,6 +537,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { key: 'total', label: 'Monto total' },
     { key: 'status', label: 'Estado de la orden' },
     { key: 'date', label: 'Fecha compromiso' },
+    { key: 'paymentMethod', label: 'Forma de pago' },
     { key: 'invoiceNumber', label: 'Factura relacionada' },
     { key: 'invoicedAt', label: 'Fecha facturación' },
     { key: 'invoicedBy', label: 'Facturado por' },
@@ -684,6 +706,28 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <p className="mt-1 text-[10px] text-muted-foreground/70">
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
+                  <select
+                    value={localDoc?.paymentMethod || ''}
+                    onChange={(event) => {
+                      const paymentMethod = event.target.value;
+                      setLocalDoc({ ...localDoc, paymentMethod } as any);
+                      void handleUpdate(localDoc!.id, { paymentMethod } as any);
+                    }}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                  >
+                    <option value="">Sin definir</option>
+                    <option value="CASH">Efectivo (Contado)</option>
+                    <option value="CARD">Tarjeta (Contado)</option>
+                    <option value="TRANSFER">Transferencia (Contado)</option>
+                    <option value="CHECK">Cheque (Contado)</option>
+                    <option value="CREDIT">Crédito (a plazos)</option>
+                  </select>
+                  {String(localDoc?.paymentMethod || '').toUpperCase() === 'CREDIT' && (
+                    <p className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">Al facturar esta orden se creará un registro en el módulo Créditos.</p>
+                  )}
                 </div>
               </div>
             </CardContent>

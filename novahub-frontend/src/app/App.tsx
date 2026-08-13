@@ -94,6 +94,15 @@ function DashboardLayout() {
     return localStorage.getItem('erp-sidebar-collapsed') === 'true';
   });
 
+  useEffect(() => {
+    const handleImportPreviewOpened = () => {
+      setIsCollapsed(true);
+      localStorage.setItem('erp-sidebar-collapsed', 'true');
+    };
+    window.addEventListener('erp-import-preview-opened', handleImportPreviewOpened);
+    return () => window.removeEventListener('erp-import-preview-opened', handleImportPreviewOpened);
+  }, []);
+
   const handleToggleCollapse = () => {
     const newVal = !isCollapsed;
     setIsCollapsed(newVal);
