@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { toast } from 'sonner';
 import type { SalesPaginationControls } from '../../types';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -77,6 +79,20 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
     return matchesSearch && matchesType && matchesWarehouse;
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    date: (m: any) => (m.date ? new Date(m.date).getTime() : null),
+    type: (m: any) => String(m.type || ''),
+    product: (m: any) => m.product?.name || 'Producto sin nombre',
+    warehouse: (m: any) => m.warehouse?.name || '—',
+  };
+  const filteredData = colFilters.applyTo(filteredMovements, filterGetters);
+  const typeOptionsForFilter = TYPE_OPTIONS.filter((t) => t.value !== 'all').map((t) => ({ value: t.value, label: t.label, count: filteredMovements.filter((m) => m.type === t.value).length }));
+  const productOptions = [...new Map(filteredMovements.map((m) => [m.product?.name || 'Producto sin nombre', m.product?.name || 'Producto sin nombre'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredMovements.filter((m) => (m.product?.name || 'Producto sin nombre') === label).length }));
+  const warehouseOptions = [...new Map(filteredMovements.map((m) => [m.warehouse?.name || '—', m.warehouse?.name || '—'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredMovements.filter((m) => (m.warehouse?.name || '—') === label).length }));
+
   const getMovementIcon = (type: string) => {
     switch (type) {
       case 'IN': return <ArrowDownLeft className="size-4 text-green-500" />;
@@ -94,8 +110,8 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
     try {
       const csvContent = [
         ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Cantidad', 'Referencia'].join(','),
-        ...filteredMovements.map(m => [
-          new Date(m.date).toLocaleString(),
+        ...filteredData.map(m => [
+          formatDateEs(m.date),
           m.type,
           `"${m.product?.name || ''}"`,
           `"${m.warehouse?.name || ''}"`,
@@ -150,10 +166,10 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
       </div>
 
       <div className="space-y-3 lg:hidden" data-tour="movements-table">
-        {filteredMovements.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredMovements.map((move: any) => (
+        {filteredData.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredData.map((move: any) => (
           <Card key={move.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{new Date(move.date).toLocaleDateString('es-ES')}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Hora</p><p>{new Date(move.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Hora</p><p>{new Date(move.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
           </Card>
         ))}
       </div>
@@ -162,16 +178,16 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28">Tipo</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Producto</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest">Almacén</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-40"><span className="inline-flex items-center gap-1">Fecha<ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} /></span></TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28"><span className="inline-flex items-center gap-1">Tipo<ColumnFilterMenu label="Tipo" options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} /></span></TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Producto<ColumnFilterMenu label="Producto" options={productOptions} selected={colFilters.state.product?.values || []} onSelect={(values) => colFilters.setValues('product', values)} sort={colFilters.state.product?.sort || null} onSort={(sort) => colFilters.setSort('product', sort)} /></span></TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Almacén<ColumnFilterMenu label="Almacén" options={warehouseOptions} selected={colFilters.state.warehouse?.values || []} onSelect={(values) => colFilters.setValues('warehouse', values)} sort={colFilters.state.warehouse?.sort || null} onSort={(sort) => colFilters.setSort('warehouse', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Cantidad</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Referencia</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredMovements.length === 0 ? (
+            {filteredData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                   <History className="size-10 mx-auto mb-2 opacity-20" />
@@ -179,10 +195,10 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
                 </TableCell>
               </TableRow>
             ) : (
-              filteredMovements.map((move: any) => (
+              filteredData.map((move: any) => (
                 <TableRow key={move.id} className="hover:bg-muted/30">
                   <TableCell className="text-xs text-muted-foreground">
-                    {new Date(move.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatDateEs(move.date, true)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -206,7 +222,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
       </div>
 
       <div className="mt-3 flex flex-col gap-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground sm:flex-row sm:items-center sm:justify-between" data-tour="movements-pagination">
-        {pagination?.total ?? filteredMovements.length} movimientos
+        {pagination?.total ?? filteredData.length} movimientos
         {pagination && <span className="inline-flex flex-wrap items-center gap-2 normal-case tracking-normal sm:ml-4">
           <select value={pagination.pageSize} onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as 50 | 100 | 200)} className="h-7 rounded border bg-background px-1 font-bold text-foreground">
             {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}

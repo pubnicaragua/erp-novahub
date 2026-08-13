@@ -18,7 +18,6 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { useGlobalSearch } from '../hooks/useGlobalSearch';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -32,6 +31,8 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -213,7 +214,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
     const [y, m, d] = clean.split('-').map(Number);
     if (!y || !m || !d) return dateStr;
-    return new Date(y, m - 1, d).toLocaleDateString();
+    return formatDateEs(new Date(y, m - 1, d));
   };
 
   useEffect(() => {
@@ -284,6 +285,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     (f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    customer: (row: Invoice) => row.customer?.name || 'Varios',
+    date: (row: Invoice) => (row.date ? new Date(row.date).getTime() : null),
+    dueDate: (row: Invoice) => (row.dueDate ? new Date(row.dueDate).getTime() : null),
+    total: (row: Invoice) => Number(row.total || 0),
+    balance: (row: Invoice) => getInvoiceBalance(row),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctCustomers = [...new Map(filtered.map((f) => [f.customer?.name || 'Varios', f.customer?.name || 'Varios'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((f) => (f.customer?.name || 'Varios') === label).length }));
 
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
     try {
@@ -583,16 +596,19 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     {
       key: 'customer',
       header: 'Cliente',
+      headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />,
       render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
     {
       key: 'date',
       header: 'Fecha Emisión',
+      headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span>
     },
     {
       key: 'dueDate',
       header: 'Vencimiento',
+      headerExtra: <ColumnFilterMenu label="Vencimiento" sort={colFilters.state.dueDate?.sort || null} onSort={(sort) => colFilters.setSort('dueDate', sort)} sortOptions={[{ value: 'asc', label: 'Próximos a vencer' }, { value: 'desc', label: 'Más lejanos' }]} />,
       render: (val, row) => (
         <span className={cn(
           "text-xs font-bold",
@@ -606,6 +622,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'total',
       header: 'Total Neto',
       width: '150px',
+      headerExtra: <ColumnFilterMenu label="Total Neto" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (val, row) => {
         const amount = Number(val || 0);
         const difference = getInvoiceExchangeDifference(amount, row.currency, row.exchangeRate);
@@ -630,6 +647,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       key: 'balance',
       header: 'Saldo pendiente',
       width: '150px',
+      headerExtra: <ColumnFilterMenu label="Saldo pendiente" sort={colFilters.state.balance?.sort || null} onSort={(sort) => colFilters.setSort('balance', sort)} />,
       render: (_val, row) => {
         const balance = getInvoiceBalance(row);
         const difference = getInvoiceExchangeDifference(balance, row.currency, row.exchangeRate);
@@ -1299,7 +1317,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
         </div>
         <EditableDataTable
-          data={filtered}
+          data={filteredData}
           pagination={pagination}
         columns={columns}
         showHorizontalControls

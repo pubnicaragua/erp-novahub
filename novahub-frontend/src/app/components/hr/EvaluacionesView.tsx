@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Award, Plus, Star, AlertTriangle, MessageSquarePlus, CheckCircle2, RotateCcw, Filter } from 'lucide-react';
+import { Award, Plus, Star, AlertTriangle, MessageSquarePlus, CheckCircle2, RotateCcw, Search, ClipboardCheck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -9,6 +9,8 @@ import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { StatCard } from './StatCard';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -35,6 +37,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
   const [showNewForm, setShowNewForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [absenceCheck, setAbsenceCheck] = useState<{ hasAbsence: boolean; items: any[]; loading: boolean }>({ hasAbsence: false, items: [], loading: false });
   const [editingPostComments, setEditingPostComments] = useState<Record<string, string>>({});
@@ -53,13 +56,15 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   const hasPeriod = newReview.employeeId && newReview.reviewPeriodStart && newReview.reviewPeriodEnd;
 
   useEffect(() => {
-    if (!hasPeriod) {
-      setAbsenceCheck({ hasAbsence: false, items: [], loading: false });
-      return;
-    }
     let cancelled = false;
-    setAbsenceCheck(prev => ({ ...prev, loading: true }));
+    if (!hasPeriod) {
+      const timer = setTimeout(() => {
+        if (!cancelled) setAbsenceCheck({ hasAbsence: false, items: [], loading: false });
+      }, 0);
+      return () => { cancelled = true; clearTimeout(timer); };
+    }
     const timer = setTimeout(async () => {
+      setAbsenceCheck(prev => ({ ...prev, loading: true }));
       try {
         const res: any = await hrService.checkPerformanceAbsence(
           newReview.employeeId,
@@ -77,11 +82,23 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
 
   const handleCreateReview = async () => {
     if (!newReview.employeeId || !newReview.reviewerId) {
-      toast.error('Completa los campos requeridos');
+      toast.error('Empleado y evaluador son obligatorios');
+      return;
+    }
+    if (!newReview.reviewPeriodStart || !newReview.reviewPeriodEnd) {
+      toast.error('El período de evaluación es obligatorio');
+      return;
+    }
+    if (absenceCheck.loading) {
+      toast.error('Espera a que termine la verificación de ausencias');
       return;
     }
     if (absenceCheck.hasAbsence) {
       toast.error('No se puede evaluar: el empleado registra ausencias en el período seleccionado');
+      return;
+    }
+    if (!newReview.comments.trim()) {
+      toast.error('Los comentarios de la evaluación son obligatorios');
       return;
     }
     try {
@@ -118,6 +135,19 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
     }
   };
 
+  const handleComplete = (review: any) => {
+    if (!(review.comments || '').trim()) {
+      toast.error('La evaluación requiere comentarios antes de completarse');
+      return;
+    }
+    if (!(review.postEvaluationComments || '').trim()) {
+      setEditingPostComments(prev => ({ ...prev, [review.id]: review.postEvaluationComments || '' }));
+      toast.warning('Agrega los comentarios post-evaluación para poder completar la evaluación');
+      return;
+    }
+    handleStatusChange(review, 'COMPLETED');
+  };
+
   const savePostComments = async (reviewId: string) => {
     const text = (editingPostComments[reviewId] || '').trim();
     try {
@@ -138,71 +168,121 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   const inProgressReviews = reviews.filter((r: any) => r.status === 'IN_PROGRESS').length;
   const pendingReviews = reviews.filter((r: any) => r.status === 'DRAFT').length;
 
-  const filteredReviews = statusFilter === 'ALL' ? reviews : reviews.filter((r: any) => r.status === statusFilter);
+  const colFilters = useColumnFilters();
+  const employeeName = (r: any) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim() || 'Sin empleado';
+  const reviewerName = (r: any) => `${r.reviewer?.firstName || ''} ${r.reviewer?.lastName || ''}`.trim() || 'Sin evaluador';
+
+  const searchFiltered = reviews.filter((r: any) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return employeeName(r).toLowerCase().includes(q) || reviewerName(r).toLowerCase().includes(q)
+      || (r.goals || '').toLowerCase().includes(q) || (r.comments || '').toLowerCase().includes(q);
+  });
+  const statusFiltered = statusFilter === 'ALL' ? searchFiltered : searchFiltered.filter((r: any) => r.status === statusFilter);
+  const filteredReviews = colFilters.applyTo(statusFiltered, {
+    employee: (r: any) => employeeName(r),
+    reviewer: (r: any) => reviewerName(r),
+    status: (r: any) => String(r.status || ''),
+    periodStart: (r: any) => (r.reviewPeriodStart ? new Date(r.reviewPeriodStart).getTime() : null),
+  });
+
+  const employeeOptions = [...new Map(reviews.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: reviews.filter((r: any) => employeeName(r) === label).length }));
+  const reviewerOptions = [...new Map(reviews.map((r: any) => [reviewerName(r), reviewerName(r)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: reviews.filter((r: any) => reviewerName(r) === label).length }));
+  const statusOptionsForFilter = [
+    { value: 'DRAFT', label: 'Borrador', count: reviews.filter((r: any) => r.status === 'DRAFT').length },
+    { value: 'IN_PROGRESS', label: 'En Progreso', count: reviews.filter((r: any) => r.status === 'IN_PROGRESS').length },
+    { value: 'COMPLETED', label: 'Completada', count: reviews.filter((r: any) => r.status === 'COMPLETED').length },
+  ];
+
+  const toggleStatus = (s: string) => setStatusFilter(prev => (prev === s ? 'ALL' : s));
 
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Calificación Promedio</p>
-              <h3 className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">{avgRating.toFixed(1)}</h3>
-              <div className="flex items-center gap-1 mt-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} className={cn('size-4', star <= Math.round(avgRating) ? 'fill-yellow-500 text-yellow-500' : 'text-gray-300')} />
-                ))}
-              </div>
-            </div>
-            <Award className="size-8 text-yellow-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Completadas</p>
-              <h3 className="text-3xl font-bold text-green-700 dark:text-green-400">{completedReviews}</h3>
-            </div>
-            <CheckCircle2 className="size-8 text-green-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">En Progreso</p>
-              <h3 className="text-3xl font-bold text-blue-700 dark:text-blue-400">{inProgressReviews}</h3>
-            </div>
-            <Award className="size-8 text-blue-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Borradores</p>
-              <h3 className="text-3xl font-bold text-gray-700 dark:text-gray-400">{pendingReviews}</h3>
-            </div>
-            <RotateCcw className="size-8 text-gray-500" />
-          </div>
-        </div>
+        <StatCard
+          label="Calificación Promedio"
+          value={avgRating.toFixed(1)}
+          icon={Award}
+          tone="amber"
+          sub="Promedio de todas las evaluaciones"
+          active={statusFilter === 'ALL'}
+          onClick={() => setStatusFilter('ALL')}
+          valueClassName="flex items-center gap-1.5"
+        />
+        <StatCard
+          label="Completadas"
+          value={completedReviews}
+          icon={CheckCircle2}
+          tone="green"
+          sub="Evaluaciones finalizadas"
+          active={statusFilter === 'COMPLETED'}
+          onClick={() => toggleStatus('COMPLETED')}
+        />
+        <StatCard
+          label="En Progreso"
+          value={inProgressReviews}
+          icon={ClipboardCheck}
+          tone="blue"
+          sub="Evaluaciones en curso"
+          active={statusFilter === 'IN_PROGRESS'}
+          onClick={() => toggleStatus('IN_PROGRESS')}
+        />
+        <StatCard
+          label="Borradores"
+          value={pendingReviews}
+          icon={RotateCcw}
+          tone="gray"
+          sub="Evaluaciones sin iniciar"
+          active={statusFilter === 'DRAFT'}
+          onClick={() => toggleStatus('DRAFT')}
+        />
       </div>
 
       {/* Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <Filter className="size-4 text-muted-foreground" />
-          {['ALL', 'DRAFT', 'IN_PROGRESS', 'COMPLETED'].map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider border transition-all',
-                statusFilter === s ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'border-border text-muted-foreground hover:bg-muted',
-              )}
-            >
-              {s === 'ALL' ? 'Todas' : STATUS_LABELS[s]}
-            </button>
-          ))}
+          <div className="relative">
+            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar empleado, evaluador, comentarios..."
+              className="pl-8 h-9 w-64 bg-background"
+            />
+          </div>
+          <ColumnFilterMenu
+            label="Estado"
+            options={statusOptionsForFilter}
+            selected={colFilters.state.status?.values || []}
+            onSelect={(values) => colFilters.setValues('status', values)}
+            sort={colFilters.state.status?.sort || null}
+            onSort={(sort) => colFilters.setSort('status', sort)}
+          />
+          <ColumnFilterMenu
+            label="Empleado"
+            options={employeeOptions}
+            selected={colFilters.state.employee?.values || []}
+            onSelect={(values) => colFilters.setValues('employee', values)}
+            sort={colFilters.state.employee?.sort || null}
+            onSort={(sort) => colFilters.setSort('employee', sort)}
+          />
+          <ColumnFilterMenu
+            label="Evaluador"
+            options={reviewerOptions}
+            selected={colFilters.state.reviewer?.values || []}
+            onSelect={(values) => colFilters.setValues('reviewer', values)}
+            sort={colFilters.state.reviewer?.sort || null}
+            onSort={(sort) => colFilters.setSort('reviewer', sort)}
+          />
+          <ColumnFilterMenu
+            label="Período"
+            sort={colFilters.state.periodStart?.sort || null}
+            onSort={(sort) => colFilters.setSort('periodStart', sort)}
+            sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]}
+          />
         </div>
         {canPerform('HR_PERFORMANCE', 'create') && (
           <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
@@ -338,11 +418,11 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-1 block">Comentarios</label>
+              <label className="text-sm font-medium mb-1 block">Comentarios *</label>
               <Textarea
                 value={newReview.comments}
                 onChange={(e) => setNewReview({ ...newReview, comments: e.target.value })}
-                placeholder="Comentarios adicionales"
+                placeholder="Comentarios de la evaluación (obligatorios)"
                 className="bg-background"
               />
             </div>
@@ -367,6 +447,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
         {filteredReviews.map((review: any) => {
           const draftText = editingPostComments[review.id];
           const isEditingPost = draftText !== undefined;
+          const isCompleteBlocked = !(review.comments || '').trim() || !(review.postEvaluationComments || '').trim();
           return (
             <div key={review.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
@@ -392,7 +473,12 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => handleStatusChange(review, 'IN_PROGRESS')}>
                         Iniciar
                       </Button>
-                      <Button size="sm" className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStatusChange(review, 'COMPLETED')}>
+                      <Button
+                        size="sm"
+                        className={cn('h-7 px-2 text-xs text-white', isCompleteBlocked ? 'bg-green-700/60 hover:bg-green-700/60' : 'bg-green-600 hover:bg-green-700')}
+                        title={isCompleteBlocked ? 'Completa comentarios y comentarios post-evaluación para habilitar' : 'Completar evaluación'}
+                        onClick={() => handleComplete(review)}
+                      >
                         <CheckCircle2 className="size-3 mr-1" /> Completar
                       </Button>
                     </div>
@@ -454,6 +540,11 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                     <MessageSquarePlus className="size-3.5" /> Comentarios post-evaluación
+                    {review.status !== 'COMPLETED' && !(review.postEvaluationComments || '').trim() && (
+                      <span className="text-[10px] font-black uppercase text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded">
+                        Obligatorio para completar
+                      </span>
+                    )}
                   </p>
                   {review.status === 'COMPLETED' && canPerform('HR_PERFORMANCE', 'edit') && (
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingPostComments(prev => ({
@@ -461,6 +552,14 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
                       [review.id]: isEditingPost ? prev[review.id] : (review.postEvaluationComments || ''),
                     }))}>
                       {isEditingPost ? 'Cancelar' : 'Editar'}
+                    </Button>
+                  )}
+                  {review.status !== 'COMPLETED' && canPerform('HR_PERFORMANCE', 'edit') && (
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingPostComments(prev => ({
+                      ...prev,
+                      [review.id]: isEditingPost ? prev[review.id] : (review.postEvaluationComments || ''),
+                    }))}>
+                      {isEditingPost ? 'Cancelar' : 'Agregar'}
                     </Button>
                   )}
                 </div>
@@ -497,7 +596,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
         <div className="text-center py-12">
           <Award className="size-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-muted-foreground">
-            {reviews.length === 0 ? 'No hay evaluaciones de desempeño' : 'No hay evaluaciones con este estado'}
+            {reviews.length === 0 ? 'No hay evaluaciones de desempeño' : 'No hay evaluaciones con los filtros seleccionados'}
           </p>
         </div>
       )}

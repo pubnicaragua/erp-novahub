@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { DateField } from '../ui/DateField';
 import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
@@ -191,7 +192,7 @@ export function DiferenciasCambiariasView() {
         <CardContent className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
           <div className="min-w-0 space-y-2">
             <Label htmlFor="exchange-differences-date">Fecha de corte</Label>
-            <Input id="exchange-differences-date" type="date" value={asOfDate} onChange={event => setAsOfDate(event.target.value)} className="max-w-full" />
+            <DateField id="exchange-differences-date" value={asOfDate} onChange={setAsOfDate} />
           </div>
           <div className="min-w-0 space-y-2">
             <Label htmlFor="exchange-differences-rate">Tasa de corte opcional</Label>

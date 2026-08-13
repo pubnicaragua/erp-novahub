@@ -9,7 +9,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Ban, Copy, Eraser, MoreHorizontal, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -77,8 +77,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   editOnPencilOnly = false,
   showSelection = true,
   bulkActions,
-  showClearSelection = true,
-  onAddRow,
   pagination,
   actionsWidth = 'w-32',
   fitContent = false,
@@ -355,28 +353,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setData(newData);
     toast.success(`Sincronizadas ${updatedCount} filas desde Excel`);
   }, [data, columns, onRowUpdate, idField, isEditingAllowed]);
-
-  const handleAddNewRow = () => {
-    if (onAddRow) {
-      onAddRow();
-    } else {
-      const newId = `new-${Math.random().toString(36).substr(2, 9)}`;
-      const newRow = { [idField]: newId } as any;
-      // Initialize with empty strings for all keys in columns
-      columns.forEach(col => {
-        newRow[col.key as string] = '';
-      });
-      setData(prev => [...prev, newRow as T]);
-      setDraftRows(prev => new Set(prev).add(newId));
-      
-      // Auto-focus first editable cell of new row
-      const firstEditable = columns.find(c => c.editable);
-      if (firstEditable) {
-        setEditingCell({ rowId: newId, colKey: firstEditable.key as string });
-        setEditValue('');
-      }
-    }
-  };
 
   const handleBulkDuplicate = async () => {
     if (!onBulkDuplicate || selectedIds.size === 0) return;

@@ -25,6 +25,8 @@ import { generateExpensePDF } from '../../utils/pdfGenerator';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
@@ -145,6 +147,16 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     if (activeKpiFilter.type === 'category') return String(g.category || '').toUpperCase() === activeKpiFilter.category;
     return true;
   });
+
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    date: (row: Expense) => (row.date ? new Date(row.date).getTime() : null),
+    category: (row: Expense) => String(row.category || '').toUpperCase(),
+    amount: (row: Expense) => Number(row.amount || 0),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
+    .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
   const downloadExpenseTemplate = () => {
     const rows = [
@@ -349,10 +361,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
   const columns: ColumnDef<Expense>[] = [
     { key: 'date',        header: 'Fecha',     width: '110px',
-      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+      headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'category',    header: 'Categoría', width: '130px', editable: canPerform('PURCHASES_EXPENSES', 'edit'), type: 'select', options: [
         {label: 'Operacional', value: 'OPERATIVO'}, {label: 'Administrativo', value: 'ADMINISTRATIVO'}, {label: 'Ventas', value: 'VENTAS'}, {label: 'Financiero', value: 'FINANCIERO'}, {label: 'Otro', value: 'OTRO'}
       ],
+      headerExtra: <ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} />,
       render: (val, row) => <Badge variant="outline" className="text-[9px] uppercase bg-primary/5 text-primary border-none">{String(val || '').toUpperCase() === 'OTRO' ? (row.categoryCustom || 'OTRO') : (val || '-')}</Badge> },
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
@@ -360,6 +374,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     { key: 'paymentSource', header: 'Cuenta Origen', width: '130px',
       render: (val) => <span className="text-xs font-black text-muted-foreground">{paymentSourceLabel(val)}</span> },
     { key: 'amount',      header: 'Monto',     width: '130px',
+      headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />,
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
@@ -851,7 +866,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {

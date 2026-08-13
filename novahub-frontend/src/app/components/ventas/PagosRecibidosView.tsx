@@ -22,6 +22,8 @@ import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
@@ -72,6 +74,16 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.invoice?.number || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    customer: (row: PaymentReceived) => row.customer?.name || 'Cliente',
+    date: (row: PaymentReceived) => (row.date ? new Date(row.date).getTime() : null),
+    amount: (row: PaymentReceived) => Number(row.amount || 0),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctCustomers = [...new Map(filtered.map((p) => [p.customer?.name || 'Cliente', p.customer?.name || 'Cliente'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.customer?.name || 'Cliente') === label).length }));
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentReceived>) => {
     try {
@@ -148,7 +160,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
-    { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'reference', header: 'Referencia / Documento', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || row.creditNote?.number || val || 'Anticipo'}</span> },
     {
       key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
@@ -168,14 +180,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         );
       }
     },
-    { key: 'date', header: 'Fecha', render: (val) => {
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
       const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);
       const [y, m, d] = clean.split('-').map(Number);
-      return <span className="text-xs font-medium text-muted-foreground">{(!y||!m||!d) ? val : new Date(y, m-1, d).toLocaleDateString()}</span>;
+      return <span className="text-xs font-medium text-muted-foreground">{(!y||!m||!d) ? val : formatDateEs(new Date(y, m-1, d))}</span>;
     } },
     {
-      key: 'amount', header: 'Monto', width: '150px', render: (val, row) => (
+      key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-emerald-500">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
         </span>)
@@ -330,7 +342,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={filteredData}
           pagination={pagination}
           onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls

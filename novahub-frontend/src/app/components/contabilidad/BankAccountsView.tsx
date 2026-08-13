@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, Trash2, Edit2, Loader2, Landmark, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Landmark, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -43,7 +43,6 @@ export function BankAccountsView() {
   const accountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
   const accounts = accountsQuery.data || [];
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
-  const fetch = () => accountsQuery.refetch();
 
   // Plan de cuentas del tenant: solo cuentas de activo, de detalle/subcuenta
   // (hojas), activas y posteables. Se priorizan las de la misma moneda que el

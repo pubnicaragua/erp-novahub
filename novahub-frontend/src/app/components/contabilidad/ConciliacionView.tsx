@@ -16,6 +16,7 @@ import {
 } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
+import { DateField } from '../ui/DateField';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
@@ -494,7 +495,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</Label>
-                <Input type="date" value={addItemForm.date} onChange={(e) => setAddItemForm({ ...addItemForm, date: e.target.value })} className="h-9 text-xs" />
+                <DateField value={addItemForm.date} onChange={(v) => setAddItemForm({ ...addItemForm, date: v })} />
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto</Label>

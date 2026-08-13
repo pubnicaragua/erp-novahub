@@ -30,6 +30,8 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -141,6 +143,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     (statusFilter === 'ALL' || String(e.status || '').toUpperCase() === statusFilter) &&
     (e.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    customerId: (row: Estimate) => row.customer?.name || 'Varios',
+    date: (row: Estimate) => (row.date ? new Date(row.date).getTime() : null),
+    status: (row: Estimate) => String(row.status || '').toUpperCase(),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctCustomers = [...new Map(filtered.map((e) => [e.customer?.name || 'Varios', e.customer?.name || 'Varios'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((e) => (e.customer?.name || 'Varios') === label).length }));
+  const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((e) => String(e.status || '').toUpperCase() === option.value).length }));
 
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     try {
@@ -372,12 +385,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     { 
       key: 'customerId', 
       header: 'Cliente', 
+      headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customerId?.values || []} onSelect={(values) => colFilters.setValues('customerId', values)} sort={colFilters.state.customerId?.sort || null} onSort={(sort) => colFilters.setSort('customerId', sort)} />,
       render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
     { 
       key: 'date', 
       header: 'Fecha Emisión', 
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span>
+      headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val)}</span>
     },
     { 
       key: 'total', 
@@ -394,6 +409,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       header: 'Estado', 
       width: '135px',
       editable: false,
+      headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
         return (
@@ -412,7 +428,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       render: (val) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
-           {new Date(val).toLocaleDateString()}
+           {formatDateEs(val)}
         </div>
       )
     }
@@ -830,7 +846,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
         </div>
         <EditableDataTable 
-          data={filtered}
+          data={filteredData}
           pagination={pagination}
           columns={columns}
           onRowUpdate={handleUpdate}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { DateField } from '../ui/DateField';
 import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -212,7 +213,7 @@ export function ActivosFijosImportTab() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cutoff-date">Fecha de corte contable (opcional)</Label>
-              <Input id="cutoff-date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
+              <DateField id="cutoff-date" value={cutoffDate} onChange={setCutoffDate} />
               <p className="text-[11px] text-muted-foreground">La depreciación se proyecta a partir del mes siguiente a esta fecha para activos ya depreciados.</p>
             </div>
             <div className="space-y-2">

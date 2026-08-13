@@ -27,6 +27,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -100,7 +101,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const normalizeStatus = (status?: string) => String(status || '').toUpperCase();
   const statusFor = (status?: string) => statusOptions.find((option) => option.value === normalizeStatus(status));
   const recalcTotal = (items: any[]) => items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
-  const formatDate = (value?: string | null) => value ? new Date(value).toLocaleDateString() : 'Sin fecha';
+  const formatDate = (value?: string | null) => value ? formatDateEs(value) : 'Sin fecha';
   const availableCreditFor = (customer?: Customer) => {
     if (!customer) return 0;
     // El saldo negativo representa deuda; un saldo positivo representa favor.

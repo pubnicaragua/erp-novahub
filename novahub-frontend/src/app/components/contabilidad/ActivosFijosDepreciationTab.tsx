@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Calculator, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react';
+import { RefreshCw, Calculator, ChevronDown, Loader2, Search } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Input } from '../ui/input';
 import { contabilidadService } from '../../services/contabilidad.service';

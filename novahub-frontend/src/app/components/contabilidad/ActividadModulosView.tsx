@@ -49,12 +49,6 @@ const MODULE_COLORS: Record<string, string> = {
   Manual: 'bg-muted text-muted-foreground border-border/30',
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  POSTED: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-  DRAFT: 'bg-muted text-muted-foreground border-border/30',
-  VOIDED: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
-};
-
 const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function ActividadModulosView() {

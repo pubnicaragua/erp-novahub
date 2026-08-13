@@ -24,6 +24,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CustomerImportPreview, type CustomerImportResult, type CustomerImportRow } from './CustomerImportPreview';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -305,6 +306,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     );
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    name: (row: Customer) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (row.createdAt ? new Date(row.createdAt).getTime() : 0) : row.name || '';
+    },
+    type: (row: Customer) => String(row.type || '').toUpperCase(),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const typeOptions = [
+    { value: 'INDIVIDUAL', label: 'Particular', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'INDIVIDUAL').length },
+    { value: 'COMPANY', label: 'Empresa', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'COMPANY').length },
+  ];
+
   const handleUpdate = async (id: string | number, updates: Partial<Customer>) => {
     try {
       if (updates.email !== undefined && String(updates.email || '').trim() && !/^\S+@\S+\.\S+$/.test(String(updates.email).trim())) {
@@ -485,6 +500,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       header: 'Nombre del Cliente', 
       width: '220px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
+      headerExtra: <ColumnFilterMenu label="Nombre" options={[{ value: '__empty__', label: 'Sin nombre' }]} selected={colFilters.state.name?.values || []} onSelect={(values) => colFilters.setValues('name', values)} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} />,
       render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
     },
     { 
@@ -493,6 +509,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       width: '110px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
       type: 'select',
+      headerExtra: <ColumnFilterMenu label="Tipo" options={typeOptions} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />,
       options: [
         { label: 'Particular', value: 'INDIVIDUAL', color: 'bg-primary/10 text-primary' },
         { label: 'Empresa', value: 'COMPANY', color: 'bg-primary/10 text-primary' }
@@ -662,7 +679,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 bg-card/40 shadow-sm" data-tour="customers-table">
           <CardContent className="min-w-0 p-1.5 sm:p-3">
             <EditableDataTable
-              data={filtered}
+              data={filteredData}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
               onRowClick={(row) => setSelectedCustomerDetail(row)}

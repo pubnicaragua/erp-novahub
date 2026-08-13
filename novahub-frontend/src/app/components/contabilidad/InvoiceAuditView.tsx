@@ -17,6 +17,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
+import { DateField } from '../ui/DateField';
 
 type AuditKind = 'SALE' | 'PURCHASE';
 type AuditStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'ISSUES';
@@ -250,8 +251,8 @@ export function InvoiceAuditView() {
                 <SelectItem value="ISSUES" className="text-xs">Con anomalías</SelectItem>
               </SelectContent>
             </Select>
-            <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-9 w-36 rounded-xl text-xs" />
-            <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-9 w-36 rounded-xl text-xs" />
+            <DateField value={dateFrom} onChange={(v) => { setDateFrom(v); setPage(1); }} placeholder="Desde" className="w-36" />
+            <DateField value={dateTo} onChange={(v) => { setDateTo(v); setPage(1); }} placeholder="Hasta" className="w-36" />
             <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={() => { refreshAll(); listQuery.refetch(); }} title="Actualizar">
               <RefreshCw className={cn('size-4', listQuery.isFetching && 'animate-spin')} />
             </Button>
@@ -274,7 +275,7 @@ export function InvoiceAuditView() {
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Total</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Auditoría</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Acciones</TableHead>
+                    <TableHead className="w-[84px] text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -302,14 +303,14 @@ export function InvoiceAuditView() {
                       </TableCell>
                       <TableCell>{auditBadge(item)}</TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
                           {hasIssues && (
                             <>
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-lg text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir">
-                                {busyId === item.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} Corregir
+                              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-sky-600 hover:bg-sky-500/10 hover:text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir">
+                                {busyId === item.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-lg text-destructive" disabled={busyId === item.id} onClick={() => setCancelTarget({ id: item.id, number: item.number, reason: '', saving: false })} title="Anular factura y revertir asiento">
-                                <Ban className="size-3.5" /> Anular
+                              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={busyId === item.id} onClick={() => setCancelTarget({ id: item.id, number: item.number, reason: '', saving: false })} title="Anular factura y revertir asiento">
+                                <Ban className="size-3.5" />
                               </Button>
                             </>
                           )}

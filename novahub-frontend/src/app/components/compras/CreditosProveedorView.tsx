@@ -20,6 +20,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import * as XLSX from 'xlsx';
 
@@ -249,20 +251,35 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       (c.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    supplier: (row: SupplierCredit) => row.supplier?.name || '-',
+    date: (row: SupplierCredit) => (row.date ? new Date(row.date).getTime() : null),
+    total: (row: SupplierCredit) => Number(row.total || 0),
+    status: (row: SupplierCredit) => String(row.status || '').toLowerCase(),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctSuppliers = [...new Map(filtered.map((c) => [c.supplier?.name || '-', c.supplier?.name || '-'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((c) => (c.supplier?.name || '-') === label).length }));
+
   const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
 
   const columns: ColumnDef<SupplierCredit>[] = [
     { key: 'number',   header: 'Crédito #',  width: '110px',
       render: (_v, row) => <span className="font-black font-mono text-primary text-xs">{row.number||row.id?.slice(0,8)}</span> },
     { key: 'supplier', header: 'Proveedor',  width: '160px',
+      headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'supplierInvoice', header: 'Doc. Origen', width: '110px',
       render: (_v, row) => row.supplierInvoice ? <span className="flex items-center gap-1 text-xs font-mono font-bold text-muted-foreground"><FileText className="size-3 text-primary/60" />{row.supplierInvoice.number}</span> : <span className="text-xs text-muted-foreground/40">—</span> },
     { key: 'date',     header: 'Fecha',      width: '100px',
-      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+      headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'total',    header: 'Total',      width: '110px',
+      headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (val, row) => <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={resolveSourceCurrency((row as any)?.currency)} sourceExchangeRate={(row as any)?.exchangeRate} className="font-black" /> },
     { key: 'status',   header: 'Estado',     width: '100px',
+      headerExtra: <ColumnFilterMenu label="Estado" options={statusOpts.map((o) => ({ value: o.value, label: o.label, count: filtered.filter((c) => String(c.status || '').toLowerCase() === o.value).length }))} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toLowerCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -420,7 +437,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     const invoiceOptions = supplierInvoices
       .filter(inv => !localDoc.supplierId || inv.supplierId === localDoc.supplierId)
       .filter(inv => String(inv.status || '').toUpperCase() !== 'CANCELLED')
-      .map(inv => ({ label: `${inv.number} · ${invoiceStatusLabel(inv.status)}`, value: inv.id, description: `${new Date(inv.date || Date.now()).toLocaleDateString()} · ${formatConvertedAmount(Number(inv.total || 0), resolveSourceCurrency((inv as any)?.currency), (inv as any)?.exchangeRate)}` }));
+      .map(inv => ({ label: `${inv.number} · ${invoiceStatusLabel(inv.status)}`, value: inv.id, description: `${formatDateEs(inv.date || Date.now())} · ${formatConvertedAmount(Number(inv.total || 0), resolveSourceCurrency((inv as any)?.currency), (inv as any)?.exchangeRate)}` }));
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -864,7 +881,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           actions={(row) => {
             const status = String(row.status || '').toUpperCase();
             return (

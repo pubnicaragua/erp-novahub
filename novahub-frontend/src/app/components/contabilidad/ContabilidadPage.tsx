@@ -426,7 +426,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
                   {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
                   {activeSection === 'activos-fijos' && <ActivosFijosView />}
-                  {activeSection === 'libro-bancos' && <LibroBancosView />}
+                  {activeSection === 'libro-bancos' && <LibroBancosView onGoToSection={handleSectionChange} />}
                   {activeSection === 'conciliacion' && <ConciliacionView onGoToConfig={() => setActiveSection('configuracion')} />}
                   {activeSection === 'periodos' && <PeriodosView />}
                   {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}

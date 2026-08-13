@@ -1,6 +1,5 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Filter } from 'lucide-react';
+import { useState } from 'react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Search, CalendarRange } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -14,6 +13,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { AbsenceType, VacationBalance } from '../../types';
 import { PromptDialog } from '../ui/PromptDialog';
 import { useQuery } from '@tanstack/react-query';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
+import { StatCard } from './StatCard';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   VACATION: 'Vacaciones',
@@ -26,10 +28,21 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 
+const countWorkDays = (start: Date, end: Date) => {
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    if (cur.getDay() !== 0) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+};
+
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform, user } = useAuth();
   const [showNewForm, setShowNewForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [search, setSearch] = useState('');
   const [newRequest, setNewRequest] = useState({
     employeeId: '',
     leaveType: 'VACATION',
@@ -43,21 +56,9 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (newRequest.startDate && newRequest.endDate) {
-      const start = new Date(newRequest.startDate);
-      const end = new Date(newRequest.endDate);
-      if (start <= end) {
-        let count = 0;
-        let cur = new Date(start);
-        while (cur <= end) {
-          if (cur.getDay() !== 0) count++; // 0 is Sunday
-          cur.setDate(cur.getDate() + 1);
-        }
-        setNewRequest(prev => ({ ...prev, days: count }));
-      }
-    }
-  }, [newRequest.startDate, newRequest.endDate]);
+  const computedDays = newRequest.startDate && newRequest.endDate
+    ? countWorkDays(new Date(newRequest.startDate), new Date(newRequest.endDate))
+    : 1;
 
   const currentYear = new Date().getFullYear();
   const balanceQuery = useQuery({
@@ -80,6 +81,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const vacationBalance = (balanceQuery.data || null) as VacationBalance | null;
   const balanceLoading = balanceQuery.isFetching;
   const absenceTypes = (Array.isArray(absenceTypesQuery.data) ? absenceTypesQuery.data : absenceTypesQuery.data?.data || []) as AbsenceType[];
+  const selectedAbsenceType = absenceTypes.find(at => at.id === newRequest.absenceTypeId) || null;
 
   const handleRecalcVacation = async () => {
     if (!newRequest.employeeId) return;
@@ -97,9 +99,26 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       toast.error('Completa todos los campos requeridos');
       return;
     }
+    if (computedDays < 1) {
+      toast.error('El período seleccionado no tiene días hábiles');
+      return;
+    }
+
+    const isVacation = newRequest.leaveType === 'VACATION';
+    if (isVacation && vacationBalance) {
+      const available = Number(vacationBalance.remainingDays) || 0;
+      if (computedDays > available) {
+        toast.error(`El empleado solo tiene ${available} días de vacaciones disponibles para ${currentYear}`);
+        return;
+      }
+    }
+    if (selectedAbsenceType && Number(selectedAbsenceType.maxDays ?? 0) > 0 && computedDays > Number(selectedAbsenceType.maxDays)) {
+      toast.error(`El tipo "${selectedAbsenceType.name}" permite máximo ${selectedAbsenceType.maxDays} días`);
+      return;
+    }
 
     try {
-      await hrService.createLeaveRequest(newRequest);
+      await hrService.createLeaveRequest({ ...newRequest, days: computedDays });
       toast.success('Solicitud creada');
       setShowNewForm(false);
       setNewRequest({
@@ -148,50 +167,80 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const pendingRequests = leaveRequests.filter((r: any) => r.status === 'PENDING');
   const approvedRequests = leaveRequests.filter((r: any) => r.status === 'APPROVED');
   const rejectedRequests = leaveRequests.filter((r: any) => r.status === 'REJECTED');
-  const filteredRequests = statusFilter === 'ALL' ? leaveRequests : leaveRequests.filter((r: any) => r.status === statusFilter);
+
+  const colFilters = useColumnFilters();
+  const employeeName = (r: any) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim() || 'Sin empleado';
+  const filterGetters = {
+    employee: (r: any) => employeeName(r),
+    leaveType: (r: any) => String(r.leaveType || ''),
+    startDate: (r: any) => (r.startDate ? new Date(r.startDate).getTime() : null),
+    status: (r: any) => String(r.status || ''),
+  };
+
+  const searchFiltered = leaveRequests.filter((r: any) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return employeeName(r).toLowerCase().includes(q)
+      || (r.reason || '').toLowerCase().includes(q)
+      || (LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType || '').toLowerCase().includes(q);
+  });
+  const statusFiltered = statusFilter === 'ALL' ? searchFiltered : searchFiltered.filter((r: any) => r.status === statusFilter);
+  const colFilteredRequests = colFilters.applyTo(statusFiltered, filterGetters);
+
+  const employeeOptions = [...new Map(searchFiltered.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: searchFiltered.filter((r: any) => employeeName(r) === label).length }));
+  const leaveTypeOptions = [...new Map(searchFiltered.map((r: any) => [String(r.leaveType || ''), LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType])).entries()]
+    .map(([value, label]) => ({ value: value as string, label: label as string, count: searchFiltered.filter((r: any) => String(r.leaveType || '') === value).length }));
+  const statusOptionsForFilter = [
+    { value: 'PENDING', label: 'Pendiente', count: searchFiltered.filter((r: any) => r.status === 'PENDING').length },
+    { value: 'APPROVED', label: 'Aprobada', count: searchFiltered.filter((r: any) => r.status === 'APPROVED').length },
+    { value: 'REJECTED', label: 'Rechazada', count: searchFiltered.filter((r: any) => r.status === 'REJECTED').length },
+  ];
 
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [pageSize, statusFilter]);
+  const totalPages = Math.max(1, Math.ceil(colFilteredRequests.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRequests = colFilteredRequests.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
-  const totalPages = Math.ceil(filteredRequests.length / pageSize);
-  const paginatedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const toggleStatus = (s: string) => {
+    setStatusFilter(prev => (prev === s ? 'ALL' : s));
+    setCurrentPage(1);
+  };
 
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Pendientes</p>
-              <h3 className="text-3xl font-bold text-orange-700">{pendingRequests.length}</h3>
-            </div>
-            <FileText className="size-8 text-orange-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Aprobadas</p>
-              <h3 className="text-3xl font-bold text-green-700">{approvedRequests.length}</h3>
-            </div>
-            <Check className="size-8 text-green-500" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Rechazadas</p>
-              <h3 className="text-3xl font-bold text-red-700">{rejectedRequests.length}</h3>
-            </div>
-            <X className="size-8 text-red-500" />
-          </div>
-        </div>
+        <StatCard
+          label="Pendientes"
+          value={pendingRequests.length}
+          icon={FileText}
+          tone="orange"
+          sub="Por aprobar o rechazar"
+          active={statusFilter === 'PENDING'}
+          onClick={() => toggleStatus('PENDING')}
+        />
+        <StatCard
+          label="Aprobadas"
+          value={approvedRequests.length}
+          icon={Check}
+          tone="green"
+          sub="Ausencias validadas"
+          active={statusFilter === 'APPROVED'}
+          onClick={() => toggleStatus('APPROVED')}
+        />
+        <StatCard
+          label="Rechazadas"
+          value={rejectedRequests.length}
+          icon={X}
+          tone="red"
+          sub="Solicitudes denegadas"
+          active={statusFilter === 'REJECTED'}
+          onClick={() => toggleStatus('REJECTED')}
+        />
       </div>
 
       {/* Vacation Balance */}
@@ -201,7 +250,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                  <Umbrella className="size-4" /> Vacaciones {new Date().getFullYear()}
+                  <Umbrella className="size-4" /> Vacaciones {currentYear}
                 </h3>
                 <Button size="sm" variant="outline" onClick={handleRecalcVacation} disabled={balanceLoading} className="h-8 text-xs rounded-xl gap-1">
                   <RefreshCw className={cn("size-3", balanceLoading && "animate-spin")} />
@@ -226,19 +275,32 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                   <p className="text-xl font-black text-green-600">{vacationBalance?.remainingDays ?? '—'}</p>
                 </div>
               </div>
+              {newRequest.leaveType === 'VACATION' && computedDays > (vacationBalance?.remainingDays ?? Infinity) && (
+                <p className="mt-3 text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-lg px-3 py-2">
+                  Los días solicitados ({computedDays}) superan el saldo disponible ({vacationBalance?.remainingDays ?? 0}).
+                </p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
       )}
 
-      {/* New Request Button + Filter */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <Filter className="size-4 text-muted-foreground" />
+          <div className="relative">
+            <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              placeholder="Buscar empleado, razón o tipo..."
+              className="pl-8 h-9 w-56 bg-background"
+            />
+          </div>
           {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map(s => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => toggleStatus(s)}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider border transition-all',
                 statusFilter === s ? 'bg-primary text-primary-foreground border-primary shadow-sm' : 'border-border text-muted-foreground hover:bg-muted',
@@ -304,12 +366,18 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 </Select>
               )}
               {newRequest.leaveType === 'OTHER' && !newRequest.absenceTypeId && (
-                <Input 
+                <Input
                   placeholder="Especifica el tipo de ausencia..."
                   value={newRequest.leaveTypeCustom}
                   onChange={e => setNewRequest({...newRequest, leaveTypeCustom: e.target.value})}
                   className="mt-2 bg-background"
                 />
+              )}
+              {selectedAbsenceType && Number(selectedAbsenceType.maxDays ?? 0) > 0 && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Máximo permitido: <strong>{selectedAbsenceType.maxDays} días</strong>
+                  {selectedAbsenceType.requiresDoc && ' · Requiere documento'}
+                </p>
               )}
             </div>
             <div>
@@ -331,11 +399,11 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Días</label>
+              <label className="text-sm font-medium mb-1 block">Días hábiles (sin domingos)</label>
               <Input
                 type="number"
                 disabled
-                value={newRequest.days}
+                value={computedDays}
                 onChange={(e) => setNewRequest({ ...newRequest, days: parseInt(e.target.value) })}
                 className="bg-background opacity-70"
               />
@@ -367,13 +435,13 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           <table className="w-full min-w-[900px]">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Tipo</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Fecha Inicio</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Empleado<ColumnFilterMenu label="Empleado" options={employeeOptions} selected={colFilters.state.employee?.values || []} onSelect={(values) => colFilters.setValues('employee', values)} sort={colFilters.state.employee?.sort || null} onSort={(sort) => colFilters.setSort('employee', sort)} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Tipo<ColumnFilterMenu label="Tipo" options={leaveTypeOptions} selected={colFilters.state.leaveType?.values || []} onSelect={(values) => colFilters.setValues('leaveType', values)} sort={colFilters.state.leaveType?.sort || null} onSort={(sort) => colFilters.setSort('leaveType', sort)} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Fecha Inicio<ColumnFilterMenu label="Fecha Inicio" sort={colFilters.state.startDate?.sort || null} onSort={(sort) => colFilters.setSort('startDate', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} /></span></th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Fecha Fin</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold">Días</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Razón</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
               </tr>
             </thead>
@@ -396,10 +464,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {new Date(request.startDate).toLocaleDateString()}
+                    {formatDateEs(request.startDate)}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {new Date(request.endDate).toLocaleDateString()}
+                    {formatDateEs(request.endDate)}
                   </td>
                   <td className="px-4 py-3 text-center text-sm font-medium">
                     {request.days}
@@ -476,16 +544,16 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
                     <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Inicio</p>
-                    <p className="font-bold text-sm">{new Date(request.startDate).toLocaleDateString()}</p>
+                    <p className="font-bold text-sm">{formatDateEs(request.startDate)}</p>
                   </div>
                   <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
                     <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Fin</p>
-                    <p className="font-bold text-sm">{new Date(request.endDate).toLocaleDateString()}</p>
+                    <p className="font-bold text-sm">{formatDateEs(request.endDate)}</p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-xs border-t border-border/50 pt-2">
                   <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Duración</span>
-                  <span className="font-bold bg-muted/50 px-2 py-1 rounded-md">{request.daysCount} días</span>
+                  <span className="font-bold bg-muted/50 px-2 py-1 rounded-md">{request.days ?? request.daysCount ?? 0} días</span>
                 </div>
                 {request.reason && (
                   <div className="text-xs border-t border-border/50 pt-2">
@@ -516,32 +584,32 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
             <div className="flex items-center gap-2">
               <span>Mostrar</span>
-              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
+              <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-8 rounded-lg border bg-background px-2 font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none transition-all cursor-pointer">
                 {PAGE_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
               <span>por página</span>
             </div>
             <div className="h-4 w-px bg-border/40 hidden sm:block" />
             <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
-              Mostrando <span className="text-foreground font-black">{leaveRequests.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, leaveRequests.length)}</span> de <span className="text-primary font-black">{leaveRequests.length}</span> registros totales
+              Mostrando <span className="text-foreground font-black">{colFilteredRequests.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1} - {Math.min(safeCurrentPage * pageSize, colFilteredRequests.length)}</span> de <span className="text-primary font-black">{colFilteredRequests.length}</span> registros totales
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
-            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
+            <button onClick={() => setCurrentPage(1)} disabled={safeCurrentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsLeft className="size-4" /></button>
+            <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronLeft className="size-4" /></button>
             <div className="flex items-center px-4 h-9 rounded-lg border bg-muted/30 font-black text-xs">
-              Pág. {currentPage} / {Math.max(1, totalPages)}
+              Pág. {safeCurrentPage} / {totalPages}
             </div>
-            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
-            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
+            <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronRight className="size-4" /></button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={safeCurrentPage === totalPages} className="p-2 rounded-lg border hover:bg-muted disabled:opacity-30 transition-all"><ChevronsRight className="size-4" /></button>
           </div>
         </div>
       )}
 
       {leaveRequests.length === 0 && (
         <div className="text-center py-12">
-          <FileText className="size-12 mx-auto text-muted-foreground mb-4" />
+          <CalendarRange className="size-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-muted-foreground">No hay solicitudes de ausencia</p>
         </div>
       )}
@@ -558,4 +626,3 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     </div>
   );
 }
-

@@ -19,6 +19,7 @@ import { Textarea } from '../ui/textarea';
 import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRow } from './EmployeeImportPreview';
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
@@ -113,6 +114,29 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     return matchesSearch && matchesDept && matchesStatus;
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    name: (emp: any) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (emp.createdAt ? new Date(emp.createdAt).getTime() : 0) : `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+    },
+    department: (emp: any) => emp.department?.name || '—',
+    position: (emp: any) => emp.position?.title || '—',
+    salary: (emp: any) => Number(emp.salary || 0),
+    status: (emp: any) => String(emp.employmentStatus || ''),
+  };
+  const colFilteredEmployees = colFilters.applyTo(filteredEmployees, filterGetters);
+  const departmentOptions = [...new Map(filteredEmployees.map((e: any) => [e.department?.name || '—', e.department?.name || '—'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredEmployees.filter((e: any) => (e.department?.name || '—') === label).length }));
+  const positionOptions = [...new Map(filteredEmployees.map((e: any) => [e.position?.title || '—', e.position?.title || '—'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredEmployees.filter((e: any) => (e.position?.title || '—') === label).length }));
+  const statusOptionsForFilter = [
+    { value: 'ACTIVE', label: 'Activo', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'ACTIVE').length },
+    { value: 'INACTIVE', label: 'Inactivo', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'INACTIVE').length },
+    { value: 'ON_LEAVE', label: 'En ausencia', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'ON_LEAVE').length },
+    { value: 'TERMINATED', label: 'Terminado', count: filteredEmployees.filter((e: any) => String(e.employmentStatus || '') === 'TERMINATED').length },
+  ];
+
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
@@ -121,8 +145,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     setCurrentPage(1);
   }, [searchTerm, filterDept, filterStatus, pageSize]);
 
-  const totalPages = Math.ceil(filteredEmployees.length / pageSize);
-  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(colFilteredEmployees.length / pageSize);
+  const paginatedEmployees = colFilteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const columnOptions = [
     { key: 'number', label: 'Número' },
     { key: 'name', label: 'Nombre' },
@@ -979,14 +1003,14 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               <thead className="bg-muted/50">
                 <tr>
                   {isColumnVisible('number') && <th className="px-4 py-3 text-left text-xs font-semibold">Número</th>}
-                  {isColumnVisible('name') && <th className="px-4 py-3 text-left text-xs font-semibold">Nombre</th>}
+                  {isColumnVisible('name') && <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Nombre<ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></th>}
                   {isColumnVisible('email') && <th className="px-4 py-3 text-left text-xs font-semibold">Correo</th>}
                   {isColumnVisible('phone') && <th className="px-4 py-3 text-left text-xs font-semibold">Teléfono</th>}
                   {isColumnVisible('nationalId') && <th className="px-4 py-3 text-left text-xs font-semibold">Cédula</th>}
-                  {isColumnVisible('department') && <th className="px-4 py-3 text-left text-xs font-semibold">Departamento</th>}
-                  {isColumnVisible('position') && <th className="px-4 py-3 text-left text-xs font-semibold">Puesto</th>}
-                  {isColumnVisible('salary') && <th className="px-4 py-3 text-left text-xs font-semibold">Salario</th>}
-                  {isColumnVisible('status') && <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>}
+                  {isColumnVisible('department') && <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Departamento<ColumnFilterMenu label="Departamento" options={departmentOptions} selected={colFilters.state.department?.values || []} onSelect={(values) => colFilters.setValues('department', values)} sort={colFilters.state.department?.sort || null} onSort={(sort) => colFilters.setSort('department', sort)} /></span></th>}
+                  {isColumnVisible('position') && <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Puesto<ColumnFilterMenu label="Puesto" options={positionOptions} selected={colFilters.state.position?.values || []} onSelect={(values) => colFilters.setValues('position', values)} sort={colFilters.state.position?.sort || null} onSort={(sort) => colFilters.setSort('position', sort)} /></span></th>}
+                  {isColumnVisible('salary') && <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Salario<ColumnFilterMenu label="Salario" sort={colFilters.state.salary?.sort || null} onSort={(sort) => colFilters.setSort('salary', sort)} /></span></th>}
+                  {isColumnVisible('status') && <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></th>}
                   {isColumnVisible('auth') && <th className="px-4 py-3 text-left text-xs font-semibold">Autorización</th>}
                   <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
                 </tr>

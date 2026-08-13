@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Wallet, Receipt } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -14,6 +14,9 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { StatCard } from './StatCard';
+import { formatDateEs } from '../../utils/dateFormat';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { displayCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
@@ -59,6 +62,24 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
     return matchesEmployee && matchesStatus;
   });
 
+  const colFilters = useColumnFilters();
+  const payrollEmployeeName = (p: any) => `${p.employee?.firstName || ''} ${p.employee?.lastName || ''}`.trim() || 'Sin empleado';
+  const colFilterGetters = {
+    employee: (p: any) => payrollEmployeeName(p),
+    periodStart: (p: any) => (p.periodStart ? new Date(p.periodStart).getTime() : null),
+    gross: (p: any) => Number(p.grossPay ?? p.grossPayBase ?? 0),
+    net: (p: any) => Number(p.netPay ?? p.netPayBase ?? 0),
+    cost: (p: any) => Number(p.costoTotalEmpresa ?? p.costoTotalEmpresaBase ?? 0),
+    status: (p: any) => String(p.status || ''),
+  };
+  const colFilteredPayrolls = colFilters.applyTo(filteredPayrolls, colFilterGetters);
+  const employeeNameOptions = [...new Map(filteredPayrolls.map((p: any) => [payrollEmployeeName(p), payrollEmployeeName(p)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: filteredPayrolls.filter((p: any) => payrollEmployeeName(p) === label).length }));
+  const statusOptionsForFilter = [
+    { value: 'PENDING', label: 'Pendiente', count: filteredPayrolls.filter((p: any) => p.status === 'PENDING').length },
+    { value: 'PAID', label: 'Pagado', count: filteredPayrolls.filter((p: any) => p.status === 'PAID').length },
+  ];
+
   const payrollBase = (p: any, field: string, baseField: string) => {
     const amount = Number(p[field] ?? p[baseField] ?? 0);
     return valuationMode === 'CURRENT'
@@ -72,13 +93,18 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
   const [prevFilters, setPrevFilters] = useState({ filterEmployee, filterStatus, includeCommissions, pageSize });
+  const [prevFilteredCount, setPrevFilteredCount] = useState(0);
   if (filterEmployee !== prevFilters.filterEmployee || filterStatus !== prevFilters.filterStatus || includeCommissions !== prevFilters.includeCommissions || pageSize !== prevFilters.pageSize) {
     setPrevFilters({ filterEmployee, filterStatus, includeCommissions, pageSize });
     setCurrentPage(1);
   }
+  if (colFilteredPayrolls.length !== prevFilteredCount) {
+    setPrevFilteredCount(colFilteredPayrolls.length);
+    setCurrentPage(1);
+  }
 
-  const totalPages = Math.ceil(filteredPayrolls.length / pageSize);
-  const paginatedPayrolls = filteredPayrolls.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(colFilteredPayrolls.length / pageSize);
+  const paginatedPayrolls = colFilteredPayrolls.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -175,7 +201,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
 
       doc.save(`nominas_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('Reporte PDF descargado');
-    } catch (e: any) {
+    } catch {
       toast.error('Error generando PDF');
     }
   };
@@ -204,43 +230,44 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border border-orange-500/20 rounded-xl p-4 bg-gradient-to-br from-orange-500/5 to-orange-500/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Bruto (Costo Empresa)</p>
-              <h3 className="text-2xl font-black text-orange-600 dark:text-orange-400">{formatCurrentAmount(totalCostoEmpresa, displayCurrency)}</h3>{valuationModeSuffix && <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{valuationModeLabel}</span>}
-            </div>
-            <Building2 className="size-8 text-orange-500/40" />
-          </div>
-        </div>
-        <div className="border border-blue-500/20 rounded-xl p-4 bg-gradient-to-br from-blue-500/5 to-blue-500/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Neto (Recibido)</p>
-              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400">{formatCurrentAmount(totalNet, displayCurrency)}</h3>
-            </div>
-            <DollarSign className="size-8 text-blue-500/40" />
-          </div>
-        </div>
-        <div className="border border-primary/20 rounded-xl p-4 bg-gradient-to-br from-primary/5 to-primary/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Impuestos Empresa</p>
-              <h3 className="text-2xl font-black text-primary">{formatCurrentAmount(totalCostoEmpresa - totalGross, displayCurrency)}</h3>
-            </div>
-            <DollarSign className="size-8 text-primary/40" />
-          </div>
-        </div>
-        <div className={`border rounded-xl p-4 transition-colors ${overdueCount > 0 ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-500/5' : 'border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-amber-500/10'}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Pendientes {overdueCount > 0 && '(Vencidas)'}</p>
-              <h3 className={`text-3xl font-black ${overdueCount > 0 ? 'text-red-600' : 'text-amber-700 dark:text-amber-400'}`}>{pendingCount}</h3>
-            </div>
-            <CheckCircle className={`size-8 ${overdueCount > 0 ? 'text-red-500/40' : 'text-amber-500/40'}`} />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Bruto (Costo Empresa)"
+          value={formatCurrentAmount(totalCostoEmpresa, displayCurrency)}
+          icon={Building2}
+          tone="orange"
+          sub={valuationModeSuffix ? valuationModeLabel : undefined}
+          valueClassName="text-xl"
+          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+        />
+        <StatCard
+          label="Total Neto (Recibido)"
+          value={formatCurrentAmount(totalNet, displayCurrency)}
+          icon={Wallet}
+          tone="blue"
+          valueClassName="text-xl"
+          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+        />
+        <StatCard
+          label="Total Impuestos Empresa"
+          value={formatCurrentAmount(totalCostoEmpresa - totalGross, displayCurrency)}
+          icon={Receipt}
+          tone="primary"
+          valueClassName="text-xl"
+          onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+        />
+        <StatCard
+          label={overdueCount > 0 ? 'Pendientes (Vencidas)' : 'Pendientes'}
+          value={pendingCount}
+          icon={CheckCircle}
+          tone={overdueCount > 0 ? 'red' : 'amber'}
+          sub={overdueCount > 0 ? `${overdueCount} vencida(s) requieren atención` : 'Por pagar'}
+          active={filterStatus === 'PENDING'}
+          onClick={() => {
+            setFilterStatus(prev => (prev === 'PENDING' ? 'all' : 'PENDING'));
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       {/* Toolbar */}
@@ -307,12 +334,12 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
           <table className="w-full min-w-[1100px]">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Período</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Salario Bruto</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Neto a Pagar</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold">Costo Total Empresa</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Empleado<ColumnFilterMenu label="Empleado" options={employeeNameOptions} selected={colFilters.state.employee?.values || []} onSelect={(values) => colFilters.setValues('employee', values)} sort={colFilters.state.employee?.sort || null} onSort={(sort) => colFilters.setSort('employee', sort)} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Período<ColumnFilterMenu label="Período" sort={colFilters.state.periodStart?.sort || null} onSort={(sort) => colFilters.setSort('periodStart', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguos' }]} /></span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Salario Bruto<ColumnFilterMenu label="Salario Bruto" sort={colFilters.state.gross?.sort || null} onSort={(sort) => colFilters.setSort('gross', sort)} /></span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Neto a Pagar<ColumnFilterMenu label="Neto a Pagar" sort={colFilters.state.net?.sort || null} onSort={(sort) => colFilters.setSort('net', sort)} /></span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold"><span className="inline-flex items-center gap-1 justify-end">Costo Total Empresa<ColumnFilterMenu label="Costo Total Empresa" sort={colFilters.state.cost?.sort || null} onSort={(sort) => colFilters.setSort('cost', sort)} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Acciones</th>
               </tr>
             </thead>
@@ -337,7 +364,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}
+                      {formatDateEs(payroll.periodStart)} - {formatDateEs(payroll.periodEnd)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold">
                       {payrollDisplay(payroll, 'grossPay', 'grossPayBase')}
@@ -469,7 +496,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Período</span>
-                    <span className="font-semibold text-right">{new Date(payroll.periodStart).toLocaleDateString()} - {new Date(payroll.periodEnd).toLocaleDateString()}</span>
+                    <span className="font-semibold text-right">{formatDateEs(payroll.periodStart)} - {formatDateEs(payroll.periodEnd)}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Salario Bruto</span>
@@ -553,7 +580,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
             </div>
             <div className="h-4 w-px bg-border/40 hidden sm:block" />
             <p className="bg-primary/5 px-3 py-1 rounded-full border border-primary/10">
-              Mostrando <span className="text-foreground font-black">{filteredPayrolls.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredPayrolls.length)}</span> de <span className="text-primary font-black">{filteredPayrolls.length}</span> registros totales
+              Mostrando <span className="text-foreground font-black">{colFilteredPayrolls.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, colFilteredPayrolls.length)}</span> de <span className="text-primary font-black">{colFilteredPayrolls.length}</span> registros totales
             </p>
           </div>
 

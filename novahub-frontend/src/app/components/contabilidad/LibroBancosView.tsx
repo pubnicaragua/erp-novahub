@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Landmark, Calendar, ChevronDown, Banknote, AlertTriangle, Loader2
+  Landmark, Calendar, ChevronDown, Banknote, AlertTriangle, Loader2, Network
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -16,19 +16,73 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { ViewConnectionsDialog, type ViewConnection } from './ViewConnectionsDialog';
 
 const currentMonth = new Date().toISOString().slice(0, 7);
+
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  CHECKING: 'Cuenta corriente',
+  SAVINGS: 'Cuenta de ahorro',
+  CURRENT: 'Cuenta corriente',
+  SAVING: 'Cuenta de ahorro',
+};
+
+const BOOK_CONNECTIONS: ViewConnection[] = [
+  {
+    id: 'diario',
+    label: 'Libro Diario',
+    description: 'Cada movimiento de este libro aparece como un asiento en el Libro Diario, generado automáticamente desde los cierres de caja, facturas y pagos.',
+    relation: 'Alimenta',
+    direction: 'feeds',
+  },
+  {
+    id: 'libro-mayor',
+    label: 'Libro Mayor',
+    description: 'La cuenta de banco vinculada agrega sus movimientos por cuenta en el Libro Mayor. Revisa los saldos por cuenta bancaria desde allí.',
+    relation: 'Alimenta',
+    direction: 'feeds',
+  },
+  {
+    id: 'balance-comprobacion',
+    label: 'Balance de Comprobación',
+    description: 'El saldo de la cuenta de banco se incluye en el balance de comprobación del período correspondiente.',
+    relation: 'Alimenta',
+    direction: 'feeds',
+  },
+  {
+    id: 'conciliacion',
+    label: 'Conciliación Bancaria',
+    description: 'El libro diario de bancos es independiente de la conciliación: esta valida el cuadre mensual contra el estado de cuenta del banco.',
+    relation: 'Valida por separado',
+    direction: 'validates',
+  },
+  {
+    id: 'flujo-efectivo',
+    label: 'Flujo de Efectivo',
+    description: 'Las cuentas vinculadas a bancos se toman como cuentas de efectivo para calcular el flujo del período.',
+    relation: 'Alimenta',
+    direction: 'feeds',
+  },
+  {
+    id: 'balance-general-contable',
+    label: 'Balance General',
+    description: 'El saldo de la cuenta de banco forma parte de los activos corrientes del balance general.',
+    relation: 'Alimenta',
+    direction: 'feeds',
+  },
+];
 
 const formatAmount = (value: any, currency?: string) => {
   const symbol = currency === 'USD' ? 'US$' : 'C$';
   return `${symbol} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 };
 
-export function LibroBancosView() {
+export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId: string) => void }) {
   const queryClient = useQueryClient();
   const [bankAccountId, setBankAccountId] = useState('');
   const [month, setMonth] = useState(currentMonth);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
 
   const bankAccountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
   const bankAccounts = (bankAccountsQuery.data || []).filter((bank: any) => bank.isActive !== false && bank.accountId);
@@ -38,7 +92,6 @@ export function LibroBancosView() {
       return { dateFrom: undefined, dateTo: undefined };
     }
     const [year, mon] = month.split('-').map(Number);
-    const start = new Date(year, mon - 1, 1);
     const today = new Date();
     const isCurrentMonth = year === today.getFullYear() && mon === today.getMonth() + 1;
     return {
@@ -114,8 +167,24 @@ export function LibroBancosView() {
           >
             Actualizar
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setConnectionsOpen(true)}
+            className="col-span-1 h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/5 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+          >
+            <Network className="size-4" /> Conexiones
+          </Button>
         </div>
       </div>
+
+      <ViewConnectionsDialog
+        open={connectionsOpen}
+        onOpenChange={setConnectionsOpen}
+        viewLabel="Libro Diario de Bancos"
+        description="Vistas contables conectadas con este libro: a cuáles alimenta, de cuáles se alimenta y qué valida. Abre una conexión para ir directamente a esa vista."
+        connections={BOOK_CONNECTIONS}
+        onGoTo={(sectionId) => onGoToSection?.(sectionId)}
+      />
 
       <div className="flex items-start gap-2 rounded-xl border border-primary/15 bg-primary/5 p-3 text-[10px] text-muted-foreground">
         <Landmark className="mt-0.5 size-3.5 shrink-0 text-primary" />
@@ -150,7 +219,7 @@ export function LibroBancosView() {
                     {book.bank.bankName} · {book.bank.accountNumber}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {book.accountCode} {book.accountName} · {book.bank.accountType || 'Cuenta'} · {book.bank.currency || 'NIO'}
+                    {book.accountCode} {book.accountName} · {ACCOUNT_TYPE_LABELS[book.bank.accountType] || book.bank.accountType || 'Cuenta'} · {book.bank.currency || 'NIO'}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -201,8 +270,8 @@ export function LibroBancosView() {
                               )}
                             </TableCell>
                             <TableCell className="py-2.5">
-                              <span className="text-xs font-black">{date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</span>
-                              <p className="text-[9px] text-muted-foreground/70">{date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
+                              <span className="text-xs font-black">{date.toLocaleDateString('es', { day: '2-digit', month: 'short' })}</span>
+                              <p className="text-[9px] text-muted-foreground/70">{date.toLocaleDateString('es', { weekday: 'short' })}</p>
                             </TableCell>
                             <TableCell className="py-2.5 text-right text-xs tabular-nums">{formatAmount(row.saldoInicial, book.bank.currency)}</TableCell>
                             <TableCell className={cn('py-2.5 text-right text-xs font-bold tabular-nums', row.ingresos > 0 && 'text-emerald-600')}>

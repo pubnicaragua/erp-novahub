@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
@@ -26,6 +26,8 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
@@ -39,9 +41,9 @@ const statusOpts = [
 ];
 
 const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'];
-// Una recepciÃ³n ya marcada como recibida sigue siendo editable mientras no
+// Una recepción ya marcada como recibida sigue siendo editable mientras no
 // tenga una factura registrada. Esto permite trasladar unidades entre
-// recibidas y rechazadas cuando se corrige la revisiÃ³n fÃ­sica.
+// recibidas y rechazadas cuando se corrige la revisión física.
 const RECEIPT_EDITABLE_STATUSES = ['PENDING', 'PARTIAL', 'WITH_INCIDENTS', 'RECEIVED'];
 const RECEIPT_NON_TAXABLE_TYPES = new Set(['EXENTO', 'EXONERADO', 'NO_GRAVADO', 'NO_SUJETO']);
 const RECEIPT_WITHHOLDING_RATES: Record<string, number> = {
@@ -77,9 +79,9 @@ function normalizeReceiptItemsForForm(items: any[]) {
     const received = Math.max(0, Number(item.quantityReceived || 0));
     const rejected = Math.max(0, Number(item.quantityRejected || 0));
     if (ordered <= 0) return { ...item, quantityReceived: received, quantityRejected: rejected };
-    // La cantidad procesada en inventario no bloquea la correcciÃ³n de la
-    // recepciÃ³n: el backend revierte la diferencia con un movimiento de
-    // salida antes de guardar. AsÃ­ una unidad puede pasar de recibida a
+    // La cantidad procesada en inventario no bloquea la corrección de la
+    // recepción: el backend revierte la diferencia con un movimiento de
+    // salida antes de guardar. Así una unidad puede pasar de recibida a
     // rechazada y volver a recibida sin que el formulario la reestablezca.
     const normalizedRejected = Math.min(rejected, ordered);
     const maxReceived = Math.max(0, ordered - normalizedRejected);
@@ -103,8 +105,8 @@ function calculateReceiptTotalsForForm(items: any[]) {
 }
 
 const RECEIPT_CURRENCY_META: Record<string, { code: string; label: string; symbol: string }> = {
-  USD: { code: 'USD', label: 'DÃ³lares', symbol: '$' },
-  NIO: { code: 'NIO', label: 'CÃ³rdobas', symbol: 'C$' },
+  USD: { code: 'USD', label: 'Dólares', symbol: '$' },
+  NIO: { code: 'NIO', label: 'Córdobas', symbol: 'C$' },
 };
 
 function normalizeReceiptCurrency(value?: unknown) {
@@ -178,7 +180,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
     const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
     const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
     if (!isImage && !isDocument) throw new Error(`El archivo ${file.name} debe ser una imagen o un documento compatible.`);
-    if (file.size > maxSize) throw new Error(`El archivo ${file.name} supera el lÃ­mite permitido.`);
+    if (file.size > maxSize) throw new Error(`El archivo ${file.name} supera el límite permitido.`);
     const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `pagos/${paymentId}` });
     await supplierInvoicesService.addAttachment(invoiceId, {
       fileName: `Pago-${reference}-${file.name}`,
@@ -219,7 +221,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
 
   const handleRegisterInvoice = async () => {
     if (!draft) return;
-    if (!invoiceNumber.trim()) return toast.error('Ingresa el nÃºmero de factura del proveedor.');
+    if (!invoiceNumber.trim()) return toast.error('Ingresa el número de factura del proveedor.');
     if (invoiceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
     setInvoiceSaving(true);
     const invoiceToastId = toast.loading('Registrando factura y evidencia...');
@@ -245,14 +247,14 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     const requiresReference = ['TRANSFER', 'CHECK', 'CARD'].includes(method);
     const paymentReference = reference.trim();
     if (requiresReference && !paymentReference) {
-      return toast.error('Ingresa el nÃºmero de referencia para este mÃ©todo de pago.');
+      return toast.error('Ingresa el número de referencia para este método de pago.');
     }
     if (files.length === 0) return toast.error('Adjunte al menos una evidencia del pago.');
     const paymentAmount = Number(amount);
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) return toast.error('El monto debe ser mayor que cero.');
     if (paymentAmount > Number(draft.amount || 0) + 0.01) return toast.error('El monto no puede superar el saldo pendiente.');
     setSaving(true);
-    const saveToastId = toast.loading('Registrando pago y generando la integraciÃ³n contable...');
+    const saveToastId = toast.loading('Registrando pago y generando la integración contable...');
     try {
       const payment = await paymentsService.create({
         supplierId: draft.supplierId,
@@ -263,7 +265,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         exchangeRate: draft.exchangeRate,
         method,
         reference: paymentReference || undefined,
-        notes: notes.trim() || `Pago de la recepciÃ³n ${draft.receiptNumber}`,
+        notes: notes.trim() || `Pago de la recepción ${draft.receiptNumber}`,
       });
 
       let evidenceError = '';
@@ -274,7 +276,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
       }
 
       toast.success('Pago registrado en Pagos realizados, Finanzas y Contabilidad.', { id: saveToastId });
-      if (evidenceError) toast.error(`El pago quedÃ³ registrado, pero ${evidenceError.toLowerCase()}`);
+      if (evidenceError) toast.error(`El pago quedó registrado, pero ${evidenceError.toLowerCase()}`);
       onSaved();
       onClose();
     } catch (error: any) {
@@ -290,16 +292,16 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12">
           <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><CircleDollarSign className="size-5" /></span>
-            Registrar pago de la recepciÃ³n
+            Registrar pago de la recepción
           </DialogTitle>
-          <DialogDescription>El pago quedarÃ¡ guardado tambiÃ©n en Pagos realizados y actualizarÃ¡ el saldo de la cuenta por pagar.</DialogDescription>
+          <DialogDescription>El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.</DialogDescription>
         </DialogHeader>
         {draft && (
           <div className="space-y-5 px-6 py-5">
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{draft.receiptNumber} Â· {draft.supplierName || 'Proveedor'}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{draft.receiptNumber} · {draft.supplierName || 'Proveedor'}</p>
                   <p className="mt-1 text-2xl font-black text-primary">Total a pagar: {formatReceiptAmount(draft.amount, draft.currency)}</p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Factura: {draft.invoiceNumber || 'Pendiente de registrar'}</p>
                 </div>
@@ -310,13 +312,13 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
               <div className="space-y-4 rounded-2xl border border-primary/25 bg-primary/[0.03] p-4">
                 <div>
                   <p className="text-xs font-black uppercase tracking-widest text-foreground">Evidencia de factura y cuenta por pagar</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Registra la factura del proveedor y su evidencia aquÃ­. No volverÃ¡s al detalle de la recepciÃ³n.</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Registra la factura del proveedor y su evidencia aquí. No volverás al detalle de la recepción.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">NÃºmero de factura *</p><Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} placeholder="Ej. A-001-000123" className="h-10 font-mono" /></div>
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de factura *</p><Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} placeholder="Ej. A-001-000123" className="h-10 font-mono" /></div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Fecha factura</p><Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Vencimiento</p><Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
-                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura Â· calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
+                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
                 </div>
                 <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
                 <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando evidencia...' : 'Registrar evidencia y continuar'}</Button>
@@ -324,10 +326,10 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Monto</p><Input type="text" value={formatReceiptAmount(Number(amount), draft.currency)} readOnly aria-readonly="true" disabled={saving} className="h-10 border-2 border-primary/20 bg-muted/20 font-black tabular-nums text-foreground" /></div>
-                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">MÃ©todo</p><select value={method} onChange={(event) => { const nextMethod = event.target.value as PaymentMethod; setMethod(nextMethod); if (nextMethod === 'CASH') setReference(''); }} disabled={saving} className="h-10 w-full rounded-xl border-2 border-primary/20 bg-background px-3 text-xs font-bold uppercase outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-                {method !== 'CASH' && <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">NÃºmero de referencia {['TRANSFER', 'CHECK', 'CARD'].includes(method) ? '*' : '(opcional)'}</p><Input value={reference} onChange={(event) => setReference(event.target.value)} disabled={saving} required={['TRANSFER', 'CHECK', 'CARD'].includes(method)} placeholder={method === 'OTHER' ? 'Opcional: referencia, comprobante o nota' : 'Ej. TRANSF-000123, cheque o voucher'} className="h-10 font-mono" /></div>}
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Método</p><select value={method} onChange={(event) => { const nextMethod = event.target.value as PaymentMethod; setMethod(nextMethod); if (nextMethod === 'CASH') setReference(''); }} disabled={saving} className="h-10 w-full rounded-xl border-2 border-primary/20 bg-background px-3 text-xs font-bold uppercase outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                {method !== 'CASH' && <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de referencia {['TRANSFER', 'CHECK', 'CARD'].includes(method) ? '*' : '(opcional)'}</p><Input value={reference} onChange={(event) => setReference(event.target.value)} disabled={saving} required={['TRANSFER', 'CHECK', 'CARD'].includes(method)} placeholder={method === 'OTHER' ? 'Opcional: referencia, comprobante o nota' : 'Ej. TRANSF-000123, cheque o voucher'} className="h-10 font-mono" /></div>}
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
-                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="ObservaciÃ³n del pago (opcional)" className="h-10" /></div>
+                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
               </div>
             )}
           </div>
@@ -414,14 +416,29 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       (r.supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    supplier: (row: PurchaseReceipt) => row.supplier?.name || '-',
+    date: (row: PurchaseReceipt) => (row.date ? new Date(row.date).getTime() : null),
+    total: (row: PurchaseReceipt) => Number(row.total || row.purchaseOrder?.total || 0),
+    status: (row: PurchaseReceipt) => String(row.status || '').toUpperCase(),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctSuppliers = [...new Map(filtered.map((r) => [r.supplier?.name || '-', r.supplier?.name || '-'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.supplier?.name || '-') === label).length }));
+  const statusOptionsForFilter = statusOpts.map((o) => ({ value: o.value, label: o.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === o.value).length }));
+
   const columns: ColumnDef<PurchaseReceipt>[] = [
     { key: 'number',    header: 'Recibo #',    width: '120px',
       render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
     { key: 'supplier',  header: 'Proveedor',   width: '200px',
+      headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',      header: 'Fecha',       width: '110px',
-      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+      headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'M�s recientes' }, { value: 'asc', label: 'M�s antiguas' }]} />,
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'total',     header: 'Total',       width: '145px',
+      headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (_value, row) => {
         const receiptStatus = String(row.status || '').toUpperCase();
         const hasReceivedQuantity = (row.items || []).some((item) => Number(item.quantityReceived || 0) > 0);
@@ -450,7 +467,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           </div>
         );
       } },
-    { key: 'items',     header: 'Ãtems',       width: '140px',
+    { key: 'items',     header: 'Ítems',       width: '140px',
       render: (_v, row) => {
         const items = row.items || [];
         const total = items.length;
@@ -463,6 +480,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         </div>;
       } },
     { key: 'status',    header: 'Estado',      width: '130px',
+      headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
   ];
 
@@ -474,23 +492,23 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const requestedStatus = String(updates.status || currentReceipt?.status || '').toUpperCase();
       const requiresApproval = !STATUS_OPTIONS_RECEIVING.includes(previousStatus) && STATUS_OPTIONS_RECEIVING.includes(requestedStatus);
       if (requiresApproval && !canPerform('PURCHASES_RECEIPTS', 'approve')) {
-        toast.error('Necesitas el permiso Aprobar para marcar esta recepciÃ³n como recibida.');
+        toast.error('Necesitas el permiso Aprobar para marcar esta recepción como recibida.');
         return;
       }
       if (requiresApproval) {
         const missingWarehouseItems = getItemsMissingWarehouse(currentReceipt?.items || [], true);
         if (missingWarehouseItems.length > 0) {
           const labels = getWarehouseWarningLabels(currentReceipt?.items || []);
-          toast.error(`Selecciona un almacÃ©n para cada producto recibido: ${labels.join(', ')}`);
+          toast.error(`Selecciona un almacén para cada producto recibido: ${labels.join(', ')}`);
           return;
         }
       }
-      updateToastId = toast.loading('Actualizando recepciÃ³n y sincronizando inventario...');
+      updateToastId = toast.loading('Actualizando recepción y sincronizando inventario...');
       const updateResponse = await purchaseReceiptsService.update(id as string, requiresApproval ? { ...updates, deferApproval: true } as any : updates);
       const inventoryResponse = requiresApproval ? await purchaseReceiptsService.approve(id as string) : updateResponse;
       const operations = getInventoryCostOperations(inventoryResponse);
       if (operations.length > 0) setInventoryCostOperations(operations);
-      toast.success('RecepciÃ³n actualizada', updateToastId ? { id: updateToastId } : undefined);
+      toast.success('Recepción actualizada', updateToastId ? { id: updateToastId } : undefined);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     }
@@ -500,16 +518,16 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const handleCancelConfirm = async () => {
     if (!pendingCancelId || !cancelReason.trim()) return;
     setCancelLoading(true);
-    const cancelToastId = toast.loading('Cancelando recepciÃ³n...');
+    const cancelToastId = toast.loading('Cancelando recepción...');
     try {
       await purchaseReceiptsService.cancel(pendingCancelId, cancelReason.trim());
-      toast.success('RecepciÃ³n cancelada', { id: cancelToastId });
+      toast.success('Recepción cancelada', { id: cancelToastId });
       if (editingId === pendingCancelId) setEditingId(null);
       setPendingCancelId(null);
       setCancelReason('');
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al cancelar la recepciÃ³n', { id: cancelToastId });
+      toast.error(error?.response?.data?.message || error?.message || 'Error al cancelar la recepción', { id: cancelToastId });
     } finally {
       setCancelLoading(false);
     }
@@ -517,18 +535,18 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
   const openPaymentModal = (receipt: any, invoice?: any) => {
     if (String(receipt?.status || '').toUpperCase() !== 'RECEIVED') {
-      toast.error('El pago solo se puede registrar cuando la recepciÃ³n estÃ¡ recibida.');
+      toast.error('El pago solo se puede registrar cuando la recepción está recibida.');
       return;
     }
     const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
     const calculatedTotal = Math.max(0, Number((receiptTotals.subtotal + receiptTotals.taxAmount - receiptTotals.withholdingTotal).toFixed(2)));
     const balance = invoice?.id ? Number(invoice.balance || 0) : calculatedTotal;
     if (invoice?.id && balance <= 0) {
-      toast.error('Esta recepciÃ³n no tiene una cuenta por pagar con saldo pendiente.');
+      toast.error('Esta recepción no tiene una cuenta por pagar con saldo pendiente.');
       return;
     }
     if (!invoice?.id && balance <= 0) {
-      toast.error('Esta recepciÃ³n no tiene un total recibido vÃ¡lido para registrar la factura.');
+      toast.error('Esta recepción no tiene un total recibido válido para registrar la factura.');
       return;
     }
     setPaymentDraft({
@@ -544,7 +562,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       currency: normalizeReceiptCurrency(invoice?.currency || receipt.currency),
       exchangeRate: Number(invoice?.exchangeRate || receipt.exchangeRate || 1),
       reference: invoice?.id ? `PAG-${Date.now().toString().slice(-8)}` : '',
-      notes: `Pago de la recepciÃ³n ${receipt.number || ''}`,
+      notes: `Pago de la recepción ${receipt.number || ''}`,
     });
   };
 
@@ -572,16 +590,16 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       : '';
     const requiresApproval = isReceiving && (editingId === 'NEW' || !STATUS_OPTIONS_RECEIVING.includes(previousStatus));
     if (requiresApproval && !canPerform('PURCHASES_RECEIPTS', 'approve')) {
-      return toast.error('Necesitas el permiso Aprobar para marcar esta recepciÃ³n como recibida.');
+      return toast.error('Necesitas el permiso Aprobar para marcar esta recepción como recibida.');
     }
     if (isReceiving) {
       const missingWarehouseItems = getItemsMissingWarehouse(itemsToSave, true);
       if (missingWarehouseItems.length > 0) {
         const labels = getWarehouseWarningLabels(itemsToSave);
-        return toast.error(`Selecciona un almacÃ©n para cada producto recibido: ${labels.join(', ')}`);
+        return toast.error(`Selecciona un almacén para cada producto recibido: ${labels.join(', ')}`);
       }
     }
-    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepciÃ³n de compra...' : 'Guardando recepciÃ³n de compra...');
+    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepción de compra...' : 'Guardando recepción de compra...');
     try {
       let inventoryResponse: any;
       let initialOperations: InventoryCostOperation[] = [];
@@ -592,11 +610,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         inventoryResponse = requiresApproval && createdReceipt?.id
           ? await purchaseReceiptsService.approve(createdReceipt.id)
           : createdResponse;
-        toast.success('RecepciÃ³n creada', { id: saveToastId });
+        toast.success('Recepción creada', { id: saveToastId });
       } else {
         const updateResponse = await purchaseReceiptsService.update(editingId!, requiresApproval ? { ...documentToSave, deferApproval: true } as any : documentToSave as any);
         inventoryResponse = requiresApproval ? await purchaseReceiptsService.approve(editingId!) : updateResponse;
-        toast.success('RecepciÃ³n guardada', { id: saveToastId });
+        toast.success('Recepción guardada', { id: saveToastId });
       }
       const operations = getInventoryCostOperations(inventoryResponse);
       if (operations.length > 0) setInventoryCostOperations(operations);
@@ -605,15 +623,15 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepciÃ³n', { id: saveToastId });
+      toast.error(e?.response?.data?.message || e?.message || 'Error al guardar la recepción', { id: saveToastId });
     }
   };
 
   const registerInvoiceFromPaymentModal = async ({ draft, number, date, dueDate, files }: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => {
     const receipt = data.find((item) => String(item.id) === String(draft.receiptId));
-    if (!receipt) throw new Error('No se encontrÃ³ la recepciÃ³n seleccionada. Actualiza la lista e intÃ©ntalo nuevamente.');
+    if (!receipt) throw new Error('No se encontró la recepción seleccionada. Actualiza la lista e inténtalo nuevamente.');
     if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || '').toUpperCase())) {
-      throw new Error('La recepciÃ³n debe estar recibida antes de registrar la factura.');
+      throw new Error('La recepción debe estar recibida antes de registrar la factura.');
     }
 
     const uploaded: Array<{ fileName: string; fileType: string; fileSize: number; fileUrl: string }> = [];
@@ -621,8 +639,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const isImage = file.type.startsWith('image/');
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
       if (!isImage && !isPdf) throw new Error(`"${file.name}" no es una imagen ni un PDF.`);
-      if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el lÃ­mite de 2 MB.`);
-      if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el lÃ­mite de 10 MB.`);
+      if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el límite de 2 MB.`);
+      if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el límite de 10 MB.`);
       const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: `recepciones/${draft.receiptId}` });
       uploaded.push({
         fileName: file.name,
@@ -692,7 +710,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       if (field === 'quantityReceived' && ordered > 0) {
         const nextReceived = Math.min(ordered, nextValue);
         // Si se reduce lo recibido, la unidad liberada pasa a rechazadas solo
-        // cuando el usuario ya estÃ¡ corrigiendo una recepciÃ³n completa. En
+        // cuando el usuario ya está corrigiendo una recepción completa. En
         // cualquier otro caso se conserva la cantidad rechazada existente.
         const nextRejected = Math.min(currentRejected, Math.max(0, ordered - nextReceived));
         newItems[idx] = { ...currentItem, quantityReceived: nextReceived, quantityRejected: nextRejected };
@@ -701,9 +719,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         const previousAllocated = currentReceived + currentRejected;
         const availableReceived = Math.max(0, ordered - nextRejected);
         let nextReceived = Math.min(currentReceived, availableReceived);
-        // Al quitar un rechazo de una lÃ­nea ya completa, la unidad vuelve a
-        // recibidas automÃ¡ticamente. Si la lÃ­nea aÃºn estaba incompleta, no
-        // inventamos una recepciÃ³n nueva.
+        // Al quitar un rechazo de una línea ya completa, la unidad vuelve a
+        // recibidas automáticamente. Si la línea aún estaba incompleta, no
+        // inventamos una recepción nueva.
         if (nextRejected < currentRejected && previousAllocated >= ordered) {
           nextReceived = Math.min(availableReceived, currentReceived + (currentRejected - nextRejected));
         }
@@ -763,23 +781,23 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva RecepciÃ³n' : `RecepciÃ³n ${localDoc.number||''}`}</h2>
+                <h2 className="text-xl font-black uppercase tracking-tight">{isNew ? 'Nueva Recepción' : `Recepción ${localDoc.number||''}`}</h2>
                 <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', currentStatus?.color||'bg-muted/20 text-muted-foreground')}>{currentStatus?.label||'Pendiente'}</Badge>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
                 <span>Inventario ingresado</span>
                 <Badge variant="outline" className="border-primary/25 bg-primary/5 px-2 py-0.5 text-[9px] font-black tracking-wide text-primary">
-                  {receiptCurrencyMeta.symbol} Â· {receiptCurrencyMeta.code} Â· {receiptCurrencyMeta.label}
+                  {receiptCurrencyMeta.symbol} · {receiptCurrencyMeta.code} · {receiptCurrencyMeta.label}
                 </Badge>
                 {receiptCurrency === 'USD' && <span className="font-bold normal-case tracking-normal text-muted-foreground">Tasa: {receiptExchangeRate.toFixed(4)} NIO/USD</span>}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!isNew && localDoc.id && <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={localDoc.id} title="Historial de la recepciÃ³n" />}
+            {!isNew && localDoc.id && <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={localDoc.id} title="Historial de la recepción" />}
             {canReceiveCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                <PackageCheck className="mr-2 size-3.5" /> {persistedStatus === 'PENDING' ? 'Recepcionar' : 'Guardar recepciÃ³n'}
+                <PackageCheck className="mr-2 size-3.5" /> {persistedStatus === 'PENDING' ? 'Recepcionar' : 'Guardar recepción'}
               </Button>
             )}
             {isNew && canPerform('PURCHASES_RECEIPTS', 'create') && (
@@ -793,7 +811,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2">
             <CardContent className="p-6 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-foreground">InformaciÃ³n General</p>
+              <p className="text-xs font-black uppercase tracking-widest text-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Proveedor</p>
@@ -801,7 +819,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     disabled={!canEditCurrent}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
-                      .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin telÃ©fono') }))}
+                      .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
                     value={localDoc.supplierId || ''}
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, purchaseOrderId: '' })}
                     placeholder="Seleccionar Proveedor"
@@ -814,7 +832,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     options={orderOptions.map(c => {
                       const orderCurrencyMeta = getReceiptCurrencyMeta(c.currency);
                       return {
-                        label: `${c.number} Â· ${orderCurrencyMeta.symbol} ${orderCurrencyMeta.code} (Total: ${formatReceiptAmount(Number(c.total || 0), c.currency)})`,
+                        label: `${c.number} · ${orderCurrencyMeta.symbol} ${orderCurrencyMeta.code} (Total: ${formatReceiptAmount(Number(c.total || 0), c.currency)})`,
                         value: c.id,
                       };
                     })}
@@ -868,14 +886,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       <FileText className="size-3.5 shrink-0 text-primary" />
                       <span className="shrink-0 font-black uppercase tracking-wide text-primary">Ruta:</span>
                       <span className="truncate font-bold text-foreground">
-                        {linkedRequest ? `Solicitud ${linkedRequest} â†’ ` : ''}
-                        Orden ${linkedOrder?.number || (localDoc as any).purchaseOrderNumber || 'no disponible'} â†’ RecepciÃ³n {localDoc.number || 'actual'}
+                        {linkedRequest ? `Solicitud ${linkedRequest} → ` : ''}
+                        Orden ${linkedOrder?.number || (localDoc as any).purchaseOrderNumber || 'no disponible'} → Recepción {localDoc.number || 'actual'}
                       </span>
                     </div>
                   )}
                 </div>
                 <div>
-                  <p className="text-[10px] text-foreground mb-1">Fecha RecepciÃ³n</p>
+                  <p className="text-[10px] text-foreground mb-1">Fecha Recepción</p>
                   <Input 
                     disabled={!canEditCurrent}
                     type="date" 
@@ -891,7 +909,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Moneda de la orden</p>
                   <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-2 py-1">
-                    <span className="text-xs font-black text-primary">{receiptCurrencyMeta.symbol} Â· {receiptCurrencyMeta.code}</span>
+                    <span className="text-xs font-black text-primary">{receiptCurrencyMeta.symbol} · {receiptCurrencyMeta.code}</span>
                     <span className="text-[10px] font-bold text-muted-foreground">{receiptCurrencyMeta.label}</span>
                   </div>
                   {receiptCurrency === 'USD' && <p className="mt-1 text-[10px] text-muted-foreground">Tasa: {receiptExchangeRate.toFixed(4)} NIO/USD</p>}
@@ -917,7 +935,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const qRej = Number(it.quantityRejected||0);
                 const falt = Math.max(0, qOrd - qRec);
                 return <div key={i} className="text-[9px] font-bold text-muted-foreground">
-                  {it.description || `Ãtem ${i+1}`}: {falt > 0 && <span className="text-amber-500">{falt} faltante(s) </span>}
+                  {it.description || `Ítem ${i+1}`}: {falt > 0 && <span className="text-amber-500">{falt} faltante(s) </span>}
                   {qRej > 0 && <span className="text-rose-500">{qRej} rechazado(s)</span>}
                   {(falt <= 0 && qRej <= 0) && <span className="text-emerald-500">Completo</span>}
                   {i < (localDoc.items||[]).length - 1 && <span className="mx-1.5 text-muted-foreground/30">|</span>}
@@ -939,9 +957,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <AlertTriangle className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 dark:text-rose-400">AlmacÃ©n obligatorio por producto</p>
-                  <p className="mt-1 text-xs font-semibold text-foreground">Selecciona un almacÃ©n para cada producto antes de registrar cantidades recibidas.</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">El sistema necesita saber en quÃ© almacÃ©n ingresarÃ¡ la existencia y actualizarÃ¡ el costo promedio.</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 dark:text-rose-400">Almacén obligatorio por producto</p>
+                  <p className="mt-1 text-xs font-semibold text-foreground">Selecciona un almacén para cada producto antes de registrar cantidades recibidas.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">El sistema necesita saber en qué almacén ingresará la existencia y actualizará el costo promedio.</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {itemsMissingWarehouse.map((item: any, index: number) => <Badge key={`${item.id || index}-warehouse-warning`} variant="outline" className="border-rose-500/30 bg-background/70 text-[9px] font-bold text-rose-600 dark:text-rose-400">{item.description || item.name || item.code || `Producto ${index + 1}`}</Badge>)}
                   </div>
@@ -977,7 +995,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         )}
                       </div>
                       {!item.productId && item.stockApplies !== false && (
-                        <p className="mb-2 text-[10px] text-amber-600">Se crearÃ¡ automÃ¡ticamente con el SKU, nombre y categorÃ­a de esta lÃ­nea al ingresar al inventario.</p>
+                        <p className="mb-2 text-[10px] text-amber-600">Se creará automáticamente con el SKU, nombre y categoría de esta línea al ingresar al inventario.</p>
                       )}
                       <Combobox
                         disabled={!canEditCurrent}
@@ -995,7 +1013,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                             handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
                           }
                         }}
-                        placeholder={item.productId ? 'Seleccionar producto del catÃ¡logo' : 'Sin vincular Â· se crearÃ¡ al recepcionar'}
+                        placeholder={item.productId ? 'Seleccionar producto del catálogo' : 'Sin vincular · se creará al recepcionar'}
                       />
                     </div>
                     {canEditCurrent && (
@@ -1006,7 +1024,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   </div>
                   <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1.1fr)_minmax(13rem,0.8fr)_minmax(14rem,0.9fr)] md:items-end">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">DescripciÃ³n / Nombre</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Descripción / Nombre</p>
                       <Input
                         disabled={!canEditCurrent}
                         value={item.description || ''}
@@ -1025,24 +1043,24 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                               value={item.code || ''}
                               onChange={(e) => handleItemChange(idx, 'code', e.target.value)}
                               className={cn('h-8 text-xs font-mono', !codeEditMode[idx] && 'bg-muted/30')}
-                              placeholder="Sin cÃ³digo"
+                              placeholder="Sin código"
                             />
                             {canEditCurrent && (
-                              <Button variant="ghost" size="icon" title={codeEditMode[idx] ? 'Finalizar ediciÃ³n' : 'Agregar un cÃ³digo nuevo'} className="size-8 shrink-0 text-muted-foreground/50 hover:text-primary rounded-xl" onClick={() => setCodeEditMode((prev) => ({ ...prev, [idx]: !prev[idx] }))}>
+                              <Button variant="ghost" size="icon" title={codeEditMode[idx] ? 'Finalizar edición' : 'Agregar un código nuevo'} className="size-8 shrink-0 text-muted-foreground/50 hover:text-primary rounded-xl" onClick={() => setCodeEditMode((prev) => ({ ...prev, [idx]: !prev[idx] }))}>
                                 {codeEditMode[idx] ? <CheckCircle2 className="size-3.5" /> : <Pencil className="size-3.5" />}
                               </Button>
                             )}
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">CategorÃ­a</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Categoría</p>
                           <select
                             disabled={!canEditCurrent}
                             value={item.categoryId || ''}
                             onChange={(e) => handleItemChange(idx, 'categoryId', e.target.value)}
                             className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
                           >
-                            <option value="">Sin categorÃ­a</option>
+                            <option value="">Sin categoría</option>
                             {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
                         </div>
@@ -1105,7 +1123,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     </div>
                     <div className="col-span-2">
                       <div className="mb-1 flex items-center gap-2">
-                        <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>AlmacÃ©n *</p>
+                        <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>Almacén *</p>
                         {missingWarehouse && <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Requerido</span>}
                       </div>
                       <Combobox
@@ -1120,14 +1138,14 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         value={item.warehouseId || ''}
                         onChange={(val) => handleItemChange(idx, 'warehouseId', val)}
                         className={missingWarehouse ? 'border-2 border-rose-500 bg-rose-500/5 text-rose-700 shadow-sm dark:text-rose-300' : ''}
-                        placeholder="Seleccionar almacÃ©n"
+                        placeholder="Seleccionar almacén"
                       />
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                     <p className="mr-auto text-[9px] font-black uppercase tracking-widest text-foreground">Cuenta Contable</p>
                     <span className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[10px] font-bold text-primary">
-                      Inventario + Inventario en TrÃ¡nsito Â· configuraciÃ³n global
+                      Inventario + Inventario en Tránsito · configuración global
                     </span>
                     <div className="flex items-center gap-2 ml-2">
                       <TaxTypeSelect
@@ -1147,7 +1165,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] tabular-nums">
                         <span className="text-muted-foreground">Subtotal <b className="text-foreground">{formatReceiptAmount(lineAmounts.lineTotal, receiptCurrency)}</b></span>
                         <span className="text-rose-500">IVA +{formatReceiptAmount(lineAmounts.taxAmount, receiptCurrency)}</span>
-                        {lineAmounts.withholdingAmount > 0 && <span className="text-amber-600">RetenciÃ³n -{formatReceiptAmount(lineAmounts.withholdingAmount, receiptCurrency)}</span>}
+                        {lineAmounts.withholdingAmount > 0 && <span className="text-amber-600">Retención -{formatReceiptAmount(lineAmounts.withholdingAmount, receiptCurrency)}</span>}
                         <span className="text-xs font-black">{formatReceiptAmount(Number((lineAmounts.lineTotal + lineAmounts.taxAmount - lineAmounts.withholdingAmount).toFixed(2)), receiptCurrency)}</span>
                       </div>
                     </div>
@@ -1157,7 +1175,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               })}
               {(!localDoc.items || localDoc.items.length === 0) && (
                 <div className="text-center py-6 text-xs text-muted-foreground/50 italic border border-dashed border-border/50 rounded-xl bg-muted/10">
-                  No hay Ã­tems registrados.
+                  No hay ítems registrados.
                 </div>
               )}
               {(localDoc.items || []).length > 0 && (
@@ -1165,7 +1183,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Subtotal recibido</p><p className="font-black tabular-nums">{formatReceiptAmount(financialTotals.subtotal, receiptCurrency)}</p></div>
                   <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">IVA</p><p className="font-black tabular-nums text-rose-500">+{formatReceiptAmount(financialTotals.taxAmount, receiptCurrency)}</p></div>
                   <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Retenciones</p><p className="font-black tabular-nums text-amber-600">-{formatReceiptAmount(financialTotals.withholdingTotal, receiptCurrency)}</p></div>
-                  <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Total recepciÃ³n</p><p className="font-black tabular-nums text-primary">{formatReceiptAmount(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal, receiptCurrency)}</p></div>
+                  <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Total recepción</p><p className="font-black tabular-nums text-primary">{formatReceiptAmount(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal, receiptCurrency)}</p></div>
                 </div>
               )}
             </div>
@@ -1183,7 +1201,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
   const kpis = [
     { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Ãtems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
+    { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
     { title: 'Faltantes', value: totalFaltantes, icon: ArrowDown, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'indicator' as const },
     { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
@@ -1200,33 +1218,33 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Inventario entregado por proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribuciÃ³n de recepciones" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva RecepciÃ³n</Button>
+              <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-') && String(data.find((receipt) => receipt.id === id)?.status || '').toUpperCase() !== 'REJECTED');
             if (validIds.length === 0) return;
-            const cancelToastId = toast.loading(`Cancelando ${validIds.length} recepciÃ³n${validIds.length === 1 ? '' : 'es'}...`);
+            const cancelToastId = toast.loading(`Cancelando ${validIds.length} recepción${validIds.length === 1 ? '' : 'es'}...`);
             let cancelled = 0;
             let failed = 0;
             for (const id of validIds) {
               try {
-                await purchaseReceiptsService.cancel(id, 'CancelaciÃ³n masiva');
+                await purchaseReceiptsService.cancel(id, 'Cancelación masiva');
                 cancelled += 1;
               } catch {
                 failed += 1;
               }
             }
             if (failed > 0) {
-              toast.error(`${cancelled} recepciÃ³n${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}; ${failed} no se pudieron cancelar.`, { id: cancelToastId });
+              toast.error(`${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}; ${failed} no se pudieron cancelar.`, { id: cancelToastId });
             } else {
-              toast.success(`${cancelled} recepciÃ³n${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}.`, { id: cancelToastId });
+              toast.success(`${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}.`, { id: cancelToastId });
             }
             if (cancelled > 0) onRefresh();
           } : undefined}
@@ -1249,13 +1267,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             return (
             <div className="flex gap-1">
               {!isReceived && RECEIPT_EDITABLE_STATUSES.includes(receiptStatus) && canPerform('PURCHASES_RECEIPTS', 'approve') && canPerform('PURCHASES_RECEIPTS', 'edit') ? (
-                <Button title={receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepciÃ³n'} aria-label={`${receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepciÃ³n'} ${row.number || 'recepciÃ³n'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
+                <Button title={receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} aria-label={`${receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
                   <PackageCheck className="size-4" />
                 </Button>
               ) : isReceived && (canRegisterPayment || canRegisterInvoice) ? (
                 <Button
                   title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
-                  aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepciÃ³n'}` : `Registrar factura y pago de ${row.number || 'recepciÃ³n'}`}
+                  aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepción'}` : `Registrar factura y pago de ${row.number || 'recepción'}`}
                   variant="ghost"
                   size="icon"
                   className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10"
@@ -1264,13 +1282,13 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <Banknote className="size-4" />
                 </Button>
               ) : (
-                <Button title="Ver detalle" aria-label={`Ver detalle de ${row.number || 'recepciÃ³n'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
+                <Button title="Ver detalle" aria-label={`Ver detalle de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
                   <Eye className="size-4" />
                 </Button>
               )}
               <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoria de la Recepcion" />
               {canPerform('PURCHASES_RECEIPTS', 'delete') && String(row.status || '').toUpperCase() !== 'REJECTED' && (
-                <Button title="Cancelar recepciÃ³n" aria-label={`Cancelar recepciÃ³n ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
+                <Button title="Cancelar recepción" aria-label={`Cancelar recepción ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
                   <Ban className="size-4" />
                 </Button>
               )}
@@ -1291,7 +1309,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               Costo promedio actualizado
             </DialogTitle>
             <DialogDescription className="max-w-3xl text-sm leading-relaxed">
-              El inventario se actualizÃ³ por producto usando el promedio ponderado de la existencia anterior y las unidades reciÃ©n recibidas. Esta es la operaciÃ³n aplicada en moneda base.
+              El inventario se actualizó por producto usando el promedio ponderado de la existencia anterior y las unidades recién recibidas. Esta es la operación aplicada en moneda base.
             </DialogDescription>
           </DialogHeader>
 
@@ -1361,7 +1379,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       <p className="mt-1 font-black tabular-nums text-rose-500">+{formatInventoryOperationAmount(receivedTaxAmount, operation.baseCurrency)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">RetenciÃ³n aplicada</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Retención aplicada</p>
                       <p className="mt-1 font-black tabular-nums text-amber-600">-{formatInventoryOperationAmount(receivedWithholdingTotal, operation.baseCurrency)}</p>
                     </div>
                     <div className="border-t border-primary/15 pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
@@ -1372,17 +1390,17 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
 
                   <div className="mx-5 mb-5 rounded-2xl border border-dashed border-primary/30 bg-primary/[0.035] p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-primary">OperaciÃ³n ponderada</p>
-                      <p className="text-[10px] font-bold text-muted-foreground">Moneda base: {operation.baseCurrency}{operation.sourceCurrency !== operation.baseCurrency ? ` Â· entrada ${operation.sourceCurrency} Â· tasa ${Number(operation.exchangeRate || 1).toFixed(4)}` : ''}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-primary">Operación ponderada</p>
+                      <p className="text-[10px] font-bold text-muted-foreground">Moneda base: {operation.baseCurrency}{operation.sourceCurrency !== operation.baseCurrency ? ` · entrada ${operation.sourceCurrency} · tasa ${Number(operation.exchangeRate || 1).toFixed(4)}` : ''}</p>
                     </div>
                     <p className="mt-3 overflow-x-auto whitespace-nowrap font-mono text-xs font-bold text-foreground">
-                      ({formatInventoryOperationQuantity(previousQuantity)} Ã— {formatInventoryOperationAmount(previousUnitCost, operation.baseCurrency)}) + ({formatInventoryOperationQuantity(receivedQuantity)} Ã— {formatInventoryOperationAmount(receivedUnitCost, operation.baseCurrency)})
+                      ({formatInventoryOperationQuantity(previousQuantity)} × {formatInventoryOperationAmount(previousUnitCost, operation.baseCurrency)}) + ({formatInventoryOperationQuantity(receivedQuantity)} × {formatInventoryOperationAmount(receivedUnitCost, operation.baseCurrency)})
                     </p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      ({formatInventoryOperationAmount(previousTotalCost, operation.baseCurrency)} + {formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}) Ã· {formatInventoryOperationQuantity(finalQuantity)} uds. = <strong className="text-base text-primary">{formatInventoryOperationAmount(newAverageCost, operation.baseCurrency)}</strong>
+                      ({formatInventoryOperationAmount(previousTotalCost, operation.baseCurrency)} + {formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}) ÷ {formatInventoryOperationQuantity(finalQuantity)} uds. = <strong className="text-base text-primary">{formatInventoryOperationAmount(newAverageCost, operation.baseCurrency)}</strong>
                     </p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Entrada: {formatInventoryOperationAmount(receivedSubtotal, operation.baseCurrency)} + IVA {formatInventoryOperationAmount(receivedTaxAmount, operation.baseCurrency)} âˆ’ retenciÃ³n {formatInventoryOperationAmount(receivedWithholdingTotal, operation.baseCurrency)} = <strong className="text-primary">{formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}</strong>
+                      Entrada: {formatInventoryOperationAmount(receivedSubtotal, operation.baseCurrency)} + IVA {formatInventoryOperationAmount(receivedTaxAmount, operation.baseCurrency)} − retención {formatInventoryOperationAmount(receivedWithholdingTotal, operation.baseCurrency)} = <strong className="text-primary">{formatInventoryOperationAmount(receivedTotalCost, operation.baseCurrency)}</strong>
                     </p>
                   </div>
 
@@ -1397,7 +1415,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                             <span className="tabular-nums text-muted-foreground">{formatInventoryOperationAmount(line.baseUnitCost, operation.baseCurrency)}/ud. efectivo</span>
                             <span className="text-right font-black tabular-nums text-foreground">
                               {formatInventoryOperationAmount(line.totalCost, operation.baseCurrency)}
-                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">IVA +{formatInventoryOperationAmount(line.sourceTaxAmount, operation.sourceCurrency)} Â· Ret. -{formatInventoryOperationAmount(line.sourceWithholdingAmount, operation.sourceCurrency)}</span>
+                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">IVA +{formatInventoryOperationAmount(line.sourceTaxAmount, operation.sourceCurrency)} · Ret. -{formatInventoryOperationAmount(line.sourceWithholdingAmount, operation.sourceCurrency)}</span>
                             </span>
                           </div>
                         ))}
@@ -1420,20 +1438,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       <ConfirmDialog
         open={pendingCancelId !== null}
         onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title="Â¿Cancelar recepciÃ³n?"
-        description="La recepciÃ³n se conservarÃ¡ para auditorÃ­a, pero quedarÃ¡ cancelada y ya no podrÃ¡ continuar al inventario. Esta acciÃ³n no se puede deshacer."
-        confirmLabel="Cancelar recepciÃ³n"
+        title="¿Cancelar recepción?"
+        description="La recepción se conservará para auditoría, pero quedará cancelada y ya no podrá continuar al inventario. Esta acción no se puede deshacer."
+        confirmLabel="Cancelar recepción"
         variant="destructive"
         loading={cancelLoading}
         disabled={!cancelReason.trim()}
         onConfirm={handleCancelConfirm}
       >
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-foreground">Motivo de cancelaciÃ³n *</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">Motivo de cancelación *</label>
           <textarea
             className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
             rows={3}
-            placeholder="Ej.: recepciÃ³n duplicada, orden cancelada, error del proveedor..."
+            placeholder="Ej.: recepción duplicada, orden cancelada, error del proveedor..."
             value={cancelReason}
             onChange={(event) => setCancelReason(event.target.value)}
           />

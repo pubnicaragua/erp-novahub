@@ -22,6 +22,8 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface Props {
   data: PaymentMade[];
@@ -150,7 +152,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       payment.supplier?.name,
       payment.supplier?.code,
       payment.notes,
-      payment.date ? new Date(payment.date).toLocaleDateString() : '',
+      payment.date ? formatDateEs(payment.date) : '',
       payment.amount,
       Number(payment.amount || 0).toLocaleString(),
       getMethodLabel(payment.method),
@@ -163,6 +165,16 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return haystack.includes(normalizedSearchTerm);
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    supplier: (row: PaymentMade) => row.supplier?.name || '-',
+    date: (row: PaymentMade) => (row.date ? new Date(row.date).getTime() : null),
+    amount: (row: PaymentMade) => Number(row.amount || 0),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctSuppliers = [...new Map(filtered.map((p) => [p.supplier?.name || '-', p.supplier?.name || '-'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.supplier?.name || '-') === label).length }));
+
   const isSupplierActive = (supplierId?: string) =>
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
 
@@ -174,10 +186,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         return <span className="text-xs font-bold text-primary">{invoice?.number || '-'}</span>;
       } },
     { key: 'supplier',  header: 'Proveedor',
+      headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',      header: 'Fecha',      width: '110px',
-      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+      headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'amount',    header: 'Monto',      width: '130px',
+      headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />,
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-emerald-500" />
       ) },
@@ -584,7 +599,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
              )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedTargetId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {

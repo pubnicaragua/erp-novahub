@@ -8,7 +8,7 @@ export const contabilidadService = {
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => api.delete(`/accounting/accounts/${id}`),
-  mergeAccount: (id: string, targetAccountId: string) => api.post<any>(`/accounting/accounts/${id}/merge`, { targetAccountId }),
+  mergeAccount: (id: string, targetAccountId: string, deleteSource = true) => api.post<any>(`/accounting/accounts/${id}/merge`, { targetAccountId, deleteSource }),
   importAccounts: (data: ChartAccountCsvRow[], replace = false) => api.post<any>(`/accounting/accounts/import${replace ? '?replace=true' : ''}`, data),
   exportAccounts: () => api.get<string[][]>('/accounting/accounts/export'),
   getDefaultAccountsByIndustry: (industry: string) => api.get<any[]>(`/accounting/accounts/defaults/${industry}`),
@@ -37,11 +37,14 @@ export const contabilidadService = {
   autoGenerateFromCashRegisterSession: (id: string) => api.post<any>(`/accounting/auto-generate/cash-register/${id}`, {}),
 
   // Reportes
-  getTrialBalance: (params?: { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
-    api.get<any[]>('/accounting/reports/trial-balance', { params, signal }),
+  getTrialBalance: (params?: { dateFrom?: string; dateTo?: string; accountIds?: string[] }, signal?: AbortSignal) =>
+    api.get<any[]>('/accounting/reports/trial-balance', {
+      params: { ...params, accountIds: params?.accountIds?.length ? params.accountIds.join(',') : undefined },
+      signal,
+    }),
   getProfitLoss: (params: { dateFrom: string; dateTo: string; previousYear?: boolean }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/profit-loss', { params, signal }),
-  getBalanceSheet: (params: { date: string; previousYear?: boolean }, signal?: AbortSignal) =>
+  getBalanceSheet: (params: { date: string; previousYear?: boolean; dateFrom?: string }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/balance-sheet', { params, signal }),
   getCashFlow: (params: { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
     api.get<any>('/accounting/reports/cash-flow', { params, signal }),

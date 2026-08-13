@@ -1,32 +1,31 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
-import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, RefreshCw, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2 } from 'lucide-react';
+import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
-import { ReportSettingsDialog, type ConfigField } from './ReportSettingsDialog';
-
-const RESULT_CONFIG_FIELDS: ConfigField[] = [
-  { moduleKey: 'invoice', fieldKey: 'income', label: 'Ingresos por ventas', hint: 'Facturas de clientes' },
-  { moduleKey: 'cashSale', fieldKey: 'income', label: 'Ingresos por ventas de caja', hint: 'Ventas directas POS' },
-  { moduleKey: 'financialIncome', fieldKey: 'income', label: 'Ingresos financieros', hint: 'Ingresos manuales y recurrentes' },
-  { moduleKey: 'expense', fieldKey: 'expense', label: 'Gastos operativos', hint: 'Gastos y compras de servicios' },
-  { moduleKey: 'cashRegister', fieldKey: 'shortage', label: 'Faltantes de caja', hint: 'Cierres de caja con sobrante/faltante' },
-];
+import { ReportSectionsDialog } from './ReportSectionsDialog';
+import { DateField } from '../ui/DateField';
 
 interface PnLAccount {
   accountId: string;
   codigo: string;
   cuenta: string;
   currentAmount: number;
-  previousAmount?: number;
+}
+
+interface PnLSection {
+  id: string;
+  label: string;
+  sign: 'INCOME' | 'EXPENSE';
+  accounts: PnLAccount[];
+  total: number;
 }
 
 interface PnLData {
@@ -34,8 +33,7 @@ interface PnLData {
   gastos: PnLAccount[];
   totalIngresos: number;
   totalGastos: number;
-  totalIngresosPrev: number;
-  totalGastosPrev: number;
+  sections?: PnLSection[];
 }
 
 export function EstadoResultadosView() {
@@ -50,41 +48,38 @@ export function EstadoResultadosView() {
   };
   const [dateFrom, setDateFrom] = useState(initialFrom);
   const [dateTo, setDateTo] = useState(() => toLocalDate(new Date()));
-  const [showPreviousYear, setShowPreviousYear] = useState(false);
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const query = useAccountingQuery<PnLData | null>(
-    ['profit-loss', dateFrom, dateTo, showPreviousYear],
+    ['profit-loss', dateFrom, dateTo],
     async (signal) => {
       if (!dateFrom || !dateTo) return null;
       const raw: any = await contabilidadService.getProfitLoss({
         dateFrom,
         dateTo,
-        previousYear: showPreviousYear,
       }, signal);
       const curr = raw?.current || raw || {};
-      const prev = raw?.previous || null;
       const mapAccounts = (list: any[]): PnLAccount[] => (list || []).map((a: any) => ({
         accountId: a.accountId || a.id || a.code || '',
         codigo: a.code || '',
         cuenta: a.name || '',
         currentAmount: a.balance || 0,
-        previousAmount: undefined,
       }));
       const result: PnLData = {
         ingresos: mapAccounts(curr.ingresos),
         gastos: mapAccounts(curr.gastos),
         totalIngresos: curr.totalIngresos || 0,
         totalGastos: curr.totalGastos || 0,
-        totalIngresosPrev: prev?.totalIngresos || 0,
-        totalGastosPrev: prev?.totalGastos || 0,
       };
-      if (prev) {
-        const prevIngMap = new Map((prev.ingresos || []).map((a: any) => [a.code, a.balance || 0]));
-        const prevGasMap = new Map((prev.gastos || []).map((a: any) => [a.code, a.balance || 0]));
-        result.ingresos = result.ingresos.map(a => ({ ...a, previousAmount: prevIngMap.get(a.codigo) as number | undefined }));
-        result.gastos = result.gastos.map(a => ({ ...a, previousAmount: prevGasMap.get(a.codigo) as number | undefined }));
+      if (Array.isArray(curr.sections) && curr.sections.length > 0) {
+        result.sections = curr.sections.map((s: any) => ({
+          id: s.id || s.label,
+          label: s.label || 'Sección',
+          sign: String(s.sign || '').toUpperCase() === 'EXPENSE' ? 'EXPENSE' : 'INCOME',
+          total: s.total || 0,
+          accounts: mapAccounts(s.accounts),
+        }));
       }
       return result;
     },
@@ -97,19 +92,9 @@ export function EstadoResultadosView() {
   }, [query.error]);
 
   const netIncome = (data?.totalIngresos || 0) - (data?.totalGastos || 0);
-  const netIncomePrev = (data?.totalIngresosPrev || 0) - (data?.totalGastosPrev || 0);
   const isProfit = netIncome >= 0;
-  const variancePct = data?.totalIngresosPrev && data?.totalIngresosPrev !== 0
-    ? ((netIncome - netIncomePrev) / Math.abs(netIncomePrev)) * 100
-    : 0;
 
   const fmt = (n: number) => n.toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-
-  const calcVariance = (current: number, previous?: number) => {
-    if (!showPreviousYear || previous == null || previous === 0) return null;
-    return ((current - previous) / Math.abs(previous)) * 100;
-  };
 
   const toggleAccount = (account: PnLAccount) => {
     setExpandedAccountId(current => current === account.accountId ? null : account.accountId);
@@ -123,7 +108,7 @@ export function EstadoResultadosView() {
     );
   };
 
-  const renderSection = (title: string, accounts: PnLAccount[], total: number, totalPrev: number, color: string) => {
+  const renderSection = (title: string, accounts: PnLAccount[], total: number, color: string, tipo: 'INCOME' | 'EXPENSE') => {
     const visibleAccounts = filterAccounts(accounts);
     return (    <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", color)}>
@@ -136,21 +121,14 @@ export function EstadoResultadosView() {
             <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Código</TableHead>
             <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Cuenta</TableHead>
             <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Período Actual</TableHead>
-            {showPreviousYear && (
-              <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Período Anterior</TableHead>
-            )}
-            {showPreviousYear && (
-              <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Variación %</TableHead>
-            )}
           </TableRow>
         </TableHeader>
         <TableBody>
           {visibleAccounts.length === 0 ? (
-            <TableRow><TableCell colSpan={showPreviousYear ? 5 : 3} className="py-6 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</TableCell></TableRow>
+            <TableRow><TableCell colSpan={3} className="py-6 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</TableCell></TableRow>
           ) : (
           <>
           {visibleAccounts.flatMap((acc, i) => {
-            const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
             const isExpanded = expandedAccountId === acc.accountId;
             return [
               <TableRow key={acc.accountId || i} className="border-border/30 hover:bg-muted/30">
@@ -169,25 +147,15 @@ export function EstadoResultadosView() {
                 <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                   {fmt(acc.currentAmount)}
                 </TableCell>
-                {showPreviousYear && (
-                  <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                    {acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}
-                  </TableCell>
-                )}
-                {showPreviousYear && (
-                  <TableCell className={cn("text-right font-mono text-sm font-bold", varPct !== null && varPct >= 0 ? "text-emerald-600" : "text-red-600")}>
-                    {varPct !== null ? fmtPct(varPct) : '-'}
-                  </TableCell>
-                )}
               </TableRow>,
               ...(isExpanded ? [
                 <TableRow key={`detail-${acc.accountId || i}`} className="hover:bg-transparent">
-                  <TableCell colSpan={showPreviousYear ? 5 : 3} className="p-0">
+                  <TableCell colSpan={3} className="p-0">
                     <AccountMovementsDetail
                       accountId={acc.accountId}
                       codigo={acc.codigo}
                       cuenta={acc.cuenta}
-                      tipo={title === 'INGRESOS' ? 'INCOME' : 'EXPENSE'}
+                      tipo={tipo}
                       dateFrom={dateFrom}
                       dateTo={dateTo}
                     />
@@ -201,12 +169,6 @@ export function EstadoResultadosView() {
           <TableRow className="bg-muted/50 font-bold border-t-2 border-border">
             <TableCell colSpan={2} className="text-sm uppercase tracking-wider">Total {title}</TableCell>
             <TableCell className={cn("text-right font-mono text-sm", total >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(total)}</TableCell>
-            {showPreviousYear && (
-              <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmt(totalPrev)}</TableCell>
-            )}
-            {showPreviousYear && (
-              <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmtPct(calcVariance(total, totalPrev) || 0)}</TableCell>
-            )}
           </TableRow>
         </TableBody>
       </Table>
@@ -216,7 +178,6 @@ export function EstadoResultadosView() {
           <p className="py-4 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</p>
         ) : (
         visibleAccounts.map((acc, i) => {
-          const varPct = calcVariance(acc.currentAmount, acc.previousAmount);
           const isExpanded = expandedAccountId === acc.accountId;
           return (
             <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
@@ -237,18 +198,12 @@ export function EstadoResultadosView() {
                   {fmt(acc.currentAmount)}
                 </span>
               </button>
-              {showPreviousYear && (
-                <div className="grid grid-cols-2 gap-2 border-t border-border/50 px-3 py-2 text-[10px] text-muted-foreground">
-                  <div><span className="block uppercase tracking-wider">Anterior</span><span className="font-mono">{acc.previousAmount != null ? fmt(acc.previousAmount) : '-'}</span></div>
-                  <div className="text-right"><span className="block uppercase tracking-wider">Variación</span><span className={cn("font-mono font-bold", varPct !== null && varPct >= 0 ? "text-emerald-600" : "text-red-600")}>{varPct !== null ? fmtPct(varPct) : '-'}</span></div>
-                </div>
-              )}
               {isExpanded && (
                 <AccountMovementsDetail
                   accountId={acc.accountId}
                   codigo={acc.codigo}
                   cuenta={acc.cuenta}
-                  tipo={title === 'INGRESOS' ? 'INCOME' : 'EXPENSE'}
+                  tipo={tipo}
                   dateFrom={dateFrom}
                   dateTo={dateTo}
                 />
@@ -261,7 +216,6 @@ export function EstadoResultadosView() {
           <span className="text-xs uppercase tracking-wider">Total {title}</span>
           <div className="text-right">
             <p className={cn("font-mono text-sm", total >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(total)}</p>
-            {showPreviousYear && <p className="text-[10px] font-mono text-muted-foreground">Anterior: {fmt(totalPrev)}</p>}
           </div>
         </div>
       </div>
@@ -278,17 +232,11 @@ export function EstadoResultadosView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
-          </div>
-          <div className="flex items-center gap-3 mt-5">
-            <Switch id="prev-year" checked={showPreviousYear} onCheckedChange={setShowPreviousYear} />
-            <label htmlFor="prev-year" className="text-[10px] font-black uppercase tracking-widest text-foreground cursor-pointer select-none">
-              Comparar año anterior
-            </label>
+            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
           </div>
           <div className="relative mt-5">
             <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -296,7 +244,7 @@ export function EstadoResultadosView() {
               placeholder="Buscar cuenta por nombre o código..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setExpandedAccountId(null); }}
-              className="h-9 w-full pl-8 text-xs sm:w-[240px]"
+              className="h-9 w-full pl-8 text-xs sm:w-[260px]"
             />
           </div>
           {(dateFrom || dateTo) && (
@@ -308,9 +256,6 @@ export function EstadoResultadosView() {
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading || !dateFrom || !dateTo} className="h-9">
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
       </div>
@@ -339,10 +284,27 @@ export function EstadoResultadosView() {
             <div className="h-40 flex items-center justify-center text-muted-foreground">Seleccione un rango de fechas para ver el reporte</div>
           ) : (
             <div>
-              {renderSection('INGRESOS', data.ingresos, data.totalIngresos, data.totalIngresosPrev, 'bg-emerald-600')}
-              <Separator className="my-4" />
-              {renderSection('GASTOS', data.gastos, data.totalGastos, data.totalGastosPrev, 'bg-red-600')}
-              <Separator className="my-4" />
+              {data.sections && data.sections.length > 0 ? (
+                data.sections.map((section, index) => (
+                  <div key={section.id}>
+                    {index > 0 && <Separator className="my-4" />}
+                    {renderSection(
+                      section.label,
+                      section.accounts,
+                      section.total,
+                      section.sign === 'INCOME' ? 'bg-emerald-600' : 'bg-red-600',
+                      section.sign,
+                    )}
+                  </div>
+                ))
+              ) : (
+                <>
+                  {renderSection('INGRESOS', data.ingresos, data.totalIngresos, 'bg-emerald-600', 'INCOME')}
+                  <Separator className="my-4" />
+                  {renderSection('GASTOS', data.gastos, data.totalGastos, 'bg-red-600', 'EXPENSE')}
+                  <Separator className="my-4" />
+                </>
+              )}
 
               <div className={cn("rounded-xl border-2 p-5", isProfit ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800" : "border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800")}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -355,17 +317,6 @@ export function EstadoResultadosView() {
                       </p>
                     </div>
                   </div>
-                  {showPreviousYear && (
-                    <div className="text-right">
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">vs Año Anterior</p>
-                      <p className={cn("text-lg font-black", variancePct >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {fmtPct(variancePct)}
-                      </p>
-                      <p className={cn("text-sm font-bold", netIncomePrev >= 0 ? "text-emerald-600" : "text-red-600")}>
-                        {fmt(netIncomePrev)}
-                      </p>
-                    </div>
-                  )}
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                   <div className="bg-emerald-500/10 rounded-lg p-3 text-center">
@@ -382,13 +333,12 @@ export function EstadoResultadosView() {
           )}
         </CardContent>
       </Card>
-      <ReportSettingsDialog
+      <ReportSectionsDialog
         open={showSettings}
         onOpenChange={setShowSettings}
-        title="Configuración · Estado de Resultados"
-        description="Cuentas contables vinculadas a los ingresos y gastos. Este reporte solo muestra cuentas de resultado (ingresos y gastos de detalle): las cuentas de balance (Caja y Bancos, cuentas por cobrar, etc.) nunca aparecen aquí."
-        fields={RESULT_CONFIG_FIELDS}
+        onSaved={() => query.refetch()}
       />
     </div>
   );
 }
+

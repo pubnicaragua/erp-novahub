@@ -5,22 +5,15 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Printer, RefreshCw, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
+import { Search, Printer, Filter, X, ChevronDown, ChevronUp, Scale, CheckCircle2, AlertTriangle, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from 'sonner';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { AccountMovementsDetail } from './AccountMovementsDetail';
-import { ReportSettingsDialog, type ConfigField } from './ReportSettingsDialog';
-
-const COMPROBACION_CONFIG_FIELDS: ConfigField[] = [
-  { moduleKey: 'invoice', fieldKey: 'receivable', label: 'Cuentas por cobrar' },
-  { moduleKey: 'invoice', fieldKey: 'ivaPayable', label: 'IVA por pagar' },
-  { moduleKey: 'supplierInvoice', fieldKey: 'payable', label: 'Cuentas por pagar' },
-  { moduleKey: 'supplierInvoice', fieldKey: 'ivaCreditable', label: 'IVA acreditable' },
-  { moduleKey: 'inventory', fieldKey: 'control', label: 'Inventario (cuenta control)' },
-  { moduleKey: 'cashRegister', fieldKey: 'cash', label: 'Caja (efectivo)' },
-];
+import { AccountChecklistDialog } from './AccountChecklistDialog';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { DateField } from '../ui/DateField';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -51,12 +44,36 @@ export function BalanceComprobacionView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  // undefined = la config aún no se carga; null = sin config (modo automático).
+  const [configuredAccountIds, setConfiguredAccountIds] = useState<string[] | null | undefined>(undefined);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const cfg: any = await contabilidadService.getConfig();
+        if (mounted) {
+          const saved = cfg?.config?.trialBalanceAccountIds;
+          setConfiguredAccountIds(Array.isArray(saved) ? saved : null);
+        }
+      } catch {
+        if (mounted) setConfiguredAccountIds(null);
+      } finally {
+        if (mounted) setConfigLoaded(true);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  // La query espera a que la configuración cargue para no mostrar primero
+  // todas las cuentas y luego solo las configuradas (las cuentas "desaparecen").
+  const accountIdsForQuery = configLoaded && configuredAccountIds && configuredAccountIds.length > 0 ? configuredAccountIds : undefined;
   const query = useAccountingQuery<TrialBalanceRow[]>(
-    ['trial-balance', dateFrom, dateTo],
+    ['trial-balance', dateFrom, dateTo, configLoaded ? (configuredAccountIds ? configuredAccountIds.join(',') : 'all') : 'loading'],
     async (signal) => {
-      const params: { dateFrom?: string; dateTo?: string } = {};
+      const params: { dateFrom?: string; dateTo?: string; accountIds?: string[] } = {};
       if (dateFrom) params.dateFrom = dateFrom;
       if (dateTo) params.dateTo = dateTo;
+      if (accountIdsForQuery) params.accountIds = accountIdsForQuery;
       const raw: any = await contabilidadService.getTrialBalance(params, signal);
       return (raw?.rows || raw || []).map((r: any) => ({
         accountId: r.accountId || r.accountCode || '',
@@ -76,13 +93,24 @@ export function BalanceComprobacionView() {
     if (query.error) toast.error(query.error.message || 'Error al cargar balance de comprobación');
   }, [query.error]);
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    cuenta: (r: TrialBalanceRow) => r.cuenta,
+    debitos: (r: TrialBalanceRow) => r.debitos,
+    creditos: (r: TrialBalanceRow) => r.creditos,
+    saldo: (r: TrialBalanceRow) => r.saldo,
+  };
+  const colFilteredData = colFilters.applyTo(data, filterGetters);
+  const accountOptionsForFilter = [...new Map(data.map((r) => [r.cuenta, r.cuenta])).entries()]
+    .map(([, label]) => ({ value: label, label, count: data.filter((r) => r.cuenta === label).length }));
+
   const grouped = useMemo(() => ACCOUNT_TYPE_ORDER.map(type => ({
     type,
     label: ACCOUNT_TYPE_LABELS[type],
-    rows: data
+    rows: colFilteredData
       .filter(r => r.tipo === type)
       .filter(r => !searchTerm || r.cuenta.toLowerCase().includes(searchTerm.toLowerCase()) || r.codigo.toLowerCase().includes(searchTerm.toLowerCase())),
-  })).filter(g => g.rows.length > 0), [data, searchTerm]);
+  })).filter(g => g.rows.length > 0), [colFilteredData, searchTerm]);
 
   const totalDebitos = data.reduce((s, r) => s + r.debitos, 0);
   const totalCreditos = data.reduce((s, r) => s + r.creditos, 0);
@@ -180,11 +208,11 @@ export function BalanceComprobacionView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
@@ -195,19 +223,42 @@ export function BalanceComprobacionView() {
         <div className="grid grid-cols-2 items-center gap-2 border-t border-border/20 pt-4 lg:ml-auto lg:flex lg:border-t-0 lg:pt-0">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[200px]" />
+            <Input placeholder="Buscar cuenta..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="h-9 w-full pl-9 sm:w-[220px]" />
           </div>
-          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading} className="h-9">
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
-          </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
             <Printer className="size-4" /> Imprimir
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Configuración
           </Button>
+          {configuredAccountIds && configuredAccountIds.length > 0 && (
+            <button
+              onClick={() => { setConfiguredAccountIds(null); void contabilidadService.updateConfig({ trialBalanceAccountIds: [] }).then(() => toast.success('Mostrando todas las cuentas')).catch(() => undefined); }}
+              title="Se está mostrando solo un subconjunto de cuentas. Haz clic para volver a mostrar todas."
+              className="h-9 gap-1.5 inline-flex items-center rounded-lg border border-primary/30 bg-primary/5 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+            >
+              <X className="size-3.5" /> Filtro activo ({configuredAccountIds.length})
+            </button>
+          )}
         </div>
       </div>
+
+      <AccountChecklistDialog
+        open={showSettings}
+        onOpenChange={setShowSettings}
+        viewLabel="Balance de Comprobación"
+        description="Cuentas contables que alimentan el balance. Solo se muestran cuentas de detalle: las agrupadoras se omiten para no repetir movimientos. Marca con checks las cuentas que quieres ver y operar; las que dejes sin marcar se ocultan del reporte."
+        configKey="trialBalanceAccountIds"
+        onSaved={() => {
+          void (async () => {
+            try {
+              const cfg: any = await contabilidadService.getConfig();
+              const saved = cfg?.config?.trialBalanceAccountIds;
+              setConfiguredAccountIds(Array.isArray(saved) ? saved : null);
+            } catch { /* noop */ }
+          })();
+        }}
+      />
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
@@ -233,11 +284,11 @@ export function BalanceComprobacionView() {
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Código</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Cuenta</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground"><span className="inline-flex items-center gap-1">Cuenta<ColumnFilterMenu label="Cuenta" options={accountOptionsForFilter} selected={colFilters.state.cuenta?.values || []} onSelect={(values) => colFilters.setValues('cuenta', values)} sort={colFilters.state.cuenta?.sort || null} onSort={(sort) => colFilters.setSort('cuenta', sort)} /></span></TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground">Tipo</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Débitos</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Créditos</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right">Saldo</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right"><span className="inline-flex items-center gap-1">Débitos<ColumnFilterMenu label="Débitos" sort={colFilters.state.debitos?.sort || null} onSort={(sort) => colFilters.setSort('debitos', sort)} /></span></TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right"><span className="inline-flex items-center gap-1">Créditos<ColumnFilterMenu label="Créditos" sort={colFilters.state.creditos?.sort || null} onSort={(sort) => colFilters.setSort('creditos', sort)} /></span></TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-foreground text-right"><span className="inline-flex items-center gap-1">Saldo<ColumnFilterMenu label="Saldo" sort={colFilters.state.saldo?.sort || null} onSort={(sort) => colFilters.setSort('saldo', sort)} /></span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -388,13 +439,6 @@ export function BalanceComprobacionView() {
           </div>
         </CardContent>
       </Card>
-      <ReportSettingsDialog
-        open={showSettings}
-        onOpenChange={setShowSettings}
-        title="Configuración · Balance de Comprobación"
-        description="Cuentas contables que alimentan el balance. Solo se muestran cuentas de detalle: las agrupadoras se omiten para no repetir movimientos."
-        fields={COMPROBACION_CONFIG_FIELDS}
-      />
     </div>
   );
 }

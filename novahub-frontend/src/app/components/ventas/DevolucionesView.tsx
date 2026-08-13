@@ -24,6 +24,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -184,6 +186,18 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     (r.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    customer: (row: SalesReturn) => row.customer?.name || 'Cliente',
+    date: (row: SalesReturn) => (row.date ? new Date(row.date).getTime() : null),
+    total: (row: SalesReturn) => Number(row.total || 0),
+    status: (row: SalesReturn) => String(row.status || '').toUpperCase(),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctCustomers = [...new Map(filtered.map((r) => [r.customer?.name || 'Cliente', r.customer?.name || 'Cliente'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.customer?.name || 'Cliente') === label).length }));
+  const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === option.value).length }));
+
   const startNew = () => {
     setIsCreating(true);
     setEditingId(null);
@@ -305,11 +319,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         </span>
       )
     },
-    { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'invoice', header: 'Factura Origen', render: (_, row) => <span className="text-xs font-bold text-blue-500">{row.invoice?.number || 'N/A'}</span> },
-    { key: 'date', header: 'Fecha', render: (val) => <span className="text-xs font-medium text-muted-foreground">{new Date(val).toLocaleDateString()}</span> },
-    { key: 'total', header: 'Total', width: '130px', render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
-    { key: 'status', header: 'Estado', width: '110px', render: (val) => {
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val)}</span> },
+    { key: 'total', header: 'Total', width: '130px', headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />, render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
+    { key: 'status', header: 'Estado', width: '110px', headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />, render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
     { key: 'isPartial', header: 'Tipo', width: '95px', render: (_, row) => <Badge variant="outline" className={cn('border-none text-[9px] font-black uppercase', isReturnPartial(row) ? 'bg-amber-500/10 text-amber-500' : 'bg-primary/10 text-primary')}>{isReturnPartial(row) ? 'Parcial' : 'Total'}</Badge> },
@@ -476,7 +490,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable data={filteredData}
           pagination={pagination}
           onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminadas', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => startEdit(row.id)} isLoading={loading} actionsWidth="w-36" fitContent showHorizontalControls

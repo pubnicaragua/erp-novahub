@@ -161,8 +161,8 @@ export function BudgetItemsView() {
         <Card className="rounded-2xl border-border/50">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Disponible</CardTitle></CardHeader>
           <CardContent>
-            <p className={cn('text-2xl font-black', items.reduce((s, i) => s + Number(i.assignedAmount) - Number(i.executedAmount), 0) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
-              {format(items.reduce((s, i) => s + Number(i.assignedAmount) - Number(i.executedAmount), 0))}
+            <p className={cn('text-2xl font-black', items.reduce((s, i) => s + (Number(i.availableAmount ?? Number(i.assignedAmount) - Number(i.executedAmount))), 0) >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+              {format(items.reduce((s, i) => s + (Number(i.availableAmount ?? Number(i.assignedAmount) - Number(i.executedAmount))), 0))}
             </p>
           </CardContent>
         </Card>
@@ -178,6 +178,7 @@ export function BudgetItemsView() {
                 <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre</th>
                 <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Asignado</th>
                 <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ejecutado</th>
+                <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ejecución</th>
                 <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Disponible</th>
                 <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</th>
                 <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Acciones</th>
@@ -185,11 +186,13 @@ export function BudgetItemsView() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">Sin partidas presupuestarias</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-muted-foreground text-sm">Sin partidas presupuestarias</td></tr>
               ) : filtered.map(item => {
                 const assigned = Number(item.assignedAmount);
                 const executed = Number(item.executedAmount);
-                const available = assigned - executed;
+                const available = Number(item.availableAmount ?? assigned - executed);
+                const pct = assigned > 0 ? Math.min(100, (executed / assigned) * 100) : 0;
+                const overBudget = available < 0;
                 return (
                   <tr key={item.id} className="border-b border-border/20 hover:bg-muted/10 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs font-bold">{item.code}</td>
@@ -199,6 +202,16 @@ export function BudgetItemsView() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-sm font-bold">{format(assigned)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{format(executed)}</td>
+                    <td className="px-4 py-3 min-w-36">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div className={cn("h-full rounded-full", overBudget ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className={cn("w-12 shrink-0 text-right font-mono text-[10px] font-bold", overBudget ? "text-red-500" : "text-muted-foreground")}>
+                          {pct.toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       <span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>
                         {format(available)}
@@ -226,9 +239,16 @@ export function BudgetItemsView() {
           </div>
           <div className="space-y-2 p-3 md:hidden">
             {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin partidas presupuestarias</p> : filtered.map(item => {
-              const assigned = Number(item.assignedAmount); const executed = Number(item.executedAmount); const available = assigned - executed;
+              const assigned = Number(item.assignedAmount); const executed = Number(item.executedAmount); const available = Number(item.availableAmount ?? assigned - executed);
+              const pct = assigned > 0 ? Math.min(100, (executed / assigned) * 100) : 0;
               return <div key={item.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{item.code}</p><p className="break-words text-xs font-semibold">{item.name}</p><p className="break-words text-[10px] text-muted-foreground">{item.account?.code} - {item.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{item.status === 'ACTIVE' ? 'Activo' : item.status === 'SUSPENDED' ? 'Suspendido' : 'Cerrado'}</Badge></div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className={cn("h-full rounded-full", available < 0 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={cn("shrink-0 font-mono text-[10px] font-bold", available < 0 ? "text-red-500" : "text-muted-foreground")}>{pct.toFixed(0)}%</span>
+                </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/20 pt-2 text-[10px]"><div><span className="block text-muted-foreground">Asignado</span><span className="font-bold">{format(assigned)}</span></div><div><span className="block text-muted-foreground">Ejecutado</span><span>{format(executed)}</span></div><div><span className="block text-muted-foreground">Disponible</span><span className={cn('font-bold', available >= 0 ? 'text-emerald-500' : 'text-red-500')}>{format(available)}</span></div><div className="flex justify-end gap-1">{canEdit && <Button variant="ghost" size="icon" aria-label="Editar partida" className="size-7" onClick={() => openEdit(item)}><Pencil className="size-3.5" /></Button>}{canDeactivate && <Button variant="ghost" size="icon" aria-label="Desactivar partida" className="size-7 text-red-500" onClick={() => handleDelete(item.id)}><Trash2 className="size-3.5" /></Button>}</div></div>
               </div>
             })}

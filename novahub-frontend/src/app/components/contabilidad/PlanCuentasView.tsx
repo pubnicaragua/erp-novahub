@@ -33,6 +33,7 @@ import { AccountImportPreview } from './AccountImportPreview';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Combobox } from '../ui/Combobox';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 
 interface AccountNode {
   id: string;
@@ -65,7 +66,7 @@ interface AccountTransaction {
 }
 
 const ACCOUNT_COLUMN_DEFS = [
-  { key: 'code', label: 'CÃ³digo', width: 'minmax(48px,.7fr)' },
+  { key: 'code', label: 'Código', width: 'minmax(48px,.7fr)' },
   { key: 'name', label: 'Nombre', width: 'minmax(90px,1.45fr)' },
   { key: 'type', label: 'Tipo', width: 'minmax(54px,.75fr)' },
   { key: 'subtype', label: 'Subtipo', width: 'minmax(78px,1fr)' },
@@ -206,13 +207,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const [mergeSource, setMergeSource] = useState<AccountNode | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState('');
+  const [mergeDeleteSource, setMergeDeleteSource] = useState(false);
   const [merging, setMerging] = useState(false);
-
-  const mergeCandidates = useMemo(() => {
-    if (!mergeSource) return [];
-    const sourceId = mergeSource.id;
-    return flatList.filter(a => a.id !== sourceId && a.type === mergeSource.type);
-  }, [mergeSource, flatList]);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -287,15 +283,20 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     const target = flatList.find(a => a.id === mergeTargetId);
     setMerging(true);
     try {
-      const res = await contabilidadService.mergeAccount(source.id, mergeTargetId);
+      const res = await contabilidadService.mergeAccount(source.id, mergeTargetId, mergeDeleteSource);
       await fetchAccounts(true);
       setSelectedAccount((current) => current?.id === source.id ? null : current);
       setSelectedTransaction(null);
       setMergeSource(null);
       setMergeTargetId('');
-      toast.success(`Cuenta eliminada. Se transfirieron ${res?.transferredRecords ?? 0} registros a ${target ? `${target.code} Â· ${target.name}` : 'la cuenta destino'}.`);
+      setMergeDeleteSource(false);
+      if (res?.sourceDeleted) {
+        toast.success(`Cuenta eliminada. Se transfirieron ${res?.transferredRecords ?? 0} registros a ${target ? `${target.code} · ${target.name}` : 'la cuenta destino'}.`);
+      } else {
+        toast.success(`Transferencia completada. ${res?.transferredRecords ?? 0} registros movidos a ${target ? `${target.code} · ${target.name}` : 'la cuenta destino'}. La cuenta ${source.code} quedó inhabilitada y vacía.`);
+      }
     } catch (e: any) {
-      toast.error(e?.message || 'No se pudo transferir y eliminar la cuenta');
+      toast.error(e?.message || 'No se pudo transferir la cuenta');
     } finally {
       setMerging(false);
     }
@@ -331,12 +332,32 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   const flatList = useMemo(() => flattenTree(accounts), [accounts]);
 
+  const colFilters = useColumnFilters();
+  const typeOptionsForFilter = ACCOUNT_TYPES.map((t) => ({ value: t.value, label: t.label, count: flatList.filter((a) => a.type === t.value).length }));
+  const subtypeOptionsForFilter = ACCOUNT_SUBTYPES.map((s) => ({ value: s.value, label: s.label, count: flatList.filter((a) => a.subtype === s.value).length }));
+  const statusOptionsForFilter = [
+    { value: 'ACTIVE', label: 'Activas', count: flatList.filter((a) => a.isActive).length },
+    { value: 'INACTIVE', label: 'Inactivas', count: flatList.filter((a) => !a.isActive).length },
+  ];
+
   const filteredList = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
+    const selectedTypes = colFilters.state.type?.values || [];
+    const selectedSubtypes = colFilters.state.subtype?.values || [];
+    const selectedStatuses = colFilters.state.status?.values || [];
     const matchesStatus = (account: AccountNode) => (
       statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? account.isActive : !account.isActive)
     );
-    const statusFiltered = flatList.filter(matchesStatus);
+    const matchesColumns = (account: AccountNode) => {
+      if (selectedTypes.length > 0 && !selectedTypes.includes(account.type)) return false;
+      if (selectedSubtypes.length > 0 && !selectedSubtypes.includes(account.subtype)) return false;
+      if (selectedStatuses.length > 0) {
+        const effective = account.isActive ? 'ACTIVE' : 'INACTIVE';
+        if (!selectedStatuses.includes(effective)) return false;
+      }
+      return true;
+    };
+    const statusFiltered = flatList.filter(a => matchesStatus(a) && matchesColumns(a));
     const matched = new Set<string>();
     const byNameOrCode = q
       ? statusFiltered.filter(a => a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q))
@@ -347,14 +368,20 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       while (parent) { matched.add(parent.id); parent = flatList.find(p => p.id === parent!.parentId); }
     }
     const addChildren = (id: string) => {
-      const children = flatList.filter(c => c.parentId === id && matchesStatus(c));
+      const children = flatList.filter(c => c.parentId === id && matchesStatus(c) && matchesColumns(c));
       for (const c of children) { matched.add(c.id); addChildren(c.id); }
     };
     for (const a of byNameOrCode) addChildren(a.id);
     return flatList.filter(a => matched.has(a.id));
-  }, [flatList, searchTerm, statusFilter]);
+  }, [flatList, searchTerm, statusFilter, colFilters.state]);
 
   const filteredTree = useMemo(() => buildTree(filteredList), [filteredList]);
+
+  const mergeCandidates = useMemo(() => {
+    if (!mergeSource) return [];
+    const sourceId = mergeSource.id;
+    return flatList.filter(a => a.id !== sourceId && a.type === mergeSource.type);
+  }, [mergeSource, flatList]);
 
   const getTypeLabel = (t: AccountType) => ACCOUNT_TYPES.find(at => at.value === t)?.label ?? t;
   const getSubtypeLabel = (subtype: AccountSubtype) => ACCOUNT_SUBTYPES.find(item => item.value === subtype)?.label ?? subtype;
@@ -450,7 +477,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     try {
       const raw = await contabilidadService.exportAccounts();
       const rows = Array.isArray(raw) ? raw : (raw as any)?.data;
-      if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolviÃ³ cuentas para exportar');
+      if (!Array.isArray(rows) || rows.length === 0) throw new Error('El servidor no devolvió cuentas para exportar');
       downloadXlsx('plan_cuentas.xlsx', rows);
       toast.success('Plan de cuentas exportado en Excel (.xlsx)');
     } catch (e: any) {
@@ -507,7 +534,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         const tipoCuenta = r.tipo_cuenta || r.type || r.tipo || 'ASSET';
         const permiteManual = r.permite_manual ?? r.allowmanualentry ?? '1';
         const activa = r.activa ?? r.isactive ?? '1';
-        if (!nombre || !codigo) { errors.push(`Fila ${rowNum}: nombre y cÃ³digo son obligatorios`); continue; }
+        if (!nombre || !codigo) { errors.push(`Fila ${rowNum}: nombre y código son obligatorios`); continue; }
         valid.push({
           codigo, nombre, tipo_cuenta: tipoCuenta,
           subtipo: r.subtipo || r.subtype || 'Cuenta de detalle',
@@ -523,7 +550,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       setPreviewProgress(90);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       setPreviewProgress(100);
-      return { valid, errors, fileName: `${importFile.name} Â· Hoja: ${selectedSheet.sheetName}` };
+      return { valid, errors, fileName: `${importFile.name} · Hoja: ${selectedSheet.sheetName}` };
     } catch (e: any) {
       toast.error(e?.message || 'Error al leer el archivo');
       return null;
@@ -542,14 +569,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   };
 
   const handleConfirmImport = async () => {
-    if (importPreviewRows.length === 0) { toast.error('No hay cuentas vÃ¡lidas para importar'); return; }
+    if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
     setImporting(true);
     setImportProgress(5);
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      // La peticiÃ³n de importaciÃ³n es atÃ³mica en el backend; avanzamos de
-      // forma continua mientras termina, igual que la importaciÃ³n masiva de
-      // productos, sin afirmar que ya terminÃ³ antes de recibir la respuesta.
+      // La petición de importación es atómica en el backend; avanzamos de
+      // forma continua mientras termina, igual que la importación masiva de
+      // productos, sin afirmar que ya terminó antes de recibir la respuesta.
       let progress = 5;
       progressTimer = setInterval(() => {
         progress = Math.min(progress + 3, 92);
@@ -627,7 +654,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               {account.name}
             </p>
             <p className="mt-1 truncate text-[10px] text-muted-foreground">
-              {getSubtypeLabel(account.subtype)} Â· {getDetailTypeLabel(account.detailType)} Â· {account.currency}
+              {getSubtypeLabel(account.subtype)} · {getDetailTypeLabel(account.detailType)} · {account.currency}
             </p>
           </div>
 
@@ -721,13 +748,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
-      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualizaciÃ³n" description="Leyendo las hojas, validando la jerarquÃ­a y preparando las cuentas para revisiÃ³n." />
+      <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo las hojas, validando la jerarquía y preparando las cuentas para revisión." />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            CatÃ¡logo de cuentas contables del sistema
+            Catálogo de cuentas contables del sistema
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -752,7 +779,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <div className="relative min-w-[min(100%,16rem)] max-w-sm flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cÃ³digo o nombre..."
+            placeholder="Buscar por código o nombre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-8 h-9"
@@ -791,7 +818,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <FolderTree className="w-4 h-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium">JerarquÃ­a de Cuentas</CardTitle>
+                  <CardTitle className="text-sm font-medium">Jerarquía de Cuentas</CardTitle>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setColumnConfigOpen(true)} title="Elegir columnas visibles">
@@ -816,14 +843,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <FolderTree className="w-10 h-10 mb-2 opacity-40" />
                   <p className="text-sm">
                     {searchTerm
-                      ? 'Sin resultados de bÃºsqueda'
-                      : statusFilter === 'ACTIVE'
-                        ? 'No hay cuentas activas'
-                        : statusFilter === 'INACTIVE'
-                          ? 'No hay cuentas inactivas'
-                          : 'No hay cuentas registradas'}
+                      ? 'Sin resultados de búsqueda'
+                      : (colFilters.state.type?.values?.length || colFilters.state.status?.values?.length)
+                        ? 'Sin cuentas que coincidan con los filtros de columna'
+                        : statusFilter === 'ACTIVE'
+                          ? 'No hay cuentas activas'
+                          : statusFilter === 'INACTIVE'
+                            ? 'No hay cuentas inactivas'
+                            : 'No hay cuentas registradas'}
                   </p>
-                  {!searchTerm && statusFilter === 'ALL' && (
+                  {!searchTerm && statusFilter === 'ALL' && !(colFilters.state.type?.values?.length || colFilters.state.status?.values?.length) && (
                     <Button variant="link" size="sm" onClick={() => openAddDialog()}>
                       Crear primera cuenta
                     </Button>
@@ -837,7 +866,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                       <span className="px-2" aria-hidden="true" />
                       {ACCOUNT_COLUMN_DEFS.filter((column) => visibleAccountColumnKeys.includes(column.key)).map((column) => (
                         <span key={column.key} className={cn('min-w-0 truncate px-2', column.key === 'balance' && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
-                          {column.label}
+                          <span className="inline-flex items-center gap-1">
+                            {column.label}
+                            {column.key === 'type' && <ColumnFilterMenu label="Tipo" options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />}
+                            {column.key === 'subtype' && <ColumnFilterMenu label="Subtipo" options={subtypeOptionsForFilter} selected={colFilters.state.subtype?.values || []} onSelect={(values) => colFilters.setValues('subtype', values)} sort={colFilters.state.subtype?.sort || null} onSort={(sort) => colFilters.setSort('subtype', sort)} />}
+                            {column.key === 'status' && <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />}
+                          </span>
                         </span>
                       ))}
                       <span className="px-2 text-right">Acciones</span>
@@ -874,7 +908,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada Â· {selectedAccount.code}</p>
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Cuenta seleccionada · {selectedAccount.code}</p>
                       <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={selectedAccount.name}>{selectedAccount.name}</h3>
                     </div>
                     <Badge variant={selectedAccount.isActive ? 'default' : 'secondary'} className="shrink-0">
@@ -934,8 +968,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         {selectedAccount.isActive ? <Ban className="mr-1 size-3.5" /> : <CircleCheck className="mr-1 size-3.5 text-emerald-500" />} {selectedAccount.isActive ? 'Inhabilitar' : 'Habilitar'}
                       </Button>
                       {(selectedAccount.children?.length ?? 0) === 0 && (
-                        <Button variant="outline" size="sm" className="flex-1 text-rose-600 hover:text-rose-600" onClick={() => { setMergeSource(selectedAccount); setMergeTargetId(''); }}>
-                          <ArrowDownLeft className="mr-1 size-3.5" /> Transferir y eliminar
+                        <Button variant="outline" size="sm" className="flex-1 text-primary hover:text-primary" onClick={() => { setMergeSource(selectedAccount); setMergeTargetId(''); setMergeDeleteSource(false); }} title="Mueve los movimientos de esta cuenta a otra. La cuenta queda inhabilitada pero NO se elimina (marca la opción en el diálogo si también quieres eliminarla).">
+                          <ArrowDownLeft className="mr-1 size-3.5" /> Transferir
                         </Button>
                       )}
                       <Button
@@ -957,7 +991,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         <Activity className="size-4 text-primary" />
                         <h3 id="account-transactions-title" className="truncate text-sm font-black uppercase tracking-tight">Transacciones de la cuenta</h3>
                       </div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Ãšltimos movimientos registrados, actualizados automÃ¡ticamente.</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Últimos movimientos registrados, actualizados automáticamente.</p>
                     </div>
                     {accountTransactionsQuery.isFetching && <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="Actualizando transacciones" />}
                   </div>
@@ -970,7 +1004,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                     <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
                       <Activity className="mx-auto size-8 text-muted-foreground/40" />
                       <p className="mt-2 text-sm font-semibold">Sin transacciones</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Esta cuenta todavÃ­a no tiene movimientos.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Esta cuenta todavía no tiene movimientos.</p>
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-xl border border-border/60">
@@ -983,7 +1017,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                               key={transaction.id}
                               role="button"
                               tabIndex={0}
-                              aria-label={`Ver detalles de la transacciÃ³n ${transaction.reference || transaction.id}`}
+                              aria-label={`Ver detalles de la transacción ${transaction.reference || transaction.id}`}
                               onClick={() => setSelectedTransaction(transaction)}
                               onKeyDown={(event) => {
                                 if (event.key === 'Enter' || event.key === ' ') {
@@ -997,9 +1031,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                                 {debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
                               </div>
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripciÃ³n'}>{transaction.description || 'Sin descripciÃ³n'}</p>
+                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripción'}>{transaction.description || 'Sin descripción'}</p>
                                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
-                                  {new Date(transaction.date).toLocaleDateString('es-NI')} Â· {transaction.reference || 'Sin referencia'}
+                                  {new Date(transaction.date).toLocaleDateString('es-NI')} · {transaction.reference || 'Sin referencia'}
                                 </p>
                               </div>
                               <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
@@ -1021,18 +1055,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         value={transactionsPageSize}
                         onChange={(event) => { setTransactionsPageSize(Number(event.target.value)); setTransactionsPage(1); }}
                         className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
-                        aria-label="Transacciones por pÃ¡gina"
+                        aria-label="Transacciones por página"
                       >
                         {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
                       </select>
-                      <span>por pÃ¡gina Â· {accountTransactionsMeta.total ?? 0} total</span>
+                      <span>por página · {accountTransactionsMeta.total ?? 0} total</span>
                     </div>
                     <div className="flex items-center justify-between gap-1 sm:justify-end">
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(1)} disabled={transactionsPage <= 1} aria-label="Primera pÃ¡gina de transacciones"><ChevronsLeft className="size-3.5" /></Button>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.max(1, page - 1))} disabled={transactionsPage <= 1} aria-label="PÃ¡gina anterior de transacciones"><ChevronRight className="size-3.5 rotate-180" /></Button>
-                      <span className="min-w-20 text-center font-bold text-foreground">PÃ¡g. {transactionsPage} / {Math.max(1, accountTransactionsMeta.totalPages ?? 1)}</span>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.min(accountTransactionsMeta.totalPages ?? 1, page + 1))} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="PÃ¡gina siguiente de transacciones"><ChevronRight className="size-3.5" /></Button>
-                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(accountTransactionsMeta.totalPages ?? 1)} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Ãšltima pÃ¡gina de transacciones"><ChevronsRight className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(1)} disabled={transactionsPage <= 1} aria-label="Primera página de transacciones"><ChevronsLeft className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.max(1, page - 1))} disabled={transactionsPage <= 1} aria-label="Página anterior de transacciones"><ChevronRight className="size-3.5 rotate-180" /></Button>
+                      <span className="min-w-20 text-center font-bold text-foreground">Pág. {transactionsPage} / {Math.max(1, accountTransactionsMeta.totalPages ?? 1)}</span>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage((page) => Math.min(accountTransactionsMeta.totalPages ?? 1, page + 1))} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Página siguiente de transacciones"><ChevronRight className="size-3.5" /></Button>
+                      <Button variant="outline" size="icon" className="size-7" onClick={() => setTransactionsPage(accountTransactionsMeta.totalPages ?? 1)} disabled={transactionsPage >= (accountTransactionsMeta.totalPages ?? 1)} aria-label="Última página de transacciones"><ChevronsRight className="size-3.5" /></Button>
                     </div>
                   </div>
                 </section>
@@ -1046,10 +1080,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 pr-8">
               <Activity className="size-5 text-primary" />
-              Detalle de transacciÃ³n
+              Detalle de transacción
             </DialogTitle>
             <DialogDescription>
-              InformaciÃ³n general del movimiento registrado en la cuenta seleccionada.
+              Información general del movimiento registrado en la cuenta seleccionada.
             </DialogDescription>
           </DialogHeader>
 
@@ -1062,7 +1096,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <div className="space-y-4">
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
-                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripciÃ³n'}</p>
+                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripción'}</p>
                   <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">ID: {selectedTransaction.id}</p>
                 </div>
 
@@ -1079,11 +1113,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">DÃ©bito</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Débito</p>
                     <p className="mt-1 break-words font-mono text-sm font-bold text-emerald-600">{formatConvertedAmount(debit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">CrÃ©dito</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Crédito</p>
                     <p className="mt-1 break-words font-mono text-sm font-bold text-rose-500">{formatConvertedAmount(credit, baseCurrency)}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
@@ -1095,7 +1129,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 </div>
 
                 <div className="rounded-xl border border-border/60 px-4 py-3 text-xs text-muted-foreground">
-                  Cuenta: <span className="font-semibold text-foreground">{selectedAccount?.code} Â· {selectedAccount?.name}</span>
+                  Cuenta: <span className="font-semibold text-foreground">{selectedAccount?.code} · {selectedAccount?.name}</span>
                 </div>
               </div>
             );
@@ -1107,7 +1141,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquÃ­a de cuentas.</DialogDescription>
+            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACCOUNT_COLUMN_DEFS.map((column) => {
@@ -1137,9 +1171,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <ConfirmDialog
         open={pendingStatusAccount !== null}
         onOpenChange={(open) => { if (!open && !statusChanging) setPendingStatusAccount(null); }}
-        title={pendingStatusAccount?.isActive ? 'Â¿Inhabilitar cuenta?' : 'Â¿Habilitar cuenta?'}
+        title={pendingStatusAccount?.isActive ? '¿Inhabilitar cuenta?' : '¿Habilitar cuenta?'}
         description={pendingStatusAccount
-          ? `${pendingStatusAccount.code} Â· ${pendingStatusAccount.name}. ${pendingStatusAccount.isActive ? 'La cuenta no estarÃ¡ disponible para nuevos movimientos, pero conservarÃ¡ su historial.' : 'La cuenta volverÃ¡ a estar disponible para nuevos movimientos.'}`
+          ? `${pendingStatusAccount.code} · ${pendingStatusAccount.name}. ${pendingStatusAccount.isActive ? 'La cuenta no estará disponible para nuevos movimientos, pero conservará su historial.' : 'La cuenta volverá a estar disponible para nuevos movimientos.'}`
           : ''}
         confirmLabel={pendingStatusAccount?.isActive ? 'Inhabilitar cuenta' : 'Habilitar cuenta'}
         variant={pendingStatusAccount?.isActive ? 'warning' : 'default'}
@@ -1147,39 +1181,51 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         onConfirm={toggleAccountStatus}
       />
 
-      <Dialog open={mergeSource !== null} onOpenChange={(open) => { if (!open && !merging) { setMergeSource(null); setMergeTargetId(''); } }}>
+      <Dialog open={mergeSource !== null} onOpenChange={(open) => { if (!open && !merging) { setMergeSource(null); setMergeTargetId(''); setMergeDeleteSource(false); } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Transferir y eliminar cuenta</DialogTitle>
+            <DialogTitle>{mergeDeleteSource ? 'Transferir y eliminar cuenta' : 'Transferir cuenta'}</DialogTitle>
             <DialogDescription>
               {mergeSource
-                ? `Se eliminarÃ¡ la cuenta ${mergeSource.code} Â· ${mergeSource.name} y TODOS sus datos (saldos, transacciones, asientos, facturas, almacenes, conciliaciones, presupuestos) se transferirÃ¡n a la cuenta destino.`
+                ? `Se moverán ${mergeSource.code} · ${mergeSource.name} y TODOS sus datos (saldos, transacciones, asientos, facturas, almacenes, conciliaciones, presupuestos) a la cuenta destino. Por defecto la cuenta origen NO se elimina: queda inhabilitada y vacía, conservando su código en el plan de cuentas.`
                 : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
-              <p className="text-xs text-rose-600">
-                <strong>Advertencia:</strong> la cuenta origen se eliminarÃ¡ de forma permanente. Esta acciÃ³n no se puede deshacer.
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <p className="text-xs text-foreground">
+                <strong>Transferir sin eliminar:</strong> la cuenta origen se queda en el plan de cuentas, inhabilitada y sin saldo. Puedes habilitarla después si la necesitas.
               </p>
             </div>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border/60 bg-card/50 p-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 accent-rose-600"
+                checked={mergeDeleteSource}
+                onChange={(e) => setMergeDeleteSource(e.target.checked)}
+              />
+              <span className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+                <strong className="text-rose-600">Eliminar la cuenta origen después de transferir.</strong>{' '}
+                Si lo marcas, la cuenta se eliminará de forma permanente junto con su código. Esta acción no se puede deshacer.
+              </span>
+            </label>
             <div className="space-y-2">
               <Label>Cuenta destino (mismo tipo: {mergeSource ? getTypeLabel(mergeSource.type) : ''})</Label>
               <Combobox
                 value={mergeTargetId}
                 onChange={setMergeTargetId}
-                options={mergeCandidates.map(a => ({ value: a.id, label: `${a.code} Â· ${a.name}` }))}
+                options={mergeCandidates.map(a => ({ value: a.id, label: `${a.code} · ${a.name}` }))}
                 placeholder="Buscar cuenta destino..."
                 emptyMessage="No hay cuentas del mismo tipo disponibles"
               />
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => { setMergeSource(null); setMergeTargetId(''); }} disabled={merging}>
+            <Button variant="outline" onClick={() => { setMergeSource(null); setMergeTargetId(''); setMergeDeleteSource(false); }} disabled={merging}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleMergeAccount} disabled={!mergeTargetId || merging}>
-              {merging ? <Loader2 className="size-4 animate-spin mr-1" /> : null} Transferir y eliminar
+            <Button variant={mergeDeleteSource ? 'destructive' : 'default'} onClick={handleMergeAccount} disabled={!mergeTargetId || merging}>
+              {merging ? <Loader2 className="size-4 animate-spin mr-1" /> : null} {mergeDeleteSource ? 'Transferir y eliminar' : 'Transferir'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1188,9 +1234,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <ConfirmDialog
         open={pendingDeleteAccount !== null}
         onOpenChange={(open) => { if (!open && !deletingAccount) setPendingDeleteAccount(null); }}
-        title="Â¿Eliminar cuenta?"
+        title="¿Eliminar cuenta?"
         description={pendingDeleteAccount
-          ? `${pendingDeleteAccount.code} Â· ${pendingDeleteAccount.name}. Esta acciÃ³n es definitiva y no se puede deshacer. Solo se eliminan cuentas sin hijos ni movimientos.`
+          ? `${pendingDeleteAccount.code} · ${pendingDeleteAccount.name}. Esta acción es definitiva y no se puede deshacer. Solo se eliminan cuentas sin hijos ni movimientos.`
           : ''}
         confirmLabel="Eliminar cuenta"
         variant="destructive"
@@ -1210,7 +1256,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="code">CÃ³digo</Label>
+                <Label htmlFor="code">Código</Label>
                 <Input
                   id="code" value={formData.code}
                   onChange={(e) => setFormData(p => ({ ...p, code: e.target.value }))}
@@ -1247,13 +1293,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                 <Label htmlFor="parentId">Cuenta Padre</Label>
                 <Combobox
                   options={[
-                    { label: 'Ninguna (RaÃ­z)', value: 'NONE' },
+                    { label: 'Ninguna (Raíz)', value: 'NONE' },
                     ...getParentOptions(editingAccount?.id).map(opt => ({ label: opt.label, value: opt.id })),
                   ]}
                   value={formData.parentId ?? 'NONE'}
                   onChange={(v) => setFormData(p => ({ ...p, parentId: v === 'NONE' ? undefined : v }))}
-                  placeholder="Ninguna (RaÃ­z)"
-                  searchPlaceholder="Buscar por nombre o cÃ³digo..."
+                  placeholder="Ninguna (Raíz)"
+                  searchPlaceholder="Buscar por nombre o código..."
                   emptyMessage="Sin cuentas coincidentes"
                   className="h-8"
                 />
@@ -1339,7 +1385,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               Importar Cuentas desde Excel
             </DialogTitle>
             <DialogDescription>
-              Descarga la plantilla Excel y sÃºbela. El sistema crea o actualiza las cuentas por cÃ³digo dentro de esta empresa.
+              Descarga la plantilla Excel y súbela. El sistema crea o actualiza las cuentas por código dentro de esta empresa.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -1347,14 +1393,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               <p className="text-xs font-medium text-foreground">Columnas requeridas</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
-                  { key: 'codigo', label: 'CÃ³digo de la cuenta' },
+                  { key: 'codigo', label: 'Código de la cuenta' },
                   { key: 'nombre', label: 'Nombre' },
                   { key: 'tipo_cuenta', label: 'Activos, Pasivos, Patrimonioâ€¦' },
                   { key: 'subtipo', label: 'Grupo, detalle, subcuentaâ€¦' },
                   { key: 'tipo_detalle', label: 'Balance General / Resultados' },
                   { key: 'moneda', label: 'Ej. NIO, USD' },
-                  { key: 'codigo_padre', label: 'CÃ³digo del padre (opcional)' },
-                  { key: 'permite_manual', label: '1 = sÃ­, 0 = no' },
+                  { key: 'codigo_padre', label: 'Código del padre (opcional)' },
+                  { key: 'permite_manual', label: '1 = sí, 0 = no' },
                   { key: 'activa', label: '1 = activa, 0 = inactiva' },
                   { key: 'notas', label: 'Observaciones (opcional)' },
                 ].map((col) => (
@@ -1390,7 +1436,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
               />
               <div>
                 <p className="text-sm font-medium">Reemplazar cuentas existentes</p>
-                <p className="text-xs text-muted-foreground">Elimina cuentas que no estÃ¡n en el archivo importado (solo si no tienen movimientos)</p>
+                <p className="text-xs text-muted-foreground">Elimina cuentas que no están en el archivo importado (solo si no tienen movimientos)</p>
               </div>
             </label>
 

@@ -8,14 +8,23 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '../ui/dialog';
 import { Checkbox } from '../ui/checkbox';
-import { Label } from '../ui/label';
-import { RefreshCw, Filter, X, ArrowUpCircle, ArrowDownCircle, DollarSign, ChevronDown, Settings2, Landmark, Loader2 } from 'lucide-react';
+import { Search, Filter, X, ArrowUpCircle, ArrowDownCircle, DollarSign, ChevronDown, Settings2, Landmark, Loader2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQuery';
 import { useQueryClient } from '@tanstack/react-query';
+import { DateField } from '../ui/DateField';
+
+interface CashFlowTx {
+  id: string;
+  date: string;
+  description?: string;
+  reference?: string;
+  debit?: number;
+  credit?: number;
+}
 
 interface CashFlowItem {
   concept: string;
@@ -73,10 +82,12 @@ export function FlujoEfectivoView() {
   });
   const [dateTo, setDateTo] = useState(() => localISO(new Date()));
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<string[]>([]);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSearch, setSettingsSearch] = useState('');
   const queryClient = useQueryClient();
   const query = useAccountingQuery<CashFlowData | null>(
     ['cash-flow', dateFrom, dateTo],
@@ -135,16 +146,38 @@ export function FlujoEfectivoView() {
     );
   }, [flatAccounts, bankAccountsQuery.data]);
 
+  // Todo el catálogo de detalle: la configuración ofrece todas las cuentas,
+  // no solo las que el sistema detecta automáticamente.
+  const leafAccounts = useMemo(() => {
+    const parentIds = new Set(flatAccounts.filter((a: any) => a.parentId).map((a: any) => a.parentId));
+    return flatAccounts
+      .filter((a: any) => !parentIds.has(a.id))
+      .filter((a: any) => a.isActive !== false && a.acceptsPostings !== false);
+  }, [flatAccounts]);
+
+  const settingsVisibleAccounts = useMemo(() => {
+    const term = settingsSearch.trim().toLowerCase();
+    if (!term) return leafAccounts;
+    return leafAccounts.filter((a: any) =>
+      a.code.toLowerCase().includes(term) || a.name.toLowerCase().includes(term));
+  }, [leafAccounts, settingsSearch]);
+
   useEffect(() => {
     if (showSettings && !settingsLoaded && settingsConfigQuery.data) {
       const configured = ((settingsConfigQuery.data as any)?.config?.cashFlow?.accountIds || []) as string[];
-      setSettingsDraft(Array.isArray(configured) ? configured : []);
+      if (Array.isArray(configured) && configured.length > 0) {
+        setSettingsDraft(configured);
+      } else {
+        // Sin configuración: se pre-marcan las cuentas que el sistema detecta
+        // automáticamente, para que el usuario vea el estado real.
+        setSettingsDraft((cashCandidates.map((a: any) => a.id)));
+      }
       setSettingsLoaded(true);
     }
-  }, [showSettings, settingsLoaded, settingsConfigQuery.data]);
+  }, [showSettings, settingsLoaded, settingsConfigQuery.data, cashCandidates]);
 
   const handleSettingsOpenChange = (next: boolean) => {
-    if (!next) { setSettingsLoaded(false); setSettingsDraft([]); }
+    if (!next) { setSettingsLoaded(false); setSettingsDraft([]); setSettingsSearch(''); }
     setShowSettings(next);
   };
 
@@ -167,6 +200,22 @@ export function FlujoEfectivoView() {
     const abs = Math.abs(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return n < 0 ? `(${abs})` : abs;
   };
+
+  const filteredData = useMemo(() => {
+    if (!data) return data;
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return data;
+    const filterSection = (section: CashFlowSection): CashFlowSection => {
+      const items = section.items.filter((item) => item.concept.toLowerCase().includes(term));
+      return { items, subtotal: items.reduce((s, item) => s + item.amount, 0) };
+    };
+    return {
+      ...data,
+      operativas: filterSection(data.operativas),
+      inversion: filterSection(data.inversion),
+      financiamiento: filterSection(data.financiamiento),
+    };
+  }, [data, searchTerm]);
 
   const renderSection = (section: typeof SECTION_CONFIG[number], secData: CashFlowSection) => {
     const Icon = section.icon;
@@ -311,11 +360,11 @@ export function FlujoEfectivoView() {
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={dateFrom} onChange={setDateFrom} placeholder="Desde" className="sm:w-[180px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={dateTo} onChange={setDateTo} placeholder="Hasta" className="sm:w-[180px]" />
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => {
@@ -329,11 +378,17 @@ export function FlujoEfectivoView() {
           )}
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cuenta o concepto..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-9 w-full pl-9 sm:w-[200px]"
+            />
+          </div>
           <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="h-9 gap-1.5">
             <Settings2 className="size-4" /> Cuentas de efectivo
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => query.refetch()} disabled={loading} className="h-9">
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
         </div>
       </div>
@@ -353,7 +408,11 @@ export function FlujoEfectivoView() {
           ) : !data ? (
             <div className="h-40 flex items-center justify-center text-muted-foreground">Seleccione un rango de fechas para ver el reporte</div>
           ) : (            <div>
-              {SECTION_CONFIG.map(section => renderSection(section, data[section.key]))}
+              {(filteredData ? [filteredData.operativas, filteredData.inversion, filteredData.financiamiento] : []).reduce((s, sec) => s + sec.items.length, 0) === 0 && searchTerm.trim() ? (
+                <p className="py-8 text-center text-xs italic text-muted-foreground/60">Sin movimientos que coincidan con la búsqueda</p>
+              ) : (
+                SECTION_CONFIG.map(section => renderSection(section, filteredData ? filteredData[section.key] : data[section.key]))
+              )}
 
               <Separator className="my-4" />
 
@@ -407,14 +466,15 @@ export function FlujoEfectivoView() {
       </Card>
 
       <Dialog open={showSettings} onOpenChange={handleSettingsOpenChange}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
               <Landmark className="size-5 text-primary" /> Cuentas de Efectivo
             </DialogTitle>
             <DialogDescription className="text-xs">
-              El Flujo de Efectivo se calcula sobre estas cuentas (efectivo y bancos). Marca las cuentas de tu empresa:
-              si ninguna está marcada, el sistema usa las que detecta automáticamente (cuentas vinculadas a bancos, código 1000 y nombres con caja/banco/efectivo).
+              El Flujo de Efectivo se calcula sobre las cuentas que marques de todo el plan de cuentas (efectivo y bancos).
+              Si ninguna está marcada, el sistema usa la detección automática (cuentas vinculadas a bancos, código 1000 y nombres con caja/banco/efectivo).
+              Se sugiere marcar solo cuentas de efectivo y bancos para que el flujo cuadre con la lógica contable.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-2">
@@ -425,38 +485,56 @@ export function FlujoEfectivoView() {
             )}
             {settingsLoaded && (
               <>
-                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  <Checkbox
-                    checked={settingsDraft.length === 0}
-                    onCheckedChange={(c) => setSettingsDraft(c ? [] : settingsDraft)}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder={`Buscar en ${leafAccounts.length} cuentas del plan por código o nombre...`}
+                    value={settingsSearch}
+                    onChange={(e) => setSettingsSearch(e.target.value)}
+                    className="h-8 pl-8 text-xs"
                   />
-                  Detección automática (ninguna seleccionada)
-                </label>
-                {cashCandidates.length === 0 ? (
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <Checkbox
+                      checked={settingsDraft.length === 0}
+                      onCheckedChange={(c) => setSettingsDraft(c ? [] : settingsDraft)}
+                    />
+                    Detección automática (ninguna seleccionada)
+                  </label>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-black text-primary">
+                    {settingsDraft.length} seleccionada(s)
+                  </span>
+                </div>
+                {settingsVisibleAccounts.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">
-                    No se encontraron cuentas de efectivo/bancos en el plan de cuentas.
+                    No se encontraron cuentas que coincidan con la búsqueda.
                   </p>
-                ) : cashCandidates.map((account: any) => {
-                  const checked = settingsDraft.includes(account.id);
-                  return (
-                    <label
-                      key={account.id}
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/40 bg-card/60 px-3 py-2.5"
-                    >
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) => setSettingsDraft(prev => c ? [...prev, account.id] : prev.filter(id => id !== account.id))}
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-bold">{account.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{account.code}</p>
-                        </div>
-                      </div>
-                      <BadgeStatus checked={checked} />
-                    </label>
-                  );
-                })}
+                ) : (
+                  <div className="grid max-h-[46vh] grid-cols-1 gap-1 overflow-y-auto rounded-xl border border-border/50 p-2 pr-1 sm:grid-cols-2">
+                    {settingsVisibleAccounts.map((account: any) => {
+                      const checked = settingsDraft.includes(account.id);
+                      return (
+                        <label
+                          key={account.id}
+                          className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/40 bg-card/60 px-3 py-2.5"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(c) => setSettingsDraft(prev => c ? [...prev, account.id] : prev.filter(id => id !== account.id))}
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold">{account.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{account.code}</p>
+                            </div>
+                          </div>
+                          <BadgeStatus checked={checked} />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             )}
           </div>

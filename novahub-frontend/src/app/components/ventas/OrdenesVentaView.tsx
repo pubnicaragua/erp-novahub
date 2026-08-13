@@ -31,6 +31,8 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -257,6 +259,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    number: (row: SalesOrder) => row.number || '',
+    customer: (row: SalesOrder) => row.customer?.name || 'Varios',
+    total: (row: SalesOrder) => Number(row.total || 0),
+    date: (row: SalesOrder) => (row.date ? new Date(row.date).getTime() : null),
+    invoicedAt: (row: SalesOrder) => (row.invoicedAt ? new Date(row.invoicedAt).getTime() : null),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
+
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
       if (updates.status && String(updates.status).toUpperCase() === 'SHIPPED') {
@@ -418,6 +432,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       key: 'number', 
       header: 'Número de Orden', 
       width: '200px',
+      headerExtra: <ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
       render: (val, row) => (
         <div className="flex items-center gap-2">
           <span 
@@ -440,6 +455,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { 
       key: 'customer', 
       header: 'Cliente', 
+      headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />,
       render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
     { 
@@ -452,6 +468,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       key: 'total', 
       header: 'Monto Total', 
       width: '150px',
+      headerExtra: <ColumnFilterMenu label="Monto Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-emerald-500">
           {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
@@ -478,10 +495,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { 
       key: 'date', 
       header: 'Fecha Compromiso', 
+      headerExtra: <ColumnFilterMenu label="Fecha Compromiso" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
-           {new Date(val).toLocaleDateString()}
+           {formatDateEs(val)}
         </div>
       )
     },
@@ -507,10 +525,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       }
     },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
-    { key: 'invoicedAt', header: 'Fecha facturación', render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '—'}</span> },
+    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '—'}</span> },
     { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
     { key: 'paymentNumber', header: 'Pago relacionado', render: (val, row) => <span className="text-xs font-mono font-bold text-emerald-500">{val || (row.invoiceId ? 'Pendiente' : '—')}</span> },
-    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '—'}</span> },
+    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '—'}</span> },
     {
       key: 'paymentStatus',
       header: 'Estado pago',
@@ -1138,7 +1156,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </div>
         </div>
         <EditableDataTable 
-          data={filtered}
+          data={filteredData}
           pagination={pagination}
           showHorizontalControls
           actionsWidth="w-56"

@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
-import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { ArrowDownAZ, ArrowUpAZ, Filter, X } from 'lucide-react';
 import { cn } from './utils';
@@ -34,8 +33,7 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
   };
 
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className="max-w-[120px] truncate">{label}</span>
+    <span className="inline-flex items-center">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button

@@ -23,6 +23,7 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -244,6 +245,21 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     return 0;
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    name: (row: Supplier) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (row.createdAt ? new Date(row.createdAt).getTime() : 0) : row.name || '';
+    },
+    type: (row: Supplier) => String(row.type || 'COMPANY').toUpperCase(),
+    balance: (row: Supplier) => Number(row.balance || 0),
+  };
+  const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
+  const typeOptions = [
+    { value: 'COMPANY', label: 'Empresa', count: filteredAndSorted.filter((s) => String(s.type || 'COMPANY').toUpperCase() === 'COMPANY').length },
+    { value: 'INDIVIDUAL', label: 'Individual', count: filteredAndSorted.filter((s) => String(s.type || 'COMPANY').toUpperCase() !== 'COMPANY').length },
+  ];
+
   const statusOptions = [
     { label: 'Activo',   value: 'ACTIVE',   color: 'bg-emerald-500/10 text-emerald-500' },
     { label: 'Inactivo', value: 'INACTIVE', color: 'bg-muted/20 text-muted-foreground' },
@@ -251,8 +267,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
-    { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+      headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /> },
     { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+      headerExtra: <ColumnFilterMenu label="Tipo" options={typeOptions} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />,
       render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
     },
     { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
@@ -428,7 +446,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredAndSorted} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"

@@ -55,63 +55,63 @@ export type ExtendedPermission = Permission & { create?: boolean; edit?: boolean
 export type ExtendedRoleManagement = Omit<RoleManagement, 'permissions'> & { permissions: ExtendedPermission[] };
 
 const AVAILABLE_MODULES = [
-  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y CrÃ©ditos' },
-  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, FacturaciÃ³n y Clientes' },
-  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Ã“rdenes de Compra' },
-  { id: 'INVENTORY', label: 'Inventario de MercancÃ­as', icon: Package, description: 'Stock, Almacenes y SKU' },
+  { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
+  { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
+  { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
+  { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package, description: 'Stock, Almacenes y SKU' },
   { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign, description: 'Libro Mayor y Balance General' },
   { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen, description: 'Contabilidad General' },
-  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'NÃ³mina y GestiÃ³n de Empleados' },
+  { id: 'HR', label: 'Recursos Humanos', icon: UserIcon, description: 'Nómina y Gestión de Empleados' },
   { id: 'ACTIVITIES', label: 'Actividades', icon: CalendarDays, description: 'Registro de Actividades' },
-  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y AtenciÃ³n' },
-  { id: 'HR_TRAINING', label: 'Centro de CapacitaciÃ³n', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
-  { id: 'SUPPORT_TECH', label: 'Soporte TÃ©cnico', icon: LifeBuoy, description: 'Soporte TÃ©cnico Especializado' },
-  { id: 'LEGAL', label: 'AsesorÃ­a Legal', icon: Scale, description: 'AsesorÃ­a y Casos Legales' },
-  { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicaciÃ³n unificada' },
-  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'GestiÃ³n Documental' },
+  { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones, description: 'Soporte y Atención' },
+  { id: 'HR_TRAINING', label: 'Centro de Capacitación', icon: GraduationCap, description: 'Cursos y Capacitaciones' },
+  { id: 'SUPPORT_TECH', label: 'Soporte Técnico', icon: LifeBuoy, description: 'Soporte Técnico Especializado' },
+  { id: 'LEGAL', label: 'Asesoría Legal', icon: Scale, description: 'Asesoría y Casos Legales' },
+  { id: 'NOVACHAT', label: 'Nova Suite', icon: NovaSuiteIcon, description: 'Bandeja multicanal y comunicación unificada' },
+  { id: 'DOCUMENTS', label: 'Documentos', icon: FileText, description: 'Gestión Documental' },
   { id: 'NOTIFICATIONS', label: 'Notificaciones', icon: BellRing, description: 'Alertas del sistema' },
-  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y AnÃ¡lisis' },
+  { id: 'REPORTS', label: 'Reportes', icon: BarChart3, description: 'Informes y Análisis' },
   { id: 'MY_COMPANY', label: 'Mi Empresa', icon: Building2, description: 'Empresa, plan, equipo, sucursales y dominio' },
-  { id: 'CONFIGURATION', label: 'ConfiguraciÃ³n', icon: Settings, description: 'Ajustes del Sistema' },
+  { id: 'CONFIGURATION', label: 'Configuración', icon: Settings, description: 'Ajustes del Sistema' },
 ];
 
-// SubmÃ³dulos para permisos ultra-granulares
+// Submódulos para permisos ultra-granulares
 export const SUBMODULES_FOR_PERMS = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
   { id: 'SALES_QUOTES', label: 'Cotizaciones', parent: 'SALES' },
-  { id: 'SALES_ORDERS', label: 'Ã“rdenes de Venta', parent: 'SALES' },
+  { id: 'SALES_ORDERS', label: 'Órdenes de Venta', parent: 'SALES' },
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
-  { id: 'SALES_RETURNS', label: 'Notas de CrÃ©dito', parent: 'SALES' },
-  { id: 'SALES_CREDIT_NOTES', label: 'CrÃ©ditos', parent: 'SALES' },
+  { id: 'SALES_RETURNS', label: 'Notas de Crédito', parent: 'SALES' },
+  { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
-  { id: 'RETAIL_POS', label: 'FacturaciÃ³n por Caja', parent: 'SALES' },
+  { id: 'RETAIL_POS', label: 'Facturación por Caja', parent: 'SALES' },
 
   // Compras
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes de compra', parent: 'PURCHASES' },
-  { id: 'PURCHASES_MANAGEMENT', label: 'GestiÃ³n de compras', parent: 'PURCHASES' },
+  { id: 'PURCHASES_MANAGEMENT', label: 'Gestión de compras', parent: 'PURCHASES' },
   { id: 'PURCHASES_SUPPLIER_PRICES', label: 'Precios de proveedores', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES', label: 'Gastos', parent: 'PURCHASES' },
   { id: 'PURCHASES_EXPENSES_REC', label: 'Gastos Recurrentes', parent: 'PURCHASES' },
-  { id: 'PURCHASES_ORDERS', label: 'Ã“rdenes de Compra', parent: 'PURCHASES' },
+  { id: 'PURCHASES_ORDERS', label: 'Órdenes de Compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_RECEIPTS', label: 'Recepciones de Compra', parent: 'PURCHASES' },
   { id: 'PURCHASES_INVOICES_REC', label: 'Facturas de Proveedor Rec.', parent: 'PURCHASES' },
   { id: 'PURCHASES_PAYMENTS', label: 'Pagos Realizados', parent: 'PURCHASES' },
-  { id: 'PURCHASES_RETURNS', label: 'CrÃ©ditos de Proveedor', parent: 'PURCHASES' },
+  { id: 'PURCHASES_RETURNS', label: 'Créditos de Proveedor', parent: 'PURCHASES' },
 
   // Recursos Humanos
   { id: 'HR_DASHBOARD', label: 'Dashboard HR', parent: 'HR' },
   { id: 'HR_EMPLOYEES', label: 'Empleados', parent: 'HR' },
-  { id: 'HR_PAYROLL', label: 'NÃ³minas', parent: 'HR' },
+  { id: 'HR_PAYROLL', label: 'Nóminas', parent: 'HR' },
   { id: 'HR_ATTENDANCE', label: 'Asistencia', parent: 'HR' },
   { id: 'HR_LEAVES', label: 'Vacaciones', parent: 'HR' },
-  { id: 'HR_PERFORMANCE', label: 'DesempeÃ±o', parent: 'HR' },
-  { id: 'HR_TRAINING', label: 'CapacitaciÃ³n', parent: 'HR' },
+  { id: 'HR_PERFORMANCE', label: 'Desempeño', parent: 'HR' },
+  { id: 'HR_TRAINING', label: 'Capacitación', parent: 'HR' },
   { id: 'HR_BENEFITS', label: 'Beneficios', parent: 'HR' },
-  { id: 'HR_PAYROLL_CONFIG', label: 'Config NÃ³mina', parent: 'HR' },
+  { id: 'HR_PAYROLL_CONFIG', label: 'Config Nómina', parent: 'HR' },
 
   // Finanzas
   { id: 'FINANCIAL_DASHBOARD', label: 'Dashboard', parent: 'FINANCIAL' },
@@ -139,7 +139,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'ACTIVITIES_TASKS', label: 'Tareas', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_EVENTS', label: 'Eventos', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_REMINDERS', label: 'Recordatorios', parent: 'ACTIVITIES' },
-  { id: 'ACTIVITIES_LOGS', label: 'BitÃ¡cora', parent: 'ACTIVITIES' },
+  { id: 'ACTIVITIES_LOGS', label: 'Bitácora', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_CALENDAR', label: 'Calendario', parent: 'ACTIVITIES' },
   { id: 'ACTIVITIES_MEETINGS', label: 'Reuniones', parent: 'ACTIVITIES' },
 
@@ -163,7 +163,7 @@ export const SUBMODULES_FOR_PERMS = [
   { id: 'REPORTS_SALES', label: 'Ventas', parent: 'REPORTS' },
   { id: 'REPORTS_PURCHASES', label: 'Compras', parent: 'REPORTS' },
   { id: 'REPORTS_FINANCIAL', label: 'Financiero', parent: 'REPORTS' },
-  { id: 'REPORTS_INVENTORY', label: 'Inventario de MercancÃ­as', parent: 'REPORTS' },
+  { id: 'REPORTS_INVENTORY', label: 'Inventario de Mercancías', parent: 'REPORTS' },
   { id: 'REPORTS_CLIENTS', label: 'Clientes', parent: 'REPORTS' },
   { id: 'REPORTS_PROVIDERS', label: 'Proveedores', parent: 'REPORTS' },
   { id: 'REPORTS_HR', label: 'Recursos Humanos', parent: 'REPORTS' },
@@ -171,42 +171,42 @@ export const SUBMODULES_FOR_PERMS = [
   
   // Mi Empresa
   { id: 'CONFIG_COMPANY', label: 'General', parent: 'MY_COMPANY' },
-  { id: 'SUBSCRIPTIONS', label: 'MÃ³dulos y Plan', parent: 'MY_COMPANY' },
+  { id: 'SUBSCRIPTIONS', label: 'Módulos y Plan', parent: 'MY_COMPANY' },
   { id: 'CONFIG_USERS', label: 'Mi Equipo', parent: 'MY_COMPANY' },
   { id: 'CONFIG_ROLES', label: 'Roles y permisos', parent: 'MY_COMPANY' },
   { id: 'COMPANY_BRANCHES', label: 'Sucursales', parent: 'MY_COMPANY' },
   { id: 'CONFIG_DOMAINS', label: 'Dominio propio', parent: 'MY_COMPANY' },
 
-  // ConfiguraciÃ³n
+  // Configuración
   { id: 'CONFIG_BRANDING', label: 'Marca y Tema', parent: 'CONFIGURATION' },
   { id: 'CONFIG_SECURITY', label: 'Seguridad', parent: 'CONFIGURATION' },
   { id: 'CONFIG_CURRENCY', label: 'Moneda', parent: 'CONFIGURATION' },
   { id: 'CONFIG_PDF', label: 'Documentos PDF', parent: 'CONFIGURATION' },
   { id: 'CONFIG_TENANCY', label: 'Multiempresa', parent: 'CONFIGURATION' },
   { id: 'CONFIG_PLATFORM', label: 'Plataforma', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_COUNTRIES', label: 'PaÃ­ses', parent: 'CONFIGURATION' },
-  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de mÃ³dulos', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_COUNTRIES', label: 'Países', parent: 'CONFIGURATION' },
+  { id: 'CONFIG_MODULE_PRICING', label: 'Precios de módulos', parent: 'CONFIGURATION' },
 
   // Contabilidad
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de ComprobaciÃ³n', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_CASH_FLOW', label: 'Flujo de Efectivo', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_RECONCILIATION', label: 'ConciliaciÃ³n Bancaria', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_PERIODS', label: 'PerÃ­odos Contables', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_RECONCILIATION', label: 'Conciliación Bancaria', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_PERIODS', label: 'Períodos Contables', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_FISCAL', label: 'Reportes Fiscales', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_EXCHANGE_DIFFERENCES', label: 'Diferencias Cambiarias', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_EQUITY', label: 'Cambios Patrimonio', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_ASSETS', label: 'Activos Fijos', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_BUDGET', label: 'Presupuestos', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'CategorÃ­as de gastos', parent: 'ACCOUNTING' },
-  { id: 'ACCOUNTING_CONFIG', label: 'ConfiguraciÃ³n contable', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_EXPENSE_CATEGORIES', label: 'Categorías de gastos', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_CONFIG', label: 'Configuración contable', parent: 'ACCOUNTING' },
 ];
 
-// Fusionar para la lista de permisos anidando los submÃ³dulos justo debajo de sus padres
+// Fusionar para la lista de permisos anidando los submódulos justo debajo de sus padres
 export const ALL_PERM_MODULES = AVAILABLE_MODULES.flatMap(mod => [
   mod,
   ...SUBMODULES_FOR_PERMS
@@ -353,7 +353,7 @@ function ColorField({ label, description, hexValue, onHexChange }: ColorFieldPro
         value={hexValue}
         onChange={e => { if (/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) onHexChange(e.target.value); }}
         onBlur={() => { if (!/^#[0-9a-fA-F]{6}$/.test(hexValue)) onHexChange(validHex); }}
-        aria-label={`CÃ³digo hexadecimal de ${label.toLowerCase()}`}
+        aria-label={`Código hexadecimal de ${label.toLowerCase()}`}
         className="w-28 font-mono text-xs"
       />
     </div>
@@ -385,8 +385,8 @@ const ALL_TABS: TabDef[] = [
   { id: 'tenancy', label: 'Multi-Tenancy', icon: Layers, scenario: ['superadmin', 'partner'] },
   { id: 'currency', label: 'Moneda & Cambio', icon: Coins, scenario: ['superadmin', 'partner', 'client'] },
   { id: 'plataforma', label: 'Plataforma', icon: Server, scenario: ['superadmin'] },
-  { id: 'paises', label: 'PaÃ­ses', icon: Globe, scenario: ['superadmin'] },
-  { id: 'precios', label: 'Precios MÃ³dulos', icon: DollarSign, scenario: ['superadmin'] },
+  { id: 'paises', label: 'Países', icon: Globe, scenario: ['superadmin'] },
+  { id: 'precios', label: 'Precios Módulos', icon: DollarSign, scenario: ['superadmin'] },
 ];
 
 const CONFIG_TAB_PERMISSIONS: Record<string, string> = {
@@ -405,9 +405,9 @@ const PRICING_MODULES = [
   { category: 'Operaciones', modules: [
     { id: 'SALES', label: 'Ventas', icon: TrendingUp },
     { id: 'PURCHASES', label: 'Compras', icon: HandCoins },
-    { id: 'INVENTORY', label: 'Inventario de MercancÃ­as', icon: Package },
+    { id: 'INVENTORY', label: 'Inventario de Mercancías', icon: Package },
   ]},
-  { category: 'AdministraciÃ³n', modules: [
+  { category: 'Administración', modules: [
     { id: 'FINANCIAL', label: 'Finanzas', icon: DollarSign },
     { id: 'HR', label: 'Recursos Humanos', icon: UserIcon },
     { id: 'ACCOUNTING', label: 'Contabilidad', icon: BookOpen },
@@ -420,7 +420,7 @@ const PRICING_MODULES = [
   ]},
   { category: 'Soporte', modules: [
     { id: 'TICKETS', label: 'Tickets y Soporte', icon: Headphones },
-    { id: 'CONFIGURATION', label: 'ConfiguraciÃ³n', icon: Settings },
+    { id: 'CONFIGURATION', label: 'Configuración', icon: Settings },
   ]},
 ];
 
@@ -473,8 +473,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         user.isTenantAdmin
       )) return true;
 
-      // Las subvistas internas no consumen una suscripciÃ³n propia. Si el
-      // tenant tiene habilitado el mÃ³dulo padre o cualquier vista del grupo,
+      // Las subvistas internas no consumen una suscripción propia. Si el
+      // tenant tiene habilitado el módulo padre o cualquier vista del grupo,
       // deben permanecer disponibles para configurar el rol.
       if (parentMod && (m as any).subscription === false) {
         const parentAliasesForInternal = SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || [];
@@ -490,8 +490,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       // 1. Direct check
       if (user.enabledModules.includes(m.id)) return true;
 
-      // Mi Empresa y ConfiguraciÃ³n son entradas Ãºnicas del sidebar; sus
-      // pestaÃ±as internas conservan compatibilidad mediante el permiso padre.
+      // Mi Empresa y Configuración son entradas únicas del sidebar; sus
+      // pestañas internas conservan compatibilidad mediante el permiso padre.
       const directAliases = SIDEBAR_PERMISSION_PARENT_ALIASES[m.id] || [];
       const inheritedAliases = parentMod ? (SIDEBAR_PERMISSION_PARENT_ALIASES[parentMod] || []) : [];
       if ([...directAliases, ...inheritedAliases].some((alias) => user.enabledModules.includes(alias))) return true;
@@ -600,13 +600,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         industry: companyIndustry,
       });
       await refetchConfiguration();
-      toast.success('InformaciÃ³n corporativa guardada');
+      toast.success('Información corporativa guardada');
       const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
       if (raw) {
         try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'empresa') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error al guardar la informaciÃ³n');
+      toast.error(error?.response?.data?.message || 'Error al guardar la información');
     }
   };
 
@@ -755,14 +755,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         setDisplayCurrencySetting(resp.displayCurrency === 'USD' ? 'USD' : 'NIO');
         setAllowCurrencySwitch(resp.allowCurrencySwitch !== false);
         await refreshCurrencyContext();
-        toast.success('ConfiguraciÃ³n de moneda actualizada');
+        toast.success('Configuración de moneda actualizada');
         const raw = sessionStorage.getItem('novahub:implementation-setup-tour');
         if (raw) {
           try { const ctx = JSON.parse(raw); if (ctx.module === 'configuracion' && ctx.subModule === 'currency') { sessionStorage.removeItem('novahub:implementation-setup-tour'); window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'overview' } })); return; } } catch {}
         }
       }
     } catch (error) {
-      toast.error('Error al guardar configuraciÃ³n de moneda');
+      toast.error('Error al guardar configuración de moneda');
     } finally {
       setIsSavingCurrency(false);
     }
@@ -770,7 +770,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   // @ts-ignore
   const handleToggleModule = async (moduleId: string) => {
-    toast.info('La gestiÃ³n de mÃ³dulos se realiza desde la pestaÃ±a de Suscripciones para garantizar el registro de auditorÃ­a.');
+    toast.info('La gestión de módulos se realiza desde la pestaña de Suscripciones para garantizar el registro de auditoría.');
   };
 
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
@@ -801,7 +801,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       ]);
       return { branding, currency, industries, pricing, roles: rolesData, warehouses: warehouseData, modules };
     },
-    { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuraciÃ³n') },
+    { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuración') },
   );
 
   useEffect(() => {
@@ -868,10 +868,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       toast.error('No puedes editar roles de otra empresa');
       return;
     }
-    // Asegurar que el rol tenga todos los mÃ³dulos actuales
+    // Asegurar que el rol tenga todos los módulos actuales
     const currentPerms = normalizePermissions(role.permissions);
     const fullPerms = tenantPermModules.map(m => {
-      // Buscar permiso existente (ignorando mayÃºsculas/minÃºsculas y buscando por ID o Label)
+      // Buscar permiso existente (ignorando mayúsculas/minúsculas y buscando por ID o Label)
       const existing = currentPerms.find(p => 
         p.module?.toUpperCase() === m.id.toUpperCase() ||
         p.module?.toUpperCase() === m.label.toUpperCase()
@@ -898,10 +898,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         portalPrimaryColor: portalPrimaryHex,
         portalAccentColor: portalAccentHex,
       });
-      toast.success('PersonalizaciÃ³n del portal guardada', { description: 'El portal utiliza esta paleta oscura independientemente del tema de cada usuario.' });
+      toast.success('Personalización del portal guardada', { description: 'El portal utiliza esta paleta oscura independientemente del tema de cada usuario.' });
     } catch (error) {
       console.error('Error saving public portal branding:', error);
-      toast.error('No se pudo guardar la personalizaciÃ³n del portal');
+      toast.error('No se pudo guardar la personalización del portal');
     }
   };
 
@@ -937,7 +937,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     }
 
     try {
-      // Limpiar el objeto de envÃ­o para eliminar campos innecesarios o automÃ¡ticos
+      // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
       const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
       const payload = {
@@ -956,7 +956,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
       if (editingRole.id) {
         await rolesService.update(editingRole.id, payload);
-        toast.success('Rol actualizado con Ã©xito');
+        toast.success('Rol actualizado con éxito');
       } else {
         await rolesService.create(payload);
         toast.success('Nuevo rol creado correctamente');
@@ -985,14 +985,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       }
     }
 
-    // Aplicar el cambio al mÃ³dulo clickeado
+    // Aplicar el cambio al módulo clickeado
     targetPerm[type] = newValue;
     // Si se activa crear, editar o borrar, asegurar que se active leer.
     if (type !== 'read' && newValue === true) {
       targetPerm.read = true;
     }
 
-    // Verificar si es un mÃ³dulo padre (tiene hijos en SUBMODULES_FOR_PERMS)
+    // Verificar si es un módulo padre (tiene hijos en SUBMODULES_FOR_PERMS)
     const childModules = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === module);
     
     if (childModules.length > 0) {
@@ -1001,7 +1001,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         const childPerm = newPerms.find(p => p.module === child.id) as any;
         if (childPerm) {
           childPerm[type] = newValue;
-          // Si se activa crear/editar/borrar en padre, tambiÃ©n activar leer en hijos
+          // Si se activa crear/editar/borrar en padre, también activar leer en hijos
           if (type !== 'read' && newValue === true) {
             childPerm.read = true;
           }
@@ -1014,7 +1014,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       });
     }
 
-    // Verificar si es un submÃ³dulo (tiene parent)
+    // Verificar si es un submódulo (tiene parent)
     const submoduleDef = SUBMODULES_FOR_PERMS.find(sub => sub.id === module);
     if (submoduleDef) {
       // Es un HIJO â†’ recalcular el estado del padre
@@ -1023,10 +1023,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         const siblings = SUBMODULES_FOR_PERMS.filter(sub => sub.parent === submoduleDef.parent);
         const siblingPerms: any[] = siblings.map(s => newPerms.find(p => p.module === s.id)).filter(Boolean);
         
-        // El padre estÃ¡ ON solo si TODOS los hijos tienen ese permiso ON
+        // El padre está ON solo si TODOS los hijos tienen ese permiso ON
         parentPerm[type] = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp[type]);
         
-        // Recalcular tambiÃ©n 'read' del padre
+        // Recalcular también 'read' del padre
         if (type !== 'read') {
           parentPerm.read = siblingPerms.length > 0 && siblingPerms.every(sp => !!sp.read);
         }
@@ -1045,11 +1045,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         <div>
           <h1 className="text-2xl md:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-2 md:gap-3 uppercase italic">
             <Settings2 className="size-6 md:size-9 text-primary" />
-            ConfiguraciÃ³n <span className="text-primary">Sistema</span>
+            Configuración <span className="text-primary">Sistema</span>
           </h1>
           <div className="flex items-center gap-2 mt-2">
             <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-              {scenario === 'superadmin' ? 'Super Admin Console' : scenario === 'partner' ? 'Partner Panel' : 'Mi ConfiguraciÃ³n'}
+              {scenario === 'superadmin' ? 'Super Admin Console' : scenario === 'partner' ? 'Partner Panel' : 'Mi Configuración'}
             </Badge>
             <span className="text-muted-foreground/40 text-xs font-medium">
               {user?.name}
@@ -1128,8 +1128,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <ColorField label="Color de Acento" description="Elementos secundarios y hovers" hexValue={accentHex} onHexChange={v => { setAccentHex(v); setActivePreset(null); }} />
                   <Separator className="my-2" />
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Colores del Sidebar</p>
-                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menÃº lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); }} />
-                  <ColorField label="Texto del Sidebar" description="Color del texto en el menÃº lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); }} />
+                  <ColorField label="Fondo del Sidebar" description="Color de fondo del menú lateral" hexValue={sidebarHex} onHexChange={v => { setSidebarHex(v); setActivePreset(null); }} />
+                  <ColorField label="Texto del Sidebar" description="Color del texto en el menú lateral" hexValue={sidebarFgHex} onHexChange={v => { setSidebarFgHex(v); setActivePreset(null); }} />
                   <div className="flex gap-3 pt-2">
                     <Button onClick={handleSave} disabled={!canEditBranding} className="rounded-xl gap-2 font-bold">
                       <Save className="size-4" />Guardar Tema
@@ -1142,8 +1142,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </Card>
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
-                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />PersonalizaciÃ³n del portal del cliente</CardTitle>
-                  <CardDescription>Define el color principal y el color de las tarjetas del enlace pÃºblico.</CardDescription>
+                  <CardTitle className="flex items-center gap-2 text-lg font-black"><Globe className="size-5 text-primary" />Personalización del portal del cliente</CardTitle>
+                  <CardDescription>Define el color principal y el color de las tarjetas del enlace público.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                   <ColorField label="Color principal del portal" description="Botones, importes, enlaces y estados destacados" hexValue={portalPrimaryHex} onHexChange={setPortalPrimaryHex} />
@@ -1177,7 +1177,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Upload className="size-10 opacity-30" />
                         <p className="text-xs font-bold">Click para subir logo</p>
-                        <p className="text-[10px] opacity-60">PNG, SVG, JPG Â· Max 2MB</p>
+                        <p className="text-[10px] opacity-60">PNG, SVG, JPG · Max 2MB</p>
                       </div>
                     )}
                   </div>
@@ -1211,7 +1211,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       </div>
                     </div>
                     <div className="p-2 space-y-1">
-                      {['Dashboard', 'Ventas', 'Compras', 'Inventario de MercancÃ­as'].map((item, i) => (
+                      {['Dashboard', 'Ventas', 'Compras', 'Inventario de Mercancías'].map((item, i) => (
                         <div key={item} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
                           style={i === 0 ? { backgroundColor: primaryHex, color: primaryFgHex } : { color: `${sidebarFgHex}99` }}>
                           {item}
@@ -1231,7 +1231,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>
 
-        {/* â•â•â•â•â•â•â•â•â•â• TAB: PERSONALIZACIÃ“N PDF â•â•â•â•â•â•â•â•â•â• */}
+        {/* â•â•â•â•â•â•â•â•â•â• TAB: PERSONALIZACIÓN PDF â•â•â•â•â•â•â•â•â•â• */}
         <TabsContent value="documentos-pdf" className="space-y-6 mt-0">
           <PdfDocumentCustomizer
             tenantId={user?.tenantId}
@@ -1250,7 +1250,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
                 <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Datos Corporativos</CardTitle>
-                <CardDescription>InformaciÃ³n principal de tu empresa en Nova Hub</CardDescription>
+                <CardDescription>Información principal de tu empresa en Nova Hub</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
                 <div className="space-y-2">
@@ -1263,7 +1263,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <span className="text-sm text-muted-foreground font-mono bg-muted px-3 py-2 rounded-lg">novahub.io/</span>
                     <Input value={companySlug || user?.tenantId || ''} onChange={e => setCompanySlug(e.target.value)} disabled={!canEditCompany} className="rounded-xl h-11 font-mono" placeholder="empresa-demo" />
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Identificador Ãºnico de tu instancia en la plataforma</p>
+                  <p className="text-[10px] text-muted-foreground">Identificador único de tu instancia en la plataforma</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Industria</Label>
@@ -1313,7 +1313,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         <Input
                           value={newIndustryName}
                           onChange={e => setNewIndustryName(e.target.value)}
-                          placeholder="Ej: LogÃ­stica y Transporte"
+                          placeholder="Ej: Logística y Transporte"
                           className="rounded-xl h-9 text-xs flex-1"
                           onKeyDown={e => e.key === 'Enter' && handleAddIndustry()}
                           autoFocus
@@ -1334,7 +1334,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   </div>
                 </div>
                 <Button onClick={handleSaveCompanyInfo} disabled={!canEditCompany} className="w-full rounded-xl gap-2 font-bold h-11">
-                  <Save className="size-4" />Guardar InformaciÃ³n
+                  <Save className="size-4" />Guardar Información
                 </Button>
               </CardContent>
             </Card>
@@ -1342,7 +1342,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
                 <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />Detalles del Tenant</CardTitle>
-                <CardDescription>InformaciÃ³n tÃ©cnica de tu instancia</CardDescription>
+                <CardDescription>Información técnica de tu instancia</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 {[
@@ -1381,15 +1381,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           </motion.div>
         </TabsContent>}
 
-        {/* Roles se administran Ãºnicamente en Mi Empresa â†’ Mi Equipo. */}
+        {/* Roles se administran únicamente en Mi Empresa â†’ Mi Equipo. */}
         {false && <TabsContent value="roles" className="space-y-6 mt-0">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2 font-black"><ShieldCheck className="size-5 text-primary" />GestiÃ³n de Roles & Permisos</CardTitle>
-                    <CardDescription>Define niveles de acceso por mÃ³dulo para cada rol de usuario</CardDescription>
+                    <CardTitle className="flex items-center gap-2 font-black"><ShieldCheck className="size-5 text-primary" />Gestión de Roles & Permisos</CardTitle>
+                    <CardDescription>Define niveles de acceso por módulo para cada rol de usuario</CardDescription>
                   </div>
                   <Button onClick={handleCreateRole} disabled={!canCreateRoles} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
                     <Plus className="size-4" />Nuevo Rol
@@ -1432,7 +1432,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                       const sub = SUBMODULES_FOR_PERMS.find(s => s.id === p.module);
                                       return sub ? sub.parent : p.module;
                                     }));
-                                    return `${parentModules.size} mÃ³dulos activos`;
+                                    return `${parentModules.size} módulos activos`;
                                   })()}
                                 </p>
                               </div>
@@ -1473,7 +1473,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               const permsArr = Array.isArray(role.permissions) ? role.permissions : (role.permissions ? Object.entries(role.permissions).map(([module, vals]: [string, any]) => ({ module, ...vals })) : []);
                               const active = permsArr.filter((p: any) => PERMISSION_ACTION_DEFINITIONS.some(({ key }) => permissionValue(p, key)) || p.write);
                               return active.length > 4 ? (
-                                <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas mÃ¡s</p>
+                                <p className="text-[10px] text-muted-foreground/50 italic pl-2">+ {active.length - 4} vistas más</p>
                               ) : null;
                             })()}
                           </div>
@@ -1556,14 +1556,14 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       value={editingRole?.name || ''} onChange={e => setEditingRole({ ...editingRole, name: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">DescripciÃ³n</Label>
-                    <Input placeholder="DescripciÃ³n del rol" className="rounded-xl h-11"
+                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Descripción</Label>
+                    <Input placeholder="Descripción del rol" className="rounded-xl h-11"
                       value={editingRole?.description || ''} onChange={e => setEditingRole({ ...editingRole, description: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 flex-shrink-0 mt-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por MÃ³dulo</Label>
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Matriz de Permisos por Módulo</Label>
                   <div className="flex flex-wrap gap-3 text-[10px] font-black uppercase tracking-widest">
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-blue-500 inline-block" />Leer</span>
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-500 inline-block" />Crear</span>
@@ -1579,7 +1579,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <table className="w-max min-w-[1900px] text-sm">
                       <thead className="bg-muted/95 backdrop-blur-md sticky top-0 z-[50] shadow-sm border-b border-border/50">
                         <tr>
-                          <th className="text-left px-4 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">MÃ³dulo</th>
+                          <th className="text-left px-4 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
                           {PERMISSION_ACTION_DEFINITIONS.map(({ key, label }) => <th key={key} className="w-[72px] px-0 py-3 text-center text-[10px] font-black text-muted-foreground sm:text-xs">{label}</th>)}
                         </tr>
                       </thead>
@@ -1636,13 +1636,13 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Shield className="size-5 text-primary" />AutenticaciÃ³n & Acceso</CardTitle>
+                <CardTitle className="flex items-center gap-2 font-black"><Shield className="size-5 text-primary" />Autenticación & Acceso</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 {[
-                  { label: 'AutenticaciÃ³n de Dos Factores (2FA)', desc: 'Protege el acceso con un segundo factor de verificaciÃ³n', value: twoFaEnabled, setter: setTwoFaEnabled, tag: 'Recomendado' },
+                  { label: 'Autenticación de Dos Factores (2FA)', desc: 'Protege el acceso con un segundo factor de verificación', value: twoFaEnabled, setter: setTwoFaEnabled, tag: 'Recomendado' },
                   { label: 'Forzar 2FA para Administradores', desc: 'Todos los usuarios admin deben activar 2FA obligatoriamente', value: false, setter: () => { }, tag: 'Enterprise' },
-                  { label: 'Inicio de SesiÃ³n con Google SSO', desc: 'Permite autenticaciÃ³n con cuentas corporativas de Google', value: false, setter: () => { }, tag: 'PrÃ³ximo' },
+                  { label: 'Inicio de Sesión con Google SSO', desc: 'Permite autenticación con cuentas corporativas de Google', value: false, setter: () => { }, tag: 'Próximo' },
                 ].map(({ label, desc, value, setter, tag }) => (
                   <div key={label} className="flex items-center justify-between p-4 rounded-xl border border-border/40 hover:border-border/70 transition-all bg-card">
                     <div className="space-y-0.5 flex-1 mr-4">
@@ -1656,7 +1656,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   </div>
                 ))}
                 <div className="space-y-2 pt-2">
-                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tiempo de ExpiraciÃ³n de SesiÃ³n</Label>
+                  <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Tiempo de Expiración de Sesión</Label>
                   <div className="flex items-center gap-3">
                     <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} disabled={!canEditSecurity}
                       className="flex h-11 flex-1 rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -1667,7 +1667,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <option value="480">8 horas</option>
                       <option value="1440">24 horas</option>
                     </select>
-                    <Button disabled={!canEditSecurity} className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('ConfiguraciÃ³n guardada')}>
+                    <Button disabled={!canEditSecurity} className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
                       <Save className="size-4" />Guardar
                     </Button>
                   </div>
@@ -1692,7 +1692,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
-                  <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-primary" />Registro de AuditorÃ­a</CardTitle>
+                  <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-primary" />Registro de Auditoría</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-3">
                   {[
@@ -1722,12 +1722,12 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Layers className="size-5 text-primary" />ConfiguraciÃ³n de Tenancy</CardTitle>
-                <CardDescription>Ajustes de aislamiento y jerarquÃ­a del sistema multi-tenant</CardDescription>
+                <CardTitle className="flex items-center gap-2 font-black"><Layers className="size-5 text-primary" />Configuración de Tenancy</CardTitle>
+                <CardDescription>Ajustes de aislamiento y jerarquía del sistema multi-tenant</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 {[
-                  { label: 'Aislamiento Estricto de Datos', desc: 'Garantiza que ningÃºn dato sea visible entre tenants, incluso en reportes globales', value: strictIsolation, setter: setStrictIsolation, locked: true },
+                  { label: 'Aislamiento Estricto de Datos', desc: 'Garantiza que ningún dato sea visible entre tenants, incluso en reportes globales', value: strictIsolation, setter: setStrictIsolation, locked: true },
                   { label: 'White Label Branding', desc: 'Remueve las menciones de "NovaHub" y usa solo tu marca corporativa', value: whiteLabel, setter: setWhiteLabel, locked: false },
                   { label: 'Acceso a API REST', desc: 'Habilita el endpoint REST para integraciones externas de tus clientes', value: apiAccess, setter: setApiAccess, locked: false },
                 ].map(({ label, desc, value, setter, locked }) => (
@@ -1742,8 +1742,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <Switch checked={value} onCheckedChange={locked || !canEditTenancy ? undefined : setter} disabled={locked || !canEditTenancy} />
                   </div>
                 ))}
-                <Button disabled={!canEditTenancy} className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { if (!canEditTenancy) return; brandingService.update({ whiteLabel }); toast.success('ConfiguraciÃ³n de tenancy guardada'); }}>
-                  <Save className="size-4" />Guardar ConfiguraciÃ³n
+                <Button disabled={!canEditTenancy} className="w-full rounded-xl gap-2 font-bold h-11" onClick={() => { if (!canEditTenancy) return; brandingService.update({ whiteLabel }); toast.success('Configuración de tenancy guardada'); }}>
+                  <Save className="size-4" />Guardar Configuración
                 </Button>
               </CardContent>
             </Card>
@@ -1755,12 +1755,12 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 {[
-                  { label: 'Base de Datos', value: 'PostgreSQL 15 Â· Supabase', status: 'ok' },
-                  { label: 'Almacenamiento', value: 'Supabase Storage Â· CDN activo', status: 'ok' },
-                  { label: 'AutenticaciÃ³n', value: 'JWT RS256 Â· 24h TTL', status: 'ok' },
-                  { label: 'API Backend', value: 'NestJS Â· localhost:3000', status: 'ok' },
+                  { label: 'Base de Datos', value: 'PostgreSQL 15 · Supabase', status: 'ok' },
+                  { label: 'Almacenamiento', value: 'Supabase Storage · CDN activo', status: 'ok' },
+                  { label: 'Autenticación', value: 'JWT RS256 · 24h TTL', status: 'ok' },
+                  { label: 'API Backend', value: 'NestJS · localhost:3000', status: 'ok' },
                   { label: 'Aislamiento Tenants', value: 'clientTenantId por query', status: 'ok' },
-                  { label: 'Dominio Frontend', value: 'Vite Â· localhost:5173', status: 'ok' },
+                  { label: 'Dominio Frontend', value: 'Vite · localhost:5173', status: 'ok' },
                 ].map(({ label, value, status }) => (
                   <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-muted/10 border border-border/30">
                     <div>
@@ -1770,7 +1770,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <div className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black',
                       status === 'ok' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500')}>
                       <div className={cn('size-1.5 rounded-full', status === 'ok' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
-                      {status === 'ok' ? 'Activo' : 'AtenciÃ³n'}
+                      {status === 'ok' ? 'Activo' : 'Atención'}
                     </div>
                   </div>
                 ))}
@@ -1791,7 +1791,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <p className="text-sm font-black uppercase tracking-widest text-primary">Tasa de Cambio AutomÃ¡tica (BCN)</p>
+                      <p className="text-sm font-black uppercase tracking-widest text-primary">Tasa de Cambio Automática (BCN)</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Sincroniza diariamente con el Banco Central de Nicaragua</p>
                     </div>
                     <Switch checked={exchangeRateAuto} onCheckedChange={setExchangeRateAuto} disabled={!canEditCurrency} />
@@ -1816,7 +1816,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                             <Input value={manualRate} onChange={e => setManualRate(e.target.value)} disabled={!canEditCurrency} type="number" step="0.01" className="pl-9 rounded-xl h-11 font-mono" />
                           </div>
                         </div>
-                        <p className="text-[10px] text-amber-600 font-bold italic">* Esta tasa se aplicarÃ¡ a todas las conversiones manuales del sistema</p>
+                        <p className="text-[10px] text-amber-600 font-bold italic">* Esta tasa se aplicará a todas las conversiones manuales del sistema</p>
                       </div>
                     </motion.div>
                   )}
@@ -1826,7 +1826,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                   <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/30">
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Moneda Base Contable</p>
-                      <p className="text-sm font-bold">{baseCurrencySetting === 'USD' ? 'DÃ³lar estadounidense (USD)' : 'CÃ³rdoba NicaragÃ¼ense (NIO)'}</p>
+                      <p className="text-sm font-bold">{baseCurrencySetting === 'USD' ? 'Dólar estadounidense (USD)' : 'Córdoba Nicaragüense (NIO)'}</p>
                     </div>
                     <select
                       value={baseCurrencySetting}
@@ -1840,7 +1840,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     </select>
                   </div>
                   <p className="text-[10px] font-semibold text-amber-600">
-                    La moneda base pertenece a esta empresa. DespuÃ©s de registrar movimientos contables no debe cambiarse sin una migraciÃ³n controlada.
+                    La moneda base pertenece a esta empresa. Después de registrar movimientos contables no debe cambiarse sin una migración controlada.
                   </p>
 
                   <div className="p-4 rounded-xl border border-border/30 bg-background/70 space-y-4">
@@ -1848,7 +1848,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <div>
                         <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Permitir Cambio de Moneda</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          Si se desactiva, nadie podrÃ¡ cambiar `NIO/USD` desde la barra superior.
+                          Si se desactiva, nadie podrá cambiar `NIO/USD` desde la barra superior.
                         </p>
                       </div>
                       <Switch checked={allowCurrencySwitch} onCheckedChange={setAllowCurrencySwitch} disabled={!canEditCurrency} />
@@ -1864,15 +1864,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         disabled={!canEditCurrency}
                         className="h-11 w-full rounded-xl border border-input bg-background px-3 text-xs font-black uppercase tracking-widest"
                       >
-                        <option value="NIO">NIO (CÃ³rdoba)</option>
-                        <option value="USD">USD (DÃ³lar)</option>
+                        <option value="NIO">NIO (Córdoba)</option>
+                        <option value="USD">USD (Dólar)</option>
                       </select>
                     </div>
                   </div>
 
                   <Button onClick={handleSaveCurrencySettings} disabled={isSavingCurrency || !canEditCurrency} className="w-full rounded-xl gap-2 font-black h-11">
                     {isSavingCurrency ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-                    Guardar ConfiguraciÃ³n
+                    Guardar Configuración
                   </Button>
                 </div>
               </CardContent>
@@ -1880,26 +1880,26 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />InformaciÃ³n sobre Multimoneda</CardTitle>
+                <CardTitle className="flex items-center gap-2 font-black"><Info className="size-5 text-primary" />Información sobre Multimoneda</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 <div className="space-y-4">
                   <div className="flex gap-4">
                     <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">1</div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      <strong className="text-foreground">Base en CÃ³rdobas:</strong> Toda la contabilidad y reportes del sistema se calculan en base a NIO para cumplir con regulaciones locales.
+                      <strong className="text-foreground">Base en Córdobas:</strong> Toda la contabilidad y reportes del sistema se calculan en base a NIO para cumplir con regulaciones locales.
                     </p>
                   </div>
                   <div className="flex gap-4">
                     <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">2</div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      <strong className="text-foreground">Soporte USD:</strong> Puedes emitir facturas, Ã³rdenes y pagos en DÃ³lares. El sistema guardarÃ¡ el equivalente en CÃ³rdobas usando la tasa de cambio del momento.
+                      <strong className="text-foreground">Soporte USD:</strong> Puedes emitir facturas, órdenes y pagos en Dólares. El sistema guardará el equivalente en Córdobas usando la tasa de cambio del momento.
                     </p>
                   </div>
                   <div className="flex gap-4">
                     <div className="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500 font-black text-xs">3</div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      <strong className="text-foreground">Modo HÃ­brido:</strong> Al usar el modo automÃ¡tico, el sistema consulta al BCN cada madrugada. Si prefieres control total, usa el modo manual.
+                      <strong className="text-foreground">Modo Híbrido:</strong> Al usar el modo automático, el sistema consulta al BCN cada madrugada. Si prefieres control total, usa el modo manual.
                     </p>
                   </div>
                 </div>
@@ -1909,7 +1909,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <AlertCircle className="size-3" /> IMPORTANTE
                   </p>
                   <p className="text-[11px] leading-relaxed text-amber-700/80">
-                    Cambiar la tasa de cambio manual no afectarÃ¡ transacciones ya realizadas. Las transacciones mantienen guardada la tasa con la que fueron creadas originalmente.
+                    Cambiar la tasa de cambio manual no afectará transacciones ya realizadas. Las transacciones mantienen guardada la tasa con la que fueron creadas originalmente.
                   </p>
                 </div>
               </CardContent>
@@ -1932,9 +1932,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <Rocket className="size-6 text-primary" />
                     </div>
                     <div>
-                      <p className="font-black text-base">Dominio Personalizado Â· PrÃ³ximamente</p>
+                      <p className="font-black text-base">Dominio Personalizado · Próximamente</p>
                       <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                        Pronto podrÃ¡s acceder al ERP con tu propia URL corporativa, por ejemplo: <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">erp.tuempresa.com</code>
+                        Pronto podrás acceder al ERP con tu propia URL corporativa, por ejemplo: <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">erp.tuempresa.com</code>
                       </p>
                     </div>
                   </div>
@@ -1955,9 +1955,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   {[
-                    { title: 'Subdominio Gratis', price: 'Incluido', desc: 'empresa.novahub.io', current: true, features: ['SSL automÃ¡tico', 'CDN global', 'Soporte tÃ©cnico'] },
-                    { title: 'Dominio Propio', price: '$29/mes', desc: 'erp.tuempresa.com', current: false, features: ['Tu dominio corporativo', 'SSL personalizado', 'RedirecciÃ³n automÃ¡tica', 'DNS configurado'] },
-                    { title: 'White Label Total', price: 'Enterprise', desc: 'app.tuempresa.com', current: false, features: ['Sin menciÃ³n a NovaHub', 'Branding completo', 'Email corporativo', 'Support dedicado'] },
+                    { title: 'Subdominio Gratis', price: 'Incluido', desc: 'empresa.novahub.io', current: true, features: ['SSL automático', 'CDN global', 'Soporte técnico'] },
+                    { title: 'Dominio Propio', price: '$29/mes', desc: 'erp.tuempresa.com', current: false, features: ['Tu dominio corporativo', 'SSL personalizado', 'Redirección automática', 'DNS configurado'] },
+                    { title: 'White Label Total', price: 'Enterprise', desc: 'app.tuempresa.com', current: false, features: ['Sin mención a NovaHub', 'Branding completo', 'Email corporativo', 'Support dedicado'] },
                   ].map(({ title, price, desc, current, features }) => (
                     <div key={title} className={cn('relative p-5 rounded-2xl border transition-all',
                       current ? 'border-primary/40 bg-primary/5 shadow-lg' : 'border-border/50 hover:border-primary/20')}>
@@ -1976,7 +1976,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                         ))}
                       </div>
                       <Button className="w-full mt-4 rounded-xl font-bold" variant={current ? 'outline' : 'default'} disabled={!current && price !== '$29/mes'}
-                        onClick={() => current ? toast.info('Ya estÃ¡s usando este plan') : toast.info('PrÃ³ximamente disponible')}>
+                        onClick={() => current ? toast.info('Ya estás usando este plan') : toast.info('Próximamente disponible')}>
                         {current ? 'Plan Actual' : price === 'Enterprise' ? <><Rocket className="size-3.5 mr-1" />Contactar</> : <><ArrowRight className="size-3.5 mr-1" />Activar</>}
                       </Button>
                     </div>
@@ -1995,15 +1995,15 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2 font-black text-lg">
-                      <DollarSign className="size-5 text-primary" />PrecificaciÃ³n de MÃ³dulos
+                      <DollarSign className="size-5 text-primary" />Precificación de Módulos
                     </CardTitle>
-                    <CardDescription>AdministrÃ¡ los precios mensuales de cada mÃ³dulo del ERP</CardDescription>
+                    <CardDescription>Administrá los precios mensuales de cada módulo del ERP</CardDescription>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                       <Input 
-                        placeholder="Buscar mÃ³dulo..." 
+                        placeholder="Buscar módulo..." 
                         value={pricingSearch}
                         onChange={e => setPricingSearch(e.target.value)}
                         className="h-9 w-48 rounded-xl pl-9 text-xs" 
@@ -2056,9 +2056,9 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                             <table className="w-full text-sm">
                               <thead className="bg-muted/20">
                                 <tr>
-                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground w-1/3">MÃ³dulo</th>
+                                  <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground w-1/3">Módulo</th>
                                   <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Precio Mensual (USD)</th>
-                                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">AcciÃ³n</th>
+                                  <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Acción</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border/30">
@@ -2154,7 +2154,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <Label className="font-bold text-sm">{label}</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
                     </div>
-                    <Switch defaultChecked={value} disabled={!canEditPlatform} onCheckedChange={() => canEditPlatform && toast.success('ConfiguraciÃ³n actualizada')} />
+                    <Switch defaultChecked={value} disabled={!canEditPlatform} onCheckedChange={() => canEditPlatform && toast.success('Configuración actualizada')} />
                   </div>
                 ))}
               </CardContent>
@@ -2162,7 +2162,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
             <Card className="border-border/50 shadow-sm">
               <CardHeader className="border-b border-border/30 bg-muted/10">
-                <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-violet-500" />EstadÃ­sticas Globales</CardTitle>
+                <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-violet-500" />Estadísticas Globales</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-2 gap-4">
@@ -2170,7 +2170,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     { label: 'Total Tenants', value: '1', color: 'from-violet-500 to-purple-600' },
                     { label: 'Partners Activos', value: '1', color: 'from-blue-500 to-indigo-600' },
                     { label: 'Usuarios Totales', value: '6', color: 'from-emerald-500 to-teal-600' },
-                    { label: 'MÃ³dulos Activos', value: '10', color: 'from-amber-500 to-orange-600' },
+                    { label: 'Módulos Activos', value: '10', color: 'from-amber-500 to-orange-600' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className={`p-5 rounded-2xl bg-gradient-to-br ${color} text-white`}>
                       <p className="text-3xl font-black">{value}</p>
@@ -2187,8 +2187,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       <ConfirmDialog
         open={Boolean(pendingDeleteRole)}
         onOpenChange={open => { if (!open) setPendingDeleteRole(null); }}
-        title="Â¿Eliminar rol?"
-        description={pendingDeleteRole ? `El rol Â«${pendingDeleteRole.name}Â» se eliminarÃ¡ y esta acciÃ³n no se puede deshacer.` : undefined}
+        title="¿Eliminar rol?"
+        description={pendingDeleteRole ? `El rol «${pendingDeleteRole.name}» se eliminará y esta acción no se puede deshacer.` : undefined}
         confirmLabel="Eliminar rol"
         variant="destructive"
         onConfirm={confirmDeleteRole}

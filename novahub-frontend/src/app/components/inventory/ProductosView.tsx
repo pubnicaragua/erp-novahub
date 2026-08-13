@@ -32,6 +32,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -692,11 +693,24 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
       });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    name: (p: any) => {
+      const sort = colFilters.state.name?.sort;
+      return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
+    },
+    category: (p: any) => p.category?.name || 'Sin categoría',
+    stock: (p: any) => Number(p.stock || 0),
+  };
+  const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
+  const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filteredProducts.filter((p: any) => (p.category?.name || 'Sin categoría') === label).length }));
+
   const paginatedProducts = useMemo(() => {
-    if (pagination) return filteredProducts;
+    if (pagination) return filteredData;
     const start = (page - 1) * pageSize;
-    return filteredProducts.slice(start, start + pageSize);
-  }, [filteredProducts, page, pageSize, pagination]);
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, page, pageSize, pagination]);
 
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
@@ -2257,14 +2271,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                 </button>
               </TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>Código</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}>{isServiceView ? 'Servicio' : 'Nombre'}</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>Categoría</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.max, minWidth: PRODUCT_TABLE_WIDTHS.max }}>Max</TableHead>}
               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>Almacén</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Almacenes'}</TableHead>
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}>Stock</TableHead>}
+              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
@@ -2277,7 +2291,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               .map(product => renderEditableRow(product))}
             
             {/* Existing products */}
-            {filteredProducts.length === 0 && editingRows.size === 0 ? (
+            {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
                 <TableCell colSpan={isServiceView ? 8 : 11} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />

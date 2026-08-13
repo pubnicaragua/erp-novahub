@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
+import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { mobiliarioService } from '../../services/mobiliario.service';
@@ -228,11 +229,11 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-addr">Fecha adquisición *</Label>
-              <Input id="af-addr" type="date" value={form.acquisitionDate} onChange={(e) => setField('acquisitionDate', e.target.value)} />
+              <DateField id="af-addr" value={form.acquisitionDate} onChange={(v) => setField('acquisitionDate', v)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-use">Fecha puesta en uso *</Label>
-              <Input id="af-use" type="date" value={form.inUseDate} onChange={(e) => setField('inUseDate', e.target.value)} />
+              <DateField id="af-use" value={form.inUseDate} onChange={(v) => setField('inUseDate', v)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-cost">Costo *</Label>
@@ -248,11 +249,10 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-ccut" title="Opcional. Solo para activos migrados con depreciación acumulada previa. Indica hasta qué fecha se acumuló dicha depreciación.">Inicio depreciación</Label>
-              <Input
+              <DateField
                 id="af-ccut"
-                type="date"
                 value={form.cutoffDate}
-                onChange={(e) => setField('cutoffDate', e.target.value)}
+                onChange={(v) => setField('cutoffDate', v)}
                 title="Opcional. Solo para activos migrados con depreciación acumulada previa. Indica hasta qué fecha se acumuló dicha depreciación."
               />
             </div>

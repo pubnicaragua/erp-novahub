@@ -10,14 +10,13 @@ import {
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
-import { useBranchScope } from '../../hooks/useBranchScope';
 import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
-import { BranchScopeFilter } from '../ui/BranchScopeFilter';
+import { DateField } from '../ui/DateField';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -38,13 +37,15 @@ interface LedgerEntry {
   branches?: Array<{ id: string; code?: string; name: string }>;
 }
 
-const ACCOUNT_TYPES = [
-  { value: 'ASSET', label: 'Activos' },
-  { value: 'LIABILITY', label: 'Pasivos' },
-  { value: 'EQUITY', label: 'Patrimonio' },
-  { value: 'INCOME', label: 'Ingresos' },
-  { value: 'EXPENSE', label: 'Gastos' },
-];
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  ASSET: 'Activos',
+  LIABILITY: 'Pasivos',
+  EQUITY: 'Patrimonio',
+  INCOME: 'Ingresos',
+  EXPENSE: 'Gastos',
+};
+
+const accountTypeLabel = (tipo?: string) => ACCOUNT_TYPE_LABELS[String(tipo || '').toUpperCase()] || String(tipo || '');
 
 const MOVEMENT_TYPES = [
   { value: 'DEBIT', label: 'Solo débitos' },
@@ -73,12 +74,10 @@ function journalStatusLabel(value?: string): string {
 }
 
 export function LibroMayorView() {
-  const { selectedBranchId } = useBranchScope();
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
-  const [filterAccountType, setFilterAccountType] = useState('');
   const [filterMovement, setFilterMovement] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -91,8 +90,7 @@ export function LibroMayorView() {
     ...(filterAccountId ? { accountId: filterAccountId } : {}),
     ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
     ...(filterDateTo ? { dateTo: filterDateTo } : {}),
-    ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
-  }), [filterAccountId, filterDateFrom, filterDateTo, selectedBranchId]);
+  }), [filterAccountId, filterDateFrom, filterDateTo]);
   const entriesQuery = useAccountingQuery<LedgerEntry[]>(['ledger', ledgerParams], async (signal) => accountingList(await contabilidadService.getLedger(ledgerParams, signal)) as LedgerEntry[]);
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
   const entries = entriesQuery.data || [];
@@ -136,14 +134,13 @@ export function LibroMayorView() {
   const filteredEntries = useMemo(() => {
     const normalizedSearch = filterSearch.trim().toLowerCase();
     return entries.filter(entry => {
-      if (filterAccountType && entry.accountType !== filterAccountType) return false;
       if (filterMovement === 'DEBIT' && !(entry.debit > 0)) return false;
       if (filterMovement === 'CREDIT' && !(entry.credit > 0)) return false;
       if (!normalizedSearch) return true;
       return [entry.accountCode, entry.accountName, entry.description, entry.reference]
         .some(value => String(value || '').toLowerCase().includes(normalizedSearch));
     });
-  }, [entries, filterAccountType, filterMovement, filterSearch]);
+  }, [entries, filterMovement, filterSearch]);
 
   const orderedEntries = useMemo(() => {
     return [...filteredEntries].sort((left, right) => {
@@ -180,17 +177,16 @@ export function LibroMayorView() {
     setFilterDateFrom('');
     setFilterDateTo('');
     setFilterSearch('');
-    setFilterAccountType('');
     setFilterMovement('');
     setSortOrder('desc');
     setPage(1);
   }
 
-  const hasFilters = filterAccountId || filterDateFrom || filterDateTo || filterSearch || filterAccountType || filterMovement;
+  const hasFilters = filterAccountId || filterDateFrom || filterDateTo || filterSearch || filterMovement;
 
   useEffect(() => {
     setPage(1);
-  }, [filterAccountId, filterDateFrom, filterDateTo, filterSearch, filterAccountType, filterMovement, sortOrder, pageSize, selectedBranchId]);
+  }, [filterAccountId, filterDateFrom, filterDateTo, filterSearch, filterMovement, sortOrder, pageSize]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -214,8 +210,7 @@ export function LibroMayorView() {
           <Filter className="size-3.5" /> Filtros
         </div>
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end lg:gap-4">
-          <BranchScopeFilter className="min-w-0" />
-          <div className="flex min-w-0 flex-col gap-1.5 sm:min-w-[220px] lg:flex-1">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:min-w-[240px] lg:flex-1 lg:min-w-[280px]">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Cuenta Contable</label>
             <Combobox
               options={accountOptions}
@@ -225,7 +220,7 @@ export function LibroMayorView() {
               emptyMessage="Sin resultados"
             />
           </div>
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:min-w-[220px] lg:flex-1">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:min-w-[280px] lg:flex-1">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Buscar movimiento</label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -239,26 +234,16 @@ export function LibroMayorView() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="h-9 w-full sm:w-[150px]" />
+            <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Desde" className="sm:w-[180px]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="h-9 w-full sm:w-[150px]" />
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Tipo de cuenta</label>
-            <Select value={filterAccountType || 'ALL'} onValueChange={value => setFilterAccountType(value === 'ALL' ? '' : value)}>
-              <SelectTrigger className="h-9 w-full sm:w-[155px]"><SelectValue placeholder="Todos los tipos" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todos los tipos</SelectItem>
-                {ACCOUNT_TYPES.map(type => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Hasta" className="sm:w-[180px]" />
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Movimiento</label>
             <Select value={filterMovement || 'ALL'} onValueChange={value => setFilterMovement(value === 'ALL' ? '' : value)}>
-              <SelectTrigger className="h-9 w-full sm:w-[155px]"><SelectValue placeholder="Débitos y créditos" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue placeholder="Débitos y créditos" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Débitos y créditos</SelectItem>
                 {MOVEMENT_TYPES.map(type => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}
@@ -268,7 +253,7 @@ export function LibroMayorView() {
           <div className="flex min-w-0 flex-col gap-1.5">
             <label className="flex items-center gap-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest"><ArrowDownUp className="size-3" /> Orden</label>
             <Select value={sortOrder} onValueChange={value => setSortOrder(value as 'asc' | 'desc')}>
-              <SelectTrigger className="h-9 w-full sm:w-[175px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="asc">Más antiguos primero</SelectItem>
                 <SelectItem value="desc">Más recientes primero</SelectItem>
@@ -322,6 +307,7 @@ export function LibroMayorView() {
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Referencia</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débito</TableHead>
@@ -335,6 +321,9 @@ export function LibroMayorView() {
                       <TableCell className="text-xs font-mono">{formatAccountingDate(entry.date)}</TableCell>
                       <TableCell className="font-mono text-xs">{entry.accountCode}</TableCell>
                       <TableCell className="font-medium text-xs">{entry.accountName}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="whitespace-nowrap text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{entry.description}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{entry.reference || '-'}</TableCell>
                       <TableCell className={cn("text-right font-mono text-xs", entry.debit > 0 && "text-emerald-600")}>
@@ -359,6 +348,7 @@ export function LibroMayorView() {
                       <p className="font-mono text-[10px] text-muted-foreground">{formatAccountingDate(entry.date)} · {entry.accountCode}</p>
                       <p className="mt-0.5 truncate text-sm font-bold" title={entry.accountName}>{entry.accountName}</p>
                       <p className="mt-1 truncate text-xs text-muted-foreground" title={entry.description}>{entry.description}</p>
+                      <Badge variant="outline" className="mt-1.5 text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
                     </div>
                     <span className={cn("shrink-0 font-mono text-sm font-black", entry.balance >= 0 ? "text-emerald-600" : "text-red-600")}>
                       {formatCurrency(entry.balance)}

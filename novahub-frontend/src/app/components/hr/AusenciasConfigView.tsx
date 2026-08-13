@@ -9,12 +9,14 @@ import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
 import {
-  Settings2, Plus, Save, RefreshCw, Check, X, FileText, Percent, DollarSign, Shield, AlertTriangle
+  Settings2, Plus, Save, RefreshCw, Check, X, FileText, Percent, DollarSign, Shield, AlertTriangle, Search, Layers, ShieldCheck, ShieldOff
 } from 'lucide-react';
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AbsenceType } from '../../types';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { StatCard } from './StatCard';
 
 const SALARY_BASE_LABELS: Record<string, string> = {
   MONTHLY: 'Mensual',
@@ -47,6 +49,8 @@ const DEFAULT_FORM: AbsenceTypeForm = {
   isActive: true,
 };
 
+type ConfigFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'DOC';
+
 export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
@@ -54,6 +58,8 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AbsenceTypeForm>(DEFAULT_FORM);
+  const [filter, setFilter] = useState<ConfigFilter>('ALL');
+  const [search, setSearch] = useState('');
 
   const absenceQuery = useQuery({
     queryKey: ['hr', 'absence-types'],
@@ -66,6 +72,37 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const loading = absenceQuery.isLoading;
   const absenceTypes = (Array.isArray(absenceQuery.data) ? absenceQuery.data : absenceQuery.data?.data || []) as AbsenceType[];
   const fetchAbsenceTypes = () => queryClient.invalidateQueries({ queryKey: ['hr', 'absence-types'] });
+
+  const colFilters = useColumnFilters();
+
+  const totalTypes = absenceTypes.length;
+  const activeTypes = absenceTypes.filter(at => at.isActive).length;
+  const inactiveTypes = totalTypes - activeTypes;
+  const docRequired = absenceTypes.filter(at => at.requiresDoc).length;
+
+  const searchFiltered = absenceTypes.filter(at => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return at.name.toLowerCase().includes(q) || at.code.toLowerCase().includes(q);
+  });
+  const stateFiltered = searchFiltered.filter(at => {
+    if (filter === 'ACTIVE') return at.isActive;
+    if (filter === 'INACTIVE') return !at.isActive;
+    if (filter === 'DOC') return at.requiresDoc;
+    return true;
+  });
+  const filteredTypes = colFilters.applyTo(stateFiltered, {
+    state: (at) => (at.isActive ? 'ACTIVE' : 'INACTIVE'),
+    name: (at) => at.name,
+    salaryBase: (at) => String(at.salaryBase || ''),
+  });
+
+  const stateOptionsForFilter = [
+    { value: 'ACTIVE', label: 'Activo', count: stateFiltered.filter(at => at.isActive).length },
+    { value: 'INACTIVE', label: 'Inactivo', count: stateFiltered.filter(at => !at.isActive).length },
+  ];
+  const nameOptionsForFilter = [...new Map(searchFiltered.map((at) => [at.name, at.name])).entries()]
+    .map(([, label]) => ({ value: label, label, count: searchFiltered.filter(at => at.name === label).length }));
 
   const resetForm = () => {
     setForm(DEFAULT_FORM);
@@ -94,8 +131,16 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       toast.error('Código y nombre son requeridos');
       return;
     }
+    if (form.paidByCompanyPct < 0 || form.paidByThirdPartyPct < 0) {
+      toast.error('Los porcentajes no pueden ser negativos');
+      return;
+    }
     if (form.paidByCompanyPct + form.paidByThirdPartyPct > 100) {
       toast.error('La suma de pagos (empresa + tercero) no puede superar el 100%');
+      return;
+    }
+    if (form.maxDays < 0 || form.cap < 0) {
+      toast.error('Días máximos y tope no pueden ser negativos');
       return;
     }
     try {
@@ -122,7 +167,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       await hrService.updateAbsenceType(at.id, { isActive: !at.isActive });
       toast.success(at.isActive ? 'Desactivado' : 'Activado');
       fetchAbsenceTypes();
-    } catch (error: any) {
+    } catch {
       toast.error('Error al cambiar estado');
     }
   };
@@ -161,6 +206,43 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Tipos configurados" value={totalTypes} icon={Layers} tone="primary" sub="Reglas de ausencia activas e inactivas" active={filter === 'ALL'} onClick={() => setFilter('ALL')} />
+        <StatCard label="Activos" value={activeTypes} icon={ShieldCheck} tone="green" sub="Disponibles en nuevas solicitudes" active={filter === 'ACTIVE'} onClick={() => setFilter('ACTIVE')} />
+        <StatCard label="Inactivos" value={inactiveTypes} icon={ShieldOff} tone="red" sub="Deshabilitados de la selección" active={filter === 'INACTIVE'} onClick={() => setFilter('INACTIVE')} />
+        <StatCard label="Requieren documento" value={docRequired} icon={AlertTriangle} tone="amber" sub="Justificación obligatoria" active={filter === 'DOC'} onClick={() => setFilter('DOC')} />
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre o código..."
+            className="pl-8 h-9 bg-background"
+          />
+        </div>
+        <ColumnFilterMenu
+          label="Estado"
+          options={stateOptionsForFilter}
+          selected={colFilters.state.state?.values || []}
+          onSelect={(values) => colFilters.setValues('state', values)}
+          sort={colFilters.state.state?.sort || null}
+          onSort={(sort) => colFilters.setSort('state', sort)}
+        />
+        <ColumnFilterMenu
+          label="Nombre"
+          options={nameOptionsForFilter}
+          selected={colFilters.state.name?.values || []}
+          onSelect={(values) => colFilters.setValues('name', values)}
+          sort={colFilters.state.name?.sort || null}
+          onSort={(sort) => colFilters.setSort('name', sort)}
+        />
       </div>
 
       {showForm && (
@@ -226,6 +308,24 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
                   </div>
                 </div>
               </div>
+
+              {/* Coverage progress */}
+              <div className="rounded-xl border border-border/40 bg-background p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cobertura de pago</p>
+                  <p className={cn('text-xs font-black', form.paidByCompanyPct + form.paidByThirdPartyPct > 100 ? 'text-rose-600' : 'text-foreground')}>
+                    {form.paidByCompanyPct}% + {form.paidByThirdPartyPct}% = {form.paidByCompanyPct + form.paidByThirdPartyPct}%
+                  </p>
+                </div>
+                <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(form.paidByCompanyPct, 100)}%` }} />
+                  <div className="h-full bg-blue-500/60 transition-all" style={{ width: `${Math.min(form.paidByThirdPartyPct, Math.max(0, 100 - form.paidByCompanyPct))}%` }} />
+                </div>
+                {form.paidByCompanyPct + form.paidByThirdPartyPct > 100 && (
+                  <p className="mt-2 text-[11px] font-bold text-rose-600">La suma supera el 100%. Ajusta los porcentajes.</p>
+                )}
+              </div>
+
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleSave} disabled={saving} className="gap-2 rounded-xl font-bold">
                   {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -239,13 +339,13 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       )}
 
       <div className="space-y-3">
-        {absenceTypes.length === 0 && (
+        {filteredTypes.length === 0 && (
           <div className="text-center py-12">
             <AlertTriangle className="size-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No hay tipos de ausencia configurados</p>
+            <p className="text-muted-foreground">No hay tipos de ausencia que coincidan con los filtros</p>
           </div>
         )}
-        {absenceTypes.map((at, i) => (
+        {filteredTypes.map((at, i) => (
           <motion.div key={at.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
             <Card className={cn("border-border/40 shadow-sm transition-all", !at.isActive && "opacity-60")}>
               <CardContent className="p-5">

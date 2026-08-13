@@ -11,6 +11,9 @@ import { Input } from '../ui/input';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import * as XLSX from 'xlsx';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
+import { cn } from '../ui/utils';
 
 const TEMPLATE_COLUMNS = [
   { key: 'codigo_empleado', label: 'CÓDIGO EMPLEADO', example: 'EMP-001', rule: 'Obligatorio. Código o nombre completo del empleado tal como aparece en el módulo Empleados.' },
@@ -57,6 +60,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [importProgress, setImportProgress] = useState(0);
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
+  const [quickFilter, setQuickFilter] = useState<{ status?: string; today?: boolean } | null>(null);
 
 const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   {
@@ -218,54 +222,107 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
     }
   };
 
-  const todayRecords = attendance.filter((a: any) => {
-    const recordDate = new Date(a.date);
-    const today = new Date();
-    return recordDate.toDateString() === today.toDateString();
-  });
+  const isSameDay = (dateStr: string, ref = new Date()) => {
+    const d = new Date(dateStr);
+    return !Number.isNaN(d.getTime()) && d.toDateString() === ref.toDateString();
+  };
+  const todayRecords = attendance.filter((a: any) => isSameDay(a.date));
 
   const totalHoursToday = todayRecords.reduce((sum: number, a: any) => sum + Number(a.hoursWorked || 0), 0);
   const presentToday = todayRecords.filter((a: any) => a.status === 'PRESENT').length;
   const absentToday = todayRecords.filter((a: any) => a.status === 'ABSENT').length;
 
+  const quickFilteredAttendance = attendance.filter((a: any) => {
+    if (!quickFilter) return true;
+    if (quickFilter.today && !isSameDay(a.date)) return false;
+    if (quickFilter.status && String(a.status || '').toUpperCase() !== quickFilter.status) return false;
+    return true;
+  });
+
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE_OPTIONS = [10, 15, 25, 30, 35, 40, 45, 50];
 
-  const totalPages = Math.ceil(attendance.length / pageSize);
-  const paginatedAttendance = attendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const colFilters = useColumnFilters();
+  const employeeName = (r: any) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}`.trim() || 'Sin empleado';
+  const filterGetters = {
+    date: (r: any) => (r.date ? new Date(r.date).getTime() : null),
+    employee: (r: any) => employeeName(r),
+    status: (r: any) => String(r.status || ''),
+    location: (r: any) => r.location || '—',
+  };
+  const colFilteredAttendance = colFilters.applyTo(quickFilteredAttendance, filterGetters);
+  const employeeOptions = [...new Map(quickFilteredAttendance.map((r: any) => [employeeName(r), employeeName(r)])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: quickFilteredAttendance.filter((r: any) => employeeName(r) === label).length }));
+  const statusOptionsForFilter = Object.entries(ATTENDANCE_STATUS_LABELS)
+    .map(([value, label]) => ({ value, label, count: quickFilteredAttendance.filter((r: any) => String(r.status || '').toUpperCase() === value).length }));
+  const locationOptions = [...new Map(quickFilteredAttendance.map((r: any) => [r.location || '—', r.location || '—'])).entries()]
+    .map(([, label]) => ({ value: label as string, label: label as string, count: quickFilteredAttendance.filter((r: any) => (r.location || '—') === label).length }));
+
+  const toggleQuickFilter = (status?: string) => {
+    setQuickFilter(prev => {
+      const next = { today: true, status };
+      if (prev && prev.today === true && prev.status === (status || undefined)) return null;
+      return next;
+    });
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.ceil(colFilteredAttendance.length / pageSize);
+  const paginatedAttendance = colFilteredAttendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-4">
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+        <button
+          onClick={() => toggleQuickFilter('PRESENT')}
+          className={cn(
+            'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
+            quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'border-blue-500/50 ring-1 ring-blue-500/20 bg-blue-500/[0.03]' : 'border-border/50',
+          )}
+        >
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-blue-500/10"><UserCheck className="size-5 text-blue-500" /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'bg-blue-500/20' : 'bg-blue-500/10')}><UserCheck className={cn('size-5', quickFilter?.status === 'PRESENT' && quickFilter?.today ? 'text-blue-600' : 'text-blue-500')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Presentes Hoy</p>
               <p className="text-2xl font-black tabular-nums">{presentToday}</p>
+              <p className="text-[11px] text-muted-foreground">Clic para ver solo hoy · presentes</p>
             </div>
           </div>
-        </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+        </button>
+        <button
+          onClick={() => toggleQuickFilter()}
+          className={cn(
+            'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
+            quickFilter?.today && !quickFilter?.status ? 'border-emerald-500/50 ring-1 ring-emerald-500/20 bg-emerald-500/[0.03]' : 'border-border/50',
+          )}
+        >
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-emerald-500/10"><Calendar className="size-5 text-emerald-500" /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.today && !quickFilter?.status ? 'bg-emerald-500/20' : 'bg-emerald-500/10')}><Calendar className={cn('size-5', quickFilter?.today && !quickFilter?.status ? 'text-emerald-600' : 'text-emerald-500')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Horas Totales Hoy</p>
               <p className="text-2xl font-black tabular-nums">{totalHoursToday.toFixed(1)}</p>
+              <p className="text-[11px] text-muted-foreground">Clic para ver solo los registros de hoy</p>
             </div>
           </div>
-        </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+        </button>
+        <button
+          onClick={() => toggleQuickFilter('ABSENT')}
+          className={cn(
+            'rounded-2xl border bg-card p-5 shadow-sm text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
+            quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'border-rose-500/50 ring-1 ring-rose-500/20 bg-rose-500/[0.03]' : 'border-border/50',
+          )}
+        >
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-rose-500/10"><UserX className="size-5 text-rose-500" /></div>
+            <div className={cn('p-3 rounded-xl', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'bg-rose-500/20' : 'bg-rose-500/10')}><UserX className={cn('size-5', quickFilter?.status === 'ABSENT' && quickFilter?.today ? 'text-rose-600' : 'text-rose-500')} /></div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Ausentes Hoy</p>
               <p className="text-2xl font-black tabular-nums">{absentToday}</p>
+              <p className="text-[11px] text-muted-foreground">Clic para ver solo hoy · ausentes</p>
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Clock In/Out Panel */}
@@ -320,21 +377,21 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           <table className="w-full min-w-[900px]">
             <thead className="bg-muted/30">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Fecha</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Empleado</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Fecha<ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Empleado<ColumnFilterMenu label="Empleado" options={employeeOptions} selected={colFilters.state.employee?.values || []} onSelect={(values) => colFilters.setValues('employee', values)} sort={colFilters.state.employee?.sort || null} onSort={(sort) => colFilters.setSort('employee', sort)} /></span></th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Entrada</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold">Salida</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">Horas</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold">H. Extra</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Estado</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold">Ubicación</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold"><span className="inline-flex items-center gap-1">Ubicación<ColumnFilterMenu label="Ubicación" options={locationOptions} selected={colFilters.state.location?.values || []} onSelect={(values) => colFilters.setValues('location', values)} sort={colFilters.state.location?.sort || null} onSort={(sort) => colFilters.setSort('location', sort)} /></span></th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {paginatedAttendance.map((record: any) => (
                 <tr key={record.id} className="hover:bg-muted/50">
                   <td className="px-4 py-3 text-sm">
-                    {new Date(record.date).toLocaleDateString()}
+                    {formatDateEs(record.date)}
                   </td>
                   <td className="px-4 py-3">
                     <div>
@@ -347,10 +404,10 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {record.checkIn ? new Date(record.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                    {record.checkIn ? new Date(record.checkIn).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {record.checkOut ? new Date(record.checkOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                    {record.checkOut ? new Date(record.checkOut).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-medium">
                     {record.hoursWorked ? Number(record.hoursWorked).toFixed(2) : '0.00'}h
@@ -406,16 +463,16 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Fecha</span>
-                  <span className="font-semibold">{new Date(record.date).toLocaleDateString()}</span>
+                  <span className="font-semibold">{formatDateEs(record.date)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
                     <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Entrada</p>
-                    <p className="font-bold text-sm">{record.checkIn ? new Date(record.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
+                    <p className="font-bold text-sm">{record.checkIn ? new Date(record.checkIn).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
                   </div>
                   <div className="bg-primary/5 p-2 rounded-lg border border-primary/10">
                     <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Salida</p>
-                    <p className="font-bold text-sm">{record.checkOut ? new Date(record.checkOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
+                    <p className="font-bold text-sm">{record.checkOut ? new Date(record.checkOut).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-xs border-t border-border/50 pt-2">

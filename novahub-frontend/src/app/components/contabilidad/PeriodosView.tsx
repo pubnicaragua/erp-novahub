@@ -60,7 +60,6 @@ export function PeriodosView() {
   const periodsQuery = useAccountingQuery<any[]>(['periods'], async (signal) => accountingList(await contabilidadService.getPeriods(signal)));
   const periods = periodsQuery.data || [];
   const loading = periodsQuery.isLoading || periodsQuery.isFetching;
-  const fetchPeriods = () => periodsQuery.refetch();
 
   const handleCreate = async () => {
     if (!form.name || !form.month || !form.year) {

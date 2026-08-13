@@ -70,7 +70,6 @@ export function TaxCatalogView() {
   const entriesQuery = useAccountingQuery<TaxEntry[]>(['tax-catalog'], async (signal) => accountingList(await contabilidadService.getTaxCatalog(undefined, signal)))
   const entries = entriesQuery.data || []
   const loading = entriesQuery.isLoading || entriesQuery.isFetching
-  const fetchEntries = () => entriesQuery.refetch()
 
   const handleCreate = async () => {
     if (!canCreate) return

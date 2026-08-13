@@ -154,7 +154,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           return { benefits, employees };
         }
         case 'kpi':
-          return { employees: await hrService.getEmployees(page, signal) };
+          {
+            const [employees, departments] = await Promise.all([
+              hrService.getEmployees(page, signal),
+              hrService.getDepartments(signal),
+            ]);
+            return { employees, departments };
+          }
         default:
           return {};
       }
@@ -335,6 +341,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               <TabsContent value="kpi" className="m-0">
                 <KpiView
                   employees={data.employees}
+                  departments={data.departments}
                   onRefresh={refreshData}
                 />
               </TabsContent>

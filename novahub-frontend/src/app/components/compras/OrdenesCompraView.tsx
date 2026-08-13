@@ -36,6 +36,8 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
+import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { formatDateEs } from '../../utils/dateFormat';
 
 interface Props {
   data: PurchaseOrder[];
@@ -1088,8 +1090,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     return haystack.includes(normalizedSearchTerm);
   });
 
+  const colFilters = useColumnFilters();
+  const filterGetters = {
+    number: (row: PurchaseOrder) => row.number || '',
+    supplier: (row: PurchaseOrder) => row.supplier?.name || '-',
+    date: (row: PurchaseOrder) => (row.date ? new Date(row.date).getTime() : null),
+    total: (row: PurchaseOrder) => Number(row.total || 0),
+  };
+  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const distinctSuppliers = [...new Map(filtered.map((o) => [o.supplier?.name || '-', o.supplier?.name || '-'])).entries()]
+    .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.supplier?.name || '-') === label).length }));
+
   const columns: ColumnDef<PurchaseOrder>[] = [
     { key: 'number',   header: 'Número',   width: '140px',
+      headerExtra: <ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
       render: (val, row) => (
         <div className="flex flex-col items-start gap-1">
           <span className="font-black font-mono text-primary text-xs">{val}</span>
@@ -1103,12 +1117,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     { key: 'purchaseRequestNumber', header: 'Solicitud', width: '110px',
       render: (_val, row) => <span className="text-xs text-muted-foreground">{row.purchaseRequestNumber || '-'}</span> },
     { key: 'supplier', header: 'Proveedor',
+      headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Fecha',     width: '110px',
-      render: (val) => <span className="text-xs text-muted-foreground">{val ? new Date(val).toLocaleDateString() : '-'}</span> },
+      headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
     { key: 'currency', header: 'Moneda', width: '100px',
       render: (val, row) => <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] font-black text-primary">{String(val || row.currency || 'NIO').toUpperCase()}</Badge> },
     { key: 'total',    header: 'Total',     width: '130px',
+      headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-foreground" />
       ) },
@@ -2137,7 +2154,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
             if (validIds.length === 0) return;

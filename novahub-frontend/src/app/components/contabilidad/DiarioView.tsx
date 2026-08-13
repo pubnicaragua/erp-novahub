@@ -21,10 +21,9 @@ import type { JournalEntry } from '../../types';
 import type { ChartAccount } from '../../types/accounting';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { useBranchScope } from '../../hooks/useBranchScope';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
-import { BranchScopeFilter } from '../ui/BranchScopeFilter';
+import { DateField } from '../ui/DateField';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -58,7 +57,6 @@ function referenceDisplay(journal: JournalEntry): string {
 export function DiarioView() {
   const { canPerform } = useAuth();
   const { baseCurrency, formatAmount } = useCurrency();
-  const { selectedBranchId } = useBranchScope();
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -85,10 +83,9 @@ export function DiarioView() {
     ...(filterRefType ? { referenceType: filterRefType } : {}),
     ...(filterRefId ? { referenceId: filterRefId } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
-    ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
     page: journalPage,
     pageSize: journalPageSize,
-  }), [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, selectedBranchId, journalPage]);
+  }), [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, journalPage]);
   const journalsQuery = useAccountingQuery<any>(['journals', journalParams], async (signal) => await contabilidadService.getJournals(journalParams, signal));
   const accountsQuery = useAccountingQuery<ChartAccount[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)) as ChartAccount[]);
   const journalDetailQuery = useAccountingQuery<JournalEntry | null>(
@@ -187,7 +184,7 @@ export function DiarioView() {
 
   useEffect(() => {
     setJournalPage(1);
-  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch, selectedBranchId]);
+  }, [filterStatus, filterDateFrom, filterDateTo, filterAccountId, filterRefType, filterRefId, debouncedSearch]);
 
   return (
     <div className="min-w-0 space-y-6">
@@ -213,8 +210,7 @@ export function DiarioView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <BranchScopeFilter className="min-w-0" />
-            <div className="min-w-0 space-y-1 sm:min-w-[180px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[240px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Buscar
               </Label>
@@ -225,7 +221,7 @@ export function DiarioView() {
                 className="h-8 text-xs"
               />
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Estado
               </Label>
@@ -241,29 +237,19 @@ export function DiarioView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Desde
               </Label>
-              <Input
-                type="date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="h-8 text-xs"
-              />
+              <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Desde" />
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[160px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Hasta
               </Label>
-              <Input
-                type="date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-                className="h-8 text-xs"
-              />
+              <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Hasta" />
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[200px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[220px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Cuenta Contable
               </Label>
@@ -275,7 +261,7 @@ export function DiarioView() {
                 emptyMessage="Sin resultados"
               />
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[160px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[200px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 Tipo Referencia
               </Label>
@@ -287,7 +273,7 @@ export function DiarioView() {
                 emptyMessage="Sin resultados"
               />
             </div>
-            <div className="min-w-0 space-y-1 sm:min-w-[140px]">
+            <div className="min-w-0 space-y-1 sm:min-w-[180px]">
               <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
                 ID Referencia
               </Label>
