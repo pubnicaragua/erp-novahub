@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { InventoryDetailPanel } from './InventoryDetailPanel';
 import type { SalesPaginationControls } from '../../types';
 
 interface TransferenciasViewProps {
@@ -26,19 +27,12 @@ interface TransferenciasViewProps {
   onStatusChange?: (value: string) => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Pendiente', color: 'bg-orange-500/10 text-orange-600' },
-  { value: 'IN_TRANSIT', label: 'En Tránsito', color: 'bg-blue-500/10 text-blue-600' },
-  { value: 'COMPLETED', label: 'Completada', color: 'bg-green-500/10 text-green-600' },
-  { value: 'CANCELLED', label: 'Cancelada', color: 'bg-red-500/10 text-red-600' },
-];
-
 const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="transfer-title"]',
     title: 'Transferencias',
-    description: 'Registra transferencias de inventario entre almacenes o sucursales. Cada transferencia tiene un origen, un destino y puede estar en diferentes estados.',
-    tip: 'Las transferencias pendientes no afectan el stock hasta que se completan.',
+    description: 'Registra transferencias de inventario entre almacenes o sucursales. Cada transferencia tiene un origen y un destino.',
+    tip: 'Al confirmar una transferencia, el stock se descuenta del origen y se agrega al destino de inmediato.',
     placement: 'bottom',
   },
   {
@@ -56,15 +50,8 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="transfer-table"]',
     title: 'Listado de Transferencias',
-    description: 'Aquí ves todas las transferencias con su guía, origen, destino, cantidad de items y estado.',
+    description: 'Aquí ves todas las transferencias con su guía, origen, destino, cantidad de items. Las transferencias confirmadas mueven el stock automáticamente.',
     placement: 'top',
-  },
-  {
-    target: '[data-tour="transfer-status"]',
-    title: 'Estado de Transferencia',
-    description: 'Puedes cambiar el estado de una transferencia. Los estados disponibles son: Pendiente, En Tránsito, Completada y Cancelada.',
-    tip: 'Completar una transferencia descuenta del origen y agrega al destino automáticamente.',
-    placement: 'left',
   },
   {
     target: '[data-tour="transfer-pagination"]',
@@ -74,7 +61,7 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: TransferenciasViewProps) {
+export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange }: TransferenciasViewProps) {
   const { canPerform } = useAuth();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,18 +76,44 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     date: new Date().toISOString().split('T')[0]
   });
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
 
   const selectedProduct = useMemo(
     () => products.find((p: any) => p.id === newTransfer.productId),
     [products, newTransfer.productId],
   );
 
-  const productOptions = useMemo(
-    () => products.map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id })),
-    [products],
-  );
+  const productWarehouseIds = (product: any): Set<string> => {
+    const ids: string[] = [
+      ...(Array.isArray(product?.stockLevels) ? product.stockLevels.map((l: any) => l.warehouseId || l.warehouse?.id) : []),
+      ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs.map((c: any) => c.warehouseId || c.warehouse?.id) : []),
+      ...(Array.isArray(product?.allocations) ? product.allocations.map((a: any) => a.warehouseId || a.warehouse?.id) : []),
+    ];
+    return new Set(ids.filter(Boolean));
+  };
+
+  const isProductInWarehouse = (productId: string, warehouseId: string) => {
+    const product = products.find((p: any) => p.id === productId);
+    return Boolean(product && warehouseId && productWarehouseIds(product).has(warehouseId));
+  };
+
+  // Solo productos presentes en el almacén origen seleccionado.
+  const productOptions = useMemo(() => {
+    const warehouseId = newTransfer.fromId;
+    return products
+      .filter((p: any) => warehouseId && productWarehouseIds(p).has(warehouseId))
+      .map((p: any) => ({ label: `${p.code} — ${p.name}`, value: p.id }));
+  }, [products, newTransfer.fromId]);
+
+  const handleFromWarehouseChange = (value: string) => {
+    setNewTransfer((prev) => ({
+      ...prev,
+      fromId: value,
+      productId: prev.productId && isProductInWarehouse(prev.productId, value) ? prev.productId : '',
+    }));
+    setSelectedSerials([]);
+  };
 
   const isSerialTracked = (product: any) =>
     Boolean(
@@ -137,10 +150,6 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     t.to?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getStatusInfo = (status: string) => {
-    return STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[0];
-  };
-
   const handleCreateTransfer = async () => {
     if (!newTransfer.fromId || !newTransfer.toId || !newTransfer.productId) {
       toast.error('Completa todos los campos');
@@ -172,7 +181,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         toId: newTransfer.toId,
         items: [{ variantId, quantity: serialRequired ? selectedSerials.length : newTransfer.quantity }],
       } as any);
-      toast.success('Transferencia creada');
+      toast.success('Transferencia creada. El stock se movió al almacén de destino');
       setIsCreating(false);
       setSelectedSerials([]);
       setSerialSearch('');
@@ -191,19 +200,6 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     }
   };
 
-  const handleUpdateStatus = async (id: string, status: string) => {
-    setUpdatingId(id);
-    try {
-      await inventoryService.updateTransferStatus(id, status as any);
-      toast.success('Estado actualizado');
-      onRefresh();
-    } catch (e: any) {
-      toast.error(e.message || 'Error al actualizar');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
   return (
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between" data-tour="transfer-title">
@@ -217,10 +213,6 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
-          {pagination && <Select defaultValue="ALL" onValueChange={(value) => onStatusChange?.(value)}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
-            <SelectContent><SelectItem value="ALL">Todos</SelectItem>{STATUS_OPTIONS.map((status) => <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>)}</SelectContent>
-          </Select>}
         </div>
         {canPerform('INVENTORY_TRANSFERS', 'create') && (
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
@@ -241,12 +233,14 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         )}
       </div>
 
-      <div className="space-y-3 lg:hidden" data-tour="transfer-table">
-        {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4">
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedTransfer ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+        <div className="min-w-0">
+          <div className="space-y-3 lg:hidden" data-tour="transfer-table">
+            {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4">
           <div className="mb-3 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nueva transferencia</p><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateTransfer} disabled={saving} aria-label="Guardar transferencia">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar transferencia"><X className="size-4" /></Button></div></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={(value) => { setNewTransfer({ ...newTransfer, fromId: value }); setSelectedSerials([]); }}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{warehouses.filter((warehouse) => warehouse.id !== newTransfer.fromId).map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Combobox options={productOptions} value={newTransfer.productId} onChange={(value) => { setNewTransfer({ ...newTransfer, productId: value }); setSelectedSerials([]); }} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage="No se encontraron productos." className="w-full" /><div className="flex gap-2"><Input type="number" min={1} value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} onChange={(event) => setNewTransfer({ ...newTransfer, quantity: Number(event.target.value) || 1 })} disabled={isSerialTracked(selectedProduct)} placeholder="Cantidad" />{isSerialTracked(selectedProduct) && <Button type="button" variant="outline" className="shrink-0" onClick={() => setSerialPickerOpen(true)}>IMEI ({selectedSerials.length})</Button>}</div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{warehouses.filter((warehouse) => warehouse.id !== newTransfer.fromId).map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Combobox options={productOptions} value={newTransfer.productId} onChange={(value) => { setNewTransfer({ ...newTransfer, productId: value }); setSelectedSerials([]); }} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={productOptions.length} className="w-full" /><div className="flex gap-2"><Input type="number" min={1} value={isSerialTracked(selectedProduct) ? selectedSerials.length : newTransfer.quantity} onChange={(event) => setNewTransfer({ ...newTransfer, quantity: Number(event.target.value) || 1 })} disabled={isSerialTracked(selectedProduct)} placeholder="Cantidad" />{isSerialTracked(selectedProduct) && <Button type="button" variant="outline" className="shrink-0" onClick={() => setSerialPickerOpen(true)}>IMEI ({selectedSerials.length})</Button>}</div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /></div>
         </Card>}
-        {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => { const statusInfo = getStatusInfo(transfer.status); const isUpdating = updatingId === transfer.id; return <Card key={transfer.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{transfer.number}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Select value={transfer.status} onValueChange={(value) => handleUpdateStatus(transfer.id, value)} disabled={!canPerform('INVENTORY_TRANSFERS', 'edit') || isUpdating || transfer.status === 'COMPLETED' || transfer.status === 'CANCELLED'}><SelectTrigger data-tour="transfer-status" className={`h-8 w-auto min-w-28 text-[10px] font-bold ${statusInfo.color}`}><SelectValue /></SelectTrigger><SelectContent>{STATUS_OPTIONS.map((status) => <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>)}</SelectContent></Select></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4 text-muted-foreground" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><span>{transfer.items?.length || 0} items</span><span>{isUpdating ? 'Actualizando…' : 'Estado guardado'}</span></div></Card>; })}
+        {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => <Card key={transfer.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedTransfer(transfer)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{transfer.number}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600"><Check className="mr-1 size-3" /> Completada</Badge></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4 text-muted-foreground" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><span>{(transfer.items || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0)} unidades</span></div></Card>)}
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="transfer-table">
@@ -267,7 +261,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
               <TableRow className="bg-blue-500/5">
                 <TableCell className="text-xs text-muted-foreground">Auto</TableCell>
                 <TableCell>
-                  <Select value={newTransfer.fromId} onValueChange={(v) => { setNewTransfer({...newTransfer, fromId: v}); setSelectedSerials([]); }}>
+                  <Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Origen" /></SelectTrigger>
                     <SelectContent>
                       {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -291,7 +285,8 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                       onChange={(v) => { setNewTransfer({...newTransfer, productId: v}); setSelectedSerials([]); }}
                       placeholder="Buscar producto..."
                       searchPlaceholder="Buscar por código o nombre..."
-                      emptyMessage="No se encontraron productos."
+                      emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'}
+                      maxVisibleOptions={productOptions.length}
                       className="w-48 min-w-48"
                     />
                     <Input 
@@ -343,36 +338,25 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                 </TableCell>
               </TableRow>
             ) : (
-              filteredTransfers.map((trf: any) => {
-                const statusInfo = getStatusInfo(trf.status);
-                const isUpdating = updatingId === trf.id;
-                return (
-                  <TableRow key={trf.id} className="group hover:bg-muted/30">
+              filteredTransfers.map((trf: any) => (
+                  <TableRow key={trf.id} className="group cursor-pointer hover:bg-muted/30" onClick={() => setSelectedTransfer(trf)}>
                     <TableCell className="font-mono text-xs">{trf.number}</TableCell>
                     <TableCell className="text-sm">{trf.from?.name || '-'}</TableCell>
                     <TableCell className="text-center"><ArrowRight className="size-4 mx-auto text-muted-foreground" /></TableCell>
                     <TableCell className="text-sm">{trf.to?.name || '-'}</TableCell>
-                    <TableCell className="text-center font-medium">{trf.items?.length || 0}</TableCell>
+                    <TableCell className="text-center font-medium">
+                      {(trf.items || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0)}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{new Date(trf.date).toLocaleDateString()}</TableCell>
                     <TableCell>
-                      <Select 
-                        value={trf.status} 
-                        onValueChange={(v) => handleUpdateStatus(trf.id, v)}
-                        disabled={!canPerform('INVENTORY_TRANSFERS', 'edit') || isUpdating || trf.status === 'COMPLETED' || trf.status === 'CANCELLED'}
-                        data-tour="transfer-status"
-                      >
-                        <SelectTrigger className={`h-7 text-[10px] font-medium ${statusInfo.color}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Badge variant="outline" className="bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600">
+                        <Check className="mr-1 size-3" /> Completada
+                      </Badge>
                     </TableCell>
                   </TableRow>
-                );
-              })
-            )}
+                )
+              ))
+            }
           </TableBody>
         </Table>
       </div>
@@ -388,6 +372,15 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             <span>Pág. {pagination.page}/{pagination.totalPages}</span>
             <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
           </span>
+        )}
+      </div>
+        </div>
+        {selectedTransfer && (
+          <InventoryDetailPanel
+            kind="transfer"
+            data={selectedTransfer}
+            onClose={() => setSelectedTransfer(null)}
+          />
         )}
       </div>
       <Dialog open={serialPickerOpen} onOpenChange={setSerialPickerOpen}>

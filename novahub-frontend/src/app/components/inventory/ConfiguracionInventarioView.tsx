@@ -190,6 +190,19 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const flatAccounts = flattenAccounts(accounts);
   const activeAccounts = flatAccounts.filter((a) => String(a.type || '').toUpperCase() === 'ASSET');
 
+  // Solo cuentas llamadas exactamente "Inventario". Si la guardada no coincide
+  // (legacy), se muestra en el trigger pero no se ofrece en la lista.
+  const inventoryControlOptions = useMemo(() => {
+    const opts = activeAccounts
+      .filter((a: any) => String(a.name || '').trim().toLowerCase() === 'inventario')
+      .map((a: any) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }));
+    const current = flatAccounts.find((a: any) => a.code === controlAccountId);
+    if (current && !opts.some((o) => o.value === current.code)) {
+      opts.unshift({ label: `${current.code} - ${current.name}`, value: current.code, description: current.code });
+    }
+    return opts;
+  }, [activeAccounts, flatAccounts, controlAccountId]);
+
   const saveControlAccount = async () => {
     setConfigLoading(true)
     try {
@@ -365,11 +378,12 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 <div className="space-y-2">
                   <Label>Cuenta contable (Activo)</Label>
                   <Combobox
-                    options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }))}
+                    options={inventoryControlOptions}
                     value={controlAccountId}
                     onChange={setControlAccountId}
                     placeholder="Selecciona la cuenta control de Inventario"
                     searchPlaceholder="Buscar por código o nombre..."
+                    emptyMessage="No hay cuentas con el nombre 'Inventario' en el Plan de Cuentas."
                   />
                   {controlAccount && (
                     <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
