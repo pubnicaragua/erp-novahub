@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { useBranchScope } from '../../hooks/useBranchScope';
 import { toast } from 'sonner';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { referenceTypeLabel } from '../../utils/accountingLabels';
+import { BranchScopeFilter } from '../ui/BranchScopeFilter';
 // import { motion } from 'motion/react';
 
 interface LedgerEntry {
@@ -33,6 +35,7 @@ interface LedgerEntry {
   balance: number;
   journalId?: string | null;
   journalNumber?: string | null;
+  branches?: Array<{ id: string; code?: string; name: string }>;
 }
 
 const ACCOUNT_TYPES = [
@@ -70,6 +73,7 @@ function journalStatusLabel(value?: string): string {
 }
 
 export function LibroMayorView() {
+  const { selectedBranchId } = useBranchScope();
   const [filterAccountId, setFilterAccountId] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -87,7 +91,8 @@ export function LibroMayorView() {
     ...(filterAccountId ? { accountId: filterAccountId } : {}),
     ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
     ...(filterDateTo ? { dateTo: filterDateTo } : {}),
-  }), [filterAccountId, filterDateFrom, filterDateTo]);
+    ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
+  }), [filterAccountId, filterDateFrom, filterDateTo, selectedBranchId]);
   const entriesQuery = useAccountingQuery<LedgerEntry[]>(['ledger', ledgerParams], async (signal) => accountingList(await contabilidadService.getLedger(ledgerParams, signal)) as LedgerEntry[]);
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
   const entries = entriesQuery.data || [];
@@ -99,7 +104,6 @@ export function LibroMayorView() {
     return result;
   }, [accountsQuery.data]);
   const loadEntries = () => entriesQuery.refetch();
-  const loadAccounts = () => accountsQuery.refetch();
 
   async function handleEntryClick(entry: LedgerEntry) {
     setSelectedEntry(entry);
@@ -186,7 +190,7 @@ export function LibroMayorView() {
 
   useEffect(() => {
     setPage(1);
-  }, [filterAccountId, filterDateFrom, filterDateTo, filterSearch, filterAccountType, filterMovement, sortOrder, pageSize]);
+  }, [filterAccountId, filterDateFrom, filterDateTo, filterSearch, filterAccountType, filterMovement, sortOrder, pageSize, selectedBranchId]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -210,6 +214,7 @@ export function LibroMayorView() {
           <Filter className="size-3.5" /> Filtros
         </div>
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end lg:gap-4">
+          <BranchScopeFilter className="min-w-0" />
           <div className="flex min-w-0 flex-col gap-1.5 sm:min-w-[220px] lg:flex-1">
             <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Cuenta Contable</label>
             <Combobox
@@ -488,6 +493,12 @@ export function LibroMayorView() {
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Operación de origen</p>
                   <p className="mt-1 text-sm font-bold">{referenceTypeLabel(selectedJournal.referenceType)}</p>
                   <p className="mt-1 break-all font-mono text-xs text-muted-foreground">ID: {selectedJournal.referenceId || 'Sin referencia'}</p>
+                  <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursal de origen</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {selectedJournal.branchLinks?.length
+                      ? selectedJournal.branchLinks.map((link: any) => link.branch?.name).filter(Boolean).join(' · ')
+                      : 'General / sin sucursal vinculada'}
+                  </p>
                   <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">Este asiento se generó a partir de la operación indicada y sus líneas son las que alimentan el Libro Mayor.</p>
                 </div>
 

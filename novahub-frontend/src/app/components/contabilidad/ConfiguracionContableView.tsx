@@ -318,10 +318,16 @@ type AccountOption = AccountInfo & {
   optionState: AccountOptionState
 }
 
+const GROUP_ACCOUNT_SUBTYPES = new Set(['MAIN_GROUP', 'GROUP'])
+
+function isGroupingAccount(account: Pick<AccountInfo, 'isLeaf' | 'subtype'>) {
+  return account.isLeaf === false || GROUP_ACCOUNT_SUBTYPES.has(String(account.subtype || '').toUpperCase())
+}
+
 function getAccountOptionStateForType(account: AccountInfo, expectedType: ModuleField['defaultType']): AccountOptionState {
   if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
   if (account.acceptsPostings === false) return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
-  if (account.isLeaf === false) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
+  if (isGroupingAccount(account)) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
   if (String(account.type).toUpperCase() !== expectedType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
   }
@@ -342,22 +348,32 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   const accountState = account ? getAccountOptionState(account, field) : null
   const accountUnavailable = Boolean(accountState?.disabled)
   const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
-  const accountIsGroup = account?.isLeaf === false
+  const accountIsGroup = Boolean(account && isGroupingAccount(account))
   const accountSelectOptions = useMemo(() => {
-    const options = accountOptions.map(accountOption => ({
-      value: accountOption.code,
-      label: `${accountOption.code} · ${accountOption.name}`,
-      description: `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`,
-      disabled: accountOption.disabled,
-    }))
+    // Las agrupadoras, inactivas y cuentas que no aceptan movimientos no son
+    // opciones de configuración. Se deja únicamente la selección histórica
+    // actual como opción deshabilitada para que el usuario pueda identificarla
+    // y sustituirla.
+    const options = accountOptions
+      .filter(accountOption => !accountOption.disabled)
+      .map(accountOption => ({
+        value: accountOption.code,
+        label: `${accountOption.code} · ${accountOption.name}`,
+        description: `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`,
+        disabled: false,
+      }))
 
-    // Mantiene visible una configuración antigua aunque la cuenta ya no exista
-    // en el catálogo, sin convertirla en una opción seleccionable.
+    // Mantiene visible la configuración actual inválida, aunque sea una cuenta
+    // agrupadora/inactiva o ya no exista en el catálogo, sin convertirla en una
+    // opción seleccionable.
     if (code && !options.some(option => option.value === code)) {
+      const currentOption = accountOptions.find(option => option.code === code)
       options.push({
         value: code,
-        label: `${code} · Cuenta configurada no encontrada`,
-        description: 'No encontrada en el plan de cuentas',
+        label: `${code} · ${currentOption?.name || 'Cuenta configurada'}`,
+        description: currentOption
+          ? `${accountTypeLabel(currentOption.type)} · ${currentOption.optionState.label}`
+          : 'No encontrada en el plan de cuentas',
         disabled: true,
       })
     }
@@ -532,7 +548,10 @@ export function ConfiguracionContableView() {
     }
   }
 
-  const persistAccountMappings = useCallback((nextMappings: Record<string, any>) => {
+  const persistAccountMappings = useCallback((
+    nextMappings: Record<string, any>,
+    patch?: { moduleId: string; fieldKey: string; value: string },
+  ) => {
     if (!canEditAccounting) return Promise.resolve()
     const saveTask = accountMappingSaveQueueRef.current
       .catch(() => undefined)
@@ -545,6 +564,7 @@ export function ConfiguracionContableView() {
             taxRate,
             industry,
             accountMappings: nextMappings,
+            ...(patch ? { accountMappingPatch: patch } : {}),
             customModules,
           })
           toast.success('Cuenta contable guardada automáticamente', { id: 'account-mapping-save' })
@@ -595,7 +615,7 @@ export function ConfiguracionContableView() {
     }
     accountMappingsRef.current = next
     setAccountMappings(next)
-    void persistAccountMappings(next)
+    void persistAccountMappings(next, { moduleId, fieldKey, value })
   }
 
   const toggleGroup = (id: string) => {
