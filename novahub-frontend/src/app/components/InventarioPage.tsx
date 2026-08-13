@@ -186,6 +186,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
     enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
+  // Catálogo completo (sin paginar) para los KPIs de Productos/Servicios: el
+  // listado principal es paginado (50/página) y no debe limitar los totales.
+  const productsSummaryQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
+  });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'warehouses', tenantKey],
@@ -300,6 +308,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
+  // Lista completa para KPIs (independiente de la paginación de la tabla).
+  const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
+    ...product,
+    itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
+  })).filter((product: any) => isProductInScope(product));
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -464,6 +477,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ProductosView 
                     products={productItems}
+                    summaryProducts={summaryProducts}
                     categories={data.categories}
                     warehouses={scopedWarehouses}
                     series={data.series}
@@ -491,6 +505,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ServiciosView
                     products={serviceItems}
+                    summaryProducts={summaryProducts}
                     categories={data.serviceCategories}
                     warehouses={scopedWarehouses}
                     series={data.series}

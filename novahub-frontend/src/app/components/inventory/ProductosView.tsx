@@ -146,6 +146,7 @@ const extractProductImageArchive = async (
 
 interface ProductosViewProps {
   products: any[];
+  summaryProducts?: any[];
   categories: any[];
   warehouses?: any[];
   series?: any[];
@@ -348,7 +349,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
@@ -768,7 +769,10 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
   const inventorySummary = useMemo(() => {
-    const stockProducts = products.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
+    // Los KPIs se calculan sobre el catálogo completo (summaryProducts) y no
+    // sobre la página visible, para reflejar los totales reales.
+    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+    const stockProducts = source.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
     const isLow = (p: any) => {
       const stock = getProductStock(p);
       if (stock <= 0) return false;
@@ -787,10 +791,11 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
       out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
     };
-  }, [products, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet]);
+  }, [products, summaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet]);
 
   const serviceSummary = useMemo(() => {
-    const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
+    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+    const services = source.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
     const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
     const now = Date.now();
     const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
@@ -804,7 +809,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       weeklyAverage: createdInLastTwelveWeeks / 12,
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
-  }, [products]);
+  }, [products, summaryProducts]);
 
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
