@@ -431,6 +431,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   PAYMENT: 'Pago',
   STATUS_CHANGE: 'Cambio de estado',
   LOGIN: 'Inicio de sesión',
+  SESSION_TAKEOVER: 'Ingreso desde otra IP',
   AUDIT: 'Auditoría',
   SENT_TO_CORRECT: 'Enviado a corregir',
   CANCELLED: 'Anulación',
@@ -452,12 +453,32 @@ function auditActionLabel(action: string) {
   return AUDIT_ACTION_LABELS[action] || action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function auditDetailText(log: any): string {
+  let details: any = log.details;
+  if (typeof details === 'string' && details.trim().startsWith('{')) {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      /* se queda como texto */
+    }
+  }
+  if (details && typeof details === 'object') {
+    if (details.ip && (log.action === 'SESSION_TAKEOVER' || log.action === 'LOGIN')) {
+      return `desde IP ${details.ip}`;
+    }
+    if (details.message) return String(details.message).slice(0, 60);
+    return JSON.stringify(details).slice(0, 60);
+  }
+  return String(details ?? '').slice(0, 60);
+}
+
 function auditModuleLabel(module: string) {
   return AUDIT_MODULE_LABELS[module] || module;
 }
 
 function auditTone(action: string): 'success' | 'warning' | 'info' | 'danger' {
   if (['LOGIN', 'PAYMENT'].includes(action)) return 'success';
+  if (['SESSION_TAKEOVER'].includes(action)) return 'danger';
   if (['UPDATE', 'STATUS_CHANGE', 'AUDIT', 'SENT_TO_CORRECT'].includes(action)) return 'warning';
   if (['DELETE', 'CANCELLED'].includes(action)) return 'danger';
   return 'info';
@@ -1842,7 +1863,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                               <p className="text-[10px] text-muted-foreground truncate">
                                 {log.user?.name || log.user?.email || 'Sistema'}
                                 {log.entity ? ` · ${log.entity.replace(/_/g, ' ').toLowerCase()}` : ''}
-                                {log.details ? ` · ${String(log.details).slice(0, 60)}` : ''}
+                                {auditDetailText(log) ? ` · ${auditDetailText(log)}` : ''}
                               </p>
                             </div>
                             <span className="text-[10px] text-muted-foreground flex-shrink-0">{auditTimeAgo(log.createdAt)}</span>
