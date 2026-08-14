@@ -61,7 +61,7 @@ interface InventarioPageProps {
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds } = useBranchScope();
+  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
   const branchScopeEnabled = Boolean(selectedBranchId);
@@ -186,6 +186,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
     enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
+  // Catálogo completo (sin paginar) para los KPIs de Productos/Servicios: el
+  // listado principal es paginado (50/página) y no debe limitar los totales.
+  const productsSummaryQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
+  });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'warehouses', tenantKey],
@@ -300,6 +308,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
+  // Lista completa para KPIs (independiente de la paginación de la tabla).
+  const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
+    ...product,
+    itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
+  })).filter((product: any) => isProductInScope(product));
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -404,8 +417,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
           </span>
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
-            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
-            const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
+            // La suscripción al módulo padre (INVENTORY) habilita todas sus
+            // vistas, incluso con submódulos granulares contratados.
+            const hasFallback = user?.enabledModules?.includes('INVENTORY');
             const hasAccess = (!user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback)
               && (section.requiredModules.length === 0 || section.requiredModules.some(mod => canPerform(mod, 'view')));
             if (!hasAccess) return null;
@@ -463,6 +477,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ProductosView 
                     products={productItems}
+                    summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.categories}
                     warehouses={scopedWarehouses}
                     series={data.series}
@@ -477,6 +493,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     targetProductId={productTarget?.id}
                     initialStockFilter={productTarget?.stockFilter}
                     onClearTargetProduct={() => setProductTarget(null)}
+                    selectedBranchId={selectedBranchId}
+                    branchWarehouseIds={branchWarehouseIds}
                   />
                 </motion.div>
               </TabsContent>
@@ -488,6 +506,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ServiciosView
                     products={serviceItems}
+                    summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.serviceCategories}
                     warehouses={scopedWarehouses}
                     series={data.series}

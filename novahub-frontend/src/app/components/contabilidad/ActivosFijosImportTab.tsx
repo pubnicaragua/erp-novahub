@@ -16,7 +16,7 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
   'Ubicación', 'Responsable', 'Proveedor', 'No. factura', 'Fecha adquisición', 'Fecha puesta en uso',
-  'Moneda', 'Tipo de cambio', 'Costo', 'Valor residual', 'Vida útil', 'Tasa anual',
+  'Moneda', 'Tipo de cambio', 'Costo', 'Valor residual', 'Residual en NIO', 'Vida útil', 'Tasa anual',
   'Dep. acumulada inicial', 'Observaciones',
 ];
 
@@ -39,6 +39,7 @@ const HEADER_TO_KEY: Record<string, string> = {
   'Tipo de cambio': 'tipo_de_cambio',
   'Costo': 'costo',
   'Valor residual': 'valor_residual',
+  'Residual en NIO': 'residual_en_nio',
   'Vida útil': 'vida_util',
   'Tasa anual': 'tasa_anual',
   'Dep. acumulada inicial': 'dep_acumulada_inicial',
@@ -48,7 +49,7 @@ const HEADER_TO_KEY: Record<string, string> = {
 const EXAMPLE_ROW = [
   'ACT-001', 'Laptop HP ProBook', 'Equipo de Cómputo', 'HP', 'ProBook 450', 'SN-001',
   'Matriz', 'Administración', 'Oficina central', 'Juan Pérez', 'Proveedor A', 'FAC-1001',
-  '2025-01-10', '2025-01-15', 'NIO', '1', '15000', '0', '24', '50%', '0', 'Laptop principal',
+  '10/01/2025', '15/01/2025', 'NIO', '1', '15000', '0', 'No', '24', '50%', '0', 'Laptop principal',
 ];
 
 function normalizeDate(value: string): string {
@@ -86,10 +87,14 @@ export function ActivosFijosImportTab() {
       ['GUÍA DE LLENADO · IMPORTAR ACTIVOS FIJOS'],
       ['1. No modifiques la fila de encabezados.'],
       ['2. Obligatorios: Nombre, Categoría, Fecha adquisición, Fecha puesta en uso, Costo.'],
-      ['3. Categoría y Sucursal se reconocen por nombre (deben existir en el sistema).'],
-      ['4. Si Vida útil o Tasa anual van vacíos, se toman de la categoría.'],
-      ['5. Moneda: NIO, USD u otra. Si no es NIO, el Tipo de cambio es obligatorio.'],
-      ['6. Dep. acumulada inicial es para activos ya depreciados antes de migrar.'],
+      ['3. Las fechas se escriben en formato día/mes/año (DD/MM/AAAA). Ejemplo: 10/01/2025.'],
+      ['4. Categoría y Sucursal se reconocen por nombre (deben existir en el sistema).'],
+      ['5. Si Vida útil o Tasa anual van vacíos, se toman de la categoría.'],
+      ['6. Moneda: NIO o USD. Si no es NIO, el Tipo de cambio es obligatorio.'],
+      ['7. "Valor residual" se escribe SIEMPRE en la moneda del activo: si Moneda = USD, el residual se entiende en dólares (deja "Residual en NIO" vacía o en No).'],
+      ['8. Si Moneda = USD y deseas el residual en córdobas: escribe en "Valor residual" el monto en C$ y marca "Residual en NIO" = Sí; se convertirá a USD dividiendo entre el Tipo de cambio de la fila.'],
+      ['9. NO escribas el residual en las dos monedas: el monto va en "Valor residual" y solo "Residual en NIO" indica si ese monto está en córdobas (Sí) o en dólares (No/vacío). Si Moneda = NIO, deja "Residual en NIO" en No.'],
+      ['10. Dep. acumulada inicial es para activos ya depreciados antes de migrar.'],
     ]);
     guide['!cols'] = [{ wch: 90 }];
     const workbook = XLSX.utils.book_new();
@@ -137,6 +142,13 @@ export function ActivosFijosImportTab() {
       for (const key of ['fecha_adquisicion', 'fecha_puesta_en_uso', 'fecha_corte']) {
         if (next[key]) next[key] = normalizeDate(next[key]);
       }
+      const residualInNio = /^(si|sí|1|true|x)$/i.test(String(next.residual_en_nio ?? '').trim());
+      const rowCurrency = String(next.moneda ?? '').trim().toUpperCase();
+      if (residualInNio && next.valor_residual && rowCurrency === 'USD') {
+        const rate = Number(next.tipo_de_cambio) || 0;
+        if (rate > 0) next.valor_residual = (Number(next.valor_residual) / rate).toFixed(2);
+      }
+      delete next.residual_en_nio;
       return next;
     });
   }

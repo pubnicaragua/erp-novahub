@@ -4,13 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Plus, Search, RefreshCw, DollarSign, Package, Tags, Calculator, Upload, LayoutGrid, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { Plus, Search, RefreshCw, DollarSign, Package, Tags, Calculator, Upload, LayoutGrid, X, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ActivosFijosCategoriesTab } from './ActivosFijosCategoriesTab';
 import { ActivosFijosDepreciationTab } from './ActivosFijosDepreciationTab';
@@ -22,6 +26,8 @@ interface FixedAsset {
   code: string;
   name: string;
   status: string;
+  currency?: string;
+  exchangeRate?: number;
   category?: { name: string };
   derived?: {
     cost: number;
@@ -38,11 +44,13 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function ActivosFijosView() {
   const { canPerform } = useAuth();
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   const detailQuery = useAccountingQuery<any>(
     ['fixed-asset-detail', selectedAssetId],
@@ -66,13 +74,40 @@ export function ActivosFijosView() {
     a.category?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalAcquisition = filtered.reduce((s, a) => s + (a.derived?.cost ?? 0), 0);
-  const totalBookValue = filtered.reduce((s, a) => s + (a.derived?.bookValue ?? 0), 0);
-  const formatCurrency = (value: number) => formatConvertedAmount(value, baseCurrency);
+  const totalAcquisition = filtered.reduce((s, a) => s + convertAmount(a.derived?.cost ?? 0, a.currency, a.exchangeRate), 0);
+  const totalBookValue = filtered.reduce((s, a) => s + convertAmount(a.derived?.bookValue ?? 0, a.currency, a.exchangeRate), 0);
+  const formatCurrency = (value: number, sourceCurrency?: string, sourceRate?: number) => formatConvertedAmount(value, sourceCurrency, sourceRate);
 
   function handleCreated() {
     queryClient.invalidateQueries({ queryKey: ['accounting'] });
     assetsQuery.refetch();
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map(a => a.id));
+    }
+  };
+
+  async function handleExport(scope: 'all' | 'selected') {
+    const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
+    if (ids.length === 0) { toast.error(scope === 'selected' ? 'No hay activos seleccionados' : 'No hay activos para exportar'); return; }
+    setExporting(true);
+    try {
+      const details = await fetchFixedAssetDetails(ids);
+      exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+      toast.success(`Exportados ${details.length} activo${details.length !== 1 ? 's' : ''}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al exportar activos');
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -94,12 +129,37 @@ export function ActivosFijosView() {
             Registro y control de activos fijos de la empresa
           </p>
         </div>
-        {canPerform('ACCOUNTING_ASSETS', 'create') && (
-          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" />
-            Nuevo Activo Fijo
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Badge variant="outline" className="h-8 border-primary/30 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">
+              {selectedIds.length} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+            </Badge>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={exporting || assets.length === 0} className="gap-2">
+                {exporting ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+                {exporting ? 'Exportando...' : 'Exportar'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-56">
+              <DropdownMenuLabel className="text-xs">Exportar activos fijos</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleExport('all')} disabled={exporting || assets.length === 0} className="cursor-pointer gap-2 text-xs">
+                <Download className="size-3.5" /> Exportar todos ({assets.length})
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('selected')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
+                <Download className="size-3.5" /> Exportar seleccionados ({selectedIds.length})
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {canPerform('ACCOUNTING_ASSETS', 'create') && (
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              Nuevo Activo Fijo
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -120,7 +180,7 @@ export function ActivosFijosView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-black text-emerald-600">{formatCurrency(totalAcquisition)}</p>
+            <p className="text-2xl font-black text-emerald-600">{formatCurrency(totalAcquisition, displayCurrency)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -130,7 +190,7 @@ export function ActivosFijosView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-black text-primary">{formatCurrency(totalBookValue)}</p>
+            <p className="text-2xl font-black text-primary">{formatCurrency(totalBookValue, displayCurrency)}</p>
           </CardContent>
         </Card>
       </div>
@@ -173,6 +233,14 @@ export function ActivosFijosView() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow className="hover:bg-transparent border-border/50">
+                        <TableHead className="w-8">
+                          <Checkbox
+                            checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                            onCheckedChange={toggleSelectAll}
+                            title="Seleccionar todos los activos visibles"
+                            aria-label="Seleccionar todos los activos visibles"
+                          />
+                        </TableHead>
                         <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Código</TableHead>
                         <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Nombre del Activo</TableHead>
                         <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Categoría</TableHead>
@@ -194,12 +262,22 @@ export function ActivosFijosView() {
                               isSelected && "bg-muted/50 hover:bg-muted/50 font-semibold"
                             )}
                           >
+                            <TableCell className="py-2">
+                              <Checkbox
+                                checked={selectedIds.includes(asset.id)}
+                                onCheckedChange={() => toggleSelect(asset.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                title="Marcar para exportar"
+                                aria-label={`Seleccionar ${asset.name}`}
+                                className="align-middle"
+                              />
+                            </TableCell>
                             <TableCell className="font-mono text-xs">{asset.code || '—'}</TableCell>
                             <TableCell className="font-medium text-xs">{asset.name}</TableCell>
                             <TableCell className="text-xs">{asset.category?.name || '—'}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{formatCurrency(asset.derived?.cost ?? 0)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{formatCurrency(asset.derived?.accumulated ?? 0)}</TableCell>
-                            <TableCell className="text-right font-mono text-xs font-bold text-emerald-600">{formatCurrency(asset.derived?.bookValue ?? 0)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs">{formatCurrency(asset.derived?.cost ?? 0, asset.currency, asset.exchangeRate)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs">{formatCurrency(asset.derived?.accumulated ?? 0, asset.currency, asset.exchangeRate)}</TableCell>
+                            <TableCell className="text-right font-mono text-xs font-bold text-emerald-600">{formatCurrency(asset.derived?.bookValue ?? 0, asset.currency, asset.exchangeRate)}</TableCell>
                             <TableCell>
                               <Badge variant={asset.status === 'ACTIVE' ? 'default' : 'secondary'} className="text-[10px] font-bold">
                                 {STATUS_LABELS[asset.status] || asset.status}
@@ -228,22 +306,31 @@ export function ActivosFijosView() {
                             <p className="text-[10px] font-mono text-muted-foreground">{asset.code || '—'}</p>
                             <p className="break-words text-xs font-bold">{asset.name}</p>
                           </div>
-                          <Badge variant="secondary" className="shrink-0 text-[10px]">
-                            {STATUS_LABELS[asset.status] || asset.status}
-                          </Badge>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Checkbox
+                              checked={selectedIds.includes(asset.id)}
+                              onCheckedChange={() => toggleSelect(asset.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              title="Marcar para exportar"
+                              aria-label={`Seleccionar ${asset.name}`}
+                            />
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {STATUS_LABELS[asset.status] || asset.status}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/20 pt-2 text-[10px]">
                           <div>
                             <span className="block text-muted-foreground">Costo</span>
-                            <span className="font-mono">{formatCurrency(asset.derived?.cost ?? 0)}</span>
+                            <span className="font-mono">{formatCurrency(asset.derived?.cost ?? 0, asset.currency, asset.exchangeRate)}</span>
                           </div>
                           <div>
                             <span className="block text-muted-foreground">Dep. acum.</span>
-                            <span className="font-mono">{formatCurrency(asset.derived?.accumulated ?? 0)}</span>
+                            <span className="font-mono">{formatCurrency(asset.derived?.accumulated ?? 0, asset.currency, asset.exchangeRate)}</span>
                           </div>
                           <div>
                             <span className="block text-muted-foreground">Valor libros</span>
-                            <span className="font-bold text-emerald-600">{formatCurrency(asset.derived?.bookValue ?? 0)}</span>
+                            <span className="font-bold text-emerald-600">{formatCurrency(asset.derived?.bookValue ?? 0, asset.currency, asset.exchangeRate)}</span>
                           </div>
                         </div>
                       </div>
@@ -257,8 +344,8 @@ export function ActivosFijosView() {
             <div className="px-6 py-3 flex items-center justify-between bg-muted/20 border-t border-border/50 rounded-b-2xl text-xs font-bold">
               <span className="uppercase tracking-wider text-muted-foreground">{filtered.length} activos</span>
               <div className="flex items-center gap-6">
-                <span className="text-muted-foreground">Costo Total: <span className="text-foreground">{formatCurrency(totalAcquisition)}</span></span>
-                <span className="text-muted-foreground">Valor en Libros: <span className="text-emerald-600">{formatCurrency(totalBookValue)}</span></span>
+                <span className="text-muted-foreground">Costo Total: <span className="text-foreground">{formatCurrency(totalAcquisition, displayCurrency)}</span></span>
+                <span className="text-muted-foreground">Valor en Libros: <span className="text-emerald-600">{formatCurrency(totalBookValue, displayCurrency)}</span></span>
               </div>
             </div>
           )}
@@ -304,7 +391,7 @@ export function ActivosFijosView() {
                         <div><span className="block text-[10px] text-muted-foreground font-semibold">No. Serie</span><span className="font-medium">{detail.serialNumber || '—'}</span></div>
                         <div><span className="block text-[10px] text-muted-foreground font-semibold">Ubicación</span><span className="font-medium">{detail.location || '—'}</span></div>
                         <div className="col-span-2 border-t border-border/20 pt-1.5 mt-0.5">
-                          <span className="block text-[10px] text-muted-foreground font-semibold">Responsable</span><span className="font-medium">{detail.responsibleText || '—'}</span>
+                          <span className="block text-[10px] text-muted-foreground font-semibold">Responsable</span><span className="font-medium">{typeof detail.responsible === 'string' ? detail.responsible : detail.responsible?.name || detail.responsibleText || '—'}</span>
                         </div>
                       </div>
                     </div>
@@ -326,19 +413,27 @@ export function ActivosFijosView() {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
                           <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Costo Adquisición</p>
-                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.derived?.cost ?? 0)}</p>
+                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.derived?.cost ?? 0, detail.currency, detail.exchangeRate)}</p>
                         </div>
                         <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Valor en Libros</p>
-                          <p className="mt-0.5 text-sm font-black text-primary">{formatCurrency(detail.derived?.bookValue ?? 0)}</p>
+                          <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Valor Residual</p>
+                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.residualValue ?? 0, detail.currency, detail.exchangeRate)}</p>
                         </div>
                         <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
                           <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Dep. Acumulada</p>
-                          <p className="mt-0.5 text-sm font-black text-emerald-600">{formatCurrency(detail.derived?.accumulated ?? 0)}</p>
+                          <p className="mt-0.5 text-sm font-black text-emerald-600">{formatCurrency(detail.derived?.accumulated ?? 0, detail.currency, detail.exchangeRate)}</p>
                         </div>
                         <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
                           <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Dep. Mensual</p>
-                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.derived?.monthly ?? 0)}</p>
+                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.derived?.monthly ?? 0, detail.currency, detail.exchangeRate)}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Dep. Acumulada Inicial</p>
+                          <p className="mt-0.5 text-sm font-black">{formatCurrency(detail.initialAccumDepreciation ?? 0, detail.currency, detail.exchangeRate)}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-muted/20 p-2.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Valor en Libros</p>
+                          <p className="mt-0.5 text-sm font-black text-primary">{formatCurrency(detail.derived?.bookValue ?? 0, detail.currency, detail.exchangeRate)}</p>
                         </div>
                       </div>
                     </div>
@@ -367,8 +462,8 @@ export function ActivosFijosView() {
                               {detail.projection.map((row: any) => (
                                 <TableRow key={row.id} className="hover:bg-muted/30 border-border/20">
                                   <TableCell className="font-mono text-[11px] py-1.5">{row.period}</TableCell>
-                                  <TableCell className="text-right font-mono text-[11px] py-1.5">{formatCurrency(row.depreciationAmount)}</TableCell>
-                                  <TableCell className="text-right font-mono text-[11px] py-1.5 font-bold">{formatCurrency(row.bookValue)}</TableCell>
+                                  <TableCell className="text-right font-mono text-[11px] py-1.5">{formatCurrency(row.depreciationAmount, detail.currency, detail.exchangeRate)}</TableCell>
+                                  <TableCell className="text-right font-mono text-[11px] py-1.5 font-bold">{formatCurrency(row.bookValue, detail.currency, detail.exchangeRate)}</TableCell>
                                   <TableCell className="py-1.5">
                                     <Badge variant={row.status === 'PROCESSED' ? 'default' : 'secondary'} className="text-[8px] px-1 py-0 h-4">
                                       {row.status === 'PROCESSED' ? 'Sí' : 'No'}

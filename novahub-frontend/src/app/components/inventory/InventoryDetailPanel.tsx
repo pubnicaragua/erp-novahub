@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDownLeft, ArrowUpRight, Check, Info, Package, Scale, X } from "lucide-react"
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Check, Info, Package, Scale, X } from "lucide-react"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card"
@@ -65,6 +65,17 @@ function TransferDetail({ data }: { data: any }) {
         <StatCard label="Destino" value={data.to?.name || '—'} />
       </div>
 
+      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+        <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Movimiento de stock</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/20 text-[10px] font-black">-{totalUnits}</Badge>
+          <span className="min-w-0 max-w-36 truncate text-xs font-semibold" title={data.from?.name}>{data.from?.name || '—'}</span>
+          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-black">+{totalUnits}</Badge>
+          <span className="min-w-0 max-w-36 truncate text-xs font-semibold" title={data.to?.name}>{data.to?.name || '—'}</span>
+        </div>
+      </div>
+
       <section className="min-w-0">
         <div className="mb-3 flex items-center gap-2">
           <Package className="size-4 text-primary" />
@@ -78,6 +89,7 @@ function TransferDetail({ data }: { data: any }) {
             {items.map((item: any) => {
               const product = item.variant?.product || {};
               const variantName = item.variant?.name || item.variant?.sku || '';
+              const itemQty = Number(item.quantity || 0);
               return (
                 <div key={item.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3">
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/60">
@@ -88,8 +100,15 @@ function TransferDetail({ data }: { data: any }) {
                     <p className="mt-1 truncate text-[10px] text-muted-foreground">
                       {[product.code, variantName].filter(Boolean).join(' · ') || 'Sin referencia'}
                     </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-black text-rose-600">-{itemQty}</span>
+                      <span className="max-w-28 truncate text-[9px] text-muted-foreground">{data.from?.name || '—'}</span>
+                      <ArrowRight className="size-2.5 text-muted-foreground" />
+                      <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-black text-emerald-600">+{itemQty}</span>
+                      <span className="max-w-28 truncate text-[9px] text-muted-foreground">{data.to?.name || '—'}</span>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">×{Number(item.quantity || 0)}</div>
+                  <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">×{itemQty}</div>
                 </div>
               );
             })}

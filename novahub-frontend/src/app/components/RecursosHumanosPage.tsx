@@ -239,8 +239,9 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             { id: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' }
           ].map((tab) => {
             const hasRequired = user?.enabledModules?.includes(tab.module);
-            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('HR_'));
-            const hasFallback = user?.enabledModules?.includes('HR') && !hasSpecificSubmodules;
+            // La suscripción al módulo padre (HR) habilita todas sus vistas,
+            // incluso con submódulos granulares contratados.
+            const hasFallback = user?.enabledModules?.includes('HR');
             const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
             if (!hasAccess) return null;
             return (

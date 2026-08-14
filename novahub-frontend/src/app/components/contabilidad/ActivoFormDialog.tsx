@@ -4,11 +4,14 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
+import { Checkbox } from '../ui/checkbox';
 import { DateField } from '../ui/DateField';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { mobiliarioService } from '../../services/mobiliario.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 
@@ -52,8 +55,10 @@ function emptyForm(): ActivoForm {
 }
 
 export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDialogProps) {
+  const { exchangeRate: currentRate } = useCurrency();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<ActivoForm>(emptyForm());
+  const [residualInBase, setResidualInBase] = useState(false);
   const [branches, setBranches] = useState<any[]>([]);
   const [costCenters, setCostCenters] = useState<any[]>([]);
 
@@ -98,17 +103,33 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
     const selectedCategory = categories.find((c) => c.id === form.categoryId);
     const usefulLifeMonths = selectedCategory?.usefulLifeMonths || 0;
     const costVal = Number(form.cost) || 0;
-    const residualVal = Number(form.residualValue) || 0;
+    const rawResidual = Number(form.residualValue) || 0;
+    const residualVal = form.currency === 'USD' && residualInBase ? rawResidual / (Number(form.exchangeRate) || 1) : rawResidual;
     const calculated = usefulLifeMonths > 0 ? (costVal - residualVal) / usefulLifeMonths : 0;
     setForm((prev) => ({ ...prev, initialAccumDepreciation: calculated.toFixed(2) }));
-  }, [form.cost, form.residualValue, form.categoryId, categories]);
+  }, [form.cost, form.residualValue, form.categoryId, form.currency, form.exchangeRate, residualInBase, categories]);
 
   function setField(field: keyof ActivoForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function handleCurrencyChange(value: string) {
+    setForm((prev) => {
+      const next: ActivoForm = { ...prev, currency: value };
+      if (value === 'USD') {
+        const tc = Number(prev.exchangeRate) || 0;
+        if (tc <= 0 || tc === 1) next.exchangeRate = String(currentRate > 0 ? currentRate : 36.5);
+      } else {
+        next.exchangeRate = '1';
+      }
+      return next;
+    });
+    if (value !== 'USD') setResidualInBase(false);
+  }
+
   function reset() {
     setForm(emptyForm());
+    setResidualInBase(false);
   }
 
   async function handleCreate() {
@@ -117,10 +138,13 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
     if (submitting) return;
     setSubmitting(true);
     try {
+      const residualValue = form.currency === 'USD' && residualInBase
+        ? Number(form.residualValue) / (Number(form.exchangeRate) || 1)
+        : Number(form.residualValue);
       await contabilidadService.createFixedAsset({
         ...form,
         cost: Number(form.cost),
-        residualValue: Number(form.residualValue),
+        residualValue,
         exchangeRate: Number(form.exchangeRate) || 1,
         initialAccumDepreciation: Number(form.initialAccumDepreciation),
         branchId: form.branchId || null,
@@ -238,10 +262,26 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             <div className="space-y-2">
               <Label htmlFor="af-cost">Costo *</Label>
               <Input id="af-cost" type="number" step="0.01" min="0" value={form.cost} onChange={(e) => setField('cost', e.target.value)} />
+              {form.currency === 'USD' && (
+                <p className="text-[10px] text-muted-foreground">
+                  Costo en USD. Al registrarse se mostrará convertido a la moneda base con el tipo de cambio digitado.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-resid">Valor residual</Label>
               <Input id="af-resid" type="number" step="0.01" min="0" value={form.residualValue} onChange={(e) => setField('residualValue', e.target.value)} />
+              {form.currency === 'USD' && (
+                <div className="space-y-1">
+                  <label className="flex w-fit cursor-pointer select-none items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Checkbox checked={residualInBase} onCheckedChange={(v) => setResidualInBase(!!v)} />
+                    Valor residual en NIO (C$)
+                  </label>
+                  {residualInBase && (
+                    <p className="text-[10px] text-muted-foreground">Se convertirá a USD con el tipo de cambio digitado.</p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-init">Dep. acumulada inicial</Label>
@@ -258,7 +298,13 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-cur">Moneda</Label>
-              <Input id="af-cur" value={form.currency} onChange={(e) => setField('currency', e.target.value.toUpperCase())} />
+              <Select value={form.currency} onValueChange={handleCurrencyChange}>
+                <SelectTrigger id="af-cur"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NIO">NIO (Córdobas)</SelectItem>
+                  <SelectItem value="USD">USD (Dólares)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="af-tc">Tipo de cambio</Label>
