@@ -213,7 +213,7 @@ export function ControlDashboardCajaView({
               <Coins className="size-5 text-primary" /> Control de Caja
             </h2>
             <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-7 rounded-full px-3 text-[10px] font-black uppercase tracking-widest">
-              <CircleHelp className="mr-1.5 size-3" /> Tutorial
+              <CircleHelp className="mr-1.5 size-3" /> Cómo controlar caja
             </Button>
             <Button 
               size="sm" 

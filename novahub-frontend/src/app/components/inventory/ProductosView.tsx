@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { createExtractorFromData } from 'node-unrar-js/esm/index.esm.js';
@@ -33,6 +33,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -146,8 +147,10 @@ const extractProductImageArchive = async (
 
 interface ProductosViewProps {
   products: any[];
+  summaryProducts?: any[];
   categories: any[];
   warehouses?: any[];
+  branches?: any[];
   series?: any[];
   movements?: any[];
   onRefresh: () => void;
@@ -162,6 +165,8 @@ interface ProductosViewProps {
   productStatusFilter?: ProductStatusFilter;
   onProductStatusFilterChange?: (value: ProductStatusFilter) => void;
   onClearTargetProduct?: () => void;
+  selectedBranchId?: string;
+  branchWarehouseIds?: string[];
 }
 
 interface EditingProduct {
@@ -280,7 +285,7 @@ function ImportPreviewPage({
             </TableHeader>
             <TableBody>
               {importData.map((row, index) => (
-                <TableRow key={`${row.code || 'fila'}-${index}`} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                <TableRow key={index} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
                   <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
@@ -307,7 +312,7 @@ function ImportPreviewPage({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="p-1"><Input value={row.unit || 'unidad'} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
@@ -346,9 +351,31 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, categories, warehouses = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
+  const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
+  const [stockByProduct, setStockByProduct] = useState<Record<string, Record<string, number>>>({});
+  const refreshStockMap = useCallback(async () => {
+    try {
+      const res: any = await inventoryService.getAllStock();
+      const levels = Array.isArray(res) ? res : (res?.data || []);
+      const map: Record<string, Record<string, number>> = {};
+      for (const level of levels) {
+        const productId = level.productId || level.product?.id;
+        const warehouseId = level.warehouseId || level.warehouse?.id;
+        if (!productId || !warehouseId) continue;
+        if (!map[productId]) map[productId] = {};
+        map[productId][warehouseId] = (map[productId][warehouseId] || 0) + Number(level.quantity || 0);
+      }
+      setStockByProduct(map);
+    } catch (e) {
+      console.error('Error al cargar stock de productos:', e);
+    }
+  }, []);
+  useEffect(() => {
+    void refreshStockMap();
+  }, [products, refreshStockMap]);
   const catalogItemType = itemType || 'PRODUCT';
   const isServiceView = catalogItemType === 'SERVICE';
   const entityLabel = isServiceView ? 'servicio' : 'producto';
@@ -371,6 +398,8 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [warehouseDetail, setWarehouseDetail] = useState<any | null>(null);
+  const [branchDetail, setBranchDetail] = useState<any | null>(null);
   const [localProductStatusFilter, setLocalProductStatusFilter] = useState<ProductStatusFilter>('ALL');
   const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -661,6 +690,33 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     pagination?.onPageChange(1);
   }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, catalogItemType]);
 
+  // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
+  // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
+  // las sucursales) muestra el stock total del producto. Prioriza el mapa real
+  // de /inventory/stock (fresco tras transferencias) y cae a stockLevels o
+  // product.stock si el listado no trae niveles.
+  const getProductStock = (product: any) => {
+    const perWarehouse = stockByProduct[product?.id];
+    if (perWarehouse) {
+      if (selectedBranchId) {
+        let total = 0;
+        for (const warehouseId of branchWarehouseIdSet) total += perWarehouse[warehouseId] || 0;
+        return total;
+      }
+      return Object.values(perWarehouse).reduce((sum, quantity) => sum + quantity, 0);
+    }
+    const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    if (selectedBranchId) {
+      return levels
+        .filter((l: any) => branchWarehouseIdSet.has(l.warehouseId || l.warehouse?.id))
+        .reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0);
+    }
+    if (levels.length > 0) {
+      return Number(product.stock ?? levels.reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0));
+    }
+    return Number(product.stock || 0);
+  };
+
   const filteredProducts = products.filter((p: any) => {
     const matchesSearch = !searchTerm || 
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -676,7 +732,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
     const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
     const matchesType = pType === catalogItemType;
-    const stock = Number(p.stock || 0);
+    const stock = getProductStock(p);
     const pMinStock = Number(p.minStock || 0);
     const stockThreshold = pMinStock > 0 ? pMinStock : 10;
     const matchesStock = stockFilter === 'all'
@@ -691,16 +747,18 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
-      });
+      })
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
   const colFilters = useColumnFilters();
   const filterGetters = {
+    code: (p: any) => p.code || '',
     name: (p: any) => {
       const sort = colFilters.state.name?.sort;
       return sort === 'desc' ? (p.createdAt || p.createdDate || p.created_on ? new Date(p.createdAt || p.createdDate || p.created_on).getTime() : 0) : p.name || '';
     },
     category: (p: any) => p.category?.name || 'Sin categoría',
-    stock: (p: any) => Number(p.stock || 0),
+    stock: (p: any) => getProductStock(p),
   };
   const filteredData = colFilters.applyTo(filteredProducts, filterGetters);
   const categoryOptions = [...new Map(filteredProducts.map((p: any) => [p.category?.name || 'Sin categoría', p.category?.name || 'Sin categoría'])).entries()]
@@ -715,9 +773,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   const totalPages = pagination?.totalPages || Math.max(1, Math.ceil(filteredProducts.length / pageSize));
 
   const inventorySummary = useMemo(() => {
-    const stockProducts = products.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
+    // Los KPIs se calculan sobre el catálogo completo (summaryProducts) y no
+    // sobre la página visible, para reflejar los totales reales.
+    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+    const stockProducts = source.filter((product: any) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() === catalogItemType);
     const isLow = (p: any) => {
-      const stock = Number(p.stock || 0);
+      const stock = getProductStock(p);
       if (stock <= 0) return false;
       const minStock = Number(p.minStock || 0);
       return minStock > 0 ? stock <= minStock : stock < 10;
@@ -726,18 +787,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       total: stockProducts.length,
       available: stockProducts.filter((p: any) => {
         if (catalogItemType === 'SERVICE') return true;
-        const stock = Number(p.stock || 0);
+        const stock = getProductStock(p);
         if (stock <= 0) return false;
         const minStock = Number(p.minStock || 0);
         return minStock > 0 ? stock > minStock : stock >= 10;
       }).length,
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
-      out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => Number(p.stock || 0) <= 0).length,
+      out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
     };
-  }, [products, catalogItemType]);
+  }, [products, summaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet]);
 
   const serviceSummary = useMemo(() => {
-    const services = products.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
+    const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+    const services = source.filter((product: any) => String(product.itemType || product.type || '').toUpperCase() === 'SERVICE');
     const categories = new Set(services.map((service: any) => service.categoryId || service.category?.id).filter(Boolean));
     const now = Date.now();
     const twelveWeeksAgo = now - (12 * 7 * 24 * 60 * 60 * 1000);
@@ -751,10 +813,68 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       weeklyAverage: createdInLastTwelveWeeks / 12,
       averagePrice: prices.length ? prices.reduce((sum, price) => sum + price, 0) / prices.length : 0,
     };
-  }, [products]);
+  }, [products, summaryProducts]);
 
+  // ─── Estadísticas por almacén y sucursal (stock real de /inventory/stock) ──
+  const warehouseStockStats = useMemo(() => {
+    const stats = new Map<string, { products: number; units: number }>();
+    for (const productId of Object.keys(stockByProduct)) {
+      const perWarehouse = stockByProduct[productId];
+      for (const warehouseId of Object.keys(perWarehouse)) {
+        const quantity = Number(perWarehouse[warehouseId] || 0);
+        if (quantity <= 0) continue;
+        const entry = stats.get(warehouseId) || { products: 0, units: 0 };
+        entry.products += 1;
+        entry.units += quantity;
+        stats.set(warehouseId, entry);
+      }
+    }
+    return stats;
+  }, [stockByProduct]);
+
+  const branchStockStats = useMemo(() => {
+    const stats = new Map<string, { warehouses: number; products: number; units: number }>();
+    for (const branch of branches || []) {
+      const warehouseIds = [branch.warehouseId, ...((branch.warehouses || []) as any[]).map((w: any) => w.id)].filter(Boolean) as string[];
+      const products = new Set<string>();
+      let units = 0;
+      for (const productId of Object.keys(stockByProduct)) {
+        const perWarehouse = stockByProduct[productId];
+        let branchUnits = 0;
+        for (const warehouseId of warehouseIds) {
+          branchUnits += Number(perWarehouse[warehouseId] || 0);
+        }
+        if (branchUnits > 0) {
+          products.add(productId);
+          units += branchUnits;
+        }
+      }
+      stats.set(branch.id, { warehouses: warehouseIds.length, products: products.size, units });
+    }
+    return stats;
+  }, [branches, stockByProduct]);
+
+  const warehouseTypeLabel = (type: string) =>
+    WAREHOUSE_TYPES.find((t) => t.value === type)?.label || type || 'Almacén';
+
+  const branchesForWarehouse = (warehouseId: string) =>
+    (branches || []).filter((branch: any) =>
+      branch.warehouseId === warehouseId || ((branch.warehouses || []) as any[]).some((w: any) => w.id === warehouseId),
+    ).map((branch: any) => branch.name);
+
+  const warehouseNamesForBranch = (branch: any) =>
+    [...new Set<string>([
+      ...((branch.warehouses || []) as any[]).map((w: any) => warehouses.find((wh: any) => wh.id === w.id)?.name),
+      ...(branch.warehouseId ? [warehouses.find((wh: any) => wh.id === branch.warehouseId)?.name] : []),
+    ].filter(Boolean))];
+
+  // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
+  // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
+  // las sucursales) muestra el stock total del producto. Prioriza el mapa real
+  // de /inventory/stock (fresco tras transferencias) y cae a stockLevels o
+  // product.stock si el listado no trae niveles.
   const getStockStatus = (product: any) => {
-    const stock = Number(product.stock || 0);
+    const stock = getProductStock(product);
     if (stock <= 0) return { label: 'Sin Stock', color: 'bg-red-500/10 text-red-500', icon: 'critical' };
     const minStock = Number(product.minStock || 0);
     if (minStock > 0 && stock <= minStock) return { label: 'Bajo', color: 'bg-orange-500/10 text-orange-500', icon: 'low' };
@@ -771,7 +891,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
   };
 
   const getStockAlertColor = (product: any) => {
-    const stock = Number(product.stock || 0);
+    const stock = getProductStock(product);
     if (stock <= 0) return 'text-red-500 font-bold';
     const minStock = Number(product.minStock || 0);
     if (minStock > 0 && stock <= minStock) return 'text-orange-500 font-bold';
@@ -984,10 +1104,17 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     let uploadedImageUri: string | undefined;
     try {
       if (product.imageFile) {
-        const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
-          folder: product.isNew ? 'catalog' : product.id,
-        });
-        uploadedImageUri = uploaded.uri;
+        try {
+          const uploaded = await storageService.uploadFile('product-image', product.imageFile, {
+            folder: product.isNew ? 'catalog' : product.id,
+          });
+          uploadedImageUri = uploaded.uri;
+        } catch (e) {
+          // Si el almacenamiento falla (p. ej. sin permiso DOCUMENTS), el
+          // producto se guarda igual sin la imagen y se avisa al usuario.
+          console.error('No se pudo subir la imagen del producto:', e);
+          toast.warning('El producto se guardará sin imagen: no se pudo subir la imagen (verifica el permiso de Documentos/almacenamiento).');
+        }
       }
       const nextImageUrl = uploadedImageUri ?? (product.removeImage ? null : product.imageStorageUri);
 
@@ -1576,7 +1703,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Almacén'];
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', 'unidad', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
+      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', '', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
     const wb = XLSX.utils.book_new();
@@ -1698,7 +1825,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             category: String(get('category') || '').trim(),
             itemType: 'PRODUCT',
             description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? 0.15, imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
-            unit: String(get('unit') || 'unidad').trim().toLowerCase() || 'unidad',
+            unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
             costPrice: get('costPrice') === '' || get('costPrice') === undefined ? undefined : Number(get('costPrice')),
             initialStock: Number(get('initialStock') || 0),
@@ -1829,7 +1956,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             name: row.name,
             categoryId: cat?.id,
             description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, lastPurchasePrice: row.lastPurchasePrice, trackBatch: row.trackBatch, attributes: row.attributes,
-            unit: row.unit || 'unidad',
+            unit: String(row.unit ?? '').trim(),
             costPrice: row.costPrice,
             initialStock: row.initialStock,
             minStock: row.minStock || 0,
@@ -2012,6 +2139,43 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             </button>
           ))}
         </div>
+        {!isServiceView && selectedBranchId && (() => {
+          const selectedBranch = (branches || []).find((b: any) => b.id === selectedBranchId) || null;
+          const linkedWarehouses = warehouses.filter((w: any) => branchWarehouseIdSet.has(w.id));
+          if (!selectedBranch && linkedWarehouses.length === 0) return null;
+          return (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {selectedBranch && (
+                <button
+                  type="button"
+                  onClick={() => setBranchDetail(selectedBranch)}
+                  title="Ver detalle de la sucursal"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/15"
+                >
+                  <Store className="size-3 shrink-0" />
+                  <span className="max-w-40 truncate">{selectedBranch.name}</span>
+                </button>
+              )}
+              {linkedWarehouses.length > 0 && (
+                <>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacenes vinculados</span>
+                  {linkedWarehouses.map((warehouse: any) => (
+                    <button
+                      key={warehouse.id}
+                      type="button"
+                      onClick={() => setWarehouseDetail(warehouse)}
+                      title="Ver detalle del almacén"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
+                    >
+                      <WarehouseIcon className="size-3 shrink-0 text-sky-600" />
+                      <span className="max-w-40 truncate">{warehouse.name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Toolbar */}
@@ -2108,7 +2272,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center" data-tour="inventory-products-actions">
           <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-2 size-4" /> Tutorial
+            <CircleHelp className="mr-2 size-4" /> {isServiceView ? 'Cómo gestionar servicios' : 'Cómo gestionar productos'}
           </Button>
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
             type="button"
@@ -2209,7 +2373,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                     </div>}
                     {!isServiceView && <div>
                       <span className="text-muted-foreground">Existencias</span>
-                      <p className={`font-bold tabular-nums ${getStockAlertColor(product)}`}>{product.stock || 0}</p>
+                      <p className={`font-bold tabular-nums ${getStockAlertColor(product)}`}>{getProductStock(product)}</p>
                     </div>}
                     {!isServiceView && <>
                       <div className="min-w-0"><span className="text-muted-foreground">U. medida</span><p className="truncate font-medium">{product.unit || 'unidad'}</p></div>
@@ -2270,7 +2434,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                   }
                 </button>
               </TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}>Código</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">Código<ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
@@ -2425,7 +2589,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                       )}
                     </TableCell>
                     {!isServiceView && <TableCell className={`text-right font-medium tabular-nums ${getStockAlertColor(product)}`}>
-                      {product.stock || 0}
+                      {getProductStock(product)}
                     </TableCell>}
                     {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-medium" /></TableCell>}
                      {!isServiceView && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
@@ -2513,11 +2677,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       />
       <Dialog open={categoryModalOpen} onOpenChange={(open) => { setCategoryModalOpen(open); if (!open) setPendingCategoryRowIndex(null); }}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-category-title">
             <DialogTitle>Nueva categoría</DialogTitle>
             <DialogDescription>Crea una categoría para usarla de inmediato en productos.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear categoría" targetPrefix="inventory-category" copy={{ data: { description: 'Escribe el nombre y una descripción breve para clasificar productos.' }, actions: { description: 'Guarda la categoría para seleccionarla inmediatamente en el catálogo.' } }} />
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3" data-tour="inventory-category-data">
             <div>
               <p className="text-[10px] text-muted-foreground mb-1">Nombre</p>
               <Input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Ej. Electrónica" className="h-9 text-xs" />
@@ -2527,7 +2692,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <Input value={newCategoryDescription} onChange={(e) => setNewCategoryDescription(e.target.value)} placeholder="Descripción corta" className="h-9 text-xs" />
             </div>
           </div>
-          <DialogFooter className="mt-2">
+          <DialogFooter className="mt-2" data-tour="inventory-category-actions">
             <Button variant="outline" onClick={() => setCategoryModalOpen(false)}>Cancelar</Button>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleCreateCategory} disabled={creatingCategory}>
               {creatingCategory ? 'Guardando...' : 'Guardar categoría'}
@@ -2537,11 +2702,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </Dialog>
       <Dialog open={warehouseModalOpen} onOpenChange={(open) => { setWarehouseModalOpen(open); if (!open) setPendingWarehouseRowIndex(null); }}>
         <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-warehouse-title">
             <DialogTitle>Nuevo almacén</DialogTitle>
             <DialogDescription>Completa los mismos datos disponibles en la vista de Almacenes y Sucursales.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear almacén" targetPrefix="inventory-warehouse" copy={{ data: { description: 'Completa nombre, ubicación, tipo, almacén matriz y cuenta contable de inventario.' }, actions: { description: 'Guarda el almacén para usarlo en productos, transferencias y ajustes.' } }} />
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2" data-tour="inventory-warehouse-data">
             <div className="space-y-1 sm:col-span-2">
               <p className="text-xs font-semibold">Nombre <span className="text-red-500">*</span></p>
               <Input value={newWarehouseName} onChange={(event) => setNewWarehouseName(event.target.value)} placeholder="Ej. Bodega principal" disabled={creatingWarehouse} autoFocus />
@@ -2580,10 +2746,90 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-warehouse-actions">
             <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
             <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(warehouseDetail)} onOpenChange={(open) => !open && setWarehouseDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-sky-600" /> {warehouseDetail?.name || 'Almacén'}</DialogTitle>
+            <DialogDescription>Detalle del almacén con su stock real y productos asignados.</DialogDescription>
+          </DialogHeader>
+          {warehouseDetail && (() => {
+            const stats = warehouseStockStats.get(warehouseDetail.id) || { products: 0, units: 0 };
+            const parent = warehouses.find((w: any) => w.id === warehouseDetail.parentId);
+            const branchNames = branchesForWarehouse(warehouseDetail.id);
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</p>
+                    <p className="mt-1 text-sm font-black">{warehouseTypeLabel(warehouseDetail.type)}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ubicación</p>
+                    <p className="mt-1 truncate text-sm font-black">{warehouseDetail.location || '—'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.products}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.units}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {parent && <Badge variant="outline" className="text-[10px]">Matriz: {parent.name}</Badge>}
+                  {branchNames.map((name) => <Badge key={name} variant="secondary" className="text-[10px]">Sucursal: {name}</Badge>)}
+                  {branchNames.length === 0 && !parent && (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">Sin sucursal asignada</Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(branchDetail)} onOpenChange={(open) => !open && setBranchDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Store className="size-5 text-violet-600" /> {branchDetail?.name || 'Sucursal'}</DialogTitle>
+            <DialogDescription>Detalle de la sucursal con sus almacenes vinculados y stock agregado.</DialogDescription>
+          </DialogHeader>
+          {branchDetail && (() => {
+            const stats = branchStockStats.get(branchDetail.id) || { warehouses: 0, products: 0, units: 0 };
+            const warehouseNames = warehouseNamesForBranch(branchDetail);
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p>
+                    <p className="mt-1 text-sm font-black">{stats.warehouses}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p>
+                    <p className="mt-1 truncate text-sm font-black">{warehouseNames.length > 0 ? warehouseNames.join(', ') : 'Sin almacenes'}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.products}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p>
+                    <p className="mt-1 text-xl font-black tabular-nums">{stats.units}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       <ProductDetailDrawer
@@ -2615,13 +2861,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-bulk-images-title">
             <DialogTitle className="flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Carga masiva de imágenes</DialogTitle>
             <DialogDescription>
               Esta opción queda disponible permanentemente en Productos, incluso después de completar la importación inicial. Permite reemplazar o asignar imágenes a productos existentes sin modificar sus datos, precios o existencias.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo cargar imágenes" targetPrefix="inventory-bulk-images" copy={{ data: { description: 'Selecciona un archivo ZIP o RAR y verifica las coincidencias por SKU.' }, actions: { description: 'Actualiza las imágenes reconocidas después de revisar los resultados.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-bulk-images-data">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
               <p className="font-bold">Cómo funciona</p>
               <ul className="mt-2 space-y-1.5 text-muted-foreground">
@@ -2651,7 +2898,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {bulkImageMissingSkus.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">No se encontraron estos SKU:</p><p className="mt-1 break-words font-mono">{bulkImageMissingSkus.slice(0, 20).join(', ')}{bulkImageMissingSkus.length > 20 ? ` y ${bulkImageMissingSkus.length - 20} más` : ''}</p></div>}
             {bulkImageResults && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm"><p className="font-bold text-emerald-700 dark:text-emerald-300">{bulkImageResults.updated} imagen(es) actualizada(s)</p>{bulkImageResults.failed.length > 0 && <p className="mt-1 text-xs text-rose-600">Con incidencia: {bulkImageResults.failed.join(', ')}</p>}</div>}
           </div>
-          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between">
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between" data-tour="inventory-bulk-images-actions">
             <Button variant="outline" onClick={() => setBulkImageModalOpen(false)} disabled={bulkImageUploading}>Cerrar</Button>
             <Button onClick={handleBulkImageUpload} disabled={bulkImageProcessing || bulkImageUploading || bulkImageProducts.length === 0}>
               {bulkImageUploading ? `Actualizando… ${bulkImageProgress}%` : `Actualizar ${bulkImageProducts.length} producto(s)`}
@@ -2661,18 +2908,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </Dialog>
       <Dialog open={initialImportIntroOpen} onOpenChange={setInitialImportIntroOpen}>
         <DialogContent className="max-w-xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-initial-import-title">
             <DialogTitle>Importación inicial de inventario</DialogTitle>
             <DialogDescription>
               Esta carga se realiza una sola vez por empresa. Primero descarga la plantilla, completa los datos y después revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo importar inventario" targetPrefix="inventory-initial-import" copy={{ data: { description: 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
-          <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm">
+          <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
             <p><b>La plantilla siempre incluye:</b> costo, Minorista, Mayorista y Distribuidor.</p>
             <p>Cada producto debe tener SKU único, nombre, categoría, costo y al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-initial-import-actions">
             <Button variant="outline" onClick={handleDownloadTemplate}><Download className="size-4 mr-2" />Descargar plantilla</Button>
             <Button onClick={() => { setInitialImportIntroOpen(false); setImportModalOpen(true); }}>Continuar con la carga</Button>
           </DialogFooter>
@@ -2691,13 +2939,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] flex flex-col">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-import-title">
             <DialogTitle>Importar Productos</DialogTitle>
             <DialogDescription>
               Sube el catálogo inicial. Esta carga es única por empresa y se confirma en dos pasos.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo importar productos" targetPrefix="inventory-import" copy={{ data: { description: 'Configura moneda, tasa, archivo e imágenes y revisa la previsualización del catálogo.' }, actions: { description: 'Carga el archivo y abre la previsualización antes de confirmar.' } }} />
           </DialogHeader>
-          <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3" data-tour="inventory-import-data">
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Listas incluidas</p><p className="h-9 flex items-center text-xs font-semibold">Minorista · Mayorista · Distribuidor</p></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Moneda del archivo</p><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Tasa USD / moneda base</p><Input className="h-9 text-xs" type="number" min="0.0001" step="any" value={importExchangeRate} onChange={(event) => setImportExchangeRate(Number(event.target.value) || 1)} disabled={importCurrency === 'NIO'} /></div>
@@ -2835,7 +3084,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                             </TableCell>
                             <TableCell className="p-1">
                               <Input
-                                value={row.unit || 'unidad'}
+                                value={row.unit ?? ''}
                                 onChange={(e) => handleImportRowUpdate(i, 'unit', e.target.value)}
                                 className="h-8 text-xs"
                               />
@@ -2936,7 +3185,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </Button>
             </div>
           </div>
-          <DialogFooter className="mt-2 pt-2 border-t">
+          <DialogFooter className="mt-2 pt-2 border-t" data-tour="inventory-import-actions">
             <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing || previewLoading}>
               Cerrar
             </Button>
@@ -2955,12 +3204,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       <Dialog open={initialImportConfirmOpen && !importing} onOpenChange={setInitialImportConfirmOpen}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-initial-confirm-title">
             <DialogTitle>Formalizar importación inicial</DialogTitle>
             <DialogDescription>Esta acción creará {importData.filter((row) => !row._hasError).length} productos y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. No podrá repetirse para esta empresa. Los precios Minorista, Mayorista y Distribuidor se guardarán en {importCurrency}; las listas sin precio quedarán pendientes. Escribe IMPORTAR para confirmar.</DialogDescription>
+            <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: 'Confirma la importación para crear el catálogo inicial.' } }} />
           </DialogHeader>
-          <Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
-          <DialogFooter><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>
+          <div data-tour="inventory-initial-confirm-data"><Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus /></div>
+          <DialogFooter data-tour="inventory-initial-confirm-actions"><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2970,7 +3220,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-request-title">
             <div className="flex flex-col items-center gap-3 py-3 text-center">
               <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500">
                 <CheckCircle2 className="size-12 animate-pulse" />
@@ -3019,8 +3269,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <DialogDescription>
               Revisa y ajusta la cantidad a solicitar de cada producto. La solicitud se guardará en Compras &gt; Solicitudes.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo crear solicitud de compra" targetPrefix="inventory-request" copy={{ data: { description: 'Selecciona empleado, bodega, justificación, fecha, prioridad y productos a solicitar.' }, actions: { description: 'Crea la solicitud para enviarla al flujo de Compras.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-request-data">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Empleado solicitante *</label>
@@ -3187,7 +3438,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               )}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-request-actions">
             <Button variant="outline" onClick={() => setSolicitudOpen(false)} disabled={solicitudCreating}>Cancelar</Button>
             <Button onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
               {solicitudCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}

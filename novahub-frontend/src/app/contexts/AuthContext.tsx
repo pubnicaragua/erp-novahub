@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { api } from '../services/api';
+import { isLegacyAuthToken, storeAuthToken } from '../services/auth-token';
 import { subscriptionsService } from '../services/subscriptions.service';
 import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 
@@ -443,6 +444,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (isLegacyAuthToken(token)) {
+          localStorage.removeItem('nh-auth-token');
+          setIsLoading(false);
+          return;
+        }
+
         try {
           const me = await api.get<any>('/auth/profile');
           setUser(createUserObject(me));
@@ -457,7 +464,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
-          localStorage.setItem('nh-auth-token', response.access_token);
+          storeAuthToken(response.access_token);
           setUser(createUserObject(response.user));
           fetchBranches();
         }
@@ -727,7 +734,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/login', { email, password });
 
-      localStorage.setItem('nh-auth-token', response.access_token);
+      storeAuthToken(response.access_token);
       setUser(createUserObject(response.user));
       fetchBranches();
     } catch (error: any) {
@@ -736,7 +743,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchBranches]);
 
   const setSession = useCallback((token: string, userData: any) => {
-    localStorage.setItem('nh-auth-token', token);
+    storeAuthToken(token);
     setUser(createUserObject(userData));
     fetchBranches();
   }, [fetchBranches]);
@@ -755,7 +762,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
-      localStorage.setItem('nh-auth-token', response.access_token);
+      storeAuthToken(response.access_token);
       localStorage.removeItem('erp-active-module');
       localStorage.removeItem('erp-active-submodule');
       

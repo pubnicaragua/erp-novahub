@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { hrService } from '../../services/hr.service';
+import { HRViewTutorial } from './HRViewTutorial';
 
 type EmployeeDetailDrawerProps = {
   employeeId: string | null;
@@ -151,7 +152,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full gap-0 border-l border-border/50 bg-background p-0 sm:max-w-3xl">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DetailTab)} className="flex min-h-0 flex-1 flex-col gap-0">
-          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-4 backdrop-blur-md sm:px-6">
+          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-4 backdrop-blur-md sm:px-6" data-tour="hr-employee-detail-title">
             <div className="flex items-start gap-3 pr-8">
               <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-lg font-black text-primary shadow-inner">{initials.toUpperCase()}</div>
               <div className="min-w-0 flex-1">
@@ -162,9 +163,10 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
                 <SheetDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs"><span className="font-mono font-bold">{employee?.employeeNumber || '—'}</span><span>•</span><span>{employee?.email || 'Sin correo'}</span>{employee?.nationalId && <><span>•</span><span>Cédula {employee.nationalId}</span></>}</SheetDescription>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" data-tour="hr-employee-detail-actions">
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onEdit?.(employee); }}><Pencil className="size-3.5" /> Editar</Button>}
               {canEdit && employee && <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { onOpenChange(false); onManageDepartments?.(employee); }}><Building2 className="size-3.5" /> Departamentos</Button>}
+              <HRViewTutorial label="Cómo consultar empleado" targetPrefix="hr-employee-detail" copy={{ data: { description: 'Revisa datos personales, laborales, actividad, nóminas y cambios del expediente.' }, actions: { description: 'Edita el empleado o administra sus departamentos si tienes permisos.' } }} />
             </div>
             <TabsList className="h-9 w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1">
               <TabsTrigger value="general" className="shrink-0 rounded-lg px-3 text-xs font-bold"><User className="mr-1.5 size-3.5" /> General</TabsTrigger>
@@ -173,7 +175,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
             </TabsList>
           </SheetHeader>
 
-          <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea className="min-h-0 flex-1 overflow-hidden" data-tour="hr-employee-detail-data">
             <div className="space-y-5 p-5 sm:p-6">
               {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs font-bold text-destructive">{error}</div>}
               {loading && !employee ? <div className="space-y-4"><Skeleton className="h-24 w-full rounded-2xl" /><Skeleton className="h-40 w-full rounded-2xl" /><Skeleton className="h-40 w-full rounded-2xl" /></div> : (

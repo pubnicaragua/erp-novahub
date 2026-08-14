@@ -166,6 +166,7 @@ const menuItems: MenuItem[] = [
       { id: 'perdidas', label: 'Pérdidas', icon: <TrendingDown className="size-4" /> },
       { id: 'movimientos', label: 'Movimientos', icon: <History className="size-4" /> },
       { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: <Building2 className="size-4" /> },
+      { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },
   {
@@ -203,6 +204,7 @@ const menuItems: MenuItem[] = [
       { id: 'diferencias-cambiarias', label: 'Diferencias Cambiarias', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'cambios-patrimonio', label: 'Cambios Patrimonio', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'activos-fijos', label: 'Activos Fijos', icon: <Building2 className="size-4" /> },
+      { id: 'libro-bancos', label: 'Libro Diario de Bancos', icon: <Landmark className="size-4" /> },
       { id: 'conciliacion', label: 'Conciliación bancaria', icon: <Landmark className="size-4" /> },
       { id: 'periodos', label: 'Períodos contables', icon: <Calendar className="size-4" /> },
       { id: 'reportes-fiscales', label: 'Reportes Fiscales', icon: <FileBarChart className="size-4" /> },
@@ -444,8 +446,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     }
 
     const hasRequired = requiredModules.some(mod => user.enabledModules.includes(mod));
-    const hasSpecificSubmodules = parentMod && user.enabledModules.some(m => m.startsWith(`${parentMod}_`));
-    const hasSubscription = hasRequired || Boolean(parentMod && user.enabledModules.includes(parentMod) && !hasSpecificSubmodules);
+    // La suscripción al módulo padre habilita todas sus vistas. La
+    // suscripción granular (sin padre) solo habilita los submódulos
+    // específicos contratados.
+    const hasParentModule = Boolean(parentMod && user.enabledModules.includes(parentMod));
+    const hasSubscription = hasRequired || hasParentModule;
     if (!hasSubscription) return false;
 
     // La suscripción habilita el módulo, pero el rol también debe tener
@@ -662,7 +667,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                   </p>
                   <div className="flex">
                     <p className="truncate text-[11px] text-sidebar-foreground/50 capitalize odoo-highlight">
-                      {user?.role === 'admin' ? 'Admin' : (user?.customRoleName || user?.role)}
+                      {user?.customRoleName || {
+                        superadmin: 'Super Administrador',
+                        partner: 'Partner',
+                        admin: 'Administrador',
+                        manager: 'Gerente',
+                        employee: 'Empleado',
+                        viewer: 'Solo Lectura',
+                        user: 'Usuario',
+                      }[user?.role?.toLowerCase() || ''] || user?.role}
                     </p>
                   </div>
                 </div>

@@ -26,6 +26,7 @@ import { api, getApiErrorMessage } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { AlmacenesView } from './AlmacenesView'
 import { cn } from '../ui/utils'
+import { InventoryViewTutorial } from './InventoryViewTutorial'
 
 type AccountInfo = {
   id: string
@@ -342,7 +343,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-1 size-3.5" /> Tutorial
+            <CircleHelp className="mr-1 size-3.5" /> Cómo configurar inventario
           </Button>
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar
@@ -662,13 +663,14 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       {/* Dialog de configuración */}
       <Dialog open={!!configTarget} onOpenChange={(open) => { if (!open) { setConfigTarget(null); setConfigBranch(null); } }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-config-modal-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
             <DialogDescription>
               Vincula este almacén con su cuenta contable de inventario{configBranch ? <> en la sucursal <span className="font-semibold text-foreground">{configBranch.name}</span></> : null}. Las cuentas creadas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo vincular almacén a contabilidad" targetPrefix="inventory-config-modal" copy={{ data: { description: 'Elige crear la cuenta automáticamente o vincular una cuenta de Activo existente.' }, actions: { description: 'Confirma para guardar la configuración contable del almacén.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2" data-tour="inventory-config-modal-data">
             <div className="space-y-2">
               <Button
                 variant={configMode === 'auto' ? 'default' : 'outline'}
@@ -733,7 +735,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-config-modal-actions">
             <Button variant="outline" onClick={() => setConfigTarget(null)}>Cancelar</Button>
             <Button onClick={runConfigure} disabled={configSaving}>
               {configSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} {configMode === 'auto' ? 'Crear y vincular' : 'Vincular'}

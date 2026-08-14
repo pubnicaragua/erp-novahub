@@ -116,7 +116,7 @@ export function CustomerImportPreview({
             </TableHeader>
             <TableBody>
               {rows.map((row, index) => (
-                <TableRow key={`${row.name}-${index}`} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
+                <TableRow key={index} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><select className={fieldClass} value={row.type} onChange={(event) => onRowUpdate(index, 'type', event.target.value)} disabled={importing}><option value="INDIVIDUAL">Particular</option><option value="COMPANY">Empresa</option></select></TableCell>

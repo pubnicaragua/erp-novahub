@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Package,
@@ -35,6 +35,7 @@ import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
+import { useBranchScope } from '../hooks/useBranchScope';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 import type { SalesPageSize, SalesPaginationControls } from '../types';
 
@@ -47,8 +48,8 @@ const INVENTORY_SECTIONS = [
   { id: 'auditorias',      label: 'Auditorías',      icon: ClipboardCheck, requiredModules: ['INVENTORY_ADJUSTMENTS'] },
   { id: 'perdidas',        label: 'Pérdidas',        icon: TrendingDown, requiredModules: ['INVENTORY_ADJUSTMENTS'] },
   { id: 'movimientos',     label: 'Movimientos',     icon: History,   requiredModules: ['INVENTORY_MOVEMENTS'] },
-  { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'mobiliario-equipos', label: 'Mobiliario y Equipos', icon: Building2, requiredModules: [] },
+  { id: 'configuracion',   label: 'Configuración',   icon: Settings2, requiredModules: ['INVENTORY_WAREHOUSES'] },
 ];
 
 interface InventarioPageProps {
@@ -60,8 +61,11 @@ interface InventarioPageProps {
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
+  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
+  const branchScopeEnabled = Boolean(selectedBranchId);
+  const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
   const [searchState, setSearchState] = useState<Record<string, string>>({});
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
   const [statusState, setStatusState] = useState<Record<string, string>>({});
@@ -89,6 +93,47 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     const status = String(statusState[section] || 'ALL').toUpperCase();
     return status === 'ACTIVE' || status === 'INACTIVE' ? status : 'ALL';
   };
+
+  // ─── Scope por sucursal ───────────────────────────────────────────────────
+  // El filtro del servidor recibe la lista de almacenes de la sucursal; el
+  // filtro cliente es un respaldo que garantiza el resultado sobre la página
+  // cargada (idempotente: no altera nada cuando el servidor ya filtró).
+  const scopeWarehouseParam = branchScopeEnabled && branchWarehouseIdSet.size > 0
+    ? [...branchWarehouseIdSet].join(',')
+    : undefined;
+  const scopeNoWarehouseParam = branchScopeEnabled ? '__none__' : undefined;
+
+  const inScope = useCallback((warehouseId?: string | null) => {
+    if (!branchScopeEnabled) return true;
+    return Boolean(warehouseId && branchWarehouseIdSet.has(warehouseId));
+  }, [branchScopeEnabled, branchWarehouseIdSet]);
+
+  const productWarehouseIds = (product: any): string[] => [
+    ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs.map((c: any) => c.warehouseId || c.warehouse?.id) : []),
+    ...(Array.isArray(product?.stockLevels) ? product.stockLevels.map((l: any) => l.warehouseId || l.warehouse?.id) : []),
+    ...(Array.isArray(product?.allocations) ? product.allocations.map((a: any) => a.warehouseId || a.warehouse?.id) : []),
+  ].filter(Boolean);
+
+  const isProductInScope = useCallback((product: any) => {
+    if (!branchScopeEnabled) return true;
+    return productWarehouseIds(product).some((warehouseId) => branchWarehouseIdSet.has(warehouseId));
+  }, [branchScopeEnabled, branchWarehouseIdSet]);
+
+  // Al cambiar de sucursal se reinician las páginas y los filtros de almacén.
+  const handleBranchChange = useCallback((branchId: string) => {
+    setSelectedBranchId(branchId);
+    setPaginationState((current) => {
+      const next: Record<string, { page: number; pageSize: SalesPageSize }> = {};
+      for (const [section, value] of Object.entries(current)) next[section] = { ...value, page: 1 };
+      return next;
+    });
+    setProductFilters((current) => {
+      const next: Record<string, { categoryIds: string[]; warehouseIds: string[] }> = {};
+      for (const [section, value] of Object.entries(current)) next[section] = { ...value, warehouseIds: [] };
+      return next;
+    });
+    setMovementFilters((current) => ({ ...current, warehouseId: 'all' }));
+  }, [setSelectedBranchId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchState(searchState), 350);
@@ -123,20 +168,31 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   } as const;
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos']],
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId],
     queryFn: ({ signal }) => {
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
       const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: filters.warehouseIds.join(',') || undefined, includeInactive: true }, signal);
+      const requestedWarehouseIds = branchScopeEnabled
+        ? (filters.warehouseIds.length > 0 ? filters.warehouseIds.filter((id) => branchWarehouseIdSet.has(id)) : [...branchWarehouseIdSet])
+        : filters.warehouseIds;
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
     enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });
   const productCatalogQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products-catalog', tenantKey],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000 }, signal),
+    queryKey: ['inventory', 'products-catalog', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
     enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
+  });
+  // Catálogo completo (sin paginar) para los KPIs de Productos/Servicios: el
+  // listado principal es paginado (50/página) y no debe limitar los totales.
+  const productsSummaryQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
@@ -152,20 +208,20 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   });
   const transfersQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'transfers', tenantKey, pageFor('transferencias').page, pageFor('transferencias').pageSize, searchFor('transferencias'), statusFor('transferencias')],
-    queryFn: ({ signal }) => inventoryService.getTransfers({ page: pageFor('transferencias').page, pageSize: pageFor('transferencias').pageSize, search: searchFor('transferencias'), status: statusFor('transferencias') }, signal),
+    queryKey: ['inventory', 'transfers', tenantKey, pageFor('transferencias').page, pageFor('transferencias').pageSize, searchFor('transferencias'), statusFor('transferencias'), selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getTransfers({ page: pageFor('transferencias').page, pageSize: pageFor('transferencias').pageSize, search: searchFor('transferencias'), status: statusFor('transferencias'), warehouseId: scopeWarehouseParam }, signal),
     enabled: Boolean(user) && activeTab === 'transferencias',
   });
   const adjustmentsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'adjustments', tenantKey, pageFor('ajustes').page, pageFor('ajustes').pageSize, searchFor('ajustes'), statusFor('ajustes')],
-    queryFn: ({ signal }) => inventoryService.getAdjustments({ page: pageFor('ajustes').page, pageSize: pageFor('ajustes').pageSize, search: searchFor('ajustes'), status: statusFor('ajustes') }, signal),
+    queryKey: ['inventory', 'adjustments', tenantKey, pageFor('ajustes').page, pageFor('ajustes').pageSize, searchFor('ajustes'), statusFor('ajustes'), selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getAdjustments({ page: pageFor('ajustes').page, pageSize: pageFor('ajustes').pageSize, search: searchFor('ajustes'), status: statusFor('ajustes'), warehouseId: scopeWarehouseParam }, signal),
     enabled: Boolean(user) && activeTab === 'ajustes',
   });
   const auditsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'audits', tenantKey, pageFor('auditorias').page, pageFor('auditorias').pageSize, searchFor('auditorias')],
-    queryFn: ({ signal }) => inventoryService.getAudits({ page: pageFor('auditorias').page, pageSize: pageFor('auditorias').pageSize, search: searchFor('auditorias') }, signal),
+    queryKey: ['inventory', 'audits', tenantKey, pageFor('auditorias').page, pageFor('auditorias').pageSize, searchFor('auditorias'), selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getAudits({ page: pageFor('auditorias').page, pageSize: pageFor('auditorias').pageSize, search: searchFor('auditorias'), warehouseId: scopeWarehouseParam }, signal),
     enabled: Boolean(user) && activeTab === 'auditorias',
   });
   const seriesQuery = useQuery({
@@ -176,13 +232,13 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   });
   const movementsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'movements', tenantKey, pageFor('movimientos').page, pageFor('movimientos').pageSize, searchFor('movimientos'), movementFilters.type, movementFilters.warehouseId],
+    queryKey: ['inventory', 'movements', tenantKey, pageFor('movimientos').page, pageFor('movimientos').pageSize, searchFor('movimientos'), movementFilters.type, movementFilters.warehouseId, selectedBranchId],
     queryFn: ({ signal }) => inventoryService.getMovements({
       page: pageFor('movimientos').page,
       pageSize: pageFor('movimientos').pageSize,
       search: searchFor('movimientos'),
       type: movementFilters.type !== 'all' ? movementFilters.type : undefined,
-      warehouseId: movementFilters.warehouseId !== 'all' ? movementFilters.warehouseId : undefined,
+      warehouseId: movementFilters.warehouseId !== 'all' ? movementFilters.warehouseId : scopeWarehouseParam,
     }, signal),
     enabled: Boolean(user) && activeTab === 'movimientos',
   });
@@ -194,17 +250,21 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     products: toList(productsQuery.data || productCatalogQuery.data).map((product: any) => ({
       ...product,
       itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
-    })),
+    })).filter((product: any) => isProductInScope(product)),
     warehouses: toList(warehousesQuery.data),
     categories: categories.filter((category: any) => category.type === 'PRODUCT'),
     serviceCategories: categories.filter((category: any) => category.type === 'SERVICE'),
-    transfers: toList(transfersQuery.data),
-    adjustments: toList(adjustmentsQuery.data),
-    audits: toList(auditsQuery.data),
+    transfers: toList(transfersQuery.data).filter((transfer: any) =>
+      inScope(transfer.fromId || transfer.from?.id) || inScope(transfer.toId || transfer.to?.id)),
+    adjustments: toList(adjustmentsQuery.data).filter((adjustment: any) =>
+      inScope(adjustment.warehouseId || adjustment.warehouse?.id)),
+    audits: toList(auditsQuery.data).filter((audit: any) => inScope(audit.warehouseId)),
     lots: [],
     series: toList(seriesQuery.data),
-    movements: toList(movementsQuery.data),
+    movements: toList(movementsQuery.data).filter((movement: any) => inScope(movement.warehouseId)),
   };
+  const scopedWarehouses = data.warehouses.filter((warehouse: any) =>
+    !branchScopeEnabled || branchWarehouseIdSet.has(warehouse.id));
   const activeQueries = [
     ...(productsQuery.isEnabled ? [productsQuery] : []),
     ...(productCatalogQuery.isEnabled ? [productCatalogQuery] : []),
@@ -248,6 +308,11 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
+  // Lista completa para KPIs (independiente de la paginación de la tabla).
+  const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
+    ...product,
+    itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
+  })).filter((product: any) => isProductInScope(product));
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -332,7 +397,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
       {/* Branch Scope Filter */}
         <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-        <BranchScopeFilter />
+        <BranchScopeFilter onChange={handleBranchChange} />
         <div />
       </div>
 
@@ -351,22 +416,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             <Package className="size-3" /> Inventario de Mercancías
           </span>
           {INVENTORY_SECTIONS.map((section) => {
-            if (section.id === 'mobiliario-equipos') {
-              return (
-                <span key="group-divider" className="mx-1 flex shrink-0 items-center gap-1.5 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-amber-600/90">
-                  <span className="h-6 w-px bg-border/60" />
-                  <Building2 className="size-3" /> Mobiliario y Equipos
-                </span>
-              );
-            }
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
-            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('INVENTORY_'));
-            const hasFallback = user?.enabledModules?.includes('INVENTORY') && !hasSpecificSubmodules;
+            // La suscripción al módulo padre (INVENTORY) habilita todas sus
+            // vistas, incluso con submódulos granulares contratados.
+            const hasFallback = user?.enabledModules?.includes('INVENTORY');
             const hasAccess = (!user?.enabledModules || section.requiredModules.length === 0 || hasRequired || hasFallback)
               && (section.requiredModules.length === 0 || section.requiredModules.some(mod => canPerform(mod, 'view')));
             if (!hasAccess) return null;
             return (
-              <TabsTrigger 
+              <TabsTrigger
                 key={section.id}
                 value={section.id} 
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
@@ -380,7 +438,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
         </TabsList>
         </div>
 
-        <div className="mt-4 min-h-[600px]">
+        {/* El key remonta las vistas al cambiar de sucursal: resetea formularios,
+            filtros locales y selecciones que dependen del alcance de almacenes. */}
+        <div key={selectedBranchId || 'all'} className="mt-4 min-h-[600px]">
           {loadError ? (
             <div className="flex min-h-80 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center">
               <div className="max-w-md">
@@ -417,8 +477,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ProductosView 
                     products={productItems}
+                    summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.categories}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData('products')}
@@ -431,6 +493,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     targetProductId={productTarget?.id}
                     initialStockFilter={productTarget?.stockFilter}
                     onClearTargetProduct={() => setProductTarget(null)}
+                    selectedBranchId={selectedBranchId}
+                    branchWarehouseIds={branchWarehouseIds}
                   />
                 </motion.div>
               </TabsContent>
@@ -442,8 +506,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ServiciosView
                     products={serviceItems}
+                    summaryProducts={summaryProducts}
+                    branches={allBranches}
                     categories={data.serviceCategories}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     series={data.series}
                     movements={data.movements}
                     onRefresh={() => fetchData()}
@@ -462,7 +528,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <AlmacenesView 
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     onRefresh={() => fetchData()}
                   />
                 </motion.div>
@@ -475,7 +541,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <TransferenciasView 
                     transfers={data.transfers}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     products={productItems}
                     series={data.series}
                     onRefresh={() => fetchData()}
@@ -493,7 +559,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <ControlStockView 
                     adjustments={data.adjustments}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     products={productItems}
                     series={data.series}
                     onRefresh={() => fetchData()}
@@ -511,7 +577,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <MovimientosView 
                     movements={data.movements}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     pagination={movementsPagination}
                     onSearchChange={(value) => updateSearch('movimientos', value)}
                     onTypeChange={(value) => updateMovementFilter('type', value)}
@@ -536,7 +602,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                 >
                   <InventoryAuditsView
                     audits={data.audits}
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
                     products={data.products}
                     onRefresh={() => fetchData()}
                     pagination={auditsPagination}
@@ -550,7 +616,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <InventoryLossesView
-                    warehouses={data.warehouses}
+                    warehouses={scopedWarehouses}
+                    warehouseId={scopeWarehouseParam}
                   />
                 </motion.div>
               </TabsContent>
@@ -560,7 +627,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <MobiliarioEquiposView />
+                  <MobiliarioEquiposView externalBranchId={selectedBranchId || undefined} />
                 </motion.div>
               </TabsContent>
             </>

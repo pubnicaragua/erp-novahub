@@ -3,6 +3,8 @@
 // Configure BASE_URL to point to your NestJS backend
 // ============================================================
 
+import { isSafeAuthToken } from './auth-token';
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface RequestOptions {
@@ -64,7 +66,14 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('nh-auth-token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (!token) return {};
+  if (!isSafeAuthToken(token)) {
+    // Do not let a stale/oversized token reach the HTTP parser and become a
+    // misleading CORS/431 error. AuthContext will require a fresh login.
+    localStorage.removeItem('nh-auth-token');
+    return {};
+  }
+  return { Authorization: `Bearer ${token}` };
 }
 
 function asTextList(value: unknown): string[] {

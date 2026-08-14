@@ -136,8 +136,9 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
             { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS', superOnly: true }
           ].map((tab: any) => {
             const hasRequired = user?.enabledModules?.includes(tab.module);
-            const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('REPORTS_'));
-            const hasFallback = user?.enabledModules?.includes('REPORTS') && !hasSpecificSubmodules;
+            // La suscripción al módulo padre (REPORTS) habilita todas sus
+            // vistas, incluso con submódulos granulares contratados.
+            const hasFallback = user?.enabledModules?.includes('REPORTS');
             const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
             const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'superadmin';
             if (!hasAccess) return null;

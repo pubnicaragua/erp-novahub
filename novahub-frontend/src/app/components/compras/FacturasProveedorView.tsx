@@ -439,7 +439,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     };
     
     return (
-      <><div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+      <><div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { openEditor(null); setLocalDoc(null); }} className="rounded-full">
@@ -450,7 +450,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
               <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle financiero</p><Badge variant="outline" className="border-none bg-primary/10 text-[8px] font-black text-primary">{getPurchaseOriginBadge(localDoc)}</Badge></div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="invoices" context="form" />
              {!isNew && (
                <Button
                  variant="outline"
@@ -489,7 +490,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -559,7 +560,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="purchases-form-summary">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="space-y-3">
@@ -604,7 +605,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           </Card>
         </div>
 
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="purchases-form-items">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Ítems a Facturar</p>

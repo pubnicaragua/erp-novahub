@@ -16,6 +16,7 @@ import { cn } from '../ui/utils';
 import type { CreditNote, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -93,14 +94,54 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentReference, setPaymentReference] = useState('');
+  const [referenceNow] = useState(() => Date.now());
 
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
   const customerFor = (id?: string | null) => customers.find((customer) => customer.id === id);
+  const getCustomerPriceListId = (customerId?: string | null) => {
+    const customer = customerFor(customerId);
+    return customer?.priceListId || (customer as any)?.priceList?.id || null;
+  };
+  const findProductForItem = (item: any) => products.find((product) => product.id === item?.productId)
+    || products.find((product) => product.code && (product.code === item?.code || product.code === item?.productCode))
+    || products.find((product) => String(product.name || '').trim().toLowerCase() === String(item?.description || '').trim().toLowerCase());
+  const resolveItemType = (item: any) => item.itemType || (findProductForItem(item)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
+  const getItemCatalog = (item: any) => {
+    const catalog = resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog;
+    if (!item?.productId || catalog.some((product) => product.id === item.productId)) return catalog;
+    const linkedProduct = products.find((product) => product.id === item.productId);
+    return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
+  };
   const customerName = (row: CreditNote) => row.customer?.name || customerFor(row.customerId)?.name || 'Cliente';
   const normalizeStatus = (status?: string) => String(status || '').toUpperCase();
   const statusFor = (status?: string) => statusOptions.find((option) => option.value === normalizeStatus(status));
-  const recalcTotal = (items: any[]) => items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+  const recalculateItems = (items: any[]) => {
+    let subtotal = 0;
+    let discountAmount = 0;
+    let taxAmount = 0;
+    const normalizedItems = items.map((item) => {
+      const quantity = toWholeQuantity(item.quantity || 0);
+      const unitPrice = Math.max(0, Number(item.unitPrice || 0));
+      const discount = Math.min(100, Math.max(0, Number(item.discount || 0)));
+      const taxRate = Math.max(0, Number(item.taxRate || 0));
+      const gross = quantity * unitPrice;
+      const lineDiscount = gross * (discount / 100);
+      const taxable = Math.max(0, gross - lineDiscount);
+      const lineTax = taxable * (taxRate / 100);
+      subtotal += gross;
+      discountAmount += lineDiscount;
+      taxAmount += lineTax;
+      return { ...item, quantity, unitPrice, discount, taxRate, total: taxable + lineTax };
+    });
+    return {
+      items: normalizedItems,
+      subtotal,
+      discountAmount,
+      taxAmount,
+      total: subtotal - discountAmount + taxAmount,
+    };
+  };
   const formatDate = (value?: string | null) => value ? formatDateEs(value) : 'Sin fecha';
   const availableCreditFor = (customer?: Customer) => {
     if (!customer) return 0;
@@ -158,6 +199,9 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
       dueDate: addDays(new Date(), 30),
       reason: '',
       items: [],
+      subtotal: 0,
+      discountAmount: 0,
+      taxAmount: 0,
       total: 0,
       priceListId: null,
       currency: displayCurrency,
@@ -190,6 +234,8 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           description: item.description || '',
           quantity: toWholeQuantity(item.quantity || 1),
           unitPrice: Number(item.unitPrice || 0),
+          taxRate: Math.max(0, Number(item.taxRate || 0)),
+          discount: Math.min(100, Math.max(0, Number(item.discount || 0))),
           total: Number(item.total || 0),
         })),
         total: Number(localDoc.total || 0),
@@ -266,15 +312,27 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
       showCreditLimitRequired();
       return;
     }
-    const items = [...(localDoc.items || []), { id: `${Date.now()}-${itemType}`, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0, priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || null), priceMissing: false }];
-    setLocalDoc({ ...localDoc, items });
+    const items = [...(localDoc.items || []), { id: `${Date.now()}-${itemType}`, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0, priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || null), priceMissing: false }];
+    setLocalDoc({ ...localDoc, ...recalculateItems(items) });
   };
 
   const updateItem = (index: number, patch: Record<string, unknown>) => {
     const items = [...(localDoc.items || [])];
     items[index] = { ...items[index], ...patch };
-    items[index].total = Number(items[index].quantity || 0) * Number(items[index].unitPrice || 0);
-    setLocalDoc({ ...localDoc, items, total: recalcTotal(items) });
+    setLocalDoc({ ...localDoc, ...recalculateItems(items) });
+  };
+
+  const handleCurrencyChange = (currency: 'NIO' | 'USD') => {
+    if (!localDoc) return;
+    const previousCurrency = localDoc.currency || 'NIO';
+    const previousRate = previousCurrency === 'NIO' ? 1 : Number(localDoc.exchangeRate || globalRate || 1);
+    const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
+    const convertedItems = (localDoc.items || []).map((item: any) => {
+      const basePrice = previousCurrency === 'USD' ? Number(item.unitPrice || 0) * previousRate : Number(item.unitPrice || 0);
+      const unitPrice = currency === 'USD' ? basePrice / exchangeRate : basePrice;
+      return { ...item, unitPrice };
+    });
+    setLocalDoc({ ...localDoc, currency, exchangeRate, ...recalculateItems(convertedItems) });
   };
 
   const columns: ColumnDef<CreditNote>[] = [
@@ -288,7 +346,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
   const totalIssued = data.filter((credit) => ['ISSUED', 'PARTIAL', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
   const totalOpen = data.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
-  const overdueCount = data.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < Date.now()).length;
+  const overdueCount = data.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
 
   if ((editingId || isCreating) && localDoc) {
     const statusOption = statusFor(localDoc.status);
@@ -296,16 +354,132 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     const selectedCustomer = customerFor(localDoc.customerId);
     const availableCredit = availableCreditFor(selectedCustomer);
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
           <div className="flex flex-wrap items-center gap-3">{canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 font-black uppercase text-[10px] tracking-widest" onClick={async () => { const id = toast.loading('Eliminando crédito...'); try { await creditNotesService.delete(localDoc.id); toast.success('Crédito eliminado', { id }); closeEditor(); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || 'No se pudo eliminar', { id }); } }} disabled={isCreating}><Trash2 className="mr-2 size-3" /> Eliminar</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'approve') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><Send className="mr-2 size-3" /> Emitir Crédito</Button>}<Button className="rounded-xl bg-primary font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>{isCreating ? 'Crear Crédito' : 'Guardar'}</Button></>}</div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const customer = customers.find((entry) => entry.id === value); const priceListId = customer?.priceListId || (customer as any)?.priceList?.id || null; const items = (localDoc.items || []).map((item: any) => item.itemType === 'SERVICE' ? { ...item, priceListId: null } : item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: value, priceListId, items }); }} placeholder="Seleccionar cliente" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
+          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => resolveItemType(item) === 'SERVICE' ? { ...item, priceListId: null } : item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite</p><p className="mt-1 text-lg font-black">{formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), baseCurrency)}</p></div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Saldo del cliente</p><p className="mt-1 text-2xl font-black">{formatConvertedAmount(Number(selectedCustomer?.balance || 0), baseCurrency)}</p><p className="mt-1 text-[10px] text-muted-foreground">Negativo: pendiente por cobrar · Positivo: saldo a favor</p></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. Configúralo en <button type="button" className="font-black underline underline-offset-2" onClick={goToCustomers}>Clientes</button> para continuar.</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
-        <Card className="rounded-2xl border-border/50"><CardContent className="p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos y servicios</p><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => addItem('PRODUCT')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Producto</Button><Button type="button" variant="outline" size="sm" onClick={() => addItem('SERVICE')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Servicio</Button></div></div><div className="space-y-3">{(localDoc.items || []).map((item: any, index: number) => { const catalog = item.itemType === 'SERVICE' ? serviceCatalog : productCatalog; return <div key={item.id || index} className="grid min-w-0 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 md:grid-cols-[minmax(0,1fr)_100px_140px_120px_32px] md:items-start"><div className="min-w-0"><div className="flex min-w-0 flex-wrap items-center gap-1"><div className="min-w-0 flex-1"><Combobox options={catalog.map((product) => ({ label: `${product.code} · ${product.name}`, value: product.id }))} value={item.productId || ''} onChange={(value) => { const product = catalog.find((candidate) => candidate.id === value); updateItem(index, { productId: value, description: product?.name || '', priceListId: item.itemType === 'SERVICE' ? null : (localDoc?.priceListId || null), unitPrice: Number(product?.salePrice ?? product?.price ?? 0), priceMissing: false }); }} placeholder={item.itemType === 'SERVICE' ? 'Seleccionar servicio' : 'Seleccionar producto'} /></div>{item.itemType !== 'SERVICE' && <SalesLinePriceListSelect productId={item.productId} productCode={catalog.find((product) => product.id === item.productId)?.code || item.code} productName={item.description} itemType={item.itemType} value={item.priceListId} defaultPriceListId={localDoc?.priceListId} currency={localDoc?.currency} exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} onChange={(priceListId, result) => updateItem(index, { priceListId, unitPrice: result.unitPrice ?? 0, priceMissing: result.priceMissing })} />}</div>{item.priceMissing && <PriceMissingBadge className="mt-1" />}</div><Input type="number" inputMode="numeric" min="1" step="1" value={item.quantity || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="Cantidad" /><Input type="number" min="0" step="0.01" value={item.unitPrice ?? ''} onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} placeholder="Precio" /><span className="text-right text-sm font-black text-primary">{formatConvertedAmount(Number(item.total || 0), localDoc.currency, localDoc.exchangeRate)}</span><Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" onClick={() => { const items = [...localDoc.items]; items.splice(index, 1); setLocalDoc({ ...localDoc, items, total: recalcTotal(items) }); }}><Trash2 className="size-3.5" /></Button></div>; })}{!localDoc.items?.length && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Agrega los productos o servicios que se entregarán a crédito.</div>}</div><div className="mt-5 flex items-center justify-between border-t border-border/50 pt-4"><span className="text-sm font-black uppercase tracking-widest">Total del crédito</span><span className="text-2xl font-black text-primary">{formatConvertedAmount(Number(localDoc.total || 0), localDoc.currency, localDoc.exchangeRate)}</span></div></CardContent></Card>
+        <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
+        <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
+          <CardContent className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos y servicios</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => addItem('PRODUCT')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Producto</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addItem('SERVICE')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Servicio</Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="hidden px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground xl:grid xl:grid-cols-12 xl:gap-2">
+                <div className="col-span-5">Descripción</div>
+                <div className="col-span-2 grid grid-cols-2 gap-1.5"><div>Aplicar</div><div className="text-right">Desc.</div></div>
+                <div className="text-right">Cant.</div>
+                <div className="text-right">Precio U.</div>
+                <div className="text-right">IVA</div>
+                <div className="col-span-2 text-right">Total</div>
+              </div>
+              {(localDoc.items || []).map((item: any, index: number) => {
+                const itemType = resolveItemType(item);
+                const catalog = getItemCatalog(item);
+                const product = findProductForItem(item);
+                return (
+                  <div key={item.id || index} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 items-start gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                    <div className="min-w-0 xl:col-span-5">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <Combobox
+                            options={catalog.map((entry) => ({ label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${entry.code || ''} - ${entry.name}`, value: entry.id }))}
+                            value={item.productId || ''}
+                            onChange={(value) => {
+                              const selectedProduct = catalog.find((entry) => entry.id === value);
+                              const baseSalePrice = Number(selectedProduct?.salePrice ?? selectedProduct?.price ?? 0);
+                              const unitPrice = localDoc?.currency === 'USD'
+                                ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1)
+                                : baseSalePrice;
+                              updateItem(index, {
+                                productId: value,
+                                description: selectedProduct?.name || '',
+                                priceListId: itemType === 'SERVICE' ? null : (localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)),
+                                unitPrice,
+                                priceMissing: false,
+                              });
+                            }}
+                            placeholder={itemType === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
+                          />
+                        </div>
+                        <SalesLinePriceListSelect
+                          productId={item.productId}
+                          productCode={product?.code || item.code || item.productCode}
+                          productName={item.description}
+                          itemType={itemType}
+                          value={item.priceListId}
+                          defaultPriceListId={localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)}
+                          currency={localDoc?.currency}
+                          exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
+                          onChange={(priceListId, result) => {
+                            const nextItems = [...(localDoc.items || [])];
+                            nextItems[index] = {
+                              ...nextItems[index],
+                              priceListId,
+                              unitPrice: result.unitPrice ?? 0,
+                              priceMissing: result.priceMissing,
+                            };
+                            const calculated = recalculateItems(nextItems);
+                            setLocalDoc({ ...localDoc, ...calculated, priceListId, items: calculated.items });
+                          }}
+                        />
+                      </div>
+                      {item.productId && product && (
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 px-1">
+                          <Badge variant="outline" className={cn('border-none px-1.5 py-0 text-[9px] font-black', itemType === 'SERVICE' ? 'bg-emerald-500/10 text-emerald-500' : Number(product.stock || 0) <= 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500')}>
+                            {itemType === 'SERVICE' ? 'DISPONIBLE' : `STOCK: ${Number(product.stock || 0)}`}
+                          </Badge>
+                          {item.priceMissing && <PriceMissingBadge />}
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
+                        <span className="flex h-8 w-full items-center gap-1.5 rounded-md bg-muted/30 px-2">
+                          <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => updateItem(index, { taxRate: event.target.checked ? 15 : 0 })} />
+                          <span className="text-xs">IVA</span>
+                        </span>
+                      </label>
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
+                        <Input type="number" min="0" max="100" step="0.01" value={item.discount ?? ''} onChange={(event) => updateItem(index, { discount: Number(event.target.value) || 0 })} className="w-full pr-6 text-left text-xs" placeholder="0" />
+                        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
+                      </label>
+                    </div>
+                    <div className="min-w-0 xl:col-span-1">
+                      <Input type="number" inputMode="numeric" min="1" step="1" value={Number(item.quantity) || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="1" />
+                    </div>
+                    <div className="min-w-0 xl:col-span-1">
+                      <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} onChange={(event) => updateItem(index, { unitPrice: Number(String(event.target.value).replace(/,/g, '')) || 0 })} placeholder="0" />
+                    </div>
+                    <div className="col-span-2 flex items-center justify-end xl:col-span-1">
+                      <Input type="text" readOnly value={formatConvertedAmount(((Number(item.quantity || 0) * Number(item.unitPrice || 0)) - (Number(item.quantity || 0) * Number(item.unitPrice || 0) * Number(item.discount || 0) / 100)) * Number(item.taxRate || 0) / 100, localDoc.currency, localDoc.exchangeRate)} className="h-8 w-16 border-none bg-transparent px-0 text-right text-xs font-black shadow-none focus-visible:border-transparent focus-visible:ring-0" />
+                    </div>
+                    <div className="flex min-w-0 items-center justify-end gap-2 text-right xl:col-span-2">
+                      <span className="text-sm font-black text-primary">{formatConvertedAmount(Number(item.total || 0), localDoc.currency, localDoc.exchangeRate)}</span>
+                      <Button type="button" variant="ghost" size="icon" title="Quitar línea" aria-label="Quitar línea" className="size-6 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { const items = [...localDoc.items]; items.splice(index, 1); setLocalDoc({ ...localDoc, ...recalculateItems(items) }); }}><Trash2 className="size-3" /></Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!localDoc.items?.length && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Agrega los productos o servicios que se entregarán a crédito.</div>}
+            </div>
+            <div className="mt-5 grid gap-2 border-t border-border/50 pt-4 text-xs sm:grid-cols-3">
+              <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Subtotal</span><span className="font-bold">{formatConvertedAmount(Number(localDoc.subtotal || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>
+              <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Descuento</span><span className="font-bold text-rose-500">-{formatConvertedAmount(Number(localDoc.discountAmount || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>
+              <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">IVA</span><span className="font-bold">{formatConvertedAmount(Number(localDoc.taxAmount || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-4"><span className="text-sm font-black uppercase tracking-widest">Total del crédito</span><span className="text-2xl font-black text-primary">{formatConvertedAmount(Number(localDoc.total || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

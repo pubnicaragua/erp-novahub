@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Truck, Plus, Search, Eye, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
+import { Truck, Plus, Search, Eye, History, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -17,6 +17,7 @@ import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { SupplierHistoryModal } from './SupplierHistoryModal';
+import { SupplierDetailDrawer } from './SupplierDetailDrawer';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -53,6 +54,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
+  const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importRows, setImportRows] = useState<SupplierImportRow[]>([]);
@@ -269,8 +271,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
       headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /> },
-    { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+    { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select',
       headerExtra: <ColumnFilterMenu label="Tipo" options={typeOptions} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />,
+      options: [
+        { label: 'Empresa', value: 'COMPANY' },
+        { label: 'Individual', value: 'INDIVIDUAL' },
+      ],
       render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
     },
     { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
@@ -282,7 +288,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { key: 'balance', header: 'Saldo', width: '170px',
       render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
     },
-    { key: 'status', header: 'Estado', width: '120px',
+    { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select', options: statusOptions,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>;
@@ -293,6 +299,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
     try { 
       const sanitized: any = { ...updates };
+      if (sanitized.status) sanitized.isActive = String(sanitized.status).toUpperCase() === 'ACTIVE';
       if (sanitized.email === '') sanitized.email = undefined;
       if (sanitized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized.email)) {
         toast.error('Correo electrónico inválido. Ingresa un email con formato válido (ej: proveedor@correo.com)');
@@ -446,7 +453,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={(row) => handleOpenEdit(row)} editOnPencilOnly isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
@@ -461,7 +468,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           )}
           actions={(row) => (
             <div className="flex gap-1">
-              <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierDetail(row)}><Eye className="size-4" /></Button>
+              <Button title="Ver historial de compras" aria-label="Ver historial de compras" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><History className="size-4" /></Button>
               {canPerform('PURCHASES_PROVIDERS', 'edit') && (
                 <Button title="Editar proveedor" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
               )}
@@ -502,24 +510,25 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
+          <DialogHeader data-tour="supplier-import-modal-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import-modal" /></DialogHeader>
+          <div className="space-y-4" data-tour="supplier-import-modal-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código es opcional y se genera automáticamente si lo dejas vacío. Los códigos, correos e identificaciones repetidas se marcarán como errores. Podrás editar cada fila antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del proveedor.</li><li>Carga el archivo; el sistema lo valida sin guardar todavía.</li><li>Presiona “Previsualizar proveedores” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; solo se guardarán las filas válidas.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar proveedores</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap" data-tour="supplier-import-modal-actions"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar proveedores</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando columnas y preparando los proveedores para revisión." />
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="purchases-form-title">
             <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
             <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto. El código es opcional.</DialogDescription>
+            <PurchaseViewTutorial view="suppliers" context="form" />
           </DialogHeader>
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7" data-tour="purchases-form-data">
             <section className="space-y-3">
               <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">Si no ingresas un código, el sistema lo asignará automáticamente.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -529,7 +538,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>
-            <section className="space-y-3 border-t border-border/40 pt-5">
+            <section className="space-y-3 border-t border-border/40 pt-5" data-tour="purchases-form-summary">
               <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
@@ -542,7 +551,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
           </div>
-          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar proveedor'}</Button>
           </DialogFooter>
@@ -551,11 +560,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
       <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !saving) { setEditOpen(false); setEditingSupplier(null); } }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="purchases-form-title">
             <DialogTitle className="text-xl font-black uppercase tracking-tight">Editar proveedor</DialogTitle>
             <DialogDescription>Actualiza la información del proveedor.</DialogDescription>
+            <PurchaseViewTutorial view="suppliers" context="form" />
           </DialogHeader>
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7" data-tour="purchases-form-data">
             <section className="space-y-3">
               <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El código del proveedor no se puede modificar.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -565,7 +575,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
               </div>
             </section>
-            <section className="space-y-3 border-t border-border/40 pt-5">
+            <section className="space-y-3 border-t border-border/40 pt-5" data-tour="purchases-form-summary">
               <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto</h3><p className="text-xs text-muted-foreground">Mantén actualizados los datos de contacto del proveedor.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Persona de contacto</label><Input value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} placeholder="Maria Lopez" className="h-11 rounded-xl" /></div>
@@ -578,12 +588,21 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
           </div>
-          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SupplierDetailDrawer
+        supplierId={selectedSupplierDetail?.id ?? null}
+        supplierSnapshot={selectedSupplierDetail}
+        canEdit={canPerform('PURCHASES_PROVIDERS', 'edit')}
+        onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
+        onEdit={(supplier) => { setSelectedSupplierDetail(null); handleOpenEdit(supplier); }}
+        onOpenHistory={(supplier) => { setSelectedSupplierDetail(null); setSelectedSupplierForHistory(supplier); }}
+      />
 
       <SupplierHistoryModal
         supplier={selectedSupplierForHistory}

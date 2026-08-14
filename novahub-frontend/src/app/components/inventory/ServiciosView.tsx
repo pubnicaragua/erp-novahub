@@ -3,8 +3,10 @@ import type { SalesPaginationControls } from '../../types';
 
 interface ServiciosViewProps {
   products: any[];
+  summaryProducts?: any[];
   categories: any[];
   warehouses?: any[];
+  branches?: any[];
   series?: any[];
   movements?: any[];
   onRefresh: () => void;

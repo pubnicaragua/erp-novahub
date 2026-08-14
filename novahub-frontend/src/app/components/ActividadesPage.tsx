@@ -115,8 +115,9 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
             <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {tabs.map((tab) => {
                 const hasRequired = user?.enabledModules?.includes(tab.module);
-                const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('ACTIVITIES_'));
-                const hasFallback = user?.enabledModules?.includes('ACTIVITIES') && !hasSpecificSubmodules;
+                // La suscripción al módulo padre (ACTIVITIES) habilita todas
+                // sus vistas, incluso con submódulos granulares contratados.
+                const hasFallback = user?.enabledModules?.includes('ACTIVITIES');
                 const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
                 if (!hasAccess) return null;
                 return (

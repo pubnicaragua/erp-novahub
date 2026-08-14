@@ -3,14 +3,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { RefreshCw, Calculator, ChevronDown, Loader2, Search } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { RefreshCw, Calculator, ChevronDown, Loader2, Search, FileSpreadsheet, Download } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Input } from '../ui/input';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
 import { toast } from 'sonner';
 
 interface AssetSummary {
@@ -18,6 +21,8 @@ interface AssetSummary {
   code: string;
   name: string;
   status?: string;
+  currency?: string;
+  exchangeRate?: number;
   category?: { id: string; name: string; depreciable: boolean };
   derived?: any;
 }
@@ -41,7 +46,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function ActivosFijosDepreciationTab() {
   const queryClient = useQueryClient();
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { displayCurrency, formatConvertedAmount, convertAmount, toBaseAmount, baseCurrency } = useCurrency();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -52,6 +57,8 @@ export function ActivosFijosDepreciationTab() {
   const [detailMap, setDetailMap] = useState<Record<string, any>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   const assetsQuery = useAccountingQuery<AssetSummary[]>(['fixed-asset-details'], async (signal) =>
     accountingList(await contabilidadService.getFixedAssetsDetail(signal)) as AssetSummary[],
@@ -70,13 +77,13 @@ export function ActivosFijosDepreciationTab() {
   }, [assets, searchTerm]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['accounting'] });
-  const fmt = (value: number) => formatConvertedAmount(value, baseCurrency);
+  const fmt = (value: number, sourceCurrency?: string, sourceRate?: number) => formatConvertedAmount(value, sourceCurrency, sourceRate);
 
   async function handleProcess() {
     if (!period) { toast.error('Selecciona un período'); return; }
     setProcessing(true);
     try {
-      const res = await contabilidadService.processFixedAssetDepreciation(period);
+      const res = await contabilidadService.processFixedAssetDepreciation(period, selectedIds.length > 0 ? selectedIds : undefined);
       const skipped = Array.isArray(res?.skipped) ? res.skipped : [];
       toast.success(`Depreciación procesada: ${res?.processed ?? 0} activos (${skipped.length} omitidos)`);
       if (res?.errors?.length) {
@@ -86,10 +93,38 @@ export function ActivosFijosDepreciationTab() {
       await invalidate();
       assetsQuery.refetch();
       setDetailMap({});
+      setSelectedIds([]);
     } catch (err: any) {
       toast.error(err.message || 'Error al procesar depreciación');
     } finally {
       setProcessing(false);
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map(a => a.id));
+    }
+  };
+
+  async function handleExport(scope: 'all' | 'selected') {
+    const ids = scope === 'selected' ? selectedIds : assets.map(a => a.id);
+    if (ids.length === 0) { toast.error(scope === 'selected' ? 'No hay activos seleccionados' : 'No hay activos para exportar'); return; }
+    setExporting(true);
+    try {
+      const details = await fetchFixedAssetDetails(ids);
+      exportFixedAssetsExcel(details, { toBase: toBaseAmount, baseCurrency });
+      toast.success(`Exportados ${details.length} activo${details.length !== 1 ? 's' : ''}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al exportar activos');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -128,7 +163,7 @@ export function ActivosFijosDepreciationTab() {
   }
 
   const totals = useMemo(() => {
-    const sum = (key: string) => assets.reduce((s, a) => s + Number(a.derived?.[key] || 0), 0);
+    const sum = (key: string) => assets.reduce((s, a) => s + convertAmount(Number(a.derived?.[key] || 0), a.currency, a.exchangeRate), 0);
     return {
       count: assets.length,
       cost: sum('cost'),
@@ -136,7 +171,7 @@ export function ActivosFijosDepreciationTab() {
       accumulated: sum('accumulated'),
       bookValue: sum('bookValue'),
     };
-  }, [assets]);
+  }, [assets, convertAmount]);
 
   return (
     <div className="space-y-4">
@@ -145,6 +180,11 @@ export function ActivosFijosDepreciationTab() {
           <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-lg font-bold">
             <span className="font-black tracking-tight uppercase italic">Procesar Depreciación por Período</span>
             <div className="flex flex-wrap items-center gap-2">
+              {selectedIds.length > 0 && (
+                <Badge variant="outline" className="h-8 border-primary/30 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">
+                  {selectedIds.length} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+                </Badge>
+              )}
               <div className="flex items-center gap-2">
                 <Label htmlFor="dep-period" className="text-xs">Período</Label>
                 <input
@@ -155,11 +195,32 @@ export function ActivosFijosDepreciationTab() {
                   className="h-8 rounded-md border border-border bg-background px-2 text-xs"
                 />
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={exporting || assets.length === 0} className="h-8 gap-1.5">
+                    {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <FileSpreadsheet className="size-3.5" />}
+                    {exporting ? 'Exportando...' : 'Exportar'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-56">
+                  <DropdownMenuLabel className="text-xs">Exportar activos fijos</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport('all')} disabled={exporting || assets.length === 0} className="cursor-pointer gap-2 text-xs">
+                    <Download className="size-3.5" /> Exportar todos ({assets.length})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('selected')} disabled={exporting || selectedIds.length === 0} className="cursor-pointer gap-2 text-xs">
+                    <Download className="size-3.5" /> Exportar seleccionados ({selectedIds.length})
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button size="sm" onClick={handleProcess} disabled={processing || !period} className="h-8 gap-1.5">
-                <Calculator className="size-3.5" /> {processing ? 'Procesando...' : 'Procesar Depreciación'}
+                <Calculator className="size-3.5" /> {processing ? 'Procesando...' : selectedIds.length > 0 ? `Procesar ${selectedIds.length} seleccionado${selectedIds.length !== 1 ? 's' : ''}` : 'Procesar Depreciación'}
               </Button>
             </div>
           </CardTitle>
+          <p className="text-[10px] text-muted-foreground">
+            Marca uno o varios activos con las casillas para depreciar solo esos en el período. Sin selección se procesan todos los activos del período.
+          </p>
         </CardHeader>
       </Card>
 
@@ -167,7 +228,7 @@ export function ActivosFijosDepreciationTab() {
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base font-bold">
             <span className="font-black tracking-tight uppercase italic">
-              Depreciación de Todos los Activos
+              Depreciación de Activos
             </span>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
@@ -180,7 +241,7 @@ export function ActivosFijosDepreciationTab() {
             </div>
           </CardTitle>
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            {totals.count} activos · Costo {fmt(totals.cost)} · Dep. mensual {fmt(totals.monthly)} · Dep. acumulada {fmt(totals.accumulated)} · Valor en libros {fmt(totals.bookValue)}
+            {totals.count} activos · Costo {fmt(totals.cost, displayCurrency)} · Dep. mensual {fmt(totals.monthly, displayCurrency)} · Dep. acumulada {fmt(totals.accumulated, displayCurrency)} · Valor en libros {fmt(totals.bookValue, displayCurrency)}
           </p>
         </CardHeader>
         <CardContent className="p-0">
@@ -197,6 +258,14 @@ export function ActivosFijosDepreciationTab() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
+                    <TableHead className="w-8">
+                      <Checkbox
+                        checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                        onCheckedChange={toggleSelectAll}
+                        title="Seleccionar todos los activos visibles"
+                        aria-label="Seleccionar todos los activos visibles"
+                      />
+                    </TableHead>
                     <TableHead className="w-8"></TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Activo</TableHead>
                     <TableHead className="text-[10px] font-black uppercase tracking-widest">Categoría</TableHead>
@@ -223,6 +292,17 @@ export function ActivosFijosDepreciationTab() {
                           onClick={() => toggleDetail(asset)}
                         >
                           <TableCell className="py-2.5">
+                            <Checkbox
+                              checked={selectedIds.includes(asset.id)}
+                              onCheckedChange={() => toggleSelect(asset.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              disabled={asset.status === 'INACTIVE' || asset.status === 'RETIRED'}
+                              title={asset.status === 'INACTIVE' || asset.status === 'RETIRED' ? 'Este activo no es depreciable' : 'Marcar para depreciar solo este activo'}
+                              aria-label={`Seleccionar ${asset.name}`}
+                              className="align-middle"
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5">
                             {loadingDetail === asset.id ? (
                               <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
                             ) : (
@@ -234,10 +314,10 @@ export function ActivosFijosDepreciationTab() {
                             <p className="text-[9px] font-mono text-muted-foreground">{asset.code}</p>
                           </TableCell>
                           <TableCell className="py-2.5 text-xs">{asset.category?.name || '—'}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.cost || 0))}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.monthly || 0))}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs tabular-nums text-amber-600">{fmt(Number(d.accumulated || 0))}</TableCell>
-                          <TableCell className="py-2.5 text-right text-xs font-bold tabular-nums text-primary">{fmt(Number(d.bookValue || 0))}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.cost || 0), asset.currency, asset.exchangeRate)}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums">{fmt(Number(d.monthly || 0), asset.currency, asset.exchangeRate)}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs tabular-nums text-amber-600">{fmt(Number(d.accumulated || 0), asset.currency, asset.exchangeRate)}</TableCell>
+                          <TableCell className="py-2.5 text-right text-xs font-bold tabular-nums text-primary">{fmt(Number(d.bookValue || 0), asset.currency, asset.exchangeRate)}</TableCell>
                           <TableCell className="py-2.5 text-right text-xs tabular-nums">{d.monthsRemaining ?? '—'}</TableCell>
                           <TableCell className="py-2.5">
                             <Badge
@@ -255,7 +335,7 @@ export function ActivosFijosDepreciationTab() {
                         </TableRow>
                         {expanded && (
                           <TableRow key={`${asset.id}-detail`}>
-                            <TableCell colSpan={9} className="p-0">
+                            <TableCell colSpan={10} className="p-0">
                               <div className="rounded-xl border border-border/40 bg-muted/10 m-2 p-3">
                                 {!detail ? (
                                   <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
@@ -263,13 +343,15 @@ export function ActivosFijosDepreciationTab() {
                                   </div>
                                 ) : (
                                   <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                                      <MiniStat label="Costo" value={fmt(Number(d.cost || 0))} />
-                                      <MiniStat label="Base dep." value={fmt(Number(d.base || 0))} />
-                                      <MiniStat label="Dep. mensual" value={fmt(Number(d.monthly || 0))} />
-                                      <MiniStat label="Dep. anual" value={fmt(Number(d.annual || 0))} />
-                                      <MiniStat label="Dep. acum." value={fmt(Number(d.accumulated || 0))} tone="emerald" />
-                                      <MiniStat label="Valor en libros" value={fmt(Number(d.bookValue || 0))} tone="primary" />
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                                      <MiniStat label="Costo" value={fmt(Number(d.cost || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Valor residual" value={fmt(Number(detail.residualValue || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Base dep." value={fmt(Number(d.base || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Dep. mensual" value={fmt(Number(d.monthly || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Dep. anual" value={fmt(Number(d.annual || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Dep. acum. inicial" value={fmt(Number(detail.initialAccumDepreciation || 0), detail.currency, detail.exchangeRate)} />
+                                      <MiniStat label="Dep. acum." value={fmt(Number(d.accumulated || 0), detail.currency, detail.exchangeRate)} tone="emerald" />
+                                      <MiniStat label="Valor en libros" value={fmt(Number(d.bookValue || 0), detail.currency, detail.exchangeRate)} tone="primary" />
                                       <MiniStat label="Meses trans." value={`${d.monthsElapsed ?? 0}`} />
                                       <MiniStat label="Meses rest." value={`${d.monthsRemaining ?? 0}`} />
                                     </div>
@@ -301,9 +383,9 @@ export function ActivosFijosDepreciationTab() {
                                             {projection.map(row => (
                                               <TableRow key={row.id} className="hover:bg-muted/30 border-border/30">
                                                 <TableCell className="font-mono text-xs">{row.period}</TableCell>
-                                                <TableCell className="text-right font-mono text-xs">{fmt(row.depreciationAmount)}</TableCell>
-                                                <TableCell className="text-right font-mono text-xs">{fmt(row.accumulatedDepreciation)}</TableCell>
-                                                <TableCell className="text-right font-mono text-xs font-bold">{fmt(row.bookValue)}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs">{fmt(row.depreciationAmount, detail.currency, detail.exchangeRate)}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs">{fmt(row.accumulatedDepreciation, detail.currency, detail.exchangeRate)}</TableCell>
+                                                <TableCell className="text-right font-mono text-xs font-bold">{fmt(row.bookValue, detail.currency, detail.exchangeRate)}</TableCell>
                                                 <TableCell>
                                                   <Badge variant={row.status === 'PROCESSED' ? 'default' : 'secondary'} className="text-[9px]">
                                                     {row.status === 'PROCESSED' ? 'Procesado' : 'Pendiente'}

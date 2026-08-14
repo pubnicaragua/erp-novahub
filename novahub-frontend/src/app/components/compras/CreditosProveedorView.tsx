@@ -440,7 +440,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       .map(inv => ({ label: `${inv.number} · ${invoiceStatusLabel(inv.status)}`, value: inv.id, description: `${formatDateEs(inv.date || Date.now())} · ${formatConvertedAmount(Number(inv.total || 0), resolveSourceCurrency((inv as any)?.currency), (inv as any)?.exchangeRate)}` }));
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
@@ -451,7 +451,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Crédito otorgado por el proveedor a favor de la empresa</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="credits" context="form" />
              {!isNew && canPerform('PURCHASES_RETURNS', 'delete') && !isLocked && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingVoidId(editingId)}>
@@ -472,7 +473,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos del Crédito</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -587,7 +588,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-summary">
             <CardContent className="p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Impuestos y descuentos</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -671,7 +672,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-items">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles</p>
@@ -804,13 +805,14 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
         <Dialog open={importOpen} onOpenChange={setImportOpen}>
           <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
+            <DialogHeader data-tour="purchases-credit-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar líneas del crédito</DialogTitle>
               <DialogDescription>
                 Sube un Excel (.xlsx, .xls, .csv) o PDF con las columnas: <b>TIPO, PRODUCTO, DESCRIPCION, CANTIDAD, PRECIO</b>. Descarga la plantilla para ver las reglas por columna.
               </DialogDescription>
+              <PurchaseViewTutorial view="credits" context="form" labelOverride="Cómo importar líneas de crédito" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-credit-modal" />
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4" data-tour="purchases-credit-modal-data">
               <Button variant="outline" className="w-full rounded-xl text-[10px] font-black uppercase tracking-widest gap-2" onClick={downloadCreditTemplate}>
                 <Download className="size-4" /> Descargar plantilla Excel
               </Button>
@@ -836,7 +838,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter data-tour="purchases-credit-modal-actions">
               <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>
             </DialogFooter>
           </DialogContent>
@@ -924,15 +926,16 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
       <Dialog open={applyTarget !== null} onOpenChange={(open) => !open && setApplyTarget(null)}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="purchases-credit-modal-title">
             <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="size-5 text-emerald-500" /> Aplicar crédito {applyTarget?.number}</DialogTitle>
             <DialogDescription>
               Al aplicar la nota de crédito se generará el asiento contable correspondiente y se registrará la liquidación como un pago al proveedor. Esta acción no se puede deshacer.
             </DialogDescription>
+            <PurchaseViewTutorial view="credits" context="form" labelOverride="Cómo aplicar crédito" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchases-credit-modal" />
           </DialogHeader>
           {applyTarget && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-sm">
+            <div className="space-y-4" data-tour="purchases-credit-modal-data">
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-2 text-sm" data-tour="purchases-credit-modal-summary">
                 <div className="flex justify-between"><span className="text-muted-foreground">Proveedor</span><b>{applyTarget.supplier?.name || '-'}</b></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Monto</span><b className="text-emerald-600"><CurrencyValuationAmount amount={Number(applyTarget.total || 0)} sourceCurrency={resolveSourceCurrency((applyTarget as any)?.currency)} sourceExchangeRate={(applyTarget as any)?.exchangeRate} /></b></div>
               </div>
@@ -950,7 +953,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter data-tour="purchases-credit-modal-actions">
             <Button variant="outline" onClick={() => setApplyTarget(null)}>Cancelar</Button>
             <Button onClick={handleApplyConfirm} disabled={applyLoading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
               <CheckCircle2 className="size-4" /> {applyLoading ? 'Aplicando...' : 'Aplicar crédito'}

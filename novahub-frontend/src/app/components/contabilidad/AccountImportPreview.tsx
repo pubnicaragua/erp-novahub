@@ -139,7 +139,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
               {rows.map((row, index) => {
                 const rowError = rowValidationErrors.get(index);
                 return (
-                <TableRow key={`${row.codigo}-${index}`} className={rowError ? 'bg-rose-500/5' : undefined}>
+                <TableRow key={index} className={rowError ? 'bg-rose-500/5' : undefined}>
                   <TableCell className="text-center" title={rowError || 'Fila válida'}>{rowError ? <AlertTriangle className="mx-auto size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" aria-label="Fila válida" />}</TableCell>
                   <TableCell><Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} /></TableCell>
@@ -164,7 +164,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
           ) : rows.map((row, index) => {
             const rowError = rowValidationErrors.get(index);
             return (
-            <div key={`${row.codigo}-${index}`} className={`rounded-2xl border border-border/70 bg-card p-3 shadow-sm ${rowError ? 'border-rose-500/50 bg-rose-500/5' : ''}`}>
+            <div key={index} className={`rounded-2xl border border-border/70 bg-card p-3 shadow-sm ${rowError ? 'border-rose-500/50 bg-rose-500/5' : ''}`}>
               <div className="flex items-start gap-2">
                 <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${rowError ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`} title={rowError || 'Fila válida'}>
                   {rowError ? <AlertTriangle className="size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="size-4 text-emerald-500" aria-label="Fila válida" />}

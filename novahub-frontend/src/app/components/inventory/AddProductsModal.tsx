@@ -12,6 +12,7 @@ import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
 import { toast } from 'sonner';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 interface AddProductsModalProps {
   open: boolean;
@@ -262,16 +263,22 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-product-add-title">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Package className="size-5 text-primary" /> Agregar {catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}
           </DialogTitle>
           <DialogDescription>
             Llena los campos para guardar un {catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}, o agrega varios a la lista.
           </DialogDescription>
+          <InventoryViewTutorial
+            label={catalogItemType === 'SERVICE' ? 'Cómo crear servicio' : 'Cómo crear producto'}
+            targetPrefix="inventory-product-add"
+            stepKeys={['title', 'data', 'items', 'actions']}
+            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, almacén y stock inicial.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
+          />
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto flex flex-col gap-6 p-1">
+        <div className="flex-1 overflow-auto flex flex-col gap-6 p-1" data-tour="inventory-product-add-data">
           
           {/* FORMULARIO SUPERIOR */}
           <div className="flex flex-col gap-4 rounded-xl border border-dashed bg-muted/30 p-4 sm:flex-row">
@@ -439,7 +446,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
           {/* TABLA INFERIOR */}
           {productsList.length > 0 && (
-            <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]">
+            <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]" data-tour="inventory-product-add-items">
                <Table>
                  <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
                  <TableRow>
@@ -490,7 +497,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           )}
         </div>
 
-        <DialogFooter className="mt-2 pt-4 border-t">
+        <DialogFooter className="mt-2 pt-4 border-t" data-tour="inventory-product-add-actions">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancelar
           </Button>

@@ -289,16 +289,17 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
       <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-xl overflow-y-auto rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12">
+        <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12" data-tour="purchases-payment-title">
           <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><CircleDollarSign className="size-5" /></span>
             Registrar pago de la recepción
           </DialogTitle>
           <DialogDescription>El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.</DialogDescription>
+          <PurchaseViewTutorial view="payments" context="form" labelOverride="Cómo registrar pago" targetPrefix="purchases-payment" />
         </DialogHeader>
         {draft && (
-          <div className="space-y-5 px-6 py-5">
-            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <div className="space-y-5 px-6 py-5" data-tour="purchases-payment-data">
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-tour="purchases-payment-summary">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{draft.receiptNumber} · {draft.supplierName || 'Proveedor'}</p>
@@ -334,7 +335,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
             )}
           </div>
         )}
-        <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4">
+        <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
           {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
@@ -773,7 +774,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     const itemsMissingWarehouse = getItemsMissingWarehouse(localDoc.items || []);
     
     return (
-      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -793,7 +794,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="receipts" context="form" />
             {!isNew && localDoc.id && <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={localDoc.id} title="Historial de la recepción" />}
             {canReceiveCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
@@ -809,7 +811,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
@@ -945,7 +947,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           </Card>
         )}
 
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="purchases-form-items">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Productos Recibidos</p>
@@ -1178,6 +1180,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   No hay ítems registrados.
                 </div>
               )}
+              <div data-tour="purchases-form-summary">
               {(localDoc.items || []).length > 0 && (
                 <div className="grid grid-cols-2 gap-3 border-t border-border/50 pt-4 text-xs sm:grid-cols-4">
                   <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Subtotal recibido</p><p className="font-black tabular-nums">{formatReceiptAmount(financialTotals.subtotal, receiptCurrency)}</p></div>
@@ -1186,6 +1189,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Total recepción</p><p className="font-black tabular-nums text-primary">{formatReceiptAmount(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal, receiptCurrency)}</p></div>
                 </div>
               )}
+              </div>
             </div>
           </CardContent>
         </Card>

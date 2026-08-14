@@ -17,6 +17,7 @@ import { storageService } from '../../services/storage.service';
 import { usersService } from '../../services/users.service';
 import { useQuery } from '@tanstack/react-query';
 import type { SalesPaginationControls } from '../../types';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 interface InventoryAuditsViewProps {
   audits: any[];
@@ -219,7 +220,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="inventory-audits-title">
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10">
             <ClipboardCheck className="size-5 text-amber-500" />
@@ -231,12 +232,15 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
             </p>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2" data-tour="inventory-audits-actions">
+        <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, almacenes y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
         <Button onClick={() => setIsCreating(true)} className="gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black uppercase text-[10px] tracking-widest h-9">
           <Plus className="size-4" /> Nueva Auditoría
         </Button>
+        </div>
       </div>
 
-      <Card className="rounded-2xl border-border/50">
+      <Card className="rounded-2xl border-border/50" data-tour="inventory-audits-data">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -310,13 +314,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
 
       <Dialog open={isCreating} onOpenChange={(open) => { if (!open) { setIsCreating(false); resetForm(); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-audit-form-title">
             <DialogTitle className="text-lg font-black uppercase tracking-tight">Acta de Inspección · Inventario Selectivo</DialogTitle>
             <DialogDescription className="text-xs">
               Registra la auditoría realizada por el encargado del proceso junto con el usuario de bodega. El acta se guarda como respaldo.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo registrar auditoría" targetPrefix="inventory-audit-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Define fecha, almacén, encargado, usuario de bodega, respaldo y observaciones.' }, items: { description: 'Agrega productos y registra el stock contado para calcular diferencias.' }, actions: { description: 'Registra el acta cuando los responsables y el conteo estén completos.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-audit-form-data">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha y hora de la inspección</Label>
@@ -389,7 +394,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
               <Input value={form.notes} onChange={(e) => updateForm({ notes: e.target.value })} placeholder="Notas de la inspección..." className="h-9 text-xs" />
             </div>
 
-            <div className="rounded-xl border border-border/40">
+            <div className="rounded-xl border border-border/40" data-tour="inventory-audit-form-items">
               <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="size-4 text-amber-500" />
@@ -458,7 +463,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
               </div>
             </div>
           </div>
-          <DialogFooter className="border-t border-border/40 pt-4">
+          <DialogFooter className="border-t border-border/40 pt-4" data-tour="inventory-audit-form-actions">
             <Button variant="outline" onClick={() => { setIsCreating(false); resetForm(); }}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving || !canSave} className="gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black uppercase text-[10px] tracking-widest">
               {saving ? 'Registrando...' : 'Registrar Acta'}
@@ -469,15 +474,16 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, p
 
       <Dialog open={!!detailAudit} onOpenChange={(open) => { if (!open) setDetailAudit(null); }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-audit-detail-title">
             <DialogTitle className="text-lg font-black uppercase tracking-tight">
               {detailAudit?.number} · Acta de Inspección
             </DialogTitle>
             <DialogDescription className="text-xs">
               {detailAudit?.auditDate ? new Date(detailAudit.auditDate).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' }) : ''}
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo consultar auditoría" targetPrefix="inventory-audit-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa responsables, almacén, respaldo, observaciones, stock del sistema y diferencias encontradas.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-audit-detail-data">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-muted/30 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Encargado</p>

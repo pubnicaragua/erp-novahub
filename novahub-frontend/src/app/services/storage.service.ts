@@ -149,8 +149,19 @@ export const storageService = {
 };
 
 export async function resolveStorageReferences<T>(value: T): Promise<T> {
+  // Resolver cada referencia de forma aislada: si el backend deniega un
+  // resolve (p. ej. sin permiso DOCUMENTS) el listado completo no debe
+  // fallar; se conserva el URI crudo y las imágenes degradan con placeholder.
+  const resolve = async (item: string): Promise<string> => {
+    if (!item.startsWith('storage://')) return item;
+    try {
+      return await storageService.resolveUrl(item);
+    } catch {
+      return item;
+    }
+  };
   if (typeof value === 'string') {
-    return (value.startsWith('storage://') ? await storageService.resolveUrl(value) : value) as T;
+    return (await resolve(value)) as T;
   }
   if (Array.isArray(value)) {
     return (await Promise.all(value.map(item => resolveStorageReferences(item)))) as T;

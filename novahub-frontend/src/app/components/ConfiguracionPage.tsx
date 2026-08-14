@@ -498,8 +498,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
       // 2. Fallback check for submodules
       if (parentMod && user.enabledModules.includes(parentMod)) {
-        const hasSpecificSubmodules = user.enabledModules.some(mod => mod.startsWith(`${parentMod}_`));
-        if (!hasSpecificSubmodules) return true;
+        return true;
       }
 
       // 3. Fallback check for main modules

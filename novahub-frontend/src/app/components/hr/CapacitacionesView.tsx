@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
+import { HRViewTutorial } from './HRViewTutorial';
 import { formatDateEs } from '../../utils/dateFormat';
 
 const TRAINING_STATUS_LABELS: Record<string, string> = {
@@ -224,7 +225,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-training-title">
         <StatCard
           label="Programadas"
           value={scheduledTrainings}
@@ -264,7 +265,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-training-actions">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -307,13 +308,17 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             Nueva Capacitación
           </Button>
         )}
+        <HRViewTutorial label="Cómo gestionar capacitaciones" targetPrefix="hr-training" copy={{ data: { description: 'Filtra las capacitaciones por estado, instructor y fecha.' }, actions: { description: 'Crea una capacitación o administra sus inscripciones y estados.' } }} />
       </div>
 
       {/* New Training Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
-          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Capacitación</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-training-form-shell">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-training-form-title">
+            <h3 className="text-lg font-semibold text-primary">Nueva Capacitación</h3>
+            <HRViewTutorial label="Cómo crear capacitación" targetPrefix="hr-training-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa título, descripción, instructor, fechas, capacidad, costo y modalidad.' }, items: { title: 'Empleados participantes', description: 'Selecciona los empleados que participarán sin superar la capacidad definida.' }, actions: { description: 'Guarda la capacitación para comenzar a gestionar sus participantes.' } }} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-training-form-data">
             <div className="md:col-span-2">
               <label className="text-sm font-medium mb-1 block">Título *</label>
               <Input
@@ -414,7 +419,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
               </select>
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2" data-tour="hr-training-form-items">
               <label className="text-sm font-medium mb-1 block">Empleados Participantes ({newTraining.employeeIds.length}/{newTraining.capacity})</label>
               <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
                 {employees?.map((emp: any) => (
@@ -445,7 +450,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-4" data-tour="hr-training-form-actions">
             <Button onClick={handleCreateTraining} disabled={isCreating} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               {isCreating ? 'Guardando...' : 'Crear Capacitación'}
             </Button>
@@ -457,7 +462,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       )}
 
       {/* Trainings Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="hr-training-data">
         {paginatedTrainings.map((training: any) => {
           const enrolledCount = training.enrollments?.length || 0;
           const completedCount = training.enrollments?.filter((e: any) => e.status === 'COMPLETED').length || 0;
@@ -623,11 +628,12 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       {/* Enroll Dialog */}
       <Dialog open={enrollingTraining !== null} onOpenChange={(open) => { if (!open) setEnrollingTraining(null); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-training-enroll-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <UserPlus className="size-5 text-primary" />
               Inscribir empleados
             </DialogTitle>
+            <HRViewTutorial label="Cómo inscribir empleados" targetPrefix="hr-training-enroll" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Revisa la capacitación y marca los empleados participantes.' }, actions: { description: 'Guarda las inscripciones para actualizar la lista de participantes.' } }} />
           </DialogHeader>
           {(() => {
             const training = trainings.find((t: any) => t.id === enrollingTraining);
@@ -642,7 +648,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                     {training.instructor && <> · Instructor: {training.instructor}</>}
                   </p>
                 </div>
-                <div className="border border-border/50 rounded-xl p-3 max-h-64 overflow-y-auto mt-2">
+                <div className="border border-border/50 rounded-xl p-3 max-h-64 overflow-y-auto mt-2" data-tour="hr-training-enroll-data">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2 block">Selecciona los participantes</Label>
                   {employees.map((emp: any) => {
                     const alreadyEnrolled = (training.enrollments || []).some((e: any) => e.employeeId === emp.id);
@@ -677,7 +683,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <p className="text-[11px] text-muted-foreground">
                   Los empleados ya inscritos se conservan. La desinscripción no está soportada: marca como completado al finalizar.
                 </p>
-                <DialogFooter className="gap-2 mt-2">
+                <DialogFooter className="gap-2 mt-2" data-tour="hr-training-enroll-actions">
                   <DialogClose asChild>
                     <Button variant="outline" className="rounded-xl">Cerrar</Button>
                   </DialogClose>

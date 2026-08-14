@@ -1141,7 +1141,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas.</DialogDescription>
+            <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas. Los cambios se reflejan inmediatamente.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACCOUNT_COLUMN_DEFS.map((column) => {
@@ -1163,7 +1163,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
           </div>
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setVisibleAccountColumnKeys(DEFAULT_ACCOUNT_COLUMN_KEYS)}>Mostrar todas</Button>
-            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

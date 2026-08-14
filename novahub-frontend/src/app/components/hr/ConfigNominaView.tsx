@@ -16,6 +16,7 @@ import {
 import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
+import { HRViewTutorial } from './HRViewTutorial';
 
 interface PayrollConfigData {
   id?: string;
@@ -182,7 +183,7 @@ export function ConfigNominaView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-payroll-config-title">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
@@ -192,7 +193,7 @@ export function ConfigNominaView() {
             Define los porcentajes de deducciones, aportes patronales y provisiones
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="hr-payroll-config-actions">
           <Badge className={cn(
             "px-3 py-1 text-[10px] font-black uppercase tracking-widest",
             hasExisting ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
@@ -205,10 +206,11 @@ export function ConfigNominaView() {
               {saving ? 'Guardando...' : 'Guardar Configuración'}
             </Button>
           )}
+          <HRViewTutorial label="Cómo configurar nómina" targetPrefix="hr-payroll-config" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Define deducciones, aportes patronales, provisiones y tramos del IR.' }, items: { title: 'Simulador de nómina', description: 'Prueba un salario bruto para visualizar deducciones, neto a pagar y costo empresarial.' }, actions: { description: 'Guarda la configuración para aplicar las reglas a los procesos de nómina.' } }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" data-tour="hr-payroll-config-data">
         {/* Left Column: Config Forms */}
         <div className="xl:col-span-2 space-y-6">
 
@@ -390,7 +392,7 @@ export function ConfigNominaView() {
 
         {/* Right Column: Simulation */}
         <div className="space-y-6">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} data-tour="hr-payroll-config-items">
             <Card className="border-primary/20 shadow-sm bg-gradient-to-br from-primary/5 to-transparent">
               <CardHeader className="border-b border-primary/10 bg-primary/5">
                 <CardTitle className="flex items-center gap-2 text-lg font-black">

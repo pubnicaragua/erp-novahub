@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
-  ClipboardList, Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
+  Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, PackageCheck, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -49,25 +49,32 @@ interface OrdenesVentaViewProps {
   dateFrom?: string;
   dateTo?: string;
   onDateRangeChange?: (dateFrom: string, dateTo: string) => void;
+  statusFilter?: OrderStatusFilter;
+  onStatusFilterChange?: (value: OrderStatusFilter) => void;
   salesAlert?: PurchaseAlertDetail;
 }
 
 const statusOptions = [
-  { label: 'Pendiente Revisión', value: 'PENDING_REVIEW', color: 'bg-orange-500/10 text-orange-500' },
   { label: 'Borrador',       value: 'DRAFT',       color: 'bg-muted/20 text-muted-foreground' },
   { label: 'Confirmada',     value: 'CONFIRMED',   color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'En Proceso',     value: 'IN_PROGRESS', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Enviada',        value: 'SHIPPED',     color: 'bg-purple-500/10 text-purple-500' },
-  { label: 'Entregada',      value: 'DELIVERED',   color: 'bg-cyan-500/10 text-cyan-500' },
+  { label: 'Entregada',      value: 'DELIVERED',   color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: OrdenesVentaViewProps) {
+export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED';
+
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CONFIRMED' | 'IN_PROGRESS'>('ALL');
+  const [localStatusFilter, setLocalStatusFilter] = useState<OrderStatusFilter>('ALL');
+  const statusFilter = controlledStatusFilter ?? localStatusFilter;
+  const setStatusFilter = (value: OrderStatusFilter) => {
+    onStatusFilterChange?.(value);
+    if (controlledStatusFilter === undefined) setLocalStatusFilter(value);
+  };
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -252,12 +259,29 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return () => clearTimeout(timer);
   }, [targetOrderId, data, onClearTargetOrderId]);
 
-  const filtered = data.filter(o => 
-    (statusFilter === 'ALL' || String(o.status || '').toUpperCase() === statusFilter) &&
-    o.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (statusFilter === 'ALL' || String(o.status || '').toUpperCase() === statusFilter) &&
-    (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter((order) => {
+    const status = String(order.status || '').toUpperCase();
+    const matchesStatus = statusFilter === 'ALL' || status === statusFilter;
+    const search = searchTerm.trim().toLowerCase();
+    const matchesSearch = !search
+      || String(order.number || '').toLowerCase().includes(search)
+      || String(order.customer?.name || '').toLowerCase().includes(search);
+    return matchesStatus && matchesSearch;
+  });
+
+  const orderStatusPriority: Record<string, number> = {
+    CONFIRMED: 0,
+    SHIPPED: 1,
+    DELIVERED: 2,
+    DRAFT: 3,
+    CANCELLED: 4,
+  };
+  const statusOrdered = [...filtered].sort((a, b) => {
+    const statusOrder = (orderStatusPriority[String(a.status || '').toUpperCase()] ?? 99)
+      - (orderStatusPriority[String(b.status || '').toUpperCase()] ?? 99);
+    if (statusOrder !== 0) return statusOrder;
+    return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
+  });
 
   const colFilters = useColumnFilters();
   const filterGetters = {
@@ -267,7 +291,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     date: (row: SalesOrder) => (row.date ? new Date(row.date).getTime() : null),
     invoicedAt: (row: SalesOrder) => (row.invoicedAt ? new Date(row.invoicedAt).getTime() : null),
   };
-  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const filteredData = colFilters.applyTo(statusOrdered, filterGetters);
   const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
 
@@ -572,7 +596,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   if (editingId && localDoc) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -583,7 +607,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+            <SalesViewTutorial view="orders" context="form" />
             {canPerform('SALES_ORDERS', 'edit') && (
               <>
                 <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
@@ -599,7 +624,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <SalesAccountingLegend flow="order" />
@@ -725,32 +750,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
-                  <select
-                    value={localDoc?.paymentMethod || ''}
-                    onChange={(event) => {
-                      const paymentMethod = event.target.value;
-                      setLocalDoc({ ...localDoc, paymentMethod } as any);
-                      void handleUpdate(localDoc!.id, { paymentMethod } as any);
-                    }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                  >
-                    <option value="">Sin definir</option>
-                    <option value="CASH">Efectivo (Contado)</option>
-                    <option value="CARD">Tarjeta (Contado)</option>
-                    <option value="TRANSFER">Transferencia (Contado)</option>
-                    <option value="CHECK">Cheque (Contado)</option>
-                    <option value="CREDIT">Crédito (a plazos)</option>
-                  </select>
-                  {String(localDoc?.paymentMethod || '').toUpperCase() === 'CREDIT' && (
-                    <p className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">Al facturar esta orden se creará un registro en el módulo Créditos.</p>
-                  )}
-                </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
@@ -841,7 +844,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         </div>
 
         {/* --- PRODUCT LINE ITEMS --- */}
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
@@ -1108,10 +1111,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Órdenes Abiertas" value={data.filter(o => (o.status||'').toUpperCase() === 'CONFIRMED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
+        <SalesKpiCard title="Órdenes Enviadas" value={data.filter(o => (o.status || '').toUpperCase() === 'SHIPPED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'SHIPPED'} onClick={() => setStatusFilter(statusFilter === 'SHIPPED' ? 'ALL' : 'SHIPPED')} />
         <SalesKpiCard title={`Monto Confirmado (${baseCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="En Proceso" value={data.filter(o => (o.status||'').toUpperCase() === 'IN_PROGRESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROGRESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')} />
-        <SalesKpiCard title="Total del Mes" value={data.length} icon={ClipboardList} color="text-purple-500" bg="bg-purple-500/10" />
+        <SalesKpiCard title="Órdenes Confirmadas" value={data.filter(o => (o.status || '').toUpperCase() === 'CONFIRMED').length} icon={Check} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
+        <SalesKpiCard title="Órdenes Entregadas" value={data.filter(o => (o.status || '').toUpperCase() === 'DELIVERED').length} icon={PackageCheck} color="text-cyan-500" bg="bg-cyan-500/10" active={statusFilter === 'DELIVERED'} onClick={() => setStatusFilter(statusFilter === 'DELIVERED' ? 'ALL' : 'DELIVERED')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
@@ -1122,6 +1125,16 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="orders" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatusFilter)}>
+              <SelectTrigger className="h-10 w-44 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos los estados</SelectItem>
+                <SelectItem value="SHIPPED">Órdenes enviadas</SelectItem>
+                <SelectItem value="DELIVERED">Órdenes entregadas</SelectItem>
+                <SelectItem value="DRAFT">Borradores</SelectItem>
+                <SelectItem value="CONFIRMED">Confirmadas</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
@@ -1188,6 +1201,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <ArrowRightCircle className={cn('size-4 text-muted-foreground', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
+                {canPerform('SALES_ORDERS', 'edit') && ['SHIPPED', 'IN_PROGRESS'].includes(String(row.status || '').toUpperCase()) && (
+                  <Button type="button" title="Marcar como entregada" aria-label="Marcar como entregada" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-cyan-500 hover:bg-cyan-500/10" onClick={() => void handleUpdate(row.id, { status: 'DELIVERED' as any })}>
+                    <PackageCheck className="size-4" />
+                  </Button>
+                )}
                 <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
                 <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') &&
@@ -1219,7 +1237,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Elige qué información quieres ver en la lista o en las tarjetas de órdenes de venta.</DialogDescription>
+            <DialogDescription>Elige qué información quieres ver en la lista o en las tarjetas de órdenes de venta. Los cambios se reflejan inmediatamente.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {columnOptions.map((option) => {
@@ -1244,7 +1262,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </div>
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
-            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AbsenceType } from '../../types';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
+import { HRViewTutorial } from './HRViewTutorial';
 
 const SALARY_BASE_LABELS: Record<string, string> = {
   MONTHLY: 'Mensual',
@@ -188,7 +189,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-absence-types-title">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
@@ -205,11 +206,12 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
               {showForm ? 'Cancelar' : 'Nuevo Tipo'}
             </Button>
           )}
+          <HRViewTutorial label="Cómo configurar tipos de ausencia" targetPrefix="hr-absence-types" copy={{ data: { description: 'Filtra y consulta las reglas de ausencia activas e inactivas.' }, actions: { description: 'Crea un tipo nuevo o edita sus porcentajes, topes y requisitos.' } }} />
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-absence-types-data">
         <StatCard label="Tipos configurados" value={totalTypes} icon={Layers} tone="primary" sub="Reglas de ausencia activas e inactivas" active={filter === 'ALL'} onClick={() => setFilter('ALL')} />
         <StatCard label="Activos" value={activeTypes} icon={ShieldCheck} tone="green" sub="Disponibles en nuevas solicitudes" active={filter === 'ACTIVE'} onClick={() => setFilter('ACTIVE')} />
         <StatCard label="Inactivos" value={inactiveTypes} icon={ShieldOff} tone="red" sub="Deshabilitados de la selección" active={filter === 'INACTIVE'} onClick={() => setFilter('INACTIVE')} />
@@ -248,13 +250,14 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       {showForm && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-primary/20 shadow-sm bg-gradient-to-br from-primary/5 to-transparent">
-            <CardHeader className="border-b border-primary/10 bg-primary/5">
+            <CardHeader className="border-b border-primary/10 bg-primary/5" data-tour="hr-absence-type-form-title">
               <CardTitle className="flex items-center gap-2 text-lg font-black">
                 {editingId ? <FileText className="size-5 text-primary" /> : <Plus className="size-5 text-primary" />}
                 {editingId ? 'Editar Tipo de Ausencia' : 'Nuevo Tipo de Ausencia'}
               </CardTitle>
+              <HRViewTutorial label={editingId ? 'Cómo editar tipo de ausencia' : 'Cómo crear tipo de ausencia'} targetPrefix="hr-absence-type-form" copy={{ data: { description: 'Define código, nombre, base salarial, porcentajes, tope, días máximos y requisitos.' }, actions: { description: 'Guarda la regla para que pueda utilizarse en las solicitudes.' } }} />
             </CardHeader>
-            <CardContent className="pt-6 space-y-5">
+            <CardContent className="pt-6 space-y-5" data-tour="hr-absence-type-form-data">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Código</Label>
@@ -326,7 +329,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-2" data-tour="hr-absence-type-form-actions">
                 <Button onClick={handleSave} disabled={saving} className="gap-2 rounded-xl font-bold">
                   {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
                   {saving ? 'Guardando...' : 'Guardar'}
@@ -338,7 +341,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
         </motion.div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3" data-tour="hr-absence-types-actions">
         {filteredTypes.length === 0 && (
           <div className="text-center py-12">
             <AlertTriangle className="size-12 mx-auto text-muted-foreground mb-4" />

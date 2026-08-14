@@ -443,8 +443,9 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
         <TabsList ref={tabsRef} className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {COMPRAS_SECTIONS.map((section) => {
                 const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
-                const hasSpecificSubmodules = user?.enabledModules?.some(m => m.startsWith('PURCHASES_'));
-                const hasFallback = user?.enabledModules?.includes('PURCHASES') && !hasSpecificSubmodules;
+                // La suscripción al módulo padre (PURCHASES) habilita todas
+                // sus vistas, incluso con submódulos granulares contratados.
+                const hasFallback = user?.enabledModules?.includes('PURCHASES');
                 const hasAccess = (!user?.enabledModules || !section.requiredModules || hasRequired || hasFallback)
                   && (!section.requiredModules || section.requiredModules.some(mod => canPerform(mod, 'view')));
                 if (!hasAccess) return null;

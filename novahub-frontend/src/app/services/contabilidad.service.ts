@@ -119,7 +119,8 @@ export const contabilidadService = {
   createFixedAsset: (data: any) => api.post<any>('/accounting/fixed-assets/records', data),
   updateFixedAsset: (id: string, data: any) => api.patch<any>(`/accounting/fixed-assets/${id}`, data),
   generateFixedAssetProjection: (id: string) => api.post<any>(`/accounting/fixed-assets/${id}/depreciation/generate-projection`, {}),
-  processFixedAssetDepreciation: (period: string) => api.post<any>('/accounting/fixed-assets/depreciation/process', { period }),
+  processFixedAssetDepreciation: (period: string, assetIds?: string[]) =>
+    api.post<any>('/accounting/fixed-assets/depreciation/process', assetIds && assetIds.length > 0 ? { period, assetIds } : { period }),
   validateFixedAssetImport: (rows: any[]) => api.post<any>('/accounting/fixed-assets/validate-import', { rows }),
   importFixedAssets: (rows: any[]) => api.post<any>('/accounting/fixed-assets/import', { rows }),
 

@@ -9,6 +9,7 @@ import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
 export type SupplierImportRow = {
   code: string;
@@ -77,11 +78,12 @@ export function SupplierImportPreview({
   return (
     <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" data-tour="supplier-import-title">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar proveedores</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores. Si dejas el código vacío, el sistema lo generará automáticamente.</p>
+            <div className="mt-3"><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import" /></div>
           </div>
         </div>
 
@@ -92,7 +94,8 @@ export function SupplierImportPreview({
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="proveedores" />
 
-        <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+        <div className="min-h-0 flex-1" data-tour="supplier-import-data">
+        <HorizontalTableScroller className="h-full" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <TableRow>
@@ -113,7 +116,7 @@ export function SupplierImportPreview({
             </TableHeader>
             <TableBody>
               {rows.map((row, index) => (
-                <TableRow key={`${row.code}-${row.name}-${index}`} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
+                <TableRow key={index} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
@@ -133,8 +136,9 @@ export function SupplierImportPreview({
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
         </HorizontalTableScroller>
+        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4" data-tour="supplier-import-actions">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
           <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || validRows === 0} className="font-bold"><Upload className="mr-2 size-4" /> {importing ? `Importando… ${progress}%` : `Importar ${validRows} válidos · omitir ${errorRows}`}</Button>
         </div>
@@ -142,9 +146,11 @@ export function SupplierImportPreview({
 
       <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se importarán {validRows} proveedores válidos y se omitirán {errorRows} con errores. Los {warningRows} avisos no bloquean la importación. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
+          <DialogHeader data-tour="supplier-import-confirm-title"><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se importarán {validRows} proveedores válidos y se omitirán {errorRows} con errores. Los {warningRows} avisos no bloquean la importación. Escribe IMPORTAR para continuar.</DialogDescription><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo confirmar importación" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import-confirm" /></DialogHeader>
+          <div data-tour="supplier-import-confirm-data">
           <Input value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
-          <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
+          </div>
+          <DialogFooter data-tour="supplier-import-confirm-actions"><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

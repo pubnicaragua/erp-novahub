@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { cn } from './ui/utils';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -62,7 +63,7 @@ function sortByRecentRegistration(items: any[]): any[] {
   });
 }
 
-export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPageProps) {
+export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
@@ -71,8 +72,9 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
     if (user.enabledModules.includes(moduleId)) return true;
-    const hasSpecificSubmodules = user.enabledModules.some(m => m.startsWith('FINANCIAL_'));
-    return user.enabledModules.includes('FINANCIAL') && !hasSpecificSubmodules;
+    // La suscripción al módulo padre (FINANCIAL) habilita todas sus vistas,
+    // incluso con submódulos granulares contratados.
+    return user.enabledModules.includes('FINANCIAL');
   };
 
   const subModuleToTab: Record<string, string> = { 
@@ -462,7 +464,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange }: FinanzasPag
       </div>
 
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-        <TabsList className="w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
+        <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 scroll-px-2 h-auto overflow-x-auto rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 pl-2 pr-2 mb-6 flex flex-nowrap gap-1.5 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
           {tabs.map((tab) => {
             if (!hasAccess(tab.module) || !tab.permission.some((module) => canPerform(module, 'view'))) return null;
             return (

@@ -301,7 +301,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     const isNew = editingId === 'NEW';
     
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -312,7 +312,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos y Abonos</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="payments" context="form" />
              {!isNew && (
                 <Button
                   variant="outline"
@@ -343,7 +344,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1">
+          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
               <div className="space-y-3">
@@ -444,7 +445,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="purchases-form-summary">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto Pagado</p>

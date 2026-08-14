@@ -1,0 +1,305 @@
+import { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import {
+  Activity,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  Edit2,
+  FileText,
+  History,
+  Mail,
+  MapPin,
+  Phone,
+  ReceiptText,
+  Truck,
+  User,
+} from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
+import { ScrollArea } from '../ui/scroll-area';
+import { Skeleton } from '../ui/skeleton';
+import {
+  expensesService,
+  purchaseOrdersService,
+  recurringExpensesService,
+  supplierInvoicesService,
+} from '../../services/compras.service';
+import { suppliersService } from '../../services/compras.service';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import type { Supplier } from '../../types';
+import { cn } from '../ui/utils';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+
+interface SupplierDetailDrawerProps {
+  supplierId: string | null;
+  supplierSnapshot?: Supplier | null;
+  canEdit?: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit?: (supplier: Supplier) => void;
+  onOpenHistory?: (supplier: Supplier) => void;
+}
+
+type SupplierTab = 'general' | 'historial';
+
+type SupplierTransaction = {
+  id: string;
+  type: string;
+  number: string;
+  date?: string;
+  status?: string;
+  amount: number;
+  currency?: string;
+};
+
+const unwrap = (response: any): any => response?.data?.data ?? response?.data ?? response;
+
+const toList = (response: any): any[] => {
+  const value = unwrap(response);
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  return [];
+};
+
+const statusInfo = (supplier?: Supplier | null) => {
+  const inactive = supplier?.isActive === false || String((supplier as any)?.status || '').toUpperCase() === 'INACTIVE';
+  return inactive
+    ? { label: 'Inactivo', className: 'bg-muted/20 text-muted-foreground border-border/40' }
+    : { label: 'Activo', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' };
+};
+
+const typeInfo = (type?: string) => String(type || 'COMPANY').toUpperCase() === 'INDIVIDUAL'
+  ? { label: 'Individual', icon: User }
+  : { label: 'Empresa', icon: Building2 };
+
+const transactionStatus = (status?: string) => {
+  const normalized = String(status || '').toUpperCase();
+  const labels: Record<string, string> = {
+    DRAFT: 'Borrador',
+    SENT: 'Enviada',
+    CONFIRMED: 'Confirmada',
+    APPROVED: 'Aprobada',
+    PAID: 'Pagada',
+    PARTIAL: 'Pago parcial',
+    CANCELLED: 'Anulada',
+    ACTIVE: 'Activa',
+    PAUSED: 'Pausada',
+  };
+  return labels[normalized] || status || 'Registrado';
+};
+
+export function SupplierDetailDrawer({
+  supplierId,
+  supplierSnapshot,
+  canEdit = false,
+  onOpenChange,
+  onEdit,
+  onOpenHistory,
+}: SupplierDetailDrawerProps) {
+  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const [activeTab, setActiveTab] = useState<SupplierTab>('general');
+  const [detail, setDetail] = useState<Supplier | null>(supplierSnapshot || null);
+  const [transactions, setTransactions] = useState<SupplierTransaction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supplierId) {
+      setDetail(null);
+      setTransactions([]);
+      setError(null);
+      setActiveTab('general');
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    setDetail(supplierSnapshot || null);
+    setActiveTab('general');
+    setError(null);
+    setLoading(true);
+    setLoadingTransactions(true);
+
+    void Promise.allSettled([
+      suppliersService.getById(supplierId),
+      purchaseOrdersService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
+      supplierInvoicesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
+      expensesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
+      recurringExpensesService.getAll({ supplierId, page: 1, pageSize: 50 } as any, controller.signal),
+    ]).then(([supplierResult, ordersResult, invoicesResult, expensesResult, recurringResult]) => {
+      if (cancelled) return;
+
+      if (supplierResult.status === 'fulfilled') {
+        const value = unwrap(supplierResult.value);
+        if (value?.id) setDetail(value);
+      } else if (!supplierSnapshot) {
+        setError('No se pudo cargar el detalle del proveedor.');
+      }
+      setLoading(false);
+
+      const nextTransactions: SupplierTransaction[] = [];
+      if (ordersResult.status === 'fulfilled') {
+        toList(ordersResult.value).forEach((item: any) => nextTransactions.push({
+          id: `order-${item.id}`,
+          type: 'Orden de compra',
+          number: item.number || 'Sin número',
+          date: item.date || item.createdAt,
+          status: item.status,
+          amount: Number(item.total || 0),
+          currency: item.currency,
+        }));
+      }
+      if (invoicesResult.status === 'fulfilled') {
+        toList(invoicesResult.value).forEach((item: any) => nextTransactions.push({
+          id: `invoice-${item.id}`,
+          type: 'Factura de proveedor',
+          number: item.number || 'Sin número',
+          date: item.date || item.createdAt,
+          status: item.status,
+          amount: Number(item.total || 0),
+          currency: item.currency,
+        }));
+      }
+      if (expensesResult.status === 'fulfilled') {
+        toList(expensesResult.value).forEach((item: any) => nextTransactions.push({
+          id: `expense-${item.id}`,
+          type: 'Gasto',
+          number: item.number || item.category || 'Gasto',
+          date: item.date || item.createdAt,
+          status: item.status,
+          amount: Number(item.amount || 0),
+          currency: item.currency,
+        }));
+      }
+      if (recurringResult.status === 'fulfilled') {
+        toList(recurringResult.value).forEach((item: any) => nextTransactions.push({
+          id: `recurring-${item.id}`,
+          type: 'Gasto recurrente',
+          number: item.description || 'Gasto recurrente',
+          date: item.startDate || item.createdAt,
+          status: item.status,
+          amount: Number(item.amount || 0),
+          currency: item.currency,
+        }));
+      }
+      nextTransactions.sort((left, right) => new Date(right.date || 0).getTime() - new Date(left.date || 0).getTime());
+      setTransactions(nextTransactions);
+      setLoadingTransactions(false);
+    });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [supplierId, supplierSnapshot]);
+
+  const supplier = detail ?? supplierSnapshot ?? null;
+  const isOpen = Boolean(supplierId);
+  const currentStatus = statusInfo(supplier);
+  const currentType = typeInfo(supplier?.type);
+  const TypeIcon = currentType.icon;
+  const totalCommitted = useMemo(() => transactions.reduce((sum, item) => sum + item.amount, 0), [transactions]);
+  const orderCount = transactions.filter((item) => item.type === 'Orden de compra').length;
+  const invoiceCount = transactions.filter((item) => item.type === 'Factura de proveedor').length;
+
+  return (
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="supplier-detail-panel flex w-full flex-col gap-0 border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SupplierTab)} className="flex min-h-0 flex-1 flex-col gap-0">
+          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-6 py-4 backdrop-blur-md" data-tour="supplier-detail-title">
+            <div className="flex items-start gap-4 pr-8">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-base font-black text-primary shadow-inner">
+                {String(supplier?.name || '?').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <SheetTitle className="truncate text-lg font-black uppercase tracking-tight text-foreground">
+                    {supplier?.name || 'Cargando…'}
+                  </SheetTitle>
+                  {supplier && <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-wider', currentStatus.className)}>{currentStatus.label}</Badge>}
+                  <Badge variant="outline" className="border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-wider text-primary">
+                    <TypeIcon className="mr-1 size-3" /> {currentType.label}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
+                  <span className="font-bold">{supplier?.code || supplier?.id?.slice(0, 8) || '—'}</span>
+                  {supplier?.createdAt && <span className="flex items-center gap-1 font-sans text-[11px]"><Calendar className="size-3" /> Registrado {format(new Date(supplier.createdAt), 'dd MMM yyyy', { locale: es })}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2" data-tour="supplier-detail-actions">
+              <PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo consultar proveedor" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-detail" />
+              {canEdit && supplier && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider" onClick={() => onEdit?.(supplier)}><Edit2 className="mr-1.5 size-3.5" /> Editar proveedor</Button>}
+              {supplier && onOpenHistory && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider" onClick={() => onOpenHistory(supplier)}><History className="mr-1.5 size-3.5" /> Historial completo</Button>}
+            </div>
+            <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 font-bold text-xs">
+              <TabsTrigger value="general" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><Truck className="size-3.5" /> General</TabsTrigger>
+              <TabsTrigger value="historial" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><History className="size-3.5" /> Historial ({transactions.length})</TabsTrigger>
+            </TabsList>
+          </SheetHeader>
+
+          <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+            <div className="space-y-6 p-6" data-tour="supplier-detail-data">
+              {error && <Card className="flex items-center gap-3 border-destructive/20 bg-destructive/10 p-4 text-destructive"><Activity className="size-5 shrink-0" /><p className="text-xs font-bold">{error}</p></Card>}
+
+              <TabsContent value="general" className="mt-0 space-y-6 outline-none">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <MetricCard label="Saldo" value={formatConvertedAmount(Number(supplier?.balance || 0), baseCurrency)} icon={CircleDollarSign} accent="text-rose-500" loading={loading} />
+                  <MetricCard label="Órdenes" value={String(orderCount)} icon={ReceiptText} accent="text-primary" loading={loadingTransactions} />
+                  <MetricCard label="Facturas" value={String(invoiceCount)} icon={FileText} accent="text-primary" loading={loadingTransactions} />
+                  <MetricCard label="Estado" value={currentStatus.label} icon={CheckCircle2} accent={currentStatus.label === 'Activo' ? 'text-emerald-500' : 'text-muted-foreground'} loading={loading} />
+                </div>
+
+                <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><MapPin className="size-4 text-primary" /> Contacto y ubicación</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <InfoField label="Correo electrónico" value={supplier?.email || 'Sin correo'} icon={Mail} muted={!supplier?.email} />
+                    <InfoField label="Teléfono" value={supplier?.phone || 'Sin teléfono'} icon={Phone} muted={!supplier?.phone} />
+                    <InfoField label="Persona de contacto" value={supplier?.contactName || 'Sin contacto'} icon={User} muted={!supplier?.contactName} />
+                    <InfoField label="Dirección" value={supplier?.address || 'Sin dirección'} icon={MapPin} muted={!supplier?.address} />
+                    <InfoField label="Ciudad" value={supplier?.city || 'Sin ciudad'} icon={MapPin} muted={!supplier?.city} />
+                    <InfoField label="País" value={supplier?.country || 'Sin país'} icon={MapPin} muted={!supplier?.country} />
+                  </div>
+                </Card>
+
+                <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><FileText className="size-4 text-primary" /> Información comercial</h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <InfoField label="Código interno" value={supplier?.code || '—'} icon={Truck} mono />
+                    <InfoField label="RUC / identificación" value={supplier?.ruc || supplier?.taxId || 'No registrado'} icon={FileText} mono muted={!supplier?.ruc && !supplier?.taxId} />
+                    <InfoField label="Condiciones de pago" value={supplier?.paymentTerms || 'No configuradas'} icon={Clock3} muted={!supplier?.paymentTerms} />
+                    <InfoField label="Total relacionado" value={formatConvertedAmount(totalCommitted, baseCurrency)} icon={CircleDollarSign} mono />
+                  </div>
+                  {supplier?.notes && <div className="border-t border-border/40 pt-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-2 rounded-xl border border-border/30 bg-muted/20 p-3 text-xs text-muted-foreground">{supplier.notes}</p></div>}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="historial" className="mt-0 space-y-4 outline-none">
+                <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><History className="size-4 text-primary" /> Operaciones recientes</h3><p className="mt-1 text-[11px] text-muted-foreground">Órdenes, facturas y gastos relacionados con este proveedor.</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{transactions.length}</Badge></div>
+                  {loadingTransactions ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones registradas para este proveedor.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{item.type}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{item.number}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black">{formatConvertedAmount(item.amount, baseCurrency)}</p><p className="text-[9px] text-muted-foreground">{transactionStatus(item.status)}</p></div></div>)}</div>}
+                </Card>
+              </TabsContent>
+            </div>
+          </ScrollArea>
+        </Tabs>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function MetricCard({ label, value, icon: Icon, accent, loading }: { label: string; value: string; icon: typeof CircleDollarSign; accent: string; loading?: boolean }) {
+  return <Card className="rounded-2xl border-border/50 bg-card p-3 shadow-sm"><div className={cn('mb-2 flex size-8 items-center justify-center rounded-xl bg-muted/40', accent)}><Icon className="size-4" /></div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>{loading ? <Skeleton className="mt-1 h-5 w-20" /> : <p className="mt-1 truncate text-sm font-black tabular-nums text-foreground">{value}</p>}</Card>;
+}
+
+function InfoField({ label, value, icon: Icon, mono = false, muted = false }: { label: string; value: string; icon: typeof Mail; mono?: boolean; muted?: boolean }) {
+  return <div className="min-w-0"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Icon className="size-3" /> {label}</p><p className={cn('mt-1 break-words text-sm font-semibold', mono && 'font-mono text-xs', muted ? 'text-muted-foreground/60' : 'text-foreground')}>{value}</p></div>;
+}

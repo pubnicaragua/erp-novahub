@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { Plus, Search, Filter, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Send, CheckCircle2, XCircle, History, Ban, Download, Upload, Settings2, Check } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Send, CheckCircle2, XCircle, History, Ban, Download, Upload, Settings2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
-import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 import { Textarea } from '../ui/textarea';
@@ -20,6 +19,7 @@ import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRo
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { HRViewTutorial } from './HRViewTutorial';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
@@ -42,7 +42,6 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [newDeptName, setNewDeptName] = useState('');
   const [newPosTitle, setNewPosTitle] = useState('');
   const [newPosDeptId, setNewPosDeptId] = useState('');
-  const [showTutorial, setShowTutorial] = useState(false);
   const [rejectEmpId, setRejectEmpId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [changeLog, setChangeLog] = useState<any[]>([]);
@@ -64,40 +63,6 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [importResult, setImportResult] = useState<EmployeeImportResult | null>(null);
   const [pendingImportDepartmentRow, setPendingImportDepartmentRow] = useState<number | null>(null);
   const [pendingImportPositionRow, setPendingImportPositionRow] = useState<number | null>(null);
-
-const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
-  {
-    target: '[data-tour="empleados-search"]',
-    title: 'Buscar y Filtrar',
-    description: 'Usa la barra de búsqueda para encontrar empleados por nombre o apellido. Puedes filtrar por departamento y estado (activo/inactivo).',
-    tip: 'La búsqueda es en tiempo real, no necesitas presionar Enter.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="empleados-add"]',
-    title: 'Agregar Empleado',
-    description: 'Registra un nuevo empleado con todos sus datos personales, información laboral y documentos asociados.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="empleados-table"]',
-    title: 'Listado de Empleados',
-    description: 'Tabla completa con todos los empleados registrados. Puedes editar, ver detalles o eliminar usando los botones de acción en cada fila.',
-    placement: 'top',
-  },
-  {
-    target: '[data-tour="empleados-columns"]',
-    title: 'Configurar columnas',
-    description: 'Elige qué información quieres mantener visible en la lista y en las tarjetas.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="empleados-layout"]',
-    title: 'Lista o tarjetas',
-    description: 'Cambia entre la tabla y una vista en tarjetas para consultar los empleados de forma más visual.',
-    placement: 'bottom',
-  },
-];
 
   const filteredEmployees = employees.filter((emp: any) => {
     const term = searchTerm.toLowerCase();
@@ -888,7 +853,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
     <div className="space-y-4">
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando los datos y preparando los empleados para revisión." />
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-tour="hr-employees-title">
         <div className="flex items-center gap-2 flex-1">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -924,7 +889,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="hr-employees-actions">
           <Button
             variant="outline"
             size="sm"
@@ -956,9 +921,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               Importar Excel
             </Button>
           )}
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial">
-            <CircleHelp className="size-3.5 mr-1" /> Tutorial
-          </Button>
+          <HRViewTutorial label="Cómo gestionar empleados" targetPrefix="hr-employees" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Busca, filtra y cambia entre lista y tarjetas para revisar el expediente laboral.' }, actions: { description: 'Configura columnas, agrega empleados, importa Excel o abre las acciones de cada registro.' } }} />
         </div>
       </div>
 
@@ -996,6 +959,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         </div>
       )}
 
+      <div data-tour="hr-employees-data" className="space-y-4">
       {/* Table View - Desktop Only */}
       <div data-tour="empleados-table" className={`border rounded-lg overflow-hidden ${viewMode === 'table' ? 'hidden md:block' : 'hidden'}`}>
           <div className="overflow-x-auto">
@@ -1157,6 +1121,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           ))}
         </div>
 
+      </div>
+
       {/* Pagination Controls */}
       {filteredEmployees.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/20">
@@ -1194,11 +1160,12 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-columns-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados.</DialogDescription>
+            <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados. Los cambios se reflejan inmediatamente.</DialogDescription>
+            <HRViewTutorial label="Cómo configurar columnas" targetPrefix="hr-columns" copy={{ data: { description: 'Activa o desactiva los campos que aparecerán en la lista y las tarjetas.' }, actions: { description: 'Cierra el modal; los cambios se aplican inmediatamente.' } }} />
           </DialogHeader>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-tour="hr-columns-data">
             {columnOptions.map((option) => {
               const active = isColumnVisible(option.key);
               return (
@@ -1214,9 +1181,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               );
             })}
           </div>
-          <DialogFooter className="flex-wrap gap-2">
+          <DialogFooter className="flex-wrap gap-2" data-tour="hr-columns-actions">
             <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
-            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1229,7 +1195,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         }
       }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="hr-employee-form-title">
             <DialogTitle className="flex items-center gap-2">{editingId ? <Edit2 className="size-5 text-primary" /> : <Plus className="size-5 text-primary" />} {editingId ? 'Editar empleado' : editingPendingId ? 'Editar empleado pendiente' : 'Agregar empleado'}</DialogTitle>
             <DialogDescription>
               {editingId
@@ -1238,8 +1204,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
                   ? 'Modifica este empleado pendiente antes de insertarlo junto con los demás registros.'
                   : 'Completa la información del empleado. Al guardarlo quedará registrado en la lista de empleados.'}
             </DialogDescription>
+            <HRViewTutorial label={editingId ? 'Cómo editar empleado' : 'Cómo agregar empleado'} targetPrefix="hr-employee-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa la información personal, laboral, salarial, de ubicación y contacto.' }, items: { title: 'Catálogos relacionados', description: 'Selecciona departamento, puesto, contrato, moneda, frecuencia de pago y estado.' }, actions: { description: 'Guarda el empleado o actualiza el registro pendiente.' } }} />
           </DialogHeader>
-          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7" data-tour="hr-employee-form-data">
             <section className="space-y-3">
               <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información personal</p><p className="mt-1 text-xs text-muted-foreground">La cédula se almacena en el expediente del empleado y también se puede importar desde Excel.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1253,7 +1220,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               </div>
             </section>
 
-            <section className="space-y-3 border-t pt-5">
+            <section className="space-y-3 border-t pt-5" data-tour="hr-employee-form-items">
               <div><p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Información laboral</p><p className="mt-1 text-xs text-muted-foreground">El departamento y el puesto deben pertenecer a los catálogos de Recursos Humanos.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2"><Label>Fecha de contratación *</Label><Input type="date" value={newEmployeeForm.hireDate || ''} onChange={(event) => updateNewEmployeeForm('hireDate', event.target.value)} /></div>
@@ -1283,7 +1250,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               </div>
             </section>
           </div>
-          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
+          <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="hr-employee-form-actions">
             <Button
               type="button"
               variant="outline"
@@ -1311,30 +1278,31 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) setImportOpen(false); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar empleados</DialogTitle><DialogDescription>Carga una plantilla Excel, revisa la previsualización y confirma solo las filas válidas. Este proceso puede repetirse cuantas veces sea necesario.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
+          <DialogHeader data-tour="hr-employee-import-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar empleados</DialogTitle><DialogDescription>Carga una plantilla Excel, revisa la previsualización y confirma solo las filas válidas. Este proceso puede repetirse cuantas veces sea necesario.</DialogDescription><HRViewTutorial label="Cómo importar empleados" targetPrefix="hr-employee-import" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Descarga la plantilla, carga el archivo y revisa las filas detectadas.' }, actions: { description: 'Abre la previsualización para corregir incidencias y confirmar las filas válidas.' } }} /></DialogHeader>
+          <div className="space-y-4" data-tour="hr-employee-import-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">Usa nombres o códigos existentes para departamentos y puestos. Si falta alguno, podrás crearlo desde la previsualización. No se importa un vendedor individual: la condición de vendedor proviene del departamento.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadEmployeeTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); }} />{importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos laborales.</li><li>Carga el archivo y abre la previsualización.</li><li>Corrige los errores; crea departamentos o puestos faltantes desde la misma fila.</li><li>Confirma escribiendo IMPORTAR. Las filas válidas se guardan aunque otras tengan incidencias.</li></ol></div>
           </div>
-          <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>
+          <DialogFooter className="flex-wrap" data-tour="hr-employee-import-actions"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importRows.length > 0 && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar empleados</Button>}</DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Modal: Crear Departamento */}
       <Dialog open={showNewDeptModal} onOpenChange={setShowNewDeptModal}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-employee-department-title">
             <DialogTitle className="flex items-center gap-2"><Building2 className="size-5 text-primary" /> Nuevo Departamento</DialogTitle>
             <DialogDescription>Crea un nuevo departamento para asignar empleados</DialogDescription>
+            <HRViewTutorial label="Cómo crear departamento" targetPrefix="hr-employee-department" copy={{ data: { description: 'Escribe el nombre del departamento que agregarás al catálogo.' }, actions: { description: 'Guarda el departamento para asignarlo al empleado.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="hr-employee-department-data">
             <div className="space-y-2">
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre del Departamento</Label>
               <Input value={newDeptName} onChange={e => setNewDeptName(e.target.value)} placeholder="Ej: Marketing, Contabilidad..." className="rounded-xl" />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="hr-employee-department-actions">
             <Button variant="outline" onClick={() => setShowNewDeptModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateDepartment} className="bg-primary text-primary-foreground">Crear Departamento</Button>
           </DialogFooter>
@@ -1344,11 +1312,12 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       {/* Modal: Crear Puesto */}
       <Dialog open={showNewPosModal} onOpenChange={setShowNewPosModal}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-employee-position-title">
             <DialogTitle className="flex items-center gap-2"><Briefcase className="size-5 text-primary" /> Nuevo Puesto</DialogTitle>
             <DialogDescription>Crea un nuevo puesto de trabajo</DialogDescription>
+            <HRViewTutorial label="Cómo crear puesto" targetPrefix="hr-employee-position" copy={{ data: { description: 'Define el título del puesto y el departamento al que pertenece.' }, actions: { description: 'Guarda el puesto para asignarlo al empleado.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="hr-employee-position-data">
             <div className="space-y-2">
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Título del Puesto</Label>
               <Input value={newPosTitle} onChange={e => setNewPosTitle(e.target.value)} placeholder="Ej: Gerente, Analista..." className="rounded-xl" />
@@ -1365,7 +1334,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="hr-employee-position-actions">
             <Button variant="outline" onClick={() => setShowNewPosModal(false)}>Cancelar</Button>
             <Button onClick={handleCreatePosition} className="bg-primary text-primary-foreground">Crear Puesto</Button>
           </DialogFooter>
@@ -1374,13 +1343,14 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
 
       <Dialog open={!!departmentEditorEmployee} onOpenChange={(open) => { if (!open) setDepartmentEditorEmployee(null); }}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-employee-departments-title">
             <DialogTitle className="flex items-center gap-2"><Building2 className="size-5 text-primary" /> Departamentos del empleado</DialogTitle>
             <DialogDescription>
               {departmentEditorEmployee ? `${departmentEditorEmployee.firstName} ${departmentEditorEmployee.lastName} puede pertenecer a uno o varios departamentos. El principal se conserva para RR. HH.` : ''}
             </DialogDescription>
+            <HRViewTutorial label="Cómo asignar departamentos" targetPrefix="hr-employee-departments" copy={{ data: { description: 'Selecciona uno o varios departamentos y define cuál será el principal.' }, actions: { description: 'Guarda los departamentos para actualizar el expediente y sus accesos.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="hr-employee-departments-data">
             <div className="flex flex-wrap gap-2">
               {departments.map((department: any) => {
                 const selected = selectedDepartmentIds.includes(department.id);
@@ -1400,7 +1370,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
             </div>
             <p className="text-xs text-muted-foreground">Si el empleado está vinculado a un usuario, los roles configurados para todos sus departamentos se sumarán a sus accesos.</p>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="hr-employee-departments-actions">
             <Button variant="outline" onClick={() => setDepartmentEditorEmployee(null)}>Cancelar</Button>
             <Button onClick={() => void saveEmployeeDepartments()} disabled={savingDepartments || !selectedDepartmentIds.length}>{savingDepartments ? 'Guardando...' : 'Guardar departamentos'}</Button>
           </DialogFooter>
@@ -1419,9 +1389,9 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       />
       <Dialog open={rejectEmpId !== null} onOpenChange={(o) => { if (!o) { setRejectEmpId(null); setRejectReason(''); } }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Rechazar Empleado</DialogTitle><DialogDescription>Indique el motivo del rechazo</DialogDescription></DialogHeader>
-          <Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Motivo del rechazo..." className="min-h-[100px]" />
-          <DialogFooter>
+          <DialogHeader data-tour="hr-employee-reject-title"><DialogTitle>Rechazar Empleado</DialogTitle><DialogDescription>Indique el motivo del rechazo</DialogDescription><HRViewTutorial label="Cómo rechazar empleado" targetPrefix="hr-employee-reject" copy={{ data: { description: 'Registra el motivo que quedará asociado a la decisión.' }, actions: { description: 'Confirma el rechazo cuando la razón esté completa.' } }} /></DialogHeader>
+          <div data-tour="hr-employee-reject-data"><Textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Motivo del rechazo..." className="min-h-[100px]" /></div>
+          <DialogFooter data-tour="hr-employee-reject-actions">
             <Button variant="outline" onClick={() => { setRejectEmpId(null); setRejectReason(''); }}>Cancelar</Button>
             <Button variant="destructive" onClick={handleReject}>Rechazar</Button>
           </DialogFooter>
@@ -1429,8 +1399,8 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
       </Dialog>
       <Dialog open={showChangeLog} onOpenChange={setShowChangeLog}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><History className="size-5 text-primary" /> Historial de Cambios</DialogTitle></DialogHeader>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          <DialogHeader data-tour="hr-employee-log-title"><DialogTitle className="flex items-center gap-2"><History className="size-5 text-primary" /> Historial de Cambios</DialogTitle><HRViewTutorial label="Cómo consultar historial" targetPrefix="hr-employee-log" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa los valores anteriores y nuevos de cada campo modificado.' } }} /></DialogHeader>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto" data-tour="hr-employee-log-data">
             {loadingChangeLog ? <p className="text-xs text-muted-foreground">Cargando...</p> : changeLog.length === 0 ? <p className="text-xs text-muted-foreground">Sin cambios registrados</p> : changeLog.map((log: any, i: number) => (
               <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 text-xs">
                 <History className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
@@ -1451,7 +1421,6 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         onManageDepartments={openDepartmentEditor}
         canEdit={canPerform('HR_EMPLOYEES', 'edit')}
       />
-      {showTutorial && <GuidedTour steps={EMPLEADOS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Empleados" />}
     </div>
   );
 }

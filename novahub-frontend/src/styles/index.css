@@ -609,6 +609,12 @@
   .purchases-module .purchase-item-row[data-item-layout="credit"] > div:nth-child(4)::before { content: "Total y acciones"; }
 }
 
+@media (max-width: 639px) {
+  .purchases-module .purchase-item-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Scrollbar estable: siempre visible y sin desplazar el contenido al aparecer. */
 .scrollbar-overlay {
   scrollbar-width: thin;

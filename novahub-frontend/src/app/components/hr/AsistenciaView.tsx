@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, LogIn, LogOut, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Upload, FileDown, Info, UserCheck, UserX, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
-import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
@@ -14,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { cn } from '../ui/utils';
+import { HRViewTutorial } from './HRViewTutorial';
 
 const TEMPLATE_COLUMNS = [
   { key: 'codigo_empleado', label: 'CÓDIGO EMPLEADO', example: 'EMP-001', rule: 'Obligatorio. Código o nombre completo del empleado tal como aparece en el módulo Empleados.' },
@@ -53,7 +53,6 @@ const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
 export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const { canPerform } = useAuth();
   const [selectedEmployee, setSelectedEmployee] = useState('');
-  const [showTutorial, setShowTutorial] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -61,27 +60,6 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   const [quickFilter, setQuickFilter] = useState<{ status?: string; today?: boolean } | null>(null);
-
-const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
-  {
-    target: '[data-tour="asistencia-clock-panel"]',
-    title: 'Registrar Entrada/Salida',
-    description: 'Selecciona un empleado y usa los botones para registrar su entrada o salida. El sistema lleva el control de horarios automáticamente.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="asistencia-employee-selector"]',
-    title: 'Selector de Empleado',
-    description: 'Busca y selecciona el empleado al que deseas registrar la asistencia. Puedes buscar por nombre o código de empleado.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="asistencia-records-table"]',
-    title: 'Registros de Asistencia',
-    description: 'Tabla completa con todos los registros de asistencia. Incluye fecha, hora de entrada/salida, horas trabajadas, horas extra, estado y ubicación.',
-    placement: 'top',
-  },
-];
 
   const handleAttendanceFileChange = async (file: File | undefined) => {
     setImportFile(file || null);
@@ -274,7 +252,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
   return (
     <div className="space-y-4">
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="hr-attendance-title">
         <button
           onClick={() => toggleQuickFilter('PRESENT')}
           className={cn(
@@ -326,7 +304,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
       </div>
 
       {/* Clock In/Out Panel */}
-      <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="asistencia-clock-panel">
+      <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-attendance-data">
         <h3 className="text-lg font-semibold mb-4 text-primary">Registrar Asistencia</h3>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="flex-1 w-full">
@@ -343,7 +321,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
               data-tour="asistencia-employee-selector"
             />
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto" data-tour="hr-attendance-actions">
             {canPerform('HR_ATTENDANCE', 'create') && (
               <>
                 <Button onClick={handleClockIn} className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -361,15 +339,23 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
                 <Upload className="size-3.5 mr-1" /> Importar
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial" className="w-full sm:w-auto">
-              <CircleHelp className="size-3.5 mr-1" /> Tutorial
-            </Button>
+            <HRViewTutorial
+              label="Cómo registrar asistencia"
+              targetPrefix="hr-attendance"
+              stepKeys={['title', 'data', 'items', 'actions']}
+              copy={{
+                data: { description: 'Selecciona al empleado y registra su entrada o salida desde este panel.' },
+                items: { title: 'Registros de asistencia', description: 'Consulta fechas, horas, estado, ubicación y filtros de los registros existentes.' },
+                actions: { description: 'Importa una plantilla o registra la entrada y salida cuando tengas el empleado seleccionado.' },
+              }}
+              className="w-full sm:w-auto"
+            />
           </div>
         </div>
       </div>
 
       {/* Attendance Records */}
-      <div data-tour="asistencia-records-table" className="border rounded-lg overflow-hidden flex flex-col">
+      <div data-tour="hr-attendance-items" className="border rounded-lg overflow-hidden flex flex-col">
         <div className="bg-muted/50 px-4 py-3 border-b">
           <h3 className="font-semibold">Registros de Asistencia</h3>
         </div>
@@ -531,17 +517,16 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
           <p className="text-muted-foreground">No hay registros de asistencia</p>
         </div>
       )}
-      {showTutorial && <GuidedTour steps={ASISTENCIA_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Asistencia" />}
-
       <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-attendance-import-title">
             <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar asistencia</DialogTitle>
             <DialogDescription>
               Sube un archivo Excel (.xlsx) para registrar asistencia masivamente.
             </DialogDescription>
+            <HRViewTutorial label="Cómo importar asistencia" targetPrefix="hr-attendance-import" copy={{ data: { description: 'Descarga la plantilla, carga el archivo y revisa la prevalidación de filas.' }, actions: { description: 'Confirma la importación para registrar los movimientos válidos.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="hr-attendance-import-data">
             <div className="rounded-xl border border-border/60 bg-muted/20">
               <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-2">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><Info className="size-3.5" /> Formato esperado del archivo</p>
@@ -597,7 +582,7 @@ const ASISTENCIA_TOUR_STEPS: GuidedTourStep[] = [
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="hr-attendance-import-actions">
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
             <Button onClick={handleImportAttendance} disabled={importing || !importFile} className="gap-2">
               <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar asistencia'}

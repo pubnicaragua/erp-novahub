@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
+import { HRViewTutorial } from './HRViewTutorial';
 import { cn } from '../ui/utils';
 
 const BENEFIT_TYPE_COLORS: Record<string, string> = {
@@ -164,7 +165,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-benefits-title">
         <StatCard
           label="Beneficios"
           value={totalBenefits}
@@ -204,7 +205,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-benefits-actions">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -237,10 +238,11 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
             <Plus className="size-4" /> Nuevo Beneficio
           </Button>
         )}
+        <HRViewTutorial label="Cómo gestionar beneficios" targetPrefix="hr-benefits" copy={{ data: { title: 'Beneficios y asignaciones', description: 'Filtra beneficios por tipo y estado, revisa costos mensuales y consulta los empleados asignados.' }, actions: { description: 'Crea, edita o elimina beneficios según tus permisos.' } }} />
       </div>
 
       {/* Benefits Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" data-tour="hr-benefits-data">
         {filteredBenefits.map((benefit: any) => {
           const assignedCount = benefit.employeeBenefits?.length ?? benefit.assignments?.length ?? benefit._count?.benefitAssignments ?? 0;
           const typeColor = BENEFIT_TYPE_COLORS[benefit.type] || BENEFIT_TYPE_COLORS.OTHER;
@@ -330,13 +332,14 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       {/* New / Edit Dialog */}
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) { setShowForm(false); setEditingId(null); } }}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-benefit-form-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <HandHeart className="size-5 text-primary" />
               {editingId ? 'Editar Beneficio' : 'Nuevo Beneficio'}
             </DialogTitle>
+            <HRViewTutorial label={editingId ? 'Cómo editar beneficio' : 'Cómo crear beneficio'} targetPrefix="hr-benefit-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa nombre, tipo, costo, moneda, proveedor, descripción y estado.' }, items: { title: 'Empleados asignados', description: 'Marca los empleados que recibirán este beneficio.' }, actions: { description: 'Guarda el beneficio y sus asignaciones.' } }} />
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2" data-tour="hr-benefit-form-data">
             <div className="space-y-1 md:col-span-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</Label>
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Seguro Médico Premium" className="rounded-xl h-10" />
@@ -395,7 +398,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                 <span className="text-xs text-muted-foreground">{form.isActive === false ? 'Inactivo' : 'Activo'}</span>
               </div>
             </div>
-            <div className="md:col-span-3 space-y-1">
+            <div className="md:col-span-3 space-y-1" data-tour="hr-benefit-form-items">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Empleados Asignados ({form.employeeIds?.length || 0})
               </Label>
@@ -422,7 +425,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2" data-tour="hr-benefit-form-actions">
             <DialogClose asChild>
               <Button variant="outline" className="rounded-xl">Cancelar</Button>
             </DialogClose>

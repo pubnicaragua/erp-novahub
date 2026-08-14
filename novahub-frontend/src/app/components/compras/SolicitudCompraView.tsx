@@ -36,11 +36,11 @@ const STATUS_STYLES: Record<string, string> = {
   IN_REVIEW: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   IN_QUOTATION: 'bg-primary/10 text-primary',
   PENDING_APPROVAL: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  APPROVED: 'bg-primary/10 text-primary',
+  APPROVED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   REJECTED: 'bg-destructive/10 text-destructive',
   RETURNED_FOR_CORRECTION: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  CONVERTED_TO_ORDER: 'bg-primary/10 text-primary',
-  CLOSED: 'bg-muted/20 text-muted-foreground',
+  CONVERTED_TO_ORDER: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  CLOSED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   CANCELLED: 'bg-destructive/10 text-destructive',
 };
 
@@ -574,7 +574,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
             const requestStatus = normalizeRequestStatus(detailOpen.status);
             return (
               <>
-                <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
+                <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchases-request-detail-title">
                   <div className="flex items-start gap-3">
                     <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
                       <ClipboardList className="size-5" />
@@ -599,9 +599,10 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                       </Badge>
                     </div>
                   )}
+                  <PurchaseViewTutorial view="requests" context="form" labelOverride="Cómo consultar solicitud" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-request-detail" />
                 </SheetHeader>
 
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" data-tour="purchases-request-detail-data">
                   <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Solicitante</span><p className="mt-1 break-words font-medium">{detailOpen.requestedBy?.firstName} {detailOpen.requestedBy?.lastName}</p></div>
                     <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Bodega</span><p className="mt-1 break-words font-medium">{detailOpen.warehouse?.name || '—'}</p></div>
@@ -674,7 +675,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                   )}
                 </div>
 
-                <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6">
+                <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchases-request-detail-actions">
                   <div className="w-full">
                     {canExportRequests && <Button variant="outline" className="h-10 w-full gap-2" onClick={() => void handleDownloadRequestPdf(detailOpen)}>
                       <FileDown className="size-4" /> Descargar PDF

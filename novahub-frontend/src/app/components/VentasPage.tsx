@@ -37,7 +37,7 @@ import { hrService } from '../services/hr.service';
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
 import { EstimacionesView } from './ventas/EstimacionesView';
-import { OrdenesVentaView } from './ventas/OrdenesVentaView';
+import { OrdenesVentaView, type OrderStatusFilter } from './ventas/OrdenesVentaView';
 import { FacturasView } from './ventas/FacturasView';
 import { FacturasRecurrentesView } from './ventas/FacturasRecurrentesView';
 import { PagosRecibidosView } from './ventas/PagosRecibidosView';
@@ -114,6 +114,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const tenantKey = user?.tenantId || 'anonymous';
   const toArray = (response: any) => Array.isArray(response) ? response : (response?.data || []);
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<OrderStatusFilter>('ALL');
   const pageFor = (section: string) => paginationState[section] || { page: 1, pageSize: 50 as SalesPageSize };
   const updatePage = (section: string, page: number) => setPaginationState((current) => ({
     ...current,
@@ -181,6 +182,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customersPage = pageFor('clientes');
   const estimatesPage = pageFor('estimaciones');
   const ordersPage = pageFor('ordenes-venta');
+  const ordersStatusParam = ordersStatusFilter === 'ALL' ? undefined : ordersStatusFilter;
   const invoicesPage = pageFor('facturas');
   const paymentsPage = pageFor('pagos-recibidos');
   const recurringPage = pageFor('facturas-recurrentes');
@@ -219,8 +221,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     placeholderData: keepPreviousData,
   });
   const ordersQuery = useQuery({
-    queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo, selectedBranchId],
-    queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), ...ordersDates, ...branchFilter }, signal),
+    queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo, selectedBranchId, ordersStatusParam],
+    queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), status: ordersStatusParam, ...ordersDates, ...branchFilter }, signal),
     enabled: activeSection === 'ordenes-venta',
     placeholderData: keepPreviousData,
   });
@@ -500,7 +502,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <EstimacionesView data={filteredData.estimaciones} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'ordenes-venta' && (
-                <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} salesAlert={salesAlert || undefined} />
+                <OrdenesVentaView data={filteredData.ordenes} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} statusFilter={ordersStatusFilter} onStatusFilterChange={(value) => { setOrdersStatusFilter(value); updatePage('ordenes-venta', 1); }} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'facturas' && (
                 <FacturasView 

@@ -7,6 +7,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
+import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { Input } from '../ui/input';
 import { FileDown, FileText, Loader2, Plus, Trash2 } from 'lucide-react';
 import { ScrollArea } from '../ui/scroll-area';
@@ -196,14 +197,17 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl xl:max-w-5xl w-full max-h-[90vh] flex flex-col">
-        <DialogHeader>
+        <DialogHeader data-tour="supplier-history-title">
           <DialogTitle className="text-xl">Historial del Proveedor</DialogTitle>
           <DialogDescription>
             {supplier?.name} | {supplier?.code || 'Sin código'}
           </DialogDescription>
+          <div data-tour="supplier-history-actions">
+            <PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo consultar historial" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-history" />
+          </div>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={setTab} data-tour="supplier-history-data">
           <TabsList className="w-fit mb-4">
             <TabsTrigger value="historial">Historial</TabsTrigger>
             <TabsTrigger value="precios">Precios ({prices.length})</TabsTrigger>

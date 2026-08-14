@@ -7,7 +7,6 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Combobox } from '../ui/Combobox';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -20,9 +19,8 @@ import { SucursalesView } from './SucursalesView';
 import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
-import { contabilidadService } from '../../services/contabilidad.service';
 import { useAuth } from '../../contexts/AuthContext';
-
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
@@ -34,7 +32,6 @@ interface EditingWarehouse {
   location: string;
   type: string;
   parentId: string | null;
-  inventoryAccountId?: string | null;
   isNew?: boolean;
 }
 
@@ -73,20 +70,6 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-const flattenAccounts = (list: any[]): any[] => {
-  const result: any[] = [];
-  const recurse = (items: any[]) => {
-    for (const item of items) {
-      result.push(item);
-      if (item.children && Array.isArray(item.children) && item.children.length > 0) {
-        recurse(item.children);
-      }
-    }
-  };
-  recurse(list);
-  return result;
-};
-
 export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const { canPerform } = useAuth();
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
@@ -100,9 +83,9 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const flatAccounts = flattenAccounts(accounts);
   const cameFromSetupRef = useRef(false);
+  const [stockByWarehouse, setStockByWarehouse] = useState<Record<string, number>>({});
+  const [detailWarehouse, setDetailWarehouse] = useState<any | null>(null);
 
   // Estados de Cajas
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -181,15 +164,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const loadCatalogs = async () => {
       try {
         setCajasLoading(true);
-        const [cajas, sucursales, chart] = await Promise.all([
+        const [cajas, sucursales] = await Promise.all([
           cajaService.getRegisters(true, controller.signal),
           api.get('/sucursales', { signal: controller.signal }),
-          contabilidadService.getChartOfAccounts(false, controller.signal),
         ]);
         setCajasList(Array.isArray(cajas) ? cajas : []);
         const branches: any = sucursales;
         setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
-        setAccounts((chart as any)?.data || chart || []);
       } catch (error: any) {
         if (error?.name !== 'AbortError' && !controller.signal.aborted && error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
           toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
@@ -201,6 +182,32 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     void loadCatalogs();
     return () => controller.abort();
   }, []);
+
+  const refreshStock = async () => {
+    try {
+      const res: any = await inventoryService.getAllStock();
+      const levels = Array.isArray(res) ? res : (res?.data || []);
+      const byWarehouse: Record<string, Set<string>> = {};
+      for (const level of levels) {
+        const warehouseId = level.warehouseId || level.warehouse?.id;
+        const productId = level.productId || level.product?.id;
+        if (!warehouseId || !productId) continue;
+        if (!byWarehouse[warehouseId]) byWarehouse[warehouseId] = new Set();
+        byWarehouse[warehouseId].add(productId);
+      }
+      const counts: Record<string, number> = {};
+      for (const [warehouseId, productIds] of Object.entries(byWarehouse)) {
+        counts[warehouseId] = productIds.size;
+      }
+      setStockByWarehouse(counts);
+    } catch (e) {
+      console.error('Error al cargar stock de almacenes:', e);
+    }
+  };
+
+  useEffect(() => {
+    void refreshStock();
+  }, [warehouses]);
 
   const handleAddNewRow = () => {
     if (!canCreateWarehouse) return;
@@ -275,7 +282,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén creado');
       } else {
@@ -284,7 +290,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           location: warehouse.location,
           type: warehouse.type,
           parentId: warehouse.parentId,
-          inventoryAccountId: warehouse.inventoryAccountId || null,
         } as any);
         toast.success('Almacén actualizado');
       }
@@ -335,7 +340,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   const getStockCount = (wh: any) => {
-    return wh.stockLevels?.reduce((acc: number, sl: any) => acc + Number(sl.quantity || 0), 0) || 0;
+    return stockByWarehouse[wh?.id] || 0;
   };
 
   const renderEditableRow = (warehouse: EditingWarehouse) => {
@@ -397,33 +402,30 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </Select>
         </TableCell>
         <TableCell>
-          <Combobox
-            value={warehouse.inventoryAccountId || ''}
-            onChange={(v) => handleUpdateField(warehouse.id, 'inventoryAccountId', v || null)}
-            options={flatAccounts.map((a: any) => {
-              const type = String(a.type || '').toUpperCase();
-              const typeLabel = {
-                ASSET: 'Activo',
-                LIABILITY: 'Pasivo',
-                EQUITY: 'Capital',
-                INCOME: 'Ingreso',
-                EXPENSE: 'Gasto',
-              }[type] || type || 'Sin tipo';
-              const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
-              const isUsable = a.isActive !== false;
-              const usabilityLabel = isUsable ? '' : ' · No acepta registros';
-              return {
-                label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
-                value: a.id,
-                description: a.code,
-                disabled: !isUsable
-              };
-            })}
-            placeholder="Seleccionar cuenta..."
-            searchPlaceholder="Buscar por código o nombre..."
-            className="w-full max-w-[280px]"
-            disabled={isSaving}
-          />
+          {warehouse.isNew ? (
+            <span className="text-[10px] text-muted-foreground">Se asigna al vincular con sucursales</span>
+          ) : (
+            (() => {
+              const live = warehouses.find((w: any) => w.id === warehouse.id);
+              return live?.inventoryAccount ? (
+                <Badge variant="outline" className="text-[9px] font-mono">{live.inventoryAccount.code} - {live.inventoryAccount.name}</Badge>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">Sin asignar</span>
+              );
+            })()
+          )}
+        </TableCell>
+        <TableCell>
+          <span className="text-[10px] text-muted-foreground">-</span>
+        </TableCell>
+        <TableCell className="text-right">
+          {warehouse.isNew ? (
+            <span className="text-[10px] font-medium tabular-nums text-muted-foreground">0</span>
+          ) : (
+            <span className="text-[10px] font-medium tabular-nums">
+              {getStockCount(warehouses.find((w: any) => w.id === warehouse.id))}
+            </span>
+          )}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
@@ -471,35 +473,21 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacén matriz</p><Select value={draft.parentId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'parentId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin padre" /></SelectTrigger><SelectContent><SelectItem value="none">Sin padre</SelectItem>{warehouses.filter((item) => item.id !== draft.id).map((item: any) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
-             <div className="space-y-1">
-               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
-               <Combobox
-                 value={draft.inventoryAccountId || ''}
-                 onChange={(value) => handleUpdateField(draft.id, 'inventoryAccountId', value || null)}
-                 options={flatAccounts.map((a: any) => {
-                   const type = String(a.type || '').toUpperCase();
-                   const typeLabel = {
-                     ASSET: 'Activo',
-                     LIABILITY: 'Pasivo',
-                     EQUITY: 'Capital',
-                     INCOME: 'Ingreso',
-                     EXPENSE: 'Gasto',
-                   }[type] || type || 'Sin tipo';
-                   const statusLabel = a.isActive === false ? 'Inactiva' : 'Activa';
-                   const isUsable = a.isActive !== false;
-                   const usabilityLabel = isUsable ? '' : ' · No acepta registros';
-                   return {
-                     label: `${a.code} · ${a.name} · ${typeLabel} · ${statusLabel}${usabilityLabel}`,
-                     value: a.id,
-                     description: a.code,
-                     disabled: !isUsable
-                   };
-                 })}
-                 placeholder="Seleccionar cuenta..."
-                 searchPlaceholder="Buscar por código o nombre..."
-                 disabled={isSaving}
-               />
-             </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
+              {draft.isNew ? (
+                <p className="text-xs text-muted-foreground">Se asigna al vincular con sucursales</p>
+              ) : (
+                (() => {
+                  const live = warehouses.find((w: any) => w.id === draft.id);
+                  return live?.inventoryAccount ? (
+                    <p className="truncate text-xs font-medium font-mono">{live.inventoryAccount.code} - {live.inventoryAccount.name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sin asignar</p>
+                  );
+                })()
+              )}
+            </div>
           </div>
         </Card>
       );
@@ -508,7 +496,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const stockCount = getStockCount(warehouse);
     const assignedSucursales = warehouse.branches || [];
     return (
-      <Card key={warehouse.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm" onDoubleClick={() => handleEditRow(warehouse)}>
+      <Card key={warehouse.id} className={`min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm cursor-pointer ${detailWarehouse?.id === warehouse.id ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/30' : ''}`} onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; setDetailWarehouse(warehouse); }}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Warehouse className="size-5" /></div>
@@ -542,7 +530,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
         <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
-            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+            <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar almacenes
           </Button>
 
           {canCreateWarehouse && <Button 
@@ -557,6 +545,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
       </div>
 
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailWarehouse ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+        <div className="min-w-0">
       <div className="space-y-3 lg:hidden" data-tour="almacenes-table">
         {Array.from(editingRows.values()).filter((warehouse) => warehouse.isNew).map(renderMobileWarehouseCard)}
         {warehouses.map(renderMobileWarehouseCard)}
@@ -602,8 +592,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 return (
                   <TableRow 
                     key={wh.id} 
-                    className="group hover:bg-muted/30 cursor-pointer"
-                    onDoubleClick={() => handleEditRow(wh)}
+                    className={`group hover:bg-muted/30 cursor-pointer ${detailWarehouse?.id === wh.id ? 'bg-muted/40 ring-1 ring-border' : ''}`}
+                    onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; setDetailWarehouse(wh); }}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -668,7 +658,85 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       </div>
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        Doble clic en una fila para editar · Enter para guardar · Esc para cancelar
+        Haz clic en una fila para ver el detalle · Usa los botones de la fila para editar o eliminar
+      </div>
+        </div>
+        {detailWarehouse && (
+          <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Warehouse className="size-4 text-muted-foreground" />
+                  <h4 className="text-sm font-bold">Detalle de Almacén</h4>
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => setDetailWarehouse(null)} title="Cerrar detalle" aria-label="Cerrar detalle">
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+              <div className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5">
+                <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Almacén seleccionado</p>
+                      <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Almacén'}</Badge>
+                  </div>
+                </div>
+                <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ubicación</p>
+                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.location || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacén matriz</p>
+                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.parent?.name || '—'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuentas contables por sucursal</p>
+                  {(detailWarehouse.branches || []).length > 0 ? (
+                    <div className="space-y-1.5">
+                      {(detailWarehouse.branches || []).map((link: any) => {
+                        const account = link.inventoryAccount || detailWarehouse.inventoryAccount;
+                        const status = link.accountingStatus || detailWarehouse.accountingStatus;
+                        return (
+                          <div key={link.id} className="flex items-start justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold">{link.name}</p>
+                              {account ? (
+                                <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{account.code} - {account.name}</p>
+                              ) : (
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">Sin cuenta asignada</p>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              {link.isPrimary && <Badge variant="outline" className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Primaria</Badge>}
+                              {status && status !== 'VINCULADO' && (
+                                <Badge variant="outline" className={`text-[9px] ${status === 'PENDIENTE' ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                                  {status === 'PENDIENTE' ? 'Pendiente' : status === 'CUENTA_INACTIVA' ? 'Cuenta inactiva' : status === 'CUENTA_NO_POSTEABLE' ? 'No posteable' : status}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
+                      <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.inventoryAccount?.code ? `${detailWarehouse.inventoryAccount.code} - ${detailWarehouse.inventoryAccount.name}` : 'Sin asignar'}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos con stock</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums">{getStockCount(detailWarehouse)}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
       <ConfirmDialog
         open={pendingDeleteId !== null}
@@ -694,11 +762,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
       <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between">
+        <DialogHeader className="flex flex-row items-center justify-between" data-tour="inventory-pos-manager-title">
           <div>
             <DialogTitle className="flex items-center gap-2 text-lg font-black"><Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)</DialogTitle>
             <DialogDescription>Crea y gestiona las cajas para el sistema POS</DialogDescription>
           </div>
+          <InventoryViewTutorial label="Cómo gestionar cajas" targetPrefix="inventory-pos-manager" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Consulta las cajas existentes, sus sucursales, ubicación y estado.' }, actions: { description: 'Crea una caja nueva o abre sus accesos y edición.' } }} />
           {canManagePos && <Button onClick={() => {
             setIsManageDialogOpen(false);
             setCajaForm({ isActive: true });
@@ -707,7 +776,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Plus className="size-4" /> Nueva Caja
           </Button>}
         </DialogHeader>
-        <div className="py-4 overflow-y-auto">
+        <div className="py-4 overflow-y-auto" data-tour="inventory-pos-manager-data">
           {cajasLoading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
           ) : (
@@ -765,7 +834,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-pos-manager-actions">
           <Button variant="outline" onClick={() => setIsManageDialogOpen(false)}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
@@ -777,11 +846,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       if (!open) setIsManageDialogOpen(true);
     }}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-cash-register-title">
           <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
           <DialogDescription>Completa la información de la caja.</DialogDescription>
+          <InventoryViewTutorial label={cajaForm.id ? 'Cómo editar caja' : 'Cómo crear caja'} targetPrefix="inventory-cash-register" copy={{ data: { description: 'Completa código, nombre, sucursal, ubicación y estado de la caja.' }, actions: { description: 'Guarda la caja para que esté disponible en el sistema POS.' } }} />
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4" data-tour="inventory-cash-register-data">
           <div className="space-y-2">
             <Label>Código *</Label>
             <Input value={cajaForm.code || ''} onChange={e => setCajaForm({...cajaForm, code: e.target.value})} placeholder="Ej. CJ-01" />
@@ -810,7 +880,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-cash-register-actions">
           <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
           {canManagePos && <Button onClick={async () => {
             if (!canManagePos) return;
@@ -840,11 +910,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       if (!open) setIsManageDialogOpen(true);
     }}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-cash-access-title">
           <DialogTitle>Accesos - {accessCaja?.name}</DialogTitle>
           <DialogDescription>Selecciona qué usuarios pueden usar esta caja</DialogDescription>
+          <InventoryViewTutorial label="Cómo asignar accesos" targetPrefix="inventory-cash-access" copy={{ data: { description: 'Activa o desactiva los usuarios autorizados para utilizar esta caja.' }, actions: { description: 'Guarda los accesos para aplicar los permisos seleccionados.' } }} />
         </DialogHeader>
-        <div className="py-4">
+        <div className="py-4" data-tour="inventory-cash-access-data">
           {accessLoading ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="size-6 animate-spin text-primary" /></div>
           ) : (
@@ -875,7 +946,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-cash-access-actions">
           <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
           {canManagePos && <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>}
         </DialogFooter>

@@ -7,6 +7,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { UserPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customersService } from '@/app/services/ventas.service';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface QuickAddCustomerModalProps {
   open: boolean;
@@ -69,16 +70,17 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSave}>
-          <DialogHeader>
+          <DialogHeader data-tour="sales-form-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
               <UserPlus className="size-5 text-primary" /> Agregar Cliente
             </DialogTitle>
             <DialogDescription>
               Registra un nuevo cliente para esta facturación. Solo el nombre es obligatorio.
             </DialogDescription>
+            <SalesViewTutorial view="customers" context="form" />
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4" data-tour="sales-form-data">
             <div className="space-y-1.5">
               <Label htmlFor="name" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                 Nombre / Empresa *
@@ -211,7 +213,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
               </div>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5" data-tour="sales-form-summary">
               <Label htmlFor="notes" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                 Notas (Opcional)
               </Label>
@@ -220,13 +222,13 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                 value={form.notes}
                 onChange={e => handleUpdate('notes', e.target.value)}
                 placeholder="Observaciones adicionales"
-                className="rounded-xl resize-none"
+                className="resize-none rounded-xl border border-border bg-background"
                 disabled={isSaving}
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter data-tour="sales-form-actions">
             <Button
               type="button"
               variant="outline"

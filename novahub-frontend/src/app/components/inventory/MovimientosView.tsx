@@ -162,7 +162,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             </SelectContent>
           </Select>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Tutorial</Button><Button variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
+        <div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Cómo consultar movimientos</Button><Button variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
       </div>
 
       <div className="space-y-3 lg:hidden" data-tour="movements-table">
