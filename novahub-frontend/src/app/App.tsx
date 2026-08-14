@@ -9,6 +9,7 @@ import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { SessionClosedPage } from './components/auth/SessionClosedPage';
+import { SessionMonitor } from './components/auth/SessionMonitor';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
@@ -311,6 +312,7 @@ function AppContent() {
         />
       )}
       <DashboardLayout />
+      <SessionMonitor />
       <Toaster position="top-right" />
     </>
   );
