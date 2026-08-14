@@ -1847,8 +1847,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   </div>
 
                   {/* Fields grid */}
-                  <div className="purchase-item-fields grid min-w-0 grid-cols-12 items-end gap-3">
-                    <div className="col-span-2 min-w-0">
+                  <div className="purchase-item-fields grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Código</p>
                       <Input
                        disabled={!canEditOrderItems}
@@ -1858,7 +1858,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         placeholder="Código"
                       />
                     </div>
-                    <div className="col-span-3 min-w-0">
+                    <div className="col-span-1 min-w-0 xl:col-span-3">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Nombre</p>
                       <Input
                         disabled={isItemMasterFieldDisabled(item)}
@@ -1868,7 +1868,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         placeholder={localDoc.purchaseType === 'SERVICE' ? 'Servicio' : 'Producto'}
                       />
                     </div>
-                    <div className="col-span-2 min-w-0">
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Categoría</p>
                       <select
                         disabled={isItemMasterFieldDisabled(item)}
@@ -1886,7 +1886,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         ))}
                       </select>
                     </div>
-                    <div className="col-span-1 min-w-0">
+                    <div className="col-span-1 min-w-0 xl:col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Stock actual</p>
                       <div className="h-8 flex items-center">
                         {item.currentStock !== undefined ? (
@@ -1896,7 +1896,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         )}
                       </div>
                     </div>
-                    <div className="col-span-2 min-w-0">
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Cant.</p>
                       <Input
                         disabled={!canEditOrderItems}
@@ -1910,7 +1910,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                         placeholder="0"
                       />
                     </div>
-                    <div className="col-span-2 min-w-0">
+                    <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Precio</p>
                       <Input
                         disabled={!canEditOrderItems}

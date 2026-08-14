@@ -141,6 +141,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [isCreating, setIsCreating] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
@@ -348,6 +349,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setPaymentMethod('CASH');
     setPaymentAccountId('');
     setPaymentReference('');
+    setPaymentDialogOpen(true);
+  };
+
+  const closeInvoicePayment = () => {
+    if (paymentLoading) return;
+    // Conserva el contenido durante la animación de salida. Los campos se
+    // reinicializan al abrir el siguiente pago para evitar un modal fantasma.
+    setPaymentDialogOpen(false);
   };
 
   const handleInvoicePayment = async () => {
@@ -400,7 +409,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
       const remaining = Math.max(0, maxAmount - amount);
       toast.success(remaining > 0.01 ? `Pago parcial registrado. Saldo restante: ${formatInvoiceAmount(remaining, invoice.currency, invoice.exchangeRate)}` : `Factura ${invoice.number} pagada`, { id: payToastId });
-      setPaymentInvoice(null);
+      setPaymentDialogOpen(false);
       await onRefresh();
     } catch (e: any) {
       console.error('Error al pagar factura:', e);
@@ -850,22 +859,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     placeholder="Seleccionar Cliente"
                     disabled={isInvoiceLocked}
                   />
-                  {(() => {
-                    const selectedCustomer = customers.find((customer) => customer.id === localDoc?.customerId);
-                    if (!selectedCustomer) return null;
-                    const creditLimit = Number(selectedCustomer.creditLimit || 0);
-                    const currentDebt = Math.max(0, -Number(selectedCustomer.balance || 0));
-                    const projectedDebt = currentDebt + Number(localDoc?.total || 0);
-                    return (
-                      <div className={cn('mt-2 rounded-xl border px-3 py-2 text-[10px] font-bold', creditLimit <= 0 || projectedDebt > creditLimit ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}>
-                        {creditLimit <= 0 ? (
-                          <span className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 size-3 shrink-0" />La emisión pendiente requiere que el cliente tenga límite de crédito configurado.</span>
-                        ) : (
-                          <span>Límite: {formatConvertedAmount(creditLimit, baseCurrency)} · Deuda actual: {formatConvertedAmount(currentDebt, baseCurrency)} · Proyección: {formatConvertedAmount(projectedDebt, baseCurrency)}{projectedDebt > creditLimit ? ' · excede el límite' : ''}</span>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <p className="mt-2 text-[10px] font-bold text-muted-foreground">
+                    El límite de crédito se valida únicamente al registrar un pago parcial o emitir una venta a crédito.
+                  </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
@@ -1406,7 +1402,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         </div>
       </ConfirmDialog>
 
-      <Dialog open={Boolean(paymentInvoice)} onOpenChange={(open) => { if (!open && !paymentLoading) setPaymentInvoice(null); }}>
+      <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
@@ -1456,7 +1452,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentInvoice(null)} disabled={paymentLoading}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
             <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || !paymentAccountId} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>

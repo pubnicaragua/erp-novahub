@@ -12,6 +12,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { useAuth } from '../../contexts/AuthContext';
 import { hrService } from '../../services/hr.service';
+import { HRViewTutorial } from './HRViewTutorial';
 
 interface DepartmentForm {
   code: string;
@@ -145,7 +146,7 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end" data-tour="hr-departments-title">
         <div>
           <div className="flex items-center gap-2">
             <Building2 className="size-5 text-primary" />
@@ -155,14 +156,17 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
             Organiza las áreas de tu empresa y asigna uno o varios usuarios como jefes de cada departamento.
           </p>
         </div>
-        {canCreate && (
-          <Button type="button" onClick={openCreate} className="h-10 shrink-0 rounded-xl px-4 text-xs font-black uppercase tracking-widest">
-            <Plus className="size-4" /> Nuevo departamento
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2" data-tour="hr-departments-actions">
+          {canCreate && (
+            <Button type="button" onClick={openCreate} className="h-10 shrink-0 rounded-xl px-4 text-xs font-black uppercase tracking-widest">
+              <Plus className="size-4" /> Nuevo departamento
+            </Button>
+          )}
+          <HRViewTutorial label="Cómo gestionar departamentos" targetPrefix="hr-departments" copy={{ data: { description: 'Consulta las áreas, códigos, empleados y jefes asignados.' }, actions: { description: 'Crea, edita o desactiva departamentos según tus permisos.' } }} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-tour="hr-departments-data">
         {departments.map((department: any, index: number) => {
           const heads = department.departmentHeads || [];
           return (
@@ -229,18 +233,19 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
 
       <Dialog open={editorOpen} onOpenChange={(open) => { if (!saving) setEditorOpen(open); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-6 py-5">
+          <DialogHeader className="border-b border-border/40 px-6 py-5" data-tour="hr-department-form-title">
             <DialogTitle className="flex items-center gap-2 text-xl font-black"><Building2 className="size-5 text-primary" /> {editingId ? 'Editar departamento' : 'Nuevo departamento'}</DialogTitle>
             <DialogDescription>Define los datos del área y selecciona uno o varios usuarios activos como jefes.</DialogDescription>
+            <HRViewTutorial label={editingId ? 'Cómo editar departamento' : 'Cómo crear departamento'} targetPrefix="hr-department-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa nombre, código y descripción del área.' }, items: { title: 'Jefes del departamento', description: 'Selecciona usuarios activos como responsables del departamento.' }, actions: { description: 'Guarda el departamento y sus jefes asignados.' } }} />
           </DialogHeader>
-          <div className="space-y-5 px-6 py-5">
+          <div className="space-y-5 px-6 py-5" data-tour="hr-department-form-data">
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
               <div className="space-y-2"><Label htmlFor="department-name">Nombre del departamento</Label><Input id="department-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Ventas" autoFocus /></div>
               <div className="space-y-2"><Label htmlFor="department-code">Código</Label><Input id="department-code" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="Ej. VEN" /></div>
             </div>
             <div className="space-y-2"><Label htmlFor="department-description">Descripción</Label><Textarea id="department-description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Responsabilidad principal del departamento" rows={3} /></div>
 
-            <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.03] p-4">
+            <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.03] p-4" data-tour="hr-department-form-items">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <Label className="text-sm font-black">Jefes de departamento</Label>
@@ -279,7 +284,7 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
               </div>
             </div>
           </div>
-          <DialogFooter className="border-t border-border/40 px-6 py-4">
+          <DialogFooter className="border-t border-border/40 px-6 py-4" data-tour="hr-department-form-actions">
             <Button type="button" variant="outline" onClick={() => setEditorOpen(false)} disabled={saving}>Cancelar</Button>
             <Button type="button" onClick={() => void handleSave()} disabled={saving}>{saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear departamento'}</Button>
           </DialogFooter>

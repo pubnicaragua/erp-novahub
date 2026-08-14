@@ -21,6 +21,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import type { KpiDefinition, KpiResult } from '../../types';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
+import { HRViewTutorial } from './HRViewTutorial';
 import { formatDateEs } from '../../utils/dateFormat';
 
 interface KpiViewProps {
@@ -267,7 +268,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-kpi-title">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <BarChart3 className="size-6 text-primary" />
@@ -275,10 +276,13 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
           </h2>
           <p className="text-muted-foreground text-sm mt-1">Define indicadores y registra resultados de evaluación</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2" data-tour="hr-kpi-actions">
+          <HRViewTutorial label="Cómo gestionar KPI" targetPrefix="hr-kpi" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Consulta definiciones activas, resultados, cumplimiento promedio e indicadores en riesgo.' }, actions: { description: 'Crea definiciones, registra resultados y navega entre ambos procesos.' } }} />
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-kpi-data">
         <StatCard
           label="Definiciones activas"
           value={activeDefs}
@@ -367,7 +371,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
             )}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3" data-tour="hr-kpi-definitions-items">
             {filteredDefinitions.length === 0 && (
               <div className="text-center py-12">
                 <Target className="size-12 mx-auto text-muted-foreground mb-4" />
@@ -507,7 +511,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
             )}
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border rounded-lg overflow-hidden" data-tour="hr-kpi-results-items">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px]">
                 <thead className="bg-muted/50">
@@ -620,13 +624,14 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
       {/* ==================== DEFINITION DIALOG ==================== */}
       <Dialog open={showDefForm} onOpenChange={(open) => { if (!open) resetDefForm(); }}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-kpi-definition-form-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <Target className="size-5 text-primary" />
               {editingDefId ? 'Editar Definición' : 'Nueva Definición de KPI'}
             </DialogTitle>
+            <HRViewTutorial label={editingDefId ? 'Cómo editar definición KPI' : 'Cómo crear definición KPI'} targetPrefix="hr-kpi-definition-form" copy={{ data: { description: 'Define nombre, período, asignación, meta, peso y estado del indicador.' }, actions: { description: 'Guarda la definición para comenzar a medir el desempeño.' } }} />
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2" data-tour="hr-kpi-definition-form-data">
             <div className="space-y-2 md:col-span-2">
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Nombre *</Label>
               <Input value={defForm.name} onChange={e => setDefForm({ ...defForm, name: e.target.value })} placeholder="Ej: Ventas mensuales" className="rounded-xl h-11" />
@@ -703,7 +708,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               <Switch checked={defForm.isActive} onCheckedChange={v => setDefForm({ ...defForm, isActive: v })} />
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2" data-tour="hr-kpi-definition-form-actions">
             <DialogClose asChild>
               <Button variant="outline" className="rounded-xl">Cancelar</Button>
             </DialogClose>
@@ -718,13 +723,14 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
       {/* ==================== RESULT DIALOG ==================== */}
       <Dialog open={showResultForm} onOpenChange={(open) => { if (!open) resetResultForm(); }}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="hr-kpi-result-form-title">
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <BarChart3 className="size-5 text-primary" />
               Nuevo Resultado KPI
             </DialogTitle>
+            <HRViewTutorial label="Cómo registrar resultado KPI" targetPrefix="hr-kpi-result-form" copy={{ data: { description: 'Selecciona empleado, definición, evaluador, período, meta y resultado real.' }, actions: { description: 'Guarda la medición para actualizar los indicadores de cumplimiento.' } }} />
           </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2" data-tour="hr-kpi-result-form-data">
             <div className="space-y-2">
               <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
                 <User className="size-3" /> Empleado *
@@ -801,7 +807,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               <Textarea value={resultForm.comment} onChange={e => setResultForm({ ...resultForm, comment: e.target.value })} placeholder="Comentario opcional sobre el resultado" className="rounded-xl" rows={2} />
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2" data-tour="hr-kpi-result-form-actions">
             <DialogClose asChild>
               <Button variant="outline" className="rounded-xl">Cancelar</Button>
             </DialogClose>

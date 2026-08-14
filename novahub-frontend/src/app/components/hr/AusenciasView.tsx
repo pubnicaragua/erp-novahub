@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { StatCard } from './StatCard';
+import { HRViewTutorial } from './HRViewTutorial';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   VACATION: 'Vacaciones',
@@ -213,7 +214,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="hr-leaves-title">
         <StatCard
           label="Pendientes"
           value={pendingRequests.length}
@@ -286,7 +287,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-leaves-actions">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -316,13 +317,17 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             {showNewForm ? 'Cancelar' : 'Nueva Solicitud'}
           </Button>
         )}
+        <HRViewTutorial label="Cómo gestionar ausencias" targetPrefix="hr-leaves" copy={{ data: { title: 'Solicitudes de ausencia', description: 'Consulta empleados, tipos, fechas, días, razones y estados de cada solicitud.' }, actions: { description: 'Crea una solicitud nueva o aprueba y rechaza las solicitudes según tus permisos.' } }} />
       </div>
 
       {/* New Request Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5">
-          <h3 className="text-lg font-semibold mb-4 text-primary">Nueva Solicitud de Ausencia</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-leave-form-shell">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-leave-form-title">
+            <h3 className="text-lg font-semibold text-primary">Nueva Solicitud de Ausencia</h3>
+            <HRViewTutorial label="Cómo crear solicitud de ausencia" targetPrefix="hr-leave-form" copy={{ data: { description: 'Selecciona empleado, tipo de ausencia, fechas, días y razón.' }, actions: { description: 'Guarda la solicitud para que pueda ser revisada y aprobada.' } }} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-leave-form-data">
             <div>
               <label className="text-sm font-medium mb-1 block">Empleado</label>
               <Combobox
@@ -418,7 +423,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
               />
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-4" data-tour="hr-leave-form-actions">
             <Button onClick={handleCreateRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               Crear Solicitud
             </Button>
@@ -430,7 +435,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       )}
 
       {/* Leave Requests Table */}
-      <div className="border rounded-lg overflow-hidden flex flex-col">
+      <div className="border rounded-lg overflow-hidden flex flex-col" data-tour="hr-leaves-data">
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full min-w-[900px]">
             <thead className="bg-muted/50">

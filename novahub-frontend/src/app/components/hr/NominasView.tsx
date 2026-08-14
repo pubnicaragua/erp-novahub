@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleHelp, Wallet, Receipt } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -12,11 +12,11 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
-import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
+import { HRViewTutorial } from './HRViewTutorial';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { displayCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
@@ -24,29 +24,6 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
-  const [showTutorial, setShowTutorial] = useState(false);
-
-const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
-  {
-    target: '[data-tour="nominas-employee-filter"]',
-    title: 'Filtrar por Empleado',
-    description: 'Selecciona un empleado específico para ver solo sus nóminas, o mantén "Todos" para ver todas.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="nominas-process"]',
-    title: 'Procesar Nómina',
-    description: 'Calcula y genera las nóminas del período actual. Puedes incluir comisiones y procesar para un empleado específico o todos.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="nominas-table"]',
-    title: 'Listado de Nóminas',
-    description: 'Tabla con todas las nóminas generadas. Cada fila muestra el empleado, período, montos y estado. Expande una fila para ver el desglose detallado de deducciones, aportes y provisiones.',
-    placement: 'top',
-  },
-];
-
   const employeeOptions = [
     { label: 'Todos los empleados', value: 'all' },
     ...employees.map((emp: any) => ({
@@ -230,7 +207,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-payroll-title">
         <StatCard
           label="Total Bruto (Costo Empresa)"
           value={formatCurrentAmount(totalCostoEmpresa, displayCurrency)}
@@ -293,7 +270,7 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
             <option value="PAID">Pagado</option>
           </select>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
           <Button variant="outline" size="sm" onClick={handleExportPDF}>
             <Download className="size-4 mr-2" />
             Descargar PDF
@@ -322,14 +299,12 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
               Procesar Nómina
             </Button>
           )}
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} aria-label="Tutorial">
-            <CircleHelp className="size-3.5 mr-1" /> Tutorial
-          </Button>
+          <HRViewTutorial label="Cómo procesar nómina" targetPrefix="hr-payroll" stepKeys={['title', 'data', 'actions']} copy={{ data: { title: 'Listado de nóminas', description: 'Consulta empleados, períodos, montos, estados y el desglose de cada nómina.' }, actions: { description: 'Filtra, descarga el reporte, paga pendientes o procesa el período actual incluyendo comisiones.' } }} />
         </div>
       </div>
 
       {/* Payroll Table */}
-      <div data-tour="nominas-table" className="border rounded-lg overflow-hidden flex flex-col">
+      <div data-tour="hr-payroll-data" className="border rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full min-w-[1100px]">
             <thead className="bg-muted/50">
@@ -613,7 +588,6 @@ const NOMINAS_TOUR_STEPS: GuidedTourStep[] = [
         loading={deleteLoading} 
         onConfirm={() => pendingDeleteId ? handleDeletePayroll(pendingDeleteId) : Promise.resolve()} 
       />
-      {showTutorial && <GuidedTour steps={NOMINAS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Nóminas" />}
     </div>
   );
 }

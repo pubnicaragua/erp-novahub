@@ -130,10 +130,10 @@ export function PurchaseOrderPreviewDialog({
 
   return (
     <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent side="right" className="w-full gap-0 border-l border-border/50 bg-background p-0 sm:max-w-2xl">
+      <SheetContent side="right" className="flex w-full min-w-0 max-w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-2xl">
         {order && (
           <>
-            <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchase-order-detail-title">
+            <SheetHeader className="sticky top-0 z-10 min-w-0 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchase-order-detail-title">
               <div className="flex items-start gap-3">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
                   <CheckCircle2 className="size-5" />
@@ -159,8 +159,8 @@ export function PurchaseOrderPreviewDialog({
               <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo consultar orden" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchase-order-detail" />
             </SheetHeader>
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" data-tour="purchase-order-detail-data">
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto p-5 sm:p-6" data-tour="purchase-order-detail-data">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm min-[480px]:grid-cols-2 sm:grid-cols-4">
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span>
                   <p className="mt-1 break-words font-semibold">{supplier?.name || '—'}</p>
@@ -185,9 +185,37 @@ export function PurchaseOrderPreviewDialog({
                   <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalle de artículos</h4>
                   <Badge variant="outline" className="text-[10px]">{items.length} artículos</Badge>
                 </div>
-                <div className="overflow-hidden rounded-2xl border border-border/50">
-                  <div className="max-w-full overflow-x-auto">
-                    <Table className="min-w-[650px]">
+                <div className="min-w-0 overflow-hidden rounded-2xl border border-border/50">
+                  <div className="space-y-2 p-2 sm:hidden">
+                    {items.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border/50 bg-muted/10 p-5 text-center text-sm text-muted-foreground">
+                        No hay artículos registrados.
+                      </div>
+                    ) : items.map((item: any, index: number) => {
+                      const lineTotal = Number(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice || 0));
+                      const tax = Number(item.taxAmount ?? 0);
+                      const subtotal = Number(item.taxBase ?? lineTotal - tax);
+                      return (
+                        <article key={item.id || index} className="min-w-0 rounded-xl border border-border/50 bg-card/60 p-3">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="break-words font-mono text-[10px] text-muted-foreground">{item.code || 'Sin código'}</p>
+                              <p className="mt-1 break-words text-sm font-semibold">{item.name || item.description || 'Artículo sin descripción'}</p>
+                            </div>
+                            <p className="shrink-0 text-right text-sm font-black text-primary">{currencyPrefix} {formatAmount(lineTotal)}</p>
+                          </div>
+                          <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/30 pt-3 text-xs">
+                            <div className="min-w-0"><dt className="text-[10px] uppercase text-muted-foreground">Cantidad</dt><dd className="mt-0.5 font-medium">{Number(item.quantity || 0)}</dd></div>
+                            <div className="min-w-0 text-right"><dt className="text-[10px] uppercase text-muted-foreground">P. unitario</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(item.unitPrice)}</dd></div>
+                            <div className="min-w-0"><dt className="text-[10px] uppercase text-muted-foreground">Subtotal</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(subtotal)}</dd></div>
+                            <div className="min-w-0 text-right"><dt className="text-[10px] uppercase text-muted-foreground">IVA</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(tax)}</dd></div>
+                          </dl>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div className="hidden max-w-full overflow-x-auto overscroll-x-contain sm:block">
+                    <Table containerClassName="!max-w-none !overflow-visible" className="min-w-[650px]">
                       <TableHeader>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
                           <TableHead className="text-[10px] uppercase">Código</TableHead>
@@ -224,7 +252,7 @@ export function PurchaseOrderPreviewDialog({
                 </div>
               </section>
 
-              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm sm:grid-cols-4" data-tour="purchase-order-detail-summary">
+              <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm min-[480px]:grid-cols-2 sm:grid-cols-4" data-tour="purchase-order-detail-summary">
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Subtotal</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.subtotal)}</p></div>
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">IVA</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.taxAmount)}</p></div>
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Retención</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.withholdingTotal)}</p></div>
@@ -265,7 +293,7 @@ export function PurchaseOrderPreviewDialog({
               </section>
             </div>
 
-            <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchase-order-detail-actions">
+            <SheetFooter className="min-w-0 border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchase-order-detail-actions">
               <div className="flex w-full flex-wrap justify-end gap-2">
                 {onDownloadPdf && (
                   <Button variant="outline" className="gap-2 rounded-xl text-xs font-black uppercase tracking-wider" onClick={onDownloadPdf}>

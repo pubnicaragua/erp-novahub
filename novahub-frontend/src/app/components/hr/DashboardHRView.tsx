@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { motion } from 'motion/react';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { HRViewTutorial } from './HRViewTutorial';
 
 const DEPT_COLORS = [
   'from-indigo-500 to-purple-600',
@@ -65,7 +66,15 @@ export function DashboardHRView({ employees, departments, leaveRequests, reviews
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between" data-tour="hr-dashboard-title">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Resumen de talento</p>
+          <p className="mt-1 text-sm text-muted-foreground">Indicadores generales de la operación de Recursos Humanos.</p>
+        </div>
+        <HRViewTutorial label="Cómo consultar el resumen de RR. HH." targetPrefix="hr-dashboard" stepKeys={['title', 'data', 'items']} copy={{ data: { title: 'Indicadores principales', description: 'Consulta empleados activos, costo de nómina, ausencias pendientes y departamentos.' }, items: { title: 'Paneles de gestión', description: 'Revisa distribución por departamento, contrataciones recientes y desempeño.' } }} />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-dashboard-data">
         {statCards.map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
             <Card className={`border ${stat.border} hover:shadow-lg transition-all`}>
@@ -87,7 +96,7 @@ export function DashboardHRView({ employees, departments, leaveRequests, reviews
       </div>
 
       {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" data-tour="hr-dashboard-items">
         {/* Department Distribution - spans 2 cols */}
         <Card className="border-border/50 lg:col-span-2">
           <CardHeader className="border-b border-border/30 bg-muted/10 pb-4">
