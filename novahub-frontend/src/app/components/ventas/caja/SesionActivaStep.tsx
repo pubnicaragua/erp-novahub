@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { ScrollArea } from '../../ui/scroll-area';
@@ -264,6 +264,39 @@ export function SesionActivaStep({
     ? (totalGastosUSD + (totalGastosNIO / sessionRate))
     : (totalGastosNIO + (totalGastosUSD * sessionRate));
 
+  const breakdown = useMemo(() => {
+    const initial = { nio: Number(session.initialAmountNIO || 0), usd: Number(session.initialAmountUSD || 0) };
+    const byMethod: Record<string, { nio: number; usd: number }> = {};
+    let expenses = { nio: 0, usd: 0 };
+    for (const log of logs) {
+      const nio = Number(log.amountNIO || 0);
+      const usd = Number(log.amountUSD || 0);
+      if (log.type === 'EXIT') {
+        expenses.nio += nio;
+        expenses.usd += usd;
+        continue;
+      }
+      if (log.type !== 'SALE' && log.type !== 'ENTRY') continue;
+      const method = String(log.paymentMethod || 'CASH').toUpperCase();
+      if (!byMethod[method]) byMethod[method] = { nio: 0, usd: 0 };
+      byMethod[method].nio += nio;
+      byMethod[method].usd += usd;
+    }
+    const convert = (nio: number, usd: number) => (isUSD ? usd + nio / sessionRate : nio + usd * sessionRate);
+    const cash = byMethod['CASH'] || { nio: 0, usd: 0 };
+    const expectedInCash = convert(initial.nio + cash.nio - expenses.nio, initial.usd + cash.usd - expenses.usd);
+    return {
+      initial: convert(initial.nio, initial.usd),
+      cash: convert(cash.nio, cash.usd),
+      check: convert((byMethod['CHECK'] || {}).nio || 0, (byMethod['CHECK'] || {}).usd || 0),
+      transfer: convert((byMethod['TRANSFER'] || {}).nio || 0, (byMethod['TRANSFER'] || {}).usd || 0),
+      card: convert((byMethod['CARD'] || {}).nio || 0, (byMethod['CARD'] || {}).usd || 0),
+      other: convert((byMethod['OTHER'] || {}).nio || 0, (byMethod['OTHER'] || {}).usd || 0),
+      expenses: convert(expenses.nio, expenses.usd),
+      expectedInCash,
+    };
+  }, [logs, isUSD, sessionRate, session.initialAmountNIO, session.initialAmountUSD]);
+
   const fondoInicialNIO = Number(session.initialAmountNIO || 0);
   const fondoInicialUSD = Number(session.initialAmountUSD || 0);
   const fondoInicialConverted = isUSD 
@@ -485,6 +518,26 @@ export function SesionActivaStep({
           </CardDescription>
         </CardHeader>
         <CardContent className="px-5 pb-5 space-y-4">
+          {showSystemAmounts && (
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Resumen del arqueo por medio de pago</p>
+              <div className="space-y-1 text-[11px]">
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">Saldo inicial en caja (día anterior)</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.initial)}</span></div>
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Efectivo pagado en caja</span><span className="font-mono font-bold text-emerald-600">{symbol} {formatSalesAmount(breakdown.cash)}</span></div>
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Cheques pagados en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.check)}</span></div>
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Transferencias pagadas en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.transfer)}</span></div>
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Pagos con tarjeta pagados en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.card)}</span></div>
+                {breakdown.other > 0 && (
+                  <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Otros medios de cobro</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.other)}</span></div>
+                )}
+                <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">− Salidas de caja (egresos)</span><span className="font-mono font-bold text-rose-500">−{symbol} {formatSalesAmount(breakdown.expenses)}</span></div>
+                <div className="flex items-center justify-between pt-1"><span className="font-black uppercase tracking-widest text-foreground text-[10px]">Esperado en caja (efectivo)</span><span className="font-mono font-black text-lg">{symbol} {formatSalesAmount(breakdown.expectedInCash)}</span></div>
+              </div>
+              <p className="text-[9px] leading-relaxed text-muted-foreground">
+                Cheques, transferencias y tarjetas no entran al conteo físico de la gaveta: cada cobro quedó registrado con su medio y referencia en el día. Al cerrar, el excedente de caja se transfiere al banco automáticamente.
+              </p>
+            </div>
+          )}
           <DenominationCounter 
             nioDenominations={nioDenominations} setNioDenominations={setNioDenominations}
             usdDenominations={usdDenominations} setUsdDenominations={setUsdDenominations}

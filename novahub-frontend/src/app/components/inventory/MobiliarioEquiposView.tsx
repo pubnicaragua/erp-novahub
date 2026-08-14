@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Paperclip, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, RefreshCw, Loader2, Building2, X, Upload, FileDown, Paperclip, ExternalLink, FileSpreadsheet, CalendarClock } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -27,6 +27,34 @@ const CATEGORIES = [
   { value: 'MACHINERY', label: 'Maquinaria y equipo' },
   { value: 'OTHER', label: 'Otros / Misceláneos' },
 ];
+
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function lastDayOfMonth(ym: string): Date {
+  const parts = String(ym || '').split('-');
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  if (!year || !month) return new Date();
+  return new Date(year, month, 0, 23, 59, 59, 999);
+}
+
+function currentMonthYM(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function buildMonthOptions(count = 24): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i += 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    opts.push({
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+    });
+  }
+  return opts;
+}
 
 const STATUSES = [
   { value: 'AVAILABLE', label: 'Disponible' },
@@ -204,26 +232,66 @@ export function MobiliarioEquiposView() {
   const [branchFilter, setBranchFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
+  const [monthCutoff, setMonthCutoff] = useState('');
+  const monthOptions = useMemo(() => buildMonthOptions(24), []);
+  const cutoffDate = useMemo(() => (monthCutoff ? lastDayOfMonth(monthCutoff) : null), [monthCutoff]);
 
-  const listQuery = useAccountingQuery<any>(['company-assets', search, categoryFilter, statusFilter, branchFilter, page, pageSize], async (signal) =>
+  const listQuery = useAccountingQuery<any>(['company-assets', search, categoryFilter, statusFilter, branchFilter, monthCutoff, page, pageSize], async (signal) =>
     mobiliarioService.getAssets({
       search: search.trim() || undefined,
       category: categoryFilter === 'all' ? undefined : categoryFilter,
       status: statusFilter === 'all' ? undefined : statusFilter,
       branchId: branchFilter === 'all' ? undefined : branchFilter,
-      page, pageSize,
+      page: cutoffDate ? 1 : page,
+      pageSize: cutoffDate ? 5000 : pageSize,
     }, signal),
   );
   const branchesQuery = useAccountingQuery<any[]>(['sucursales'], async (signal) => accountingList(await api.get('/sucursales', { signal })));
   const usersQuery = useAccountingQuery<any[]>(['users-list'], async (signal) => accountingList(await api.get('/users', { signal })));
 
   const response = listQuery.data as any;
-  const assets: AssetRow[] = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+  const allAssets: AssetRow[] = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
   const summary = response?.summary ?? null;
-  const meta = response?.meta ?? { total: assets.length, page, pageSize, totalPages: Math.max(1, Math.ceil(assets.length / pageSize)) };
+  const meta = response?.meta ?? { total: allAssets.length, page, pageSize, totalPages: Math.max(1, Math.ceil(allAssets.length / pageSize)) };
   const loading = listQuery.isLoading || listQuery.isFetching;
   const branches = (branchesQuery.data || []).map(b => ({ id: String(b.id), name: `${b.code || ''} ${b.name || ''}`.trim() }));
   const users = (usersQuery.data || []).map(u => ({ id: String(u.id), name: String(u.name || u.email || '') }));
+
+  const assets = useMemo(() => {
+    if (!cutoffDate) return allAssets;
+    return allAssets.filter((a) => {
+      if (!a.acquisitionDate) return true;
+      const d = new Date(String(a.acquisitionDate).slice(0, 10));
+      return !Number.isNaN(d.getTime()) && d.getTime() <= cutoffDate.getTime();
+    });
+  }, [allAssets, cutoffDate]);
+
+  const displayedAssets = useMemo(() => {
+    if (!cutoffDate) return assets;
+    const start = (page - 1) * pageSize;
+    return assets.slice(start, start + pageSize);
+  }, [assets, cutoffDate, page, pageSize]);
+
+  const displayTotal = cutoffDate ? assets.length : meta.total;
+  const displayTotalPages = cutoffDate ? Math.max(1, Math.ceil(assets.length / pageSize)) : meta.totalPages;
+
+  const cutoffSummary = useMemo(() => {
+    if (!cutoffDate) return null;
+    const base = String(summary?.baseCurrency || 'USD');
+    let totalCostBase = 0;
+    const perCurrency: Record<string, number> = { NIO: 0, USD: 0 };
+    for (const a of assets) {
+      const cur = String(a.currency || 'USD');
+      const cost = Number(a.cost || 0);
+      perCurrency[cur] = (perCurrency[cur] || 0) + cost;
+      const rate = Number(a.exchangeRate || 0);
+      if (cur === base) totalCostBase += cost;
+      else if (base === 'NIO') totalCostBase += rate > 0 ? cost * rate : cost;
+      else totalCostBase += rate > 0 ? cost / rate : cost;
+    }
+    return { totalAssets: assets.length, baseCurrency: base, totalCostBase, perCurrency };
+  }, [assets, cutoffDate, summary]);
+  const effectiveSummary = cutoffDate ? cutoffSummary : summary;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<AssetRow | null>(null);
@@ -238,6 +306,7 @@ export function MobiliarioEquiposView() {
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [importMonth, setImportMonth] = useState(currentMonthYM());
 
   // Respaldo
   const [attachmentBusy, setAttachmentBusy] = useState(false);
@@ -374,7 +443,13 @@ export function MobiliarioEquiposView() {
   const confirmImport = async () => {
     setImporting(true);
     try {
-      const res = await mobiliarioService.importAssets(importRowsData);
+      const cutoff = lastDayOfMonth(importMonth);
+      const y = cutoff.getFullYear();
+      const m = String(cutoff.getMonth() + 1).padStart(2, '0');
+      const d = String(cutoff.getDate()).padStart(2, '0');
+      const defaultDate = `${y}-${m}-${d}`;
+      const items = importRowsData.map((row) => row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate });
+      const res = await mobiliarioService.importAssets(items);
       setImportResult(res);
       toast.success(`Importación completada: ${res?.createdCount ?? 0} creados, ${res?.skippedCount ?? 0} omitidos`);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
@@ -432,6 +507,13 @@ export function MobiliarioEquiposView() {
             <option value="all">Todas las sucursales</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <Select value={monthCutoff || '__none'} onValueChange={(v) => { setMonthCutoff(v === '__none' ? '' : v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Corte por mes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none">Sin corte (actual)</SelectItem>
+              {monthOptions.map((mo) => <SelectItem key={mo.value} value={mo.value}>{mo.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">
@@ -470,25 +552,33 @@ export function MobiliarioEquiposView() {
           </p>
         </CardHeader>
         <CardContent className="p-4">
-          {summary && (
+          {cutoffDate && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Badge className="gap-1 text-[10px]">
+                <CalendarClock className="size-3" /> Activos al corte {cutoffDate.toLocaleDateString('es-NI', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </Badge>
+              <p className="text-[10px] text-muted-foreground">Se listan los bienes adquiridos hasta esa fecha; los activos sin fecha se incluyen como existentes.</p>
+            </div>
+          )}
+          {effectiveSummary && (
             <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total de activos</p>
-                <p className="text-xl font-black tabular-nums">{summary.totalAssets ?? meta.total}</p>
+                <p className="text-xl font-black tabular-nums">{effectiveSummary.totalAssets ?? displayTotal}</p>
               </div>
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Valor total ({summary.baseCurrency || 'USD'})</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Valor total ({effectiveSummary.baseCurrency || 'USD'})</p>
                 <p className="text-xl font-black tabular-nums">
-                  {summary.baseCurrency === 'NIO' ? 'C$' : '$'} {fmtCost(Number(summary.totalCostBase || 0))}
+                  {effectiveSummary.baseCurrency === 'NIO' ? 'C$' : '$'} {fmtCost(Number(effectiveSummary.totalCostBase || 0))}
                 </p>
                 <p className="text-[9px] text-muted-foreground">Convertido con la tasa de cada activo</p>
               </div>
               <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desglose por moneda</p>
                 <p className="text-sm font-black tabular-nums">
-                  <span className="text-amber-600">C$ {fmtCost(Number(summary.perCurrency?.NIO || 0))}</span>
+                  <span className="text-amber-600">C$ {fmtCost(Number(effectiveSummary.perCurrency?.NIO || 0))}</span>
                   <span className="mx-1.5 text-muted-foreground">·</span>
-                  <span className="text-emerald-600">$ {fmtCost(Number(summary.perCurrency?.USD || 0))}</span>
+                  <span className="text-emerald-600">$ {fmtCost(Number(effectiveSummary.perCurrency?.USD || 0))}</span>
                 </p>
                 <p className="text-[9px] text-muted-foreground">Costo original de cada registro</p>
               </div>
@@ -523,7 +613,7 @@ export function MobiliarioEquiposView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {assets.map(asset => (
+                    {displayedAssets.map(asset => (
                       <TableRow key={asset.id} className="border-b border-muted/30 hover:bg-muted/10">
                         <TableCell className="py-2 px-2 font-mono text-xs">{asset.code}</TableCell>
                         <TableCell className="py-2 px-2">
@@ -583,11 +673,11 @@ export function MobiliarioEquiposView() {
                 </Table>
               </div>
               <div className="flex items-center justify-between border-t border-border/40 bg-muted/20 px-4 py-2">
-                <p className="text-[10px] text-muted-foreground">{meta.total} activo(s)</p>
+                <p className="text-[10px] text-muted-foreground">{displayTotal} activo(s)</p>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button>
-                  <span className="px-2 text-[10px] text-muted-foreground">{page} / {Math.max(1, meta.totalPages)}</span>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={page >= (meta.totalPages || 1) || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button>
+                  <span className="px-2 text-[10px] text-muted-foreground">{page} / {displayTotalPages}</span>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={page >= displayTotalPages || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button>
                 </div>
               </div>
             </div>
@@ -744,6 +834,16 @@ export function MobiliarioEquiposView() {
               {importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; las filas con errores se omiten sin afectar al resto.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-2">
+            <Label>Mes del corte (fecha de adquisición)</Label>
+            <Select value={importMonth} onValueChange={setImportMonth}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((mo) => <SelectItem key={mo.value} value={mo.value}>{mo.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Los activos importados sin fecha de adquisición se registrarán el último día de este mes ({lastDayOfMonth(importMonth).toLocaleDateString('es-NI', { day: '2-digit', month: 'long', year: 'numeric' })}).</p>
+          </div>
           {importResult ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">

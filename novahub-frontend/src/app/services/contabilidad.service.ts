@@ -124,7 +124,7 @@ export const contabilidadService = {
   importFixedAssets: (rows: any[]) => api.post<any>('/accounting/fixed-assets/import', { rows }),
 
   // Import CSV
-  importCsv: (data: { type: string; rows: any[][] }) => api.post<any>('/accounting/import/csv', data),
+  importCsv: (data: { type: string; rows: (string | number)[][] }) => api.post<any>('/accounting/import/csv', data),
 
   // Eliminar asiento (borrador)
   deleteJournal: (id: string) => api.delete(`/accounting/journals/${id}`),

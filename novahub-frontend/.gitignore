@@ -50,3 +50,6 @@ Thumbs.db
 test-results/
 e2e-results/
 playwright-report/
+e2e/.auth/
+test-results/
+playwright-report/

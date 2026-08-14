@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
@@ -8,6 +8,7 @@ import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
   Stethoscope, GraduationCap, Briefcase, Building, Upload, Eye, EyeOff, Circle,
+  Phone,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -17,7 +18,18 @@ import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { authService, type ModuleRecommendationsResponse } from '../../services/auth.service';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPasswordError, isValidEmail, normalizeEmail, passwordRules } from '../../utils/accountValidation';
+import { normalizeEmail, passwordRules } from '../../utils/accountValidation';
+import { TechnicalSheetStep } from './TechnicalSheetStep';
+
+const WA_NUMBER = '50588241003';
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.297-.497.1-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+    </svg>
+  );
+}
 
 type IndustryKey = 'ARCHITECTURE' | 'RETAIL' | 'TECHNOLOGY' | 'SERVICES' | 'MANUFACTURING' | 'CONSTRUCTION' | 'HEALTHCARE' | 'EDUCATION' | 'RESTAURANT' | 'OTHER' | 'CUSTOM';
 type CompanySize = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE';
@@ -45,6 +57,8 @@ const COMPANY_SIZES: { key: CompanySize; label: string }[] = [
 const step1Schema = z.object({
   companyName: z.string().min(2, 'Mínimo 2 caracteres').max(100).trim(),
   userName: z.string().min(2, 'Mínimo 2 caracteres').max(100).trim(),
+  cargo: z.string().min(2, 'Mínimo 2 caracteres').max(100).trim(),
+  whatsappNumber: z.string().regex(/^\+?\d[\d\s-]{7,17}$/, 'Ingresa un número de WhatsApp válido (ej: +50581234567)'),
   email: z.string().email('Email inválido').trim().toLowerCase(),
   password: z.string().min(8, 'Mínimo 8 caracteres').regex(/[A-Z]/, 'Debe incluir mayúscula').regex(/[0-9]/, 'Debe incluir número').regex(/[^a-zA-Z0-9\s]/, 'Debe incluir carácter especial'),
   acceptTerms: z.boolean().refine((v) => v === true, 'Debés aceptar los términos'),
@@ -56,7 +70,7 @@ const STEP_MESSAGES = [
   'Contanos sobre tu empresa para empezar',
   'Seleccioná tu industria y tamaño de empresa',
   'Personalizá tu NovaHub con los módulos que necesitás',
-  'Configurá roles y usuarios (Opcional)',
+  'Completá la ficha técnica para que conozcamos tu operación (Opcional)',
 ];
 
 const LEFT_BRANDING = [
@@ -282,61 +296,73 @@ export function RegisterTenantPage() {
   const [expandedParent, setExpandedParent] = useState<string | null>(null);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [users, setUsers] = useState<{name: string, email: string, password: string, roleName?: string}[]>([]);
-  const [roles, setRoles] = useState<{name: string, allowedModules: string[], permissions: any[]}[]>([]);
-  const [newRoleName, setNewRoleName] = useState('');
-  const [newRoleModules, setNewRoleModules] = useState<string[]>([]);
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', roleName: '' });
+  const [technicalSheet, setTechnicalSheet] = useState<any>(null);
+  const [waStarted, setWaStarted] = useState(false);
+  const [waConfirmed, setWaConfirmed] = useState(false);
+  const [waReminder, setWaReminder] = useState(false);
+  const waTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waLeftAtRef = useRef<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [showUserPassword, setShowUserPassword] = useState(false);
-  const [newUserEmailError, setNewUserEmailError] = useState('');
-  const [newUserEmailChecking, setNewUserEmailChecking] = useState(false);
 
   const { register, handleSubmit, formState: { errors, isValid }, watch, setError: setFormError, clearErrors } = useForm<Step1Data>({
     resolver: zodResolver(step1Schema),
     mode: 'onChange',
-    defaultValues: { companyName: '', userName: '', email: '', password: '', acceptTerms: false },
+    defaultValues: { companyName: '', userName: '', cargo: '', whatsappNumber: '', email: '', password: '', acceptTerms: false },
   });
 
   const acceptTerms = watch('acceptTerms');
   const passwordValue = watch('password');
+  const companyNameValue = watch('companyName');
+  const userNameValue = watch('userName');
+  const cargoValue = watch('cargo');
 
-  const newUserPasswordError = getPasswordError(newUser.password);
-  const newUserDuplicateEmail = users.some(user => normalizeEmail(user.email) === normalizeEmail(newUser.email) && normalizeEmail(newUser.email) !== '');
-  const newUserFormInvalid = !newUser.name.trim() || !isValidEmail(newUser.email) || newUserEmailChecking || !!newUserEmailError || newUserDuplicateEmail || !!newUserPasswordError;
-  const newUserDraftStarted = Object.values(newUser).some(value => String(value).trim() !== '');
-  const step4Invalid = newUserDraftStarted && newUserFormInvalid;
+  const clearWaTimer = () => {
+    if (waTimerRef.current) { clearTimeout(waTimerRef.current); waTimerRef.current = null; }
+  };
+
+  const startWaTimer = () => {
+    clearWaTimer();
+    waTimerRef.current = setTimeout(() => setWaReminder(true), 30000);
+  };
 
   useEffect(() => {
-    const email = normalizeEmail(newUser.email);
-    setNewUserEmailError('');
-    if (!email) {
-      setNewUserEmailChecking(false);
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setNewUserEmailChecking(false);
-      return;
-    }
-    if (newUserDuplicateEmail) {
-      setNewUserEmailChecking(false);
-      setNewUserEmailError('Este correo ya está agregado en este formulario. Escribe otro.');
-      return;
-    }
-    const timer = window.setTimeout(async () => {
-      setNewUserEmailChecking(true);
-      try {
-        const response: any = await authService.checkEmail(email);
-        const exists = response?.data?.exists ?? response?.exists;
-        setNewUserEmailError(exists ? 'Este correo ya está en uso. Escribe otro.' : '');
-      } catch {
-        setNewUserEmailError('No se pudo verificar el correo. Intenta nuevamente.');
-      } finally {
-        setNewUserEmailChecking(false);
+    if (!waStarted) return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (reminderTimeoutRef.current) { clearTimeout(reminderTimeoutRef.current); reminderTimeoutRef.current = null; }
+        if (waReminder) {
+          reminderTimeoutRef.current = setTimeout(() => setWaReminder(false), 3000);
+        }
+        clearWaTimer();
+        // Solo se considera enviado si el usuario estuvo fuera de la pestaña
+        // el tiempo suficiente para escribir y enviar el mensaje en WhatsApp
+        // (>= 8 segundos). Si volvió antes, debe confirmarlo manualmente.
+        const leftAt = waLeftAtRef.current;
+        waLeftAtRef.current = null;
+        if (leftAt !== null && Date.now() - leftAt >= 8000) {
+          setWaConfirmed(true);
+        }
+      } else {
+        if (reminderTimeoutRef.current) { clearTimeout(reminderTimeoutRef.current); reminderTimeoutRef.current = null; }
+        waLeftAtRef.current = Date.now();
+        startWaTimer();
       }
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [newUser.email, newUserDuplicateEmail]);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearWaTimer();
+      if (reminderTimeoutRef.current) { clearTimeout(reminderTimeoutRef.current); reminderTimeoutRef.current = null; }
+    };
+  }, [waStarted, waReminder]);
+
+  const sendWhatsApp = () => {
+    if (!waConfirmed) setWaStarted(true);
+    const msg = `Hola, he iniciado mi prueba gratuita de 3 días en Nova ERP, con mi empresa ${companyNameValue.trim()}, mi nombre es ${userNameValue.trim()} y mi cargo es ${cargoValue.trim()}.`;
+    window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+    startWaTimer();
+  };
 
   useEffect(() => {
     if (step === 2 && industry && !recommendations) {
@@ -372,7 +398,7 @@ export function RegisterTenantPage() {
         setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
         return;
       }
-      setStep1Data({ ...data, email: normalizeEmail(data.email) });
+      setStep1Data({ ...data, email: normalizeEmail(data.email), whatsappNumber: data.whatsappNumber.replace(/[\s-]/g, '') });
       setStep(1);
     } catch (e: any) {
       setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
@@ -394,6 +420,7 @@ export function RegisterTenantPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const { _requiredComplete: _omit, ...cleanTechnicalSheet } = technicalSheet || {};
       const response: any = await authService.registerTenant({
         companyName: step1Data.companyName,
         userName: step1Data.userName,
@@ -405,8 +432,9 @@ export function RegisterTenantPage() {
         companyDescription: companyDescription || undefined,
         selectedModules,
         logo: logo || undefined,
-        roles: roles.length > 0 ? roles : undefined,
-        users: users.length > 0 ? users : undefined,
+        whatsappNumber: step1Data.whatsappNumber || undefined,
+        contactRole: step1Data.cargo || undefined,
+        technicalSheet: Object.keys(cleanTechnicalSheet).length > 0 ? cleanTechnicalSheet : undefined,
       });
       const token = response?.access_token || response?.data?.access_token;
       const user = response?.user || response?.data?.user;
@@ -482,7 +510,7 @@ export function RegisterTenantPage() {
           />
         </div>
         <div className="flex justify-between">
-          {['Cuenta', 'Negocio', 'Módulos', 'Equipo'].map((label, i) => (
+          {['Cuenta', 'Negocio', 'Módulos', 'Ficha'].map((label, i) => (
             <div key={label} className="flex flex-col items-center gap-1">
               <motion.div
                 initial={false}
@@ -569,13 +597,35 @@ export function RegisterTenantPage() {
         {errors.companyName && <p className="text-xs text-destructive ml-1">{errors.companyName.message}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="userName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Tu nombre</Label>
+        <Label htmlFor="userName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre del contacto</Label>
         <div className="relative">
           <User className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input id="userName" {...register('userName')} placeholder="Juan Pérez" autoComplete="name"
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.userName && 'border-destructive')} />
         </div>
         {errors.userName && <p className="text-xs text-destructive ml-1">{errors.userName.message}</p>}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="cargo" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Cargo</Label>
+        <div className="relative">
+          <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input id="cargo" {...register('cargo')} placeholder="Ej: Gerente General, Administrador..." autoComplete="organization-title"
+            className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.cargo && 'border-destructive')} />
+        </div>
+        {errors.cargo && <p className="text-xs text-destructive ml-1">{errors.cargo.message}</p>}
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="whatsappNumber" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Número de WhatsApp</Label>
+        <div className="relative">
+          <Phone className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input id="whatsappNumber" {...register('whatsappNumber')} type="tel" placeholder="+505 8123 4567" autoComplete="tel"
+            className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.whatsappNumber && 'border-destructive')} />
+        </div>
+        {errors.whatsappNumber ? (
+          <p className="text-xs text-destructive ml-1">{errors.whatsappNumber.message}</p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground ml-1">Lo usaremos para que un asesor de Nova te contacte durante tu prueba.</p>
+        )}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Email</Label>
@@ -634,10 +684,53 @@ export function RegisterTenantPage() {
         </label>
         {errors.acceptTerms && <p className="text-xs text-destructive ml-1">{errors.acceptTerms.message}</p>}
       </div>
-      <Button type="submit" disabled={!acceptTerms || !isValid || Object.keys(errors).length > 0}
+      {waConfirmed ? (
+        <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+            <WhatsAppIcon className="size-4 text-emerald-600" />
+          </span>
+          <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+            ¡WhatsApp verificado!
+            <p className="text-[10px] font-normal text-muted-foreground mt-0.5">Gracias por escribirnos. Podés continuar con tu registro.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 space-y-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
+              <WhatsAppIcon className="size-4 text-emerald-600" />
+            </span>
+            <div>
+              <p className="text-xs font-black text-primary">Último paso: verifica por WhatsApp</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Es requisito enviar el mensaje para activar tu prueba gratuita de 3 días.</p>
+            </div>
+          </div>
+          <Button type="button" variant="outline" onClick={sendWhatsApp}
+            className="w-full h-10 rounded-xl border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 gap-2 text-xs font-bold">
+            <WhatsAppIcon className="size-4" /> Enviar mensaje por WhatsApp
+          </Button>
+          {waStarted && (
+            <>
+              <div className="rounded-lg bg-white/40 dark:bg-black/10 border border-border/40 px-3 py-2 text-[10px] text-muted-foreground leading-relaxed">
+                Se abrió WhatsApp con tu mensaje prellenado con tu empresa y cargo. <strong>Al enviarlo, volvé a esta pestaña</strong>; si volvés antes de unos segundos, confirmá abajo que ya lo enviaste.
+              </div>
+              <Button type="button" variant="outline" onClick={() => setWaConfirmed(true)}
+                className="w-full h-9 rounded-xl gap-2 text-xs font-bold text-emerald-700 border-emerald-500/40 hover:bg-emerald-500/10">
+                <CheckCircle2 className="size-4 text-emerald-600" /> Sí, ya envié el mensaje
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      <Button type="submit" disabled={!acceptTerms || !isValid || Object.keys(errors).length > 0 || !waConfirmed}
         className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 mt-2">
         Siguiente <ArrowRight className="size-4" />
       </Button>
+      {!waConfirmed && (
+        <p className="text-center text-[10px] text-muted-foreground">
+          {!isValid || Object.keys(errors).length > 0 ? 'Completa el formulario para continuar.' : 'Debés enviar el mensaje de WhatsApp para continuar.'}
+        </p>
+      )}
     </form>
   );
 
@@ -927,182 +1020,33 @@ export function RegisterTenantPage() {
   
   const renderStep4 = () => (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-border/50 p-4 bg-white/5">
-        <h4 className="text-xs font-bold mb-3">Roles (Opcional)</h4>
-        <div className="flex flex-col gap-2 mb-3">
-          <div className="flex gap-2">
-            <Input value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} placeholder="Nombre del Rol (Ej: Vendedor)" className="flex-1 h-9 bg-white/5 text-xs" />
-            <Button type="button" onClick={() => {
-              if (newRoleName && newRoleModules.length > 0) {
-                // Un módulo padre habilita también todas sus subvistas. Antes
-                // solo se guardaba el permiso del padre, por lo que al editar
-                // el rol los switches de las subvistas aparecían apagados.
-                const expandedModules = Array.from(new Set(
-                  newRoleModules.flatMap((moduleKey) => [
-                    moduleKey,
-                    ...(PARENT_SUBMODULES[moduleKey] || []),
-                  ]),
-                ));
-                const newPerms = expandedModules.map(module => ({
-                  module,
-                  read: true,
-                  write: true,
-                  create: true,
-                  edit: true,
-                  delete: true,
-                }));
-                setRoles([...roles, { name: newRoleName, allowedModules: expandedModules, permissions: newPerms }]);
-                setNewRoleName('');
-                setNewRoleModules([]);
-              } else if (!newRoleName) {
-                toast.error('Ingresa un nombre para el rol');
-              } else {
-                toast.error('Selecciona al menos un módulo para el rol');
-              }
-            }} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Añadir Rol</Button>
-          </div>
-          <div className="bg-black/20 p-3 rounded-lg border border-border/30">
-            <div className="text-[10px] font-bold text-muted-foreground mb-2">Selecciona los módulos a los que tendrá acceso:</div>
-            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-              
-              {(() => {
-                const available = Array.from(PARENT_KEYS).filter(mod => {
-                  const subs = PARENT_SUBMODULES[mod] || [];
-                  if (subs.length === 0) return selectedModules.includes(mod);
-                  return selectedModules.includes(mod) || subs.some(s => selectedModules.includes(s));
-                });
-                if (available.length === 0) return <div className="col-span-2 text-xs text-muted-foreground mt-2">No hay módulos seleccionados en el paso anterior.</div>;
-                return available.map(mod => (
-                <label key={mod} className="flex items-start gap-2 cursor-pointer hover:bg-white/5 p-1 rounded-md transition-colors">
-                  <input type="checkbox" checked={newRoleModules.includes(mod)} onChange={(e) => {
-                    if (e.target.checked) setNewRoleModules([...newRoleModules, mod]);
-                    else setNewRoleModules(newRoleModules.filter(m => m !== mod));
-                  }} className="size-3.5 mt-0.5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500/30" />
-                  <span className="text-[10px] text-foreground font-medium leading-tight">
-                      {
-                        mod === 'SALES' ? 'Ventas' :
-                        mod === 'PURCHASES' ? 'Compras' :
-                        mod === 'INVENTORY' ? 'Inventario de Mercancías' :
-                        mod === 'FINANCIAL' ? 'Finanzas' :
-                        mod === 'ACCOUNTING' ? 'Contabilidad' :
-                        mod === 'HR' ? 'Recursos Humanos' :
-                        mod === 'PROJECTS' ? 'Proyectos' :
-                        mod === 'NOTIFICATIONS' ? 'Notificaciones' :
-                        mod === 'ACTIVITIES' ? 'Actividades' :
-                        mod === 'DOCUMENTS' ? 'Nova Cloud' :
-                        mod === 'REPORTS' ? 'Reportes' :
-                        mod === 'SUPPORT_TECH' ? 'Soporte Técnico' :
-                        mod === 'TICKETS' ? 'Tickets y Soporte' :
-                        mod === 'TRAINING' ? 'Centro de Capacitación' :
-                        mod === 'FINANCING' ? 'Financiamiento PYME' :
-                        mod === 'TOOLS' ? 'Herramientas' :
-                        mod === 'NOVACHAT' ? 'Nova Suite' :
-                        mod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
-                      }
-                    </span>
-                </label>
-              ));
-              })()}
-            </div>
-          </div>
-        </div>
-        {roles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {roles.map((r, i) => (
-              <span key={i} className="px-2 py-1 text-[10px] font-bold bg-primary/20 text-primary rounded-md flex items-center gap-1">
-                {r.name} ({r.allowedModules.length} mods)
-                <button type="button" onClick={() => setRoles(roles.filter(x => x.name !== r.name))} className="hover:text-red-500">×</button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl border border-border/50 p-4 bg-white/5">
-        <h4 className="text-xs font-bold mb-3">Usuarios (Opcional)</h4>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Nombre" className="h-9 bg-white/5 text-xs border-border/50" />
-          <Input 
-            value={newUser.email} 
-            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} 
-            onBlur={async (e) => {
-              if (e.target.value && e.target.value.includes('@')) {
-                try {
-                  const res: any = await authService.checkEmail(e.target.value);
-                  if (res?.data?.exists ?? res?.exists) {
-                    toast.error('Este email ya está en uso');
-                  }
-                } catch (err) {}
-              }
-            }}
-            placeholder="Email" 
-            type="email" 
-            className={cn('h-9 bg-white/5 text-xs border-border/50', (newUserEmailError || newUserDuplicateEmail) && 'border-destructive')} 
-          />
-          {(newUserEmailError || newUserDuplicateEmail) && <p className="col-span-2 text-[10px] text-destructive">{newUserEmailError || 'Este correo ya está agregado en este formulario. Escribe otro.'}</p>}
-          <div className="relative">
-            <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="8 caracteres, mayúscula, número y símbolo" type={showUserPassword ? 'text' : 'password'} className={cn('h-9 bg-white/5 text-xs border-border/50 pr-8', newUserPasswordError && 'border-destructive')} />
-            <button type="button" onClick={() => setShowUserPassword(!showUserPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-              {showUserPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-            </button>
-          </div>
-          <select value={newUser.roleName} onChange={(e) => setNewUser({ ...newUser, roleName: e.target.value })} className="h-9 bg-white/5 text-xs rounded-md border border-border/50 px-2 outline-none text-muted-foreground">
-            <option value="">Rol Base (Sin módulos extras)</option>
-            {roles.map((r, i) => <option key={i} value={r.name}>{r.name}</option>)}
-          </select>
-        </div>
-        {newUserPasswordError && <p className="text-[10px] text-destructive">{newUserPasswordError}</p>}
-        <Button type="button" variant="outline" className="w-full h-8 text-xs mb-3 border-border/50" onClick={async () => {
-          if (!newUser.name.trim() || !isValidEmail(newUser.email) || newUserEmailError || newUserDuplicateEmail || newUserPasswordError) {
-            toast.error(newUserEmailError || (newUserDuplicateEmail ? 'Este correo ya está agregado en este formulario. Escribe otro.' : newUserPasswordError || 'Completa los datos del usuario'));
-            return;
-          }
-          if (newUser.name && newUser.email && newUser.password) {
-            try {
-              const res: any = await authService.checkEmail(normalizeEmail(newUser.email));
-              const exists = res?.data?.exists ?? res?.exists;
-              if (exists) {
-                toast.error('El email del usuario ya está registrado en el sistema');
-                return;
-              }
-              setUsers([...users, { ...newUser, email: normalizeEmail(newUser.email) }]);
-              setNewUser({ name: '', email: '', password: '', roleName: '' });
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al verificar el correo');
-            }
-          } else {
-            toast.error('Nombre, Email y Contraseña son obligatorios para crear un usuario');
-          }
-        }} disabled={step4Invalid || newUserEmailChecking}>Añadir Usuario</Button>
-        {users.length > 0 && (
-          <div className="space-y-2">
-            {users.map((u, i) => (
-              <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-black/10 border border-border/30">
-                <div>
-                  <div className="text-xs font-bold">{u.name}</div>
-                  <div className="text-[10px] text-muted-foreground">{u.email}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">{u.roleName || 'Usuario base'}</div>
-                  <button type="button" onClick={() => setUsers(users.filter((_, idx) => idx !== i))} className="text-red-500/70 hover:text-red-500">×</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
+      <TechnicalSheetStep
+        prefill={{
+          companyName: step1Data?.companyName || '',
+          userName: step1Data?.userName || '',
+          email: step1Data?.email || '',
+          whatsappNumber: step1Data?.whatsappNumber || '',
+          cargo: step1Data?.cargo || '',
+          industry: industry || '',
+        }}
+        onData={setTechnicalSheet}
+      />
       <div className="flex gap-3 pt-2">
         <Button type="button" variant="outline" onClick={() => setStep(2)}
           className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
           <ArrowLeft className="size-4" /> Atrás
         </Button>
-        <Button type="button" disabled={submitting || step4Invalid} onClick={handleFinalSubmit}
+        <Button type="button" disabled={submitting || technicalSheet?._requiredComplete === false} onClick={handleFinalSubmit}
           className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           Comenzar prueba gratis
         </Button>
       </div>
+      {technicalSheet && technicalSheet._requiredComplete === false && (
+        <p className="text-[10px] text-amber-600 text-center">Completá los campos obligatorios de la ficha técnica para continuar.</p>
+      )}
+      {error && <p className="text-xs text-destructive text-center">{error}</p>}
+      <p className="text-[10px] text-muted-foreground text-center">Completá la ficha con la información de tu empresa. Es opcional y podés editarla después desde Configuración.</p>
     </div>
   );
   const SETUP_MESSAGES = [
@@ -1217,12 +1161,29 @@ export function RegisterTenantPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
+      <AnimatePresence>
+        {waReminder && (
+          <motion.div
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -60, opacity: 0 }}
+            className="fixed top-0 inset-x-0 z-50 bg-emerald-600 text-white px-4 py-3 shadow-lg flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4"
+          >
+            <span className="text-xs font-bold text-center sm:text-left">
+              ¡Ya casi terminas! No olvides enviar el mensaje de WhatsApp para activar tu prueba gratuita de 3 días.
+            </span>
+            <Button type="button" onClick={sendWhatsApp} size="sm" className="bg-white text-emerald-700 hover:bg-emerald-50 font-black text-[11px] rounded-lg gap-1.5 shrink-0">
+              <WhatsAppIcon className="size-3.5" /> Reenviar mensaje
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {step < 2 && renderLeftPanel()}
       <div className={cn(
-        "flex-1 flex items-center justify-center p-6 md:p-10 bg-background",
-        step >= 2 ? "w-full" : ""
+        "flex-1 flex p-6 md:p-10 bg-background",
+        step === 3 ? "items-start overflow-y-auto max-h-screen justify-center" : "items-center justify-center"
       )}>
-        <div className={cn("w-full space-y-6", step === 2 ? "max-w-4xl" : step === 3 ? "max-w-2xl" : "max-w-md")}>
+        <div className={cn("w-full space-y-6", step === 2 ? "max-w-4xl" : step === 3 ? "max-w-4xl pb-10" : "max-w-md")}>
           <div className="lg:hidden flex items-center gap-3 mb-4">
             <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Package className="size-6 text-primary" />
@@ -1243,7 +1204,7 @@ export function RegisterTenantPage() {
                   <h2 className="text-2xl font-black tracking-tighter uppercase italic mb-6">
                     {step === 0 && <>Crear <span className="text-primary">cuenta</span></>}
                     {step === 1 && <>Tu <span className="text-primary">negocio</span></>}
-                    {step === 3 && <>Tu <span className="text-primary">equipo</span></>}
+                    {step === 3 && <>Tu ficha <span className="text-primary">técnica</span></>}
                     {step === 2 && <>Tus <span className="text-primary">módulos</span></>}
                   </h2>
                   {step === 0 && renderStep1()}

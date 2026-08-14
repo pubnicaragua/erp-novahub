@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, AlertCircle, Coins
+  UserPlus, AlertCircle, Coins, Settings2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -32,6 +32,7 @@ import {
   type PotentialDuplicateSale,
 } from '../../services/caja.service';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
+import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
 import { createIdempotencyKey } from '../../services/api';
@@ -297,6 +298,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const canCreateCustomer = canPerform('SALES_CLIENTS', 'create');
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
+  const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
@@ -894,6 +896,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <p className="text-muted-foreground max-w-md mb-6">
             {availabilityMessage.description}
           </p>
+          <Button onClick={() => setManageCajasOpen(true)} className="gap-2 rounded-xl font-bold">
+            <Settings2 className="size-4" /> Configurar caja
+          </Button>
         </div>
       </>
     );
@@ -1565,6 +1570,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}
         onSuccess={handleCustomerCreated}
+      />
+      <AdministrarCajasModal
+        open={manageCajasOpen}
+        onOpenChange={setManageCajasOpen}
+        onRegistersChanged={() => {
+          loadInitialData();
+          setActiveSession(null);
+        }}
       />
     </div>
   );

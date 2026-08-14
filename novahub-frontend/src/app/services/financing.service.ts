@@ -61,6 +61,7 @@ export interface PrefillData {
   monthlyExpenses: number;
   monthlyCashFlow: number | null;
   hasHistoricalData: boolean;
+  baseCurrency: string;
 }
 
 export interface PaymentCalculation {

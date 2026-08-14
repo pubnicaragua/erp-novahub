@@ -16,6 +16,9 @@ export interface RegisterTenantDto {
   companyDescription?: string;
   selectedModules?: string[];
   logo?: string;
+  whatsappNumber?: string;
+  contactRole?: string;
+  technicalSheet?: any;
   roles?: { name: string; allowedModules: string[]; permissions: any[] }[];
   users?: { name: string; email: string; password: string; roleName?: string }[];
 }

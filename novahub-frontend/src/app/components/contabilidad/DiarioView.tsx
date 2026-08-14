@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { FileText, Send, Ban, Search, RotateCcw, X, ArrowDownLeft, ArrowUpRight, Upload, Download, CalendarRange, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -24,6 +25,11 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { REFERENCE_TYPES, referenceTypeLabel } from '../../utils/accountingLabels';
 import { DateField } from '../ui/DateField';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -54,6 +60,58 @@ function referenceDisplay(journal: JournalEntry): string {
   return journal.referenceNumber || formatReferenceId(journal.referenceId);
 }
 
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+const ASIENTOS_TEMPLATE_HEADERS = ['Código de cuenta', 'Descripción', 'Débito', 'Crédito', 'Referencia', 'Mes'];
+
+const HEADER_TO_KEY: Record<string, string> = {
+  'codigo de cuenta': 'codigo',
+  'descripcion': 'descripcion',
+  'debito': 'debito',
+  'credito': 'credito',
+  'referencia': 'referencia',
+  'mes': 'mes',
+};
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function normalizeHeader(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function parseAmount(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const normalized = s.includes(',') && s.includes('.') ? s.replace(/,/g, '') : s.replace(/,/g, '.');
+  const n = Number(normalized);
+  return isFinite(n) ? n : null;
+}
+
+function monthCutoff(year: number, month: number) {
+  const d = new Date(year, month, 0);
+  return {
+    iso: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+    label: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`,
+  };
+}
+
+interface PreviewRow {
+  rowIndex: number;
+  codigo: string;
+  descripcion: string;
+  debito: number | null;
+  credito: number | null;
+  referencia: string;
+  mes: string;
+  cutoffISO: string;
+  cutoffLabel: string;
+  errors: string[];
+  valid: boolean;
+}
+
 export function DiarioView() {
   const { canPerform } = useAuth();
   const { baseCurrency, formatAmount } = useCurrency();
@@ -69,6 +127,20 @@ export function DiarioView() {
   const journalPageSize = 10000;
 
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
+
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const [importOpen, setImportOpen] = useState(false);
+  const [scopeMode, setScopeMode] = useState<'full' | 'elapsed' | 'custom'>('full');
+  const [elapsedMonths, setElapsedMonths] = useState(String(currentMonth));
+  const [customFromMonth, setCustomFromMonth] = useState('1');
+  const [customFromYear, setCustomFromYear] = useState(String(currentYear));
+  const [customToMonth, setCustomToMonth] = useState(String(currentMonth));
+  const [customToYear, setCustomToYear] = useState(String(currentYear));
+  const [importFileName, setImportFileName] = useState('');
+  const [rawImportRows, setRawImportRows] = useState<Record<string, string>[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [operationProgress, setOperationProgress] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(filterSearch.trim()), 250);
@@ -105,6 +177,192 @@ export function DiarioView() {
     return flatten(accountsQuery.data || []);
   }, [accountsQuery.data]);
   const loadJournals = () => journalsQuery.refetch();
+
+  const yearOptions = useMemo(() => {
+    const years: number[] = [];
+    for (let y = currentYear - 5; y <= currentYear + 1; y += 1) years.push(y);
+    return years;
+  }, [currentYear]);
+
+  const scopeMonths = useMemo(() => {
+    if (scopeMode === 'full') {
+      return Array.from({ length: 12 }, (_, i) => ({ year: currentYear, month: i + 1 }));
+    }
+    if (scopeMode === 'elapsed') {
+      const count = Math.min(12, Math.max(1, Number(elapsedMonths) || 1));
+      return Array.from({ length: count }, (_, i) => ({ year: currentYear, month: i + 1 }));
+    }
+    const from = { year: Number(customFromYear) || currentYear, month: Math.min(12, Math.max(1, Number(customFromMonth) || 1)) };
+    const to = { year: Number(customToYear) || currentYear, month: Math.min(12, Math.max(1, Number(customToMonth) || 1)) };
+    const result: { year: number; month: number }[] = [];
+    const cursor = { ...from };
+    let guard = 0;
+    while ((cursor.year < to.year || (cursor.year === to.year && cursor.month <= to.month)) && guard < 120) {
+      result.push({ ...cursor });
+      if (cursor.month === 12) { cursor.month = 1; cursor.year += 1; } else { cursor.month += 1; }
+      guard += 1;
+    }
+    return result;
+  }, [scopeMode, elapsedMonths, customFromMonth, customFromYear, customToMonth, customToYear]);
+
+  const scopeMonthKeys = useMemo(() => new Set(scopeMonths.map((m) => `${m.year}-${pad2(m.month)}`)), [scopeMonths]);
+
+  const accountCodes = useMemo(() => new Set(accounts.map((a) => a.code)), [accounts]);
+
+  const importRows = useMemo<PreviewRow[]>(
+    () => rawImportRows.map((row, idx) => validateAsientoRow(row, idx, accountCodes, scopeMonthKeys)),
+    [rawImportRows, accountCodes, scopeMonthKeys],
+  );
+  const validImportCount = importRows.filter((r) => r.valid).length;
+  const invalidImportCount = importRows.length - validImportCount;
+
+  function validateAsientoRow(row: Record<string, string>, rowIndex: number, codes: Set<string>, months: Set<string>): PreviewRow {
+    const errors: string[] = [];
+    const codigo = (row.codigo || '').trim();
+    const descripcion = (row.descripcion || '').trim();
+    const referencia = (row.referencia || '').trim();
+    const mes = (row.mes || '').trim();
+    const debito = parseAmount(row.debito);
+    const credito = parseAmount(row.credito);
+
+    if (!codigo) errors.push('Falta el código de cuenta');
+    else if (!codes.has(codigo)) errors.push(`Cuenta no existe: ${codigo}`);
+
+    let cutoffISO = '';
+    let cutoffLabel = '';
+    const mesMatch = mes.match(/^(\d{4})-(\d{1,2})$/);
+    if (!mesMatch) {
+      errors.push(`Mes inválido (formato AAAA-MM): ${mes || '(vacío)'}`);
+    } else {
+      const monthKey = `${mesMatch[1]}-${pad2(Number(mesMatch[2]))}`;
+      if (!months.has(monthKey)) {
+        errors.push(`Mes fuera del alcance: ${mes}`);
+      } else {
+        const cutoff = monthCutoff(Number(mesMatch[1]), Number(mesMatch[2]));
+        cutoffISO = cutoff.iso;
+        cutoffLabel = cutoff.label;
+      }
+    }
+
+    if (debito === null && credito === null) {
+      errors.push('Indica Débito o Crédito');
+    } else {
+      if (debito !== null && debito <= 0) errors.push('El Débito debe ser mayor a 0');
+      if (credito !== null && credito <= 0) errors.push('El Crédito debe ser mayor a 0');
+      if (debito !== null && debito > 0 && credito !== null && credito > 0) errors.push('Indica solo una columna: Débito o Crédito');
+    }
+
+    return {
+      rowIndex,
+      codigo,
+      descripcion,
+      debito,
+      credito,
+      referencia,
+      mes,
+      cutoffISO,
+      cutoffLabel,
+      errors,
+      valid: errors.length === 0,
+    };
+  }
+
+  function downloadAsientosTemplate() {
+    const firstMonth = scopeMonths[0];
+    if (!firstMonth) { toast.error('Define un alcance válido antes de descargar la plantilla'); return; }
+    const mes = `${firstMonth.year}-${pad2(firstMonth.month)}`;
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ASIENTOS_TEMPLATE_HEADERS,
+      ['1101-001', 'Aporte inicial de capital', '100000.00', '', '', mes],
+      ['2103-005', 'Compra de mercadería a crédito', '', '25000.00', 'FAC-0001', mes],
+      ['4101-001', 'Venta de servicios de contado', '', '12500.00', 'FAC-0002', mes],
+    ]);
+    worksheet['!cols'] = [{ wch: 18 }, { wch: 42 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 10 }];
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['GUÍA DE LLENADO · IMPORTAR ASIENTOS CONTABLES'],
+      ['1. No modifiques la fila de encabezados.'],
+      ['2. Código de cuenta: debe existir en el plan de cuentas (ej. 1101-001).'],
+      ['3. Mes: formato AAAA-MM del corte contable (ej. 2026-01). La fecha del asiento será el último día de ese mes.'],
+      ['4. Débito o Crédito: número con puntos para decimales (ej. 1250.75), una sola columna por fila.'],
+      ['5. Referencia: opcional, documento o comprobante asociado al movimiento.'],
+      ['6. Las fechas de corte son mensuales: el último día de cada mes dentro del alcance.'],
+    ]);
+    guide['!cols'] = [{ wch: 100 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Asientos');
+    XLSX.utils.book_append_sheet(workbook, guide, 'Guía');
+    XLSX.writeFile(workbook, 'plantilla_asientos_contables.xlsx');
+  }
+
+  async function handleAsientosFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+      toast.error('El archivo debe ser Excel (.xlsx o .xls)');
+      return;
+    }
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '', raw: false });
+      const nonEmpty = raw.filter((row: any) => Array.isArray(row) && row.some((cell: any) => String(cell ?? '').trim().length > 0));
+      if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return; }
+      const headerRow = (nonEmpty[0] as any[]).map((h) => String(h ?? '').trim());
+      const dataRows = nonEmpty.slice(1);
+      const mapped = dataRows.map((cols: any[]) => {
+        const row: Record<string, string> = {};
+        headerRow.forEach((header, index) => {
+          const key = HEADER_TO_KEY[normalizeHeader(header)];
+          if (key) row[key] = String(cols[index] ?? '').trim();
+        });
+        return row;
+      });
+      setImportFileName(file.name);
+      setRawImportRows(mapped);
+      toast.success(`${mapped.length} filas leídas del archivo`);
+    } catch (err) {
+      toast.error('Error al leer el archivo Excel');
+    }
+  }
+
+  async function handleImportAsientos() {
+    if (validImportCount === 0) { toast.error('No hay filas válidas para importar'); return; }
+    setImporting(true);
+    setOperationProgress(10);
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    try {
+      progressTimer = setInterval(() => setOperationProgress((p) => Math.min(90, p + 3)), 180);
+      const rows = importRows.filter((r) => r.valid).map((r) => [
+        r.codigo,
+        r.cutoffISO,
+        r.descripcion,
+        r.debito ?? 0,
+        r.credito ?? 0,
+        r.referencia || 'IMPORT-XLSX',
+      ]);
+      const res = await contabilidadService.importCsv({ type: 'transactions', rows });
+      if (progressTimer) clearInterval(progressTimer);
+      setOperationProgress(100);
+      toast.success(`Importación completada: ${res?.imported ?? validImportCount} asientos`);
+      loadJournals();
+      setImportOpen(false);
+      setRawImportRows([]);
+      setImportFileName('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Error al importar asientos');
+    } finally {
+      if (progressTimer) clearInterval(progressTimer);
+      setImporting(false);
+      window.setTimeout(() => setOperationProgress(0), 200);
+    }
+  }
+
+  function handleImportOpenChange(open: boolean) {
+    setImportOpen(open);
+    if (!open) {
+      setRawImportRows([]);
+      setImportFileName('');
+    }
+  }
 
   const accountOptions = accounts
     .filter((account) => account.isActive && account.allowManualEntry !== false && account.acceptsPostings !== false)
@@ -198,6 +456,13 @@ export function DiarioView() {
             Registro cronológico de todos los asientos contables
           </p>
         </div>
+        <Button
+          onClick={() => setImportOpen(true)}
+          className="gap-1.5 self-start lg:self-auto"
+        >
+          <Upload className="size-4" />
+          Importar asientos
+        </Button>
       </div>
 
       {/* Filters */}
@@ -574,6 +839,260 @@ export function DiarioView() {
           </Card>
         </div>
       )}
+
+      <Dialog open={importOpen} onOpenChange={handleImportOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-black uppercase tracking-tight italic">
+              <Upload className="size-4 text-primary" />
+              Importar asientos contables
+            </DialogTitle>
+            <DialogDescription>
+              Carga el libro diario del año contable o de los meses transcurridos a la fecha desde una plantilla Excel.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <CalendarRange className="size-4 text-muted-foreground" />
+                Alcance de carga
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <RadioGroup value={scopeMode} onValueChange={(value) => setScopeMode(value as 'full' | 'elapsed' | 'custom')} className="gap-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 p-3 transition-colors hover:border-primary/40 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value="full" className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">Año contable completo (Enero - Diciembre)</span>
+                    <span className="block text-xs text-muted-foreground">Todos los meses del año {currentYear}</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 p-3 transition-colors hover:border-primary/40 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value="elapsed" className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">Meses transcurridos a la fecha</span>
+                    <span className="block text-xs text-muted-foreground">Primeros N meses del año {currentYear} hasta el mes actual</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 p-3 transition-colors hover:border-primary/40 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value="custom" className="mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold">Personalizado</span>
+                    <span className="block text-xs text-muted-foreground">Elige el rango de meses (desde / hasta)</span>
+                  </span>
+                </label>
+              </RadioGroup>
+
+              {scopeMode === 'elapsed' && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                    Cantidad de meses
+                  </Label>
+                  <Select value={elapsedMonths} onValueChange={setElapsedMonths}>
+                    <SelectTrigger className="h-8 w-56 text-xs">
+                      <SelectValue placeholder="Meses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <SelectItem key={m} value={String(m)}>
+                          {m} {m === 1 ? 'mes' : 'meses'} · {MONTH_NAMES[m - 1]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {scopeMode === 'custom' && (
+                <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Desde · Mes</Label>
+                    <Select value={customFromMonth} onValueChange={setCustomFromMonth}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONTH_NAMES.map((name, i) => (
+                          <SelectItem key={name} value={String(i + 1)}>{name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Desde · Año</Label>
+                    <Select value={customFromYear} onValueChange={setCustomFromYear}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {yearOptions.map((y) => (
+                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Hasta · Mes</Label>
+                    <Select value={customToMonth} onValueChange={setCustomToMonth}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONTH_NAMES.map((name, i) => (
+                          <SelectItem key={name} value={String(i + 1)}>{name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Hasta · Año</Label>
+                    <Select value={customToYear} onValueChange={setCustomToYear}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {yearOptions.map((y) => (
+                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Fechas de corte generadas ({scopeMonths.length})
+                </p>
+                {scopeMonths.length === 0 ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    El rango seleccionado es inválido (el inicio es posterior al fin).
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {scopeMonths.map((m) => (
+                      <Badge key={`${m.year}-${m.month}`} variant="outline" className="font-mono text-[10px]">
+                        {monthCutoff(m.year, m.month).label}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-bold">
+                <Download className="size-3.5 text-muted-foreground" />
+                Plantilla de importación (.xlsx)
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Columnas en español: Código de cuenta, Descripción, Débito, Crédito, Referencia y Mes.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={downloadAsientosTemplate} disabled={scopeMonths.length === 0}>
+              <Download className="size-3.5" />
+              Descargar plantilla (.xlsx)
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <FileSpreadsheet className="size-4 text-muted-foreground" />
+                Subir archivo y revisar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border border-dashed border-border/40 p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  id="asientos-import-file"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAsientosFile(f); e.target.value = ''; }}
+                />
+                <label htmlFor="asientos-import-file" className="flex cursor-pointer flex-col items-center gap-2 text-muted-foreground">
+                  <FileSpreadsheet className="size-10 opacity-40" />
+                  <span className="text-sm font-medium">{importFileName ? importFileName : 'Haz clic para seleccionar un archivo Excel'}</span>
+                  <span className="text-xs">{rawImportRows.length > 0 ? `${importRows.length} filas leídas` : 'Se cargarán los asientos del archivo'}</span>
+                </label>
+              </div>
+
+              {importRows.length > 0 && (
+                <>
+                  <ImportReviewSummary total={importRows.length} valid={validImportCount} skipped={invalidImportCount} entityLabel="asientos" />
+
+                  <div className="overflow-x-auto rounded-xl border border-border/60">
+                    <table className="w-full min-w-[820px] text-xs">
+                      <thead className="bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2">Fila</th>
+                          <th className="px-3 py-2">Código</th>
+                          <th className="px-3 py-2">Descripción</th>
+                          <th className="px-3 py-2 text-right">Débito</th>
+                          <th className="px-3 py-2 text-right">Crédito</th>
+                          <th className="px-3 py-2">Fecha de corte</th>
+                          <th className="px-3 py-2">Referencia</th>
+                          <th className="px-3 py-2 text-center">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.map((row) => (
+                          <tr key={row.rowIndex} className="border-t border-border/30">
+                            <td className="px-3 py-1.5 font-mono">{row.rowIndex + 2}</td>
+                            <td className="px-3 py-1.5 font-mono">{row.codigo || '—'}</td>
+                            <td className="max-w-[240px] truncate px-3 py-1.5" title={row.descripcion}>{row.descripcion || '—'}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{row.debito !== null && row.debito > 0 ? formatCurrency(row.debito) : '—'}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-rose-500">{row.credito !== null && row.credito > 0 ? formatCurrency(row.credito) : '—'}</td>
+                            <td className="px-3 py-1.5 font-mono">{row.cutoffLabel || '—'}</td>
+                            <td className="max-w-[140px] truncate px-3 py-1.5 font-mono" title={row.referencia}>{row.referencia || '—'}</td>
+                            <td className="px-3 py-1.5 text-center">
+                              {row.valid ? (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                                  <CheckCircle2 className="size-3" /> Válida
+                                </span>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex cursor-help items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600">
+                                      <AlertTriangle className="size-3" /> Error
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <div className="space-y-1">
+                                      {row.errors.map((error) => <p key={error}>{error}</p>)}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={handleImportAsientos} disabled={importing || validImportCount === 0} className="gap-1.5">
+                      <Upload className="size-4" />
+                      {importing ? 'Importando...' : `Importar ${validImportCount} válidas`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </DialogContent>
+      </Dialog>
+      <ImportProgressOverlay
+        open={importing}
+        progress={operationProgress}
+        title="Importando asientos contables"
+        description="Creando las transacciones del libro diario desde las filas válidas..."
+      />
       </div>
     </div>
   );

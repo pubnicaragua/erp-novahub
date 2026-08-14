@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: Letter; margin: 16mm 14mm 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a2e22; font-size: 10.5px; line-height: 1.5; margin: 0; }
+  h1 { font-size: 22px; margin: 0; color: #065f46; }
+  h2 { font-size: 14px; color: #065f46; border-bottom: 2px solid #10b981; padding-bottom: 4px; margin: 22px 0 10px; }
+  .header { background: linear-gradient(135deg, #065f46, #10b981); color: #fff; border-radius: 10px; padding: 18px 20px; }
+  .header h1 { color: #fff; } .header p { margin: 4px 0 0; color: #d1fae5; font-size: 11px; }
+  .badge { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .ok { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+  .partial { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+  .no { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+  .manual { background: #e0e7ff; color: #3730a3; border: 1px solid #818cf8; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  th { background: #ecfdf5; color: #065f46; font-size: 9px; text-transform: uppercase; letter-spacing: .6px; text-align: left; padding: 6px 8px; border: 1px solid #a7f3d0; }
+  td { padding: 6px 8px; border: 1px solid #d1fae5; vertical-align: top; font-size: 10px; }
+  .scenario { border: 1px solid #d1fae5; border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fcfdfd; page-break-inside: avoid; }
+  .scenario .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .scenario .title { font-weight: 700; font-size: 11.5px; color: #064e3b; }
+  .flow { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 10px; font-size: 9.5px; color: #166534; margin-top: 6px; }
+  .debit { color: #b45309; font-weight: 700; } .credit { color: #1d4ed8; font-weight: 700; }
+  .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; font-size: 10px; margin: 8px 0; }
+  .footer { margin-top: 20px; text-align: center; font-size: 9px; color: #6b7280; border-top: 1px solid #d1fae5; padding-top: 8px; }
+  ul { margin: 4px 0 4px 18px; padding: 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Manual de Asientos Contables Autom&aacute;ticos</h1>
+  <p>NOVA HUB ERP &mdash; Gu&iacute;a completa de escenarios: qu&eacute; genera asiento, con qu&eacute; cuentas, y estado actual en el ERP (agosto 2026)</p>
+</div>
+
+<h2>1. C&oacute;mo funciona el motor contable</h2>
+<p>El motor de asientos autom&aacute;ticos conecta cada m&oacute;dulo del ERP con el Libro Diario, el Libro Mayor y el Plan de Cuentas. Cuando un proceso cumple su condici&oacute;n contable (ej. una factura queda <strong>pagada</strong>), el sistema genera un asiento con las cuentas configuradas en <strong>Contabilidad &rarr; Configuraci&oacute;n &rarr; Configuraci&oacute;n de cuentas para asientos contables por m&oacute;dulos y vistas</strong>. Cada proceso usa <strong>varias cuentas a la vez</strong> (una por campo Debe/Haber); cada campo acepta <strong>una sola cuenta</strong>, y pueden elegirse cuentas de detalle, subcuentas o cuentas con subcuentas (sus saldos directos se muestran en el Balance General). Los asientos alimentan: Libro Diario, Libro Mayor, Balance de Comprobaci&oacute;n, Estado de Resultados, Balance General, Flujo de Efectivo y Cambios en el Patrimonio.</p>
+
+<h2>2. Escenarios de VENTAS</h2>
+
+<div class="scenario"><div class="head"><span class="title">Venta por factura (pagada)</span><span class="badge ok">✓ Funciona</span></div>
+<p>Cuando la factura se marca como pagada se registra <strong>una sola vez</strong>, contra el cobro real.</p>
+<div class="flow"><span class="debit">DEBE</span> Cuenta de cobro seg&uacute;n forma de pago (Efectivo/Caja, Tarjetas, Transferencias, Cheques u Otros) &nbsp;·&nbsp; <span class="credit">HABER</span> Ingresos por Ventas (subtotal) + IVA por Pagar</div>
+<p>Pagos <strong>mixtos</strong> (ej. mitad efectivo, mitad tarjeta): cada m&eacute;todo se debita en su propia cuenta configurada. Si la factura se emite desde una caja (POS), usa las cuentas de <strong>Facturaci&oacute;n por Caja</strong>.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Venta por factura: costo de venta e inventario</span><span class="badge partial">⚠ Parcial</span></div>
+<p>El asiento de la venta registra ingreso, IVA y cobro. El <strong>costo de venta y la salida de inventario</strong> (y el efecto por sucursal/almac&eacute;n) se controlan en el m&oacute;dulo de Inventario pero <strong>a&uacute;n no se contabilizan autom&aacute;ticamente</strong> (no se genera d&eacute;bito a Costo de Ventas vs cr&eacute;dito a Inventario).</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Venta por caja (Facturaci&oacute;n POS)</span><span class="badge ok">✓ Funciona</span></div>
+<p>Venta cobrada al momento, sin cuentas por cobrar.</p>
+<div class="flow"><span class="debit">DEBE</span> Medio de cobro POS (efectivo/tarjeta/transferencia/cheque/otro) &nbsp;·&nbsp; <span class="credit">HABER</span> Ingresos por Ventas + IVA por Pagar</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Cobro de factura pendiente</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Medio de cobro (seg&uacute;n forma de pago) &nbsp;·&nbsp; <span class="credit">HABER</span> Cuentas por Cobrar</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Ventas recurrentes</span><span class="badge ok">✓ Funciona</span></div>
+<p>La factura recurrente, al quedar pagada, genera el mismo asiento que una factura normal (ingreso + IVA + cuenta de cobro).</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Nota de cr&eacute;dito / devoluci&oacute;n</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Devoluciones y Descuentos &nbsp;·&nbsp; <span class="credit">HABER</span> Cuentas por Cobrar</div>
+<p>No genera asiento de reversa de inventario ni de IVA: solo la devoluci&oacute;n de venta y la disminuci&oacute;n de la cuenta por cobrar.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Cierre de caja (arqueo diario)</span><span class="badge partial">⚠ Parcial</span></div>
+<p>Apertura y cierre son control operativo: <strong>solo las diferencias del arqueo</strong> generan asiento (sobrante/faltante contra la cuenta de caja). Un cierre sin diferencias no registra nada en contabilidad.</p></div>
+
+<h2>3. Escenarios de COMPRAS</h2>
+
+<div class="scenario"><div class="head"><span class="title">Recepci&oacute;n de compra pagada</span><span class="badge partial">⚠ Parcial</span></div>
+<p>Solo al liquidar (pagar) la recepci&oacute;n se genera el asiento. Una recepci&oacute;n pendiente NO genera asiento.</p>
+<div class="flow"><span class="debit">DEBE</span> Inventario / Gasto + IVA Acreditable &nbsp;·&nbsp; <span class="credit">HABER</span> IR retenido por pagar + IVA retenido por pagar + Otras retenciones + Cuentas por Pagar + medio de pago</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Pago de factura a proveedor</span><span class="badge ok">✓ Funciona</span></div>
+<p>El pago NO crea un segundo asiento: el &uacute;nico asiento es el de la factura/recepci&oacute;n <strong>pagada</strong> (el comprobante operativo del pago es la propia factura liquidada).</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Cr&eacute;dito de proveedor aplicado</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Cuentas por Pagar &nbsp;·&nbsp; <span class="credit">HABER</span> Inventario / Compras</div></div>
+
+<h2>4. Escenarios de INVENTARIO y ACTIVOS FIJOS</h2>
+
+<div class="scenario"><div class="head"><span class="title">Ajuste de inventario (conteo f&iacute;sico)</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Inventario (si sobra) o P&eacute;rdida/Ganancia &nbsp;·&nbsp; <span class="credit">HABER</span> P&eacute;rdida/Ganancia o Inventario (si falta)</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Transferencia de inventario entre almacenes</span><span class="badge partial">⚠ Parcial</span></div>
+<p>La transferencia genera asiento con las cuentas configuradas en el m&oacute;dulo <strong>Transferencias</strong> (cuenta destino vs cuenta origen). Si las cuentas de inventario por almac&eacute;n no est&aacute;n definidas, no se registra el movimiento de bodega.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Venta de activo fijo (baja)</span><span class="badge no">✗ No genera asiento a&uacute;n</span></div>
+<p>Pendiente de desarrollo: el alta/baja de activos fijos se registra operativamente, pero no se genera el asiento de la venta (caja/banco vs valor en libros y resultado de la venta).</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Compra de activo fijo</span><span class="badge no">✗ No genera asiento a&uacute;n</span></div>
+<p>El activo se registra y se puede importar por plantilla, pero no se genera asiento autom&aacute;tico de la compra.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Depreciaci&oacute;n de activos fijos</span><span class="badge no">✗ No genera asiento a&uacute;n</span></div>
+<p>La depreciaci&oacute;n se calcula y muestra en la vista de activos, pero no se contabiliza (no se registra Gasto por depreciaci&oacute;n vs Depreciaci&oacute;n acumulada).</p></div>
+
+<h2>5. Transferencias, fondos y conciliaci&oacute;n</h2>
+
+<div class="scenario"><div class="head"><span class="title">Transferencia de caja a bancos (y viceversa)</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Cuenta destino (ej. Efectivo en banco) &nbsp;·&nbsp; <span class="credit">HABER</span> Cuenta origen (ej. Caja General)</div>
+<p>Ambas cuentas se configuran en el m&oacute;dulo <strong>Transferencias</strong>. Con pago mixto, cada parte usa su cuenta.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Transferencia / fusi&oacute;n de saldo entre cuentas (Merge)</span><span class="badge ok">✓ Funciona</span></div>
+<p>Desde el Plan de Cuentas, "Transferir datos de una cuenta a otra" mueve <strong>todos</strong> los movimientos (transacciones, l&iacute;neas de asiento, facturas, cobros, gastos, ingresos, presupuestos, conciliaciones) y el saldo a la cuenta destino, con o sin eliminar la cuenta origen. Requiere que la origen no tenga subcuentas y sea del mismo tipo contable.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Conciliaci&oacute;n bancaria</span><span class="badge partial">⚠ Parcial</span></div>
+<p>Genera asiento (CON) cuando el estado de cuenta presenta <strong>diferencias</strong> contra el libro de banco (cargos/abonos por conciliar). Una conciliaci&oacute;n sin diferencias no registra nada.</p></div>
+
+<h2>6. N&oacute;mina, gastos, ingresos y moneda</h2>
+
+<div class="scenario"><div class="head"><span class="title">N&oacute;mina pagada</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Salario base + Bonificaciones + Horas extras + Comisiones + INSS patronal + INATEC + provisiones (aguinaldo, vacaciones, indemnizaci&oacute;n) &nbsp;·&nbsp; <span class="credit">HABER</span> INSS laboral + INSS patronal + INATEC + IR por pagar + otras deducciones + provisiones por pagar + Caja/Bancos (neto)</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Gasto pagado (finanzas o RR. HH.)</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="debit">DEBE</span> Cuenta de gasto &nbsp;·&nbsp; <span class="credit">HABER</span> Medio de pago (caja/tarjeta/transferencia/cheque/otro)</div>
+<p>Incluye gastos de Formaci&oacute;n/Capacitaci&oacute;n y Beneficios de empleados, cada uno con su propia cuenta de gasto. Los <strong>gastos recurrentes</strong> se contabilizan igual al pagarse.</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Ingresos financieros (incluye recurrentes)</span><span class="badge ok">✓ Funciona</span></div>
+<div class="flow"><span class="credit">HABER</span> Cuenta de ingresos configurada</div></div>
+
+<div class="scenario"><div class="head"><span class="title">Diferencias cambiarias</span><span class="badge ok">✓ Funciona</span></div>
+<p>El c&aacute;lculo de diferencias entre tasa autom&aacute;tica y manual genera asientos de ganancia/p&eacute;rdida cambiaria (no realizada y realizada) al confirmar la corrida, y permite reversi&oacute;n.</p></div>
+
+<h2>7. Apertura y cierre de per&iacute;odos</h2>
+
+<div class="scenario"><div class="head"><span class="title">Saldos iniciales / apertura de a&ntilde;o</span><span class="badge manual">Manual</span></div>
+<p>Se cargan como asiento de apertura (ej. AS-001 "Apertura de a&ntilde;o fiscal"): d&eacute;bitos a activos y cr&eacute;ditos a pasivos y patrimonio. El asiento debe cuadrar (total d&eacute;bitos = total cr&eacute;ditos).</p></div>
+
+<div class="scenario"><div class="head"><span class="title">Cierre de per&iacute;odo contable</span><span class="badge no">✗ No genera asiento a&uacute;n</span></div>
+<p>La vista de Per&iacute;odos Contables controla apertura/cierre por mes, pero no genera el asiento de cierre (traslado de resultados a patrimonio).</p></div>
+
+<h2>8. Reportes que alimentan los asientos</h2>
+<table>
+<tr><th>Reporte</th><th>Origen de los datos</th></tr>
+<tr><td>Libro Diario</td><td>Asientos generados por todos los procesos</td></tr>
+<tr><td>Libro Mayor</td><td>Movimientos por cuenta contable (transacciones)</td></tr>
+<tr><td>Balance de Comprobaci&oacute;n</td><td>Saldos por cuenta a la fecha de corte</td></tr>
+<tr><td>Estado de Resultados</td><td>Ingresos y gastos del per&iacute;odo (resultado acumulado)</td></tr>
+<tr><td>Balance General</td><td>Activos, pasivos y patrimonio; incluye el saldo directo de cuentas con subcuentas</td></tr>
+<tr><td>Flujo de Efectivo</td><td>Clasificaci&oacute;n por actividad operativa, inversi&oacute;n y financiamiento</td></tr>
+<tr><td>Cambios en el Patrimonio</td><td>Capital, resultados y movimientos patrimoniales del per&iacute;odo</td></tr>
+</table>
+
+<h2>9. Estado por proceso (gu&iacute;a de pruebas)</h2>
+<table>
+<tr><th>Proceso</th><th>Estado</th><th>Genera asiento</th></tr>
+<tr><td>Factura de venta pagada</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (ingreso + IVA + cobro por forma de pago)</td></tr>
+<tr><td>Costo de venta e inventario de la venta</td><td><span class="badge partial">⚠ Parcial</span></td><td>No contabilizado (solo control de inventario)</td></tr>
+<tr><td>Facturaci&oacute;n por caja (POS)</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (medio de cobro + ingreso + IVA)</td></tr>
+<tr><td>Cobro de factura</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (medio de cobro vs CxC)</td></tr>
+<tr><td>Ventas recurrentes</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (igual a factura pagada)</td></tr>
+<tr><td>Nota de cr&eacute;dito / devoluci&oacute;n</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (devoluciones vs CxC)</td></tr>
+<tr><td>Recepci&oacute;n de compra</td><td><span class="badge partial">⚠ Parcial</span></td><td>Solo si la factura est&aacute; pagada</td></tr>
+<tr><td>Pago a proveedor</td><td><span class="badge ok">✓ Funciona</span></td><td>No crea asiento (delegado en la factura pagada)</td></tr>
+<tr><td>Cr&eacute;dito de proveedor</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (CxP vs inventario/compras)</td></tr>
+<tr><td>Gasto pagado (incluye recurrentes)</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (gasto vs medio de pago)</td></tr>
+<tr><td>Ingreso financiero (incluye recurrentes)</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (ingreso configurado)</td></tr>
+<tr><td>N&oacute;mina</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (costos laborales + retenciones + neto)</td></tr>
+<tr><td>Ajuste de inventario</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (inventario vs p&eacute;rdida/ganancia)</td></tr>
+<tr><td>Transferencia caja &harr; bancos</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (cuenta destino vs cuenta origen)</td></tr>
+<tr><td>Transferencia inventario entre almacenes</td><td><span class="badge partial">⚠ Parcial</span></td><td>Seg&uacute;n cuentas configuradas</td></tr>
+<tr><td>Cierre de caja</td><td><span class="badge partial">⚠ Parcial</span></td><td>Solo diferencias de arqueo</td></tr>
+<tr><td>Conciliaci&oacute;n bancaria</td><td><span class="badge partial">⚠ Parcial</span></td><td>Solo diferencias del estado de cuenta</td></tr>
+<tr><td>Diferencias cambiarias</td><td><span class="badge ok">✓ Funciona</span></td><td>S&iacute; (ganancia/p&eacute;rdida por tasa)</td></tr>
+<tr><td>Saldos iniciales / apertura</td><td><span class="badge manual">Manual</span></td><td>Asiento de apertura cargado por el usuario</td></tr>
+<tr><td>Cierre de per&iacute;odo contable</td><td><span class="badge no">✗ Pendiente</span></td><td>No genera asiento</td></tr>
+<tr><td>Venta de activo fijo</td><td><span class="badge no">✗ Pendiente</span></td><td>No genera asiento</td></tr>
+<tr><td>Compra de activo fijo</td><td><span class="badge no">✗ Pendiente</span></td><td>No genera asiento</td></tr>
+<tr><td>Depreciaci&oacute;n de activos</td><td><span class="badge no">✗ Pendiente</span></td><td>No genera asiento</td></tr>
+</table>
+
+<div class="note"><strong>Nota sobre cuentas:</strong> un proceso puede tocar varias cuentas a la vez (ej. una venta toca ingreso, IVA, caja y banco). En la configuraci&oacute;n, cada <strong>campo</strong> es una cuenta: se elige UNA cuenta por campo (Debe o Haber). Se pueden elegir cuentas de detalle, subcuentas y cuentas con subcuentas (grupos estructurales: "Grupo principal"/"Grupo" no). El Balance General muestra el saldo directo de las cuentas con subcuentas junto al de sus subcuentas.</div>
+
+<div class="footer">NOVA HUB ERP &mdash; Soluciones que crecen con su empresa &mdash; Documento generado el 13 de agosto de 2026</div>
+</body>
+</html>

@@ -197,7 +197,7 @@ export function FinanciamientoPymePage() {
       </AnimatePresence>
 
       <Dialog open={showWizard} onOpenChange={setShowWizard}>
-        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
+        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 rounded-3xl border-none">
           <div className="p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nueva Solicitud de Financiamiento</DialogTitle>
           </div>
@@ -280,9 +280,21 @@ function PaymentCalculator() {
 }
 
 function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string; onBack: () => void; onComplete: (app: FinancingApplication) => void }) {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [prefill, setPrefill] = useState<PrefillData | null>(null);
+
+  const [company, setCompany] = useState({
+    companyName: user?.tenantName || user?.name || '',
+    ruc: '',
+    industry: '',
+    yearsOfOperation: '',
+    address: '',
+    phone: '',
+    legalRepresentative: user?.name || '',
+    legalRepresentativeEmail: user?.email || '',
+  });
 
   const [form, setForm] = useState({
     requestedAmount: 100000,
@@ -308,13 +320,23 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
   });
 
   useEffect(() => {
-    if (step === 1 && tenantId && !prefill) {
+    if (tenantId && !prefill) {
       const load = async () => {
         setLoading(true);
         try {
           const res: any = await financingService.getPrefill(tenantId);
           const data = res?.data || res;
           setPrefill(data);
+          setCompany((prev) => ({
+            companyName: data.companyName || prev.companyName,
+            ruc: data.ruc || prev.ruc,
+            industry: data.industry || prev.industry,
+            yearsOfOperation: data.yearsOfOperation != null ? String(data.yearsOfOperation) : prev.yearsOfOperation,
+            address: data.address || prev.address,
+            phone: data.phone || prev.phone,
+            legalRepresentative: data.legalRepresentative || prev.legalRepresentative,
+            legalRepresentativeEmail: data.legalRepresentativeEmail || prev.legalRepresentativeEmail,
+          }));
           setForm((prev) => ({
             ...prev,
             monthlyRevenue: data.monthlyRevenue || 0,
@@ -384,15 +406,15 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mb-2">
         {steps.map((s, i) => (
-          <div key={s} className="flex items-center gap-2 flex-1">
+          <div key={s} className="flex items-center gap-2 flex-1 min-w-0">
             <div className={cn('size-8 rounded-full flex items-center justify-center text-xs font-black shrink-0',
               i === step ? 'bg-primary text-primary-foreground' : i < step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')}>
               {i < step ? <CheckCircle2 className="size-4" /> : i + 1}
             </div>
-            <span className={cn('text-xs font-bold hidden sm:block', i === step ? 'text-primary' : 'text-muted-foreground')}>{s}</span>
-            {i < 4 && <div className={cn('flex-1 h-0.5 rounded', i < step ? 'bg-primary' : 'bg-muted')} />}
+            <span className={cn('text-xs font-bold hidden sm:block min-w-0 truncate', i === step ? 'text-primary' : 'text-muted-foreground')}>{s}</span>
+            {i < 4 && <div className={cn('flex-1 h-0.5 rounded min-w-4', i < step ? 'bg-primary' : 'bg-muted')} />}
           </div>
         ))}
       </div>
@@ -406,16 +428,23 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
               {loading ? (
                 <div className="flex items-center gap-3 py-8"><Loader2 className="size-5 animate-spin text-primary" /><span className="text-muted-foreground">Cargando datos del ERP...</span></div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <EditField label="Nombre de la empresa" value={prefill?.companyName || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, companyName: v } : null)} />
-                  <EditField label="RUC/NIT" value={prefill?.ruc || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, ruc: v } : null)} />
-                  <EditField label="Giro de negocio" value={prefill?.industry || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, industry: v } : null)} />
-                  <EditField label="Años de operación" value={prefill?.yearsOfOperation?.toString() || '0'} onChange={(v) => setPrefill(prev => prev ? { ...prev, yearsOfOperation: parseInt(v) || 0 } : null)} />
-                  <EditField label="Dirección fiscal" value={prefill?.address || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, address: v } : null)} />
-                  <EditField label="Teléfono" value={prefill?.phone || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, phone: v } : null)} />
-                  <EditField label="Representante legal" value={prefill?.legalRepresentative || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, legalRepresentative: v } : null)} />
-                  <EditField label="Email" value={prefill?.legalRepresentativeEmail || ''} onChange={(v) => setPrefill(prev => prev ? { ...prev, legalRepresentativeEmail: v } : null)} />
-                </div>
+                <>
+                  {Object.values(company).some((v) => v !== '') && (
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-center gap-2 text-xs font-bold text-primary">
+                      <CheckCircle2 className="size-4 shrink-0" /> Datos de tu empresa precargados del sistema
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <EditField label="Nombre de la empresa" value={company.companyName} readOnly={company.companyName !== ''} onChange={(v) => setCompany({ ...company, companyName: v })} />
+                    <EditField label="RUC/NIT" value={company.ruc} readOnly={company.ruc !== ''} onChange={(v) => setCompany({ ...company, ruc: v })} />
+                    <EditField label="Giro de negocio" value={company.industry} readOnly={company.industry !== ''} onChange={(v) => setCompany({ ...company, industry: v })} />
+                    <EditField label="Años de operación" value={company.yearsOfOperation} readOnly={company.yearsOfOperation !== ''} onChange={(v) => setCompany({ ...company, yearsOfOperation: v })} />
+                    <EditField label="Dirección fiscal" value={company.address} readOnly={company.address !== ''} onChange={(v) => setCompany({ ...company, address: v })} />
+                    <EditField label="Teléfono" value={company.phone} readOnly={company.phone !== ''} onChange={(v) => setCompany({ ...company, phone: v })} />
+                    <EditField label="Representante legal" value={company.legalRepresentative} readOnly={company.legalRepresentative !== ''} onChange={(v) => setCompany({ ...company, legalRepresentative: v })} />
+                    <EditField label="Email" value={company.legalRepresentativeEmail} readOnly={company.legalRepresentativeEmail !== ''} onChange={(v) => setCompany({ ...company, legalRepresentativeEmail: v })} />
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -503,9 +532,9 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
                   <Calculator className="size-4" /> Cuota mensual estimada
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-center">
-                  <div><div className="text-[10px] uppercase text-muted-foreground">Cuota</div><div className="text-lg font-black text-primary">${Math.round(calc.monthly).toLocaleString()}</div></div>
-                  <div><div className="text-[10px] uppercase text-muted-foreground">Total</div><div className="text-lg font-black">${Math.round(calc.total).toLocaleString()}</div></div>
-                  <div><div className="text-[10px] uppercase text-muted-foreground">Intereses</div><div className="text-lg font-black text-amber-600">${Math.round(calc.total - form.requestedAmount).toLocaleString()}</div></div>
+                  <div className="min-w-0"><div className="text-[10px] uppercase text-muted-foreground">Cuota</div><div className="text-lg font-black text-primary">${Math.round(calc.monthly).toLocaleString()}</div></div>
+                  <div className="min-w-0"><div className="text-[10px] uppercase text-muted-foreground">Total</div><div className="text-lg font-black">${Math.round(calc.total).toLocaleString()}</div></div>
+                  <div className="min-w-0"><div className="text-[10px] uppercase text-muted-foreground">Intereses</div><div className="text-lg font-black text-amber-600">${Math.round(calc.total - form.requestedAmount).toLocaleString()}</div></div>
                 </div>
                 <p className="text-[10px] text-primary mt-2">Tasa referencial BCN: 18% anual</p>
               </div>
@@ -556,7 +585,7 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
             <div className="space-y-4">
               <h3 className="text-lg font-black tracking-tighter">Revisión y Envío</h3>
               <div className="rounded-2xl border border-border/50 divide-y divide-border/30 text-sm">
-                <SummaryRow label="Empresa" value={prefill?.companyName || ''} />
+                <SummaryRow label="Empresa" value={company.companyName} />
                 <SummaryRow label="Monto" value={`C$ ${form.requestedAmount.toLocaleString()}`} />
                 <SummaryRow label="Plazo" value={`${form.termMonths} meses`} />
                 <SummaryRow label="Destino" value={PURPOSES.find((p) => p.value === form.purpose)?.label || form.purpose} />
@@ -673,11 +702,12 @@ function ApplicationDetail({ app, onBack, onRefresh }: { app: FinancingApplicati
   );
 }
 
-function EditField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function EditField({ label, value, onChange, readOnly }: { label: string; value: string; onChange: (v: string) => void; readOnly?: boolean }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-[10px] uppercase font-black tracking-widest">{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-11 rounded-xl" />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} readOnly={readOnly}
+        className={cn('h-11 rounded-xl', readOnly && 'bg-muted/40 text-muted-foreground cursor-not-allowed')} />
     </div>
   );
 }

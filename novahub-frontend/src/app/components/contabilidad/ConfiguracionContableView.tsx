@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { motion } from 'motion/react'
 import {
   Settings2, Save, Building2, Upload, FileDown, RefreshCw,
   Loader2, CheckCircle2, Globe, DollarSign,
@@ -6,6 +7,7 @@ import {
   Plus, Info, Trash2,
   FileText, Receipt, Package, Wallet,
   Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight, Landmark, Sparkles, GitBranch,
+  Search, Check,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
@@ -366,9 +368,14 @@ function isGroupingAccount(account: Pick<AccountInfo, 'isLeaf' | 'subtype'>) {
 function getAccountOptionStateForType(account: AccountInfo, expectedType: ModuleField['defaultType']): AccountOptionState {
   if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
   if (account.acceptsPostings === false) return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
-  if (isGroupingAccount(account)) return { disabled: true, label: 'Activa · Agrupadora', className: 'text-red-500' }
   if (String(account.type).toUpperCase() !== expectedType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
+  }
+  if (isGroupingAccount(account)) {
+    // Las cuentas agrupadoras (con subcuentas) también pueden elegirse: el
+    // motor registra el asiento en la cuenta indicada y el balance general
+    // muestra el saldo directo de la agrupadora junto al de sus subcuentas.
+    return { disabled: false, label: 'Activa · Agrupadora (acumula sus subcuentas)', className: 'text-amber-500' }
   }
   return { disabled: false, label: 'Activa · Disponible', className: 'text-emerald-600' }
 }
@@ -460,6 +467,32 @@ function getRecommendedAccounts(field: ModuleField, accountOptions: AccountOptio
     .slice(0, 3)
 }
 
+const SUBTYPE_LABELS: Record<string, string> = {
+  MAIN_GROUP: 'Grupo principal',
+  GROUP: 'Grupo',
+  DETAIL_ACCOUNT: 'Detalle',
+  SUBACCOUNT: 'Subcuenta',
+}
+
+const subtypeLabel = (value?: string) => SUBTYPE_LABELS[String(value || '').toUpperCase()] || String(value || '') || '—'
+
+function ModuleStatusBadge({ status }: { status: { total: number; defined: number; pct: number; complete: boolean } }) {
+  return (
+    <span className={cn(
+      'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+      status.complete ? 'bg-emerald-500/15 text-emerald-600' : status.pct > 0 ? 'bg-amber-500/15 text-amber-600' : 'bg-muted text-muted-foreground',
+    )}>
+      {status.complete ? (
+        <><Check className="mr-0.5 inline size-2.5" /> Listo</>
+      ) : status.total - status.defined === 0 ? (
+        <>Faltan cuentas</>
+      ) : (
+        <>Faltan {status.total - status.defined} cuentas</>
+      )}
+    </span>
+  )
+}
+
 function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   code: string
   field: ModuleField
@@ -474,17 +507,28 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
   const recommended = useMemo(() => getRecommendedAccounts(field, accountOptions), [field, accountOptions])
   const recommendedCodes = useMemo(() => new Set(recommended.map(entry => entry.option.code)), [recommended])
   const topRecommendation = recommended[0]?.option
+  const [subtypeFilter, setSubtypeFilter] = useState('ALL')
+  const availableSubtypes = useMemo(() => {
+    const seen = new Set<string>()
+    for (const option of accountOptions) {
+      if (option.disabled) continue
+      seen.add(String(option.subtype || '').toUpperCase())
+    }
+    return Array.from(seen).sort()
+  }, [accountOptions])
   const accountSelectOptions = useMemo(() => {
     const options = accountOptions.map(accountOption => {
       const recommendation = recommended.find(entry => entry.option.code === accountOption.code)
-      const baseDescription = `${accountTypeLabel(accountOption.type)} · ${accountOption.optionState.label}`
+      const subtype = subtypeLabel(accountOption.subtype)
+      const baseDescription = `${accountTypeLabel(accountOption.type)} · ${subtype} · ${accountOption.optionState.label}`
       return {
         value: accountOption.code,
         label: `${accountOption.code} · ${accountOption.name}`,
         description: recommendation
-          ? `★ Recomendada · coincide con ${recommendation.hits.map(hit => `"${hit}"`).join(', ')} · ${accountTypeLabel(accountOption.type)}`
+          ? `★ Recomendada · coincide con ${recommendation.hits.map(hit => `"${hit}"`).join(', ')} · ${accountTypeLabel(accountOption.type)} · ${subtype}`
           : baseDescription,
         disabled: accountOption.disabled,
+        subtype: String(accountOption.subtype || '').toUpperCase(),
       }
     })
 
@@ -505,14 +549,18 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
         value: code,
         label: `${code} · ${currentOption?.name || 'Cuenta configurada'}`,
         description: currentOption
-          ? `${accountTypeLabel(currentOption.type)} · ${currentOption.optionState.label}`
+          ? `${accountTypeLabel(currentOption.type)} · ${subtypeLabel(currentOption.subtype)} · ${currentOption.optionState.label}`
           : 'No encontrada en el plan de cuentas',
         disabled: true,
+        subtype: String(currentOption?.subtype || '').toUpperCase(),
       })
     }
 
-    return options
-  }, [accountOptions, code, recommended, recommendedCodes])
+    const filtered = subtypeFilter === 'ALL'
+      ? options
+      : options.filter(option => option.subtype === subtypeFilter || option.value === code)
+    return filtered
+  }, [accountOptions, code, recommended, recommendedCodes, subtypeFilter])
 
   return (
     <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
@@ -529,19 +577,36 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
       </div>
       <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
         <span>Referencia: <span className="font-mono font-bold">{field.defaultCode}</span> · {field.defaultName}</span>
-        <span>La cuenta elegida debe ser de detalle y aceptar movimientos.</span>
+        <span>Este proceso usa varias cuentas a la vez: elegí 1 cuenta por campo (Debe/Haber).</span>
+        <span>Podés elegir cuentas de detalle, auxiliares o agrupadoras con subcuentas.</span>
         {recommended.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
       </div>
-      <Combobox
-        options={accountSelectOptions}
-        value={code || ''}
-        onChange={onChange}
-        placeholder={`Seleccionar ${field.label.toLowerCase()}`}
-        searchPlaceholder="Buscar por código o nombre..."
-        maxVisibleOptions={500}
-        className="h-9 text-xs"
-        emptyMessage="No se encontraron cuentas con ese código o nombre."
-      />
+      <div className="flex min-w-0 items-center gap-2">
+        {availableSubtypes.length > 0 && (
+          <select
+            value={subtypeFilter}
+            onChange={(e) => setSubtypeFilter(e.target.value)}
+            className="h-9 max-w-[150px] rounded-lg border border-border/50 bg-background px-2 text-[10px] font-bold text-muted-foreground outline-none focus:border-primary/50"
+            aria-label="Filtrar por subtipo de cuenta"
+            title="Filtrar por subtipo: auxiliares, detalle, grupos..."
+          >
+            <option value="ALL">Todos los subtipos</option>
+            {availableSubtypes.map((s) => (
+              <option key={s} value={s}>{subtypeLabel(s)}</option>
+            ))}
+          </select>
+        )}
+        <Combobox
+          options={accountSelectOptions}
+          value={code || ''}
+          onChange={onChange}
+          placeholder={`Seleccionar ${field.label.toLowerCase()}`}
+          searchPlaceholder="Buscar por código o nombre..."
+          maxVisibleOptions={500}
+          className="h-9 flex-1 text-xs"
+          emptyMessage="No se encontraron cuentas con ese código o nombre."
+        />
+      </div>
       <div className="flex min-w-0 items-center justify-between gap-2">
         {account ? (
           <span className={`min-w-0 truncate text-[10px] font-semibold ${accountTypeMismatch || accountUnavailable ? (accountTypeMismatch ? 'text-amber-500' : 'text-red-500') : 'text-emerald-600'}`} title={`${account.code} · ${account.name}`}>
@@ -549,10 +614,10 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
             {accountTypeMismatch
               ? ` · Tipo incorrecto: ${accountTypeLabel(account.type)}; se espera ${accountTypeLabel(field.defaultType)}`
               : accountIsGroup
-                ? ' · Cuenta agrupadora: selecciona una cuenta de detalle'
+                ? ' · Agrupadora: acumula sus subcuentas en el balance'
                 : accountUnavailable
                   ? ` · ${accountState?.label || 'No seleccionable'}`
-                  : ' · Disponible'}
+                  : ` · ${subtypeLabel(account.subtype)} · Disponible`}
           </span>
         ) : code ? (
           <span className="text-[10px] text-red-500">La cuenta no existe en el plan</span>
@@ -621,6 +686,7 @@ export function ConfiguracionContableView() {
   }, [accountsQuery.data])
 
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
+const [mappingsSearch, setMappingsSearch] = useState('')
   const [salesExpanded, setSalesExpanded] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
@@ -886,11 +952,18 @@ export function ConfiguracionContableView() {
     ])) as Record<string, AccountOption[]>
   }, [allAccounts, allModuleDefs])
 
-  const salesModuleDefs = useMemo(() => allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
+  const matchesSearch = (mod: (typeof allModuleDefs)[number]) => {
+    const q = mappingsSearch.trim().toLowerCase()
+    if (!q) return true
+    const haystack = `${mod.label} ${mod.description} ${mod.fields.map(f => f.label).join(' ')}`.toLowerCase()
+    return haystack.includes(q)
+  }
+
+  const salesModuleDefs = allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id) && matchesSearch(mod))
   const invoiceSalesModule = salesModuleDefs.find(mod => mod.id === 'invoice')
   const invoicePaymentModule = salesModuleDefs.find(mod => mod.id === 'payment')
   const otherSalesModuleDefs = salesModuleDefs.filter(mod => !['invoice', 'payment'].includes(mod.id))
-  const otherModuleDefs = useMemo(() => allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id)), [allModuleDefs])
+  const otherModuleDefs = allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id) && matchesSearch(mod))
   const groupedOtherModules = useMemo(() => {
     const assigned = new Set<string>()
     const groups = ACCOUNTING_MODULE_GROUPS.map(group => {
@@ -908,6 +981,29 @@ export function ConfiguracionContableView() {
     }
     return groups
   }, [otherModuleDefs])
+
+  const modConfigStatus = (mod: (typeof allModuleDefs)[number]) => {
+    const mapping = accountMappings[mod.id] || {}
+    const total = mod.fields.length
+    const defined = mod.fields.filter(f => mapping[f.key] && accountsByCode.get(mapping[f.key])).length
+    const pct = total === 0 ? 100 : Math.round((defined / total) * 100)
+    return { total, defined, pct, complete: total > 0 && defined >= total }
+  }
+
+  const configuredPct = useMemo(() => {
+    if (allModuleDefs.length === 0) return 0
+    const totalFields = allModuleDefs.reduce((s, m) => s + m.fields.length, 0)
+    const definedFields = allModuleDefs.reduce((s, m) => s + modConfigStatus(m).defined, 0)
+    return totalFields === 0 ? 100 : Math.round((definedFields / totalFields) * 100)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allModuleDefs, accountMappings])
+
+  const configuredCounts = useMemo(() => {
+    const total = allModuleDefs.reduce((s, m) => s + m.fields.length, 0)
+    const defined = allModuleDefs.reduce((s, m) => s + modConfigStatus(m).defined, 0)
+    return { total, defined }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allModuleDefs, accountMappings])
 
   const renderConnectionModule = (mod: (typeof allModuleDefs)[number]) => {
     const modMapping = accountMappings[mod.id] || {}
@@ -928,6 +1024,7 @@ export function ConfiguracionContableView() {
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
             </div>
           </div>
+          <ModuleStatusBadge status={modConfigStatus(mod)} />
         </div>
         <div className={cn(
           'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2',
@@ -1000,11 +1097,26 @@ export function ConfiguracionContableView() {
             <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-tight">Facturas de venta</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                Un solo asiento para la factura pagada: ingreso, IVA y cuenta de cobro según la forma de pago.
-              </p>
-            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Un solo asiento para la factura pagada: ingreso, IVA y cuenta de cobro según la forma de pago.
+            </p>
           </div>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {fields.map(({ module, field }) => {
+            const code = module.id === 'invoice' ? (invoiceMapping[field.key] || field.defaultCode) : (paymentMapping[field.key] || field.defaultCode)
+            const hasAccount = Boolean(invoiceMapping[field.key] || paymentMapping[field.key]) && Boolean(accountsByCode.get(code))
+            return (
+              <span key={`${module.id}-${field.key}`} className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                hasAccount ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
+              )}>
+                {hasAccount ? <Check className="size-2.5" /> : <Sparkles className="size-2.5" />}
+                {field.label}
+              </span>
+            )
+          })}
+        </div>
         </div>
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
           {fields.map(({ module, mapping, field }) => {
@@ -1040,6 +1152,7 @@ export function ConfiguracionContableView() {
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
             </div>
           </div>
+          <ModuleStatusBadge status={modConfigStatus(mod)} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {mod.fields.map(field => {
@@ -1243,6 +1356,9 @@ export function ConfiguracionContableView() {
               <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
                 {allModuleDefs.length} módulos
               </Badge>
+              <Badge className="w-fit shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600">
+                {configuredCounts.defined} de {configuredCounts.total} cuentas definidas
+              </Badge>
               <Button
                 type="button"
                 variant="ghost"
@@ -1259,6 +1375,47 @@ export function ConfiguracionContableView() {
           </div>
         </CardHeader>
         {accountMappingsExpanded && <CardContent id="configuracion-cuentas-asientos-content" className="space-y-5 p-5">
+          <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-primary shrink-0" />
+                  <p className="text-xs font-black uppercase tracking-tight text-foreground">Completitud de la configuración</p>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">
+                    {configuredCounts.defined} de {configuredCounts.total} cuentas definidas
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${configuredPct}%` }}
+                      transition={{ duration: 0.6, ease: 'easeOut' }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-black text-muted-foreground">{configuredPct}%</span>
+                </div>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                  Cada proceso del ERP usa <strong>varias cuentas a la vez</strong> (ej. una venta toca: ingreso, IVA, caja o banco e inventario). Elegí <strong>una cuenta por campo</strong>; podés filtrar por subtipo (auxiliares, detalle, grupos) para encontrarla más rápido. Cada selección se guarda automáticamente.
+                </p>
+              </div>
+              <div className="relative w-full shrink-0 md:w-72">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={mappingsSearch}
+                  onChange={(e) => setMappingsSearch(e.target.value)}
+                  placeholder="Buscar módulo o proceso (ej: venta, nómina, caja)..."
+                  className="h-10 rounded-xl pl-9 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+          {mappingsSearch.trim() && salesModuleDefs.length + otherModuleDefs.length === 0 && (
+            <p className="rounded-xl border border-border/40 bg-muted/20 px-4 py-3 text-center text-xs italic text-muted-foreground">
+              Sin módulos que coincidan con "{mappingsSearch}". Probá con otra palabra (ej: venta, compra, inventario, caja, banco, nómina).
+            </p>
+          )}
           {/* Cuentas contables de Ventas */}
       <Card id="ventas-cuentas-contables" className="border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
         <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
