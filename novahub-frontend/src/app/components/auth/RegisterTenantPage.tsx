@@ -1057,14 +1057,14 @@ export function RegisterTenantPage() {
           className="h-12 rounded-xl font-bold uppercase tracking-widest gap-2 flex-1">
           <ArrowLeft className="size-4" /> Atrás
         </Button>
-        <Button type="button" disabled={submitting || technicalSheet?._requiredComplete === false} onClick={handleFinalSubmit}
+        <Button type="button" disabled={submitting} onClick={handleFinalSubmit}
           className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           Comenzar prueba gratis
         </Button>
       </div>
       {technicalSheet && technicalSheet._requiredComplete === false && (
-        <p className="text-[10px] text-amber-600 text-center">Completá los campos obligatorios de la ficha técnica para continuar.</p>
+        <p className="text-[10px] text-muted-foreground text-center">Faltan algunos datos de la ficha técnica, pero podés continuar y completarla después desde Configuración.</p>
       )}
       {error && <p className="text-xs text-destructive text-center">{error}</p>}
       <p className="text-[10px] text-muted-foreground text-center">Completá la ficha con la información de tu empresa. Es opcional y podés editarla después desde Configuración.</p>

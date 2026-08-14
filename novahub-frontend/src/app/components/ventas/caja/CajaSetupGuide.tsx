@@ -164,29 +164,43 @@ export function CajaSetupGuide({
     { key: 'register', label: 'Caja activa', done: registers.length > 0, icon: Banknote },
   ];
 
+  const pendingSteps = steps.filter((step) => !step.done);
+  const allDone = pendingSteps.length === 0;
+
   return (
     <>
       <Card className="border-border/60 bg-gradient-to-br from-background via-muted/20 to-primary/5 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-black">Configurar caja paso a paso</CardTitle>
+          <CardTitle className="text-base font-black">{allDone ? 'Caja lista para operar' : 'Configurar caja paso a paso'}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Para aperturar caja se necesita este orden: almacen, sucursal y caja. Completa el siguiente paso aqui mismo.
+            {allDone
+              ? 'Almacen, sucursal y caja estan configurados. Solo falta seleccionar la caja con la que vas a operar.'
+              : 'Para aperturar caja se necesita este orden: almacen, sucursal y caja. Completa el siguiente paso aqui mismo.'}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
-            {steps.map((step) => {
+            {pendingSteps.map((step) => {
               const Icon = step.icon;
               return (
                 <div key={step.key} className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/70 p-3">
-                  {step.done ? <CheckCircle2 className="size-5 text-emerald-600" /> : <Icon className="size-5 text-primary" />}
+                  <Icon className="size-5 text-primary" />
                   <div>
                     <p className="text-sm font-bold">{step.label}</p>
-                    <p className="text-xs text-muted-foreground">{step.done ? 'Listo' : 'Pendiente'}</p>
+                    <p className="text-xs text-muted-foreground">Pendiente</p>
                   </div>
                 </div>
               );
             })}
+            {allDone && (
+              <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                <CheckCircle2 className="size-5 text-emerald-600" />
+                <div>
+                  <p className="text-sm font-bold">Todo configurado</p>
+                  <p className="text-xs text-muted-foreground">Listo</p>
+                </div>
+              </div>
+            )}
           </div>
           <Button onClick={openNextStep} className="gap-2">
             {nextStep === 'warehouse' && 'Crear almacen ahora'}
