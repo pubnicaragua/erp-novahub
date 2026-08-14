@@ -214,7 +214,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       throw err;
     }
 
-    if (response.status === 401 && errorBody?.error === 'SESSION_CLOSED') {
+    // El backend devuelve SESSION_CLOSED anidado en `message` cuando el error
+    // se lanza desde la estrategia de Passport, así que se revisan ambos niveles.
+    const sessionClosed =
+      errorBody?.error === 'SESSION_CLOSED' ||
+      (errorBody?.message &&
+        typeof errorBody.message === 'object' &&
+        (errorBody.message as any)?.error === 'SESSION_CLOSED');
+    if (response.status === 401 && sessionClosed) {
       localStorage.removeItem('nh-auth-token');
       const err = new Error('Tu sesión se cerró porque se inició sesión en otro dispositivo.');
       err.name = 'SessionClosedError';
