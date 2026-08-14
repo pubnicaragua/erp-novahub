@@ -218,7 +218,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     try {
       timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
       const result = await suppliersService.importMassive({
-        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, code: row.code || undefined })),
+        rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, code: row.code || undefined, ruc: row.taxId || undefined })),
       });
       if (timer) clearInterval(timer);
       setImportProgress(100);
@@ -244,7 +244,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const filteredAndSorted = [...filtered].sort((a, b) => {
     if (balanceOrder === 'highest') return Number(b.balance || 0) - Number(a.balance || 0);
     if (balanceOrder === 'lowest') return Number(a.balance || 0) - Number(b.balance || 0);
-    return 0;
+    const aCode = String(a.code || '').trim();
+    const bCode = String(b.code || '').trim();
+    if (!aCode && !bCode) return 0;
+    if (!aCode) return 1;
+    if (!bCode) return -1;
+    return aCode.localeCompare(bCode, 'es', { numeric: true, sensitivity: 'base' });
   });
 
   const colFilters = useColumnFilters();
@@ -280,7 +285,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
     },
     { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
-      render: (val) => <span className={cn('font-mono text-xs', val ? 'text-foreground' : 'text-muted-foreground/50')}>{val || '—'}</span>
+      render: (val, row) => <span className={cn('font-mono text-xs', val || row.taxId ? 'text-foreground' : 'text-muted-foreground/50')}>{val || row.taxId || '—'}</span>
     },
     { key: 'contactName', header: 'Contacto',  editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
@@ -333,7 +338,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       code: row.code || '',
       name: row.name || '',
       type: String(row.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY',
-      ruc: row.ruc || '',
+      ruc: row.ruc || row.taxId || '',
       contactName: row.contactName || '',
       email: row.email || '',
       phone: row.phone || '',

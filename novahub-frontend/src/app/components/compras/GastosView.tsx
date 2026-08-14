@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { 
-  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, X, Pencil
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -107,6 +108,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const [paymentMethod, setPaymentMethod] = useState<(typeof paymentMethodOptions)[number]['value']>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [selectedExpenseDetail, setSelectedExpenseDetail] = useState<Expense | null>(null);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -183,22 +185,42 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
   const downloadExpenseTemplate = () => {
+    const headers = ['Fecha', 'Descripción', 'Categoría', 'Categoría personalizada', 'Monto', 'Moneda', 'Fuente de pago', 'Pagado a', 'Referencia', 'Estado'];
     const rows = [
-      ['date', 'description', 'category', 'amount', 'currency', 'paymentSource', 'paidTo', 'reference', 'status', 'notes'],
-      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '1500', 'NIO', 'BAC', 'Proveedor Internet', 'FAC-001', 'PAID', 'Importado desde plantilla'],
+      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '', '1500', 'NIO', 'BAC', 'Proveedor Internet', 'FAC-001', 'PENDING'],
+      ['2026-01-16', 'Mantenimiento de aires acondicionados', 'OTRO', 'Mantenimiento', '250', 'USD', 'EFECTIVO', 'Técnico XYZ', '', 'DRAFT'],
+      ['2026-01-17', 'Publicidad en redes sociales', 'VENTAS', '', '800', 'NIO', 'LAFISE', 'Agencia ABC', 'TRANSF-088', 'PENDING'],
     ];
-    const csv = [
-      'sep=;',
-      ...rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(';')),
-    ].join('\r\n');
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'plantilla_gastos.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    sheet['!cols'] = headers.map((header) => ({ wch: Math.max(14, Math.min(28, header.length + 4)) }));
+    const guide = XLSX.utils.aoa_to_sheet([
+      ['GUÍA DE LLENADO · IMPORTACIÓN DE GASTOS'],
+      ['Descripción y monto son obligatorios; las demás columnas son opcionales. Puedes repetir la importación cuando quieras.'],
+      ['Campo', 'Regla'],
+      ['Fecha', 'Formato YYYY-MM-DD (ej. 2026-01-15). Si está vacía se usará la fecha de hoy.'],
+      ['Descripción', 'Obligatoria. Concepto del gasto, ej. "Pago de internet".'],
+      ['Categoría', 'Obligatoria. Valores: OPERATIVO, ADMINISTRATIVO, VENTAS, FINANCIERO, OTRO.'],
+      ['Categoría personalizada', 'Obligatoria cuando Categoría = OTRO. Escribe un nombre libre, ej. "Mantenimiento".'],
+      ['Monto', 'Obligatorio. Mayor que 0. Acepta punto o coma decimal (ej. 1500.50).'],
+      ['Moneda', 'NIO o USD. Si está vacía se usa la moneda configurada en la empresa.'],
+      ['Fuente de pago', 'EFECTIVO, BAC, LAFISE, ATLANTIDA, FICOHSA, BANPRO, BDF o AVANZ. Si está vacía se usa EFECTIVO.'],
+      ['Pagado a', 'Opcional. Nombre de la persona o proveedor que recibe el pago.'],
+      ['Referencia', 'Opcional. Nº de factura, recibo, transferencia o comprobante.'],
+      ['Estado', 'DRAFT (borrador), PENDING (pendiente) o PAID (pagado). Si está vacío se crea como PENDING.'],
+      ['Previsualización', 'Después de cargar el archivo verás cuántos gastos se importarán y cuáles se omitirán antes de confirmar.'],
+    ]);
+    guide['!cols'] = [{ wch: 32 }, { wch: 100 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Gastos');
+    XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
+    XLSX.writeFile(workbook, 'plantilla_gastos.xlsx');
     toast.success('Plantilla descargada');
+  };
+
+  const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_/-]+/g, '');
+  const getImportCell = (row: Record<string, any>, aliases: string[]) => {
+    const match = aliases.map(normalizeImportHeader).find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
+    return match ? row[match] : '';
   };
 
   const splitCsvLine = (line: string, delimiter: string) => {
@@ -228,7 +250,24 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     return values.map((v) => v.replace(/^"(.*)"$/, '$1').trim());
   };
 
-  const parseExpensesCsv = async (file: File) => {
+  const parseExpensesFile = async (file: File) => {
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
+
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+      const sheetName = workbook.SheetNames.find((name) => normalizeImportHeader(name) === 'gastos') || workbook.SheetNames[0];
+      const rawSheet = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      const raw = rawSheet.filter((row) => row.some((cell) => String(cell ?? '').trim()));
+      if (raw.length < 2) return [];
+      const headers = (raw[0] || []).map(normalizeImportHeader);
+      return raw.slice(1).map((values: any[]) => {
+        const row: Record<string, string> = {};
+        headers.forEach((header: string, index: number) => { if (header) row[header] = String(values[index] ?? '').trim(); });
+        return row;
+      });
+    }
+
     const text = await file.text();
     const rawLines = text
       .split(/\r?\n/)
@@ -242,7 +281,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         ? ((headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ',' : '\t')
         : ((headerLine.match(/;/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ';' : '\t')
     );
-    const headers = splitCsvLine(headerLine, delimiter).map((h) => h.toLowerCase());
+    const headers = splitCsvLine(headerLine, delimiter).map(normalizeImportHeader);
     return lines.slice(1).map((line) => {
       const cols = splitCsvLine(line, delimiter);
       const row: Record<string, string> = {};
@@ -268,10 +307,10 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   };
 
   const isValidExpenseImportRow = (row: Record<string, string>) => {
-    const description = String(row.description || row.descripcion || '').trim();
-    const amount = Number(String(row.amount || row.monto || '0').replace(',', '.'));
-    const category = normalizeExpenseCategory(String(row.category || row.categoria || ''));
-    const categoryCustom = category === 'OTRO' ? String(row.categorycustom || row.categoriacustom || '').trim() : '';
+    const description = String(getImportCell(row, ['descripcion', 'description', 'concepto'])).trim();
+    const amount = Number(String(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])).replace(',', '.'));
+    const category = normalizeExpenseCategory(String(getImportCell(row, ['categoria', 'category'])));
+    const categoryCustom = category === 'OTRO' ? String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada'])).trim() : '';
     return Boolean(description) && Number.isFinite(amount) && amount > 0 && (category !== 'OTRO' || Boolean(categoryCustom));
   };
 
@@ -280,7 +319,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     setImportFileStats(null);
     if (!file) return;
     try {
-      const rows = await parseExpensesCsv(file);
+      const rows = await parseExpensesFile(file);
       const valid = rows.filter(isValidExpenseImportRow).length;
       setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
     } catch {
@@ -297,7 +336,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     setImportProgress(8);
     setImportResult(null);
     try {
-      const rows = await parseExpensesCsv(importFile);
+      const rows = await parseExpensesFile(importFile);
       setImportProgress(28);
       if (rows.length === 0) {
         toast.error('El archivo no contiene filas para importar');
@@ -313,19 +352,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       for (let idx = 0; idx < rows.length; idx++) {
         const row = rows[idx];
         const rowNumber = idx + 2;
-        const description = String(row.description || row.descripcion || '').trim();
-        const amount = Number(String(row.amount || row.monto || '0').replace(',', '.'));
-        const category = normalizeExpenseCategory(String(row.category || row.categoria || ''));
-        const categoryCustom = category === 'OTRO' ? String(row.categorycustom || row.categoriacustom || '').trim() : '';
-        const status = normalizeExpenseStatus(String(row.status || row.estado || 'PENDING'));
-        const currencyRaw = String(row.currency || row.moneda || displayCurrency || 'NIO').trim().toUpperCase();
+        const description = String(getImportCell(row, ['descripcion', 'description', 'concepto'])).trim();
+        const amount = Number(String(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])).replace(',', '.'));
+        const category = normalizeExpenseCategory(String(getImportCell(row, ['categoria', 'category'])));
+        const categoryCustom = category === 'OTRO' ? String(getImportCell(row, ['categoriacustom', 'categorycustom', 'categoriapersonalizada'])).trim() : '';
+        const status = normalizeExpenseStatus(String(getImportCell(row, ['estado', 'status']) || 'PENDING'));
+        const currencyRaw = String(getImportCell(row, ['moneda', 'currency']) || displayCurrency || 'NIO').trim().toUpperCase();
         const currency = currencyRaw === 'USD' ? 'USD' : 'NIO';
-        const paymentSourceRaw = String(row.paymentsource || row.cuentaorigen || 'EFECTIVO').trim().toUpperCase();
+        const paymentSourceRaw = String(getImportCell(row, ['cuentaorigen', 'paymentsource', 'fuentedepago', 'metododepago', 'paymentmethod']) || 'EFECTIVO').trim().toUpperCase();
         const paymentSource = paymentSourceOptions.includes(paymentSourceRaw as any) ? paymentSourceRaw : (paymentSourceRaw === 'CASH' ? 'EFECTIVO' : 'EFECTIVO');
-        const paidTo = String(row.paidto || row.pagadoa || '').trim();
-        const reference = String(row.reference || row.referencia || '').trim();
-        const notes = String(row.notes || row.notas || '').trim();
-        const dateRaw = String(row.date || row.fecha || '').trim();
+        const paidTo = String(getImportCell(row, ['pagadoa', 'paidto'])).trim();
+        const reference = String(getImportCell(row, ['referencia', 'reference'])).trim();
+        const dateRaw = String(getImportCell(row, ['fecha', 'date'])).trim();
         const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
 
@@ -360,7 +398,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             paidTo: paidTo || undefined,
             paymentSource: paymentSource as any,
             reference: reference || undefined,
-            notes: notes || undefined,
             status: status as any,
           } as any);
           created++;
@@ -381,6 +418,13 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       setImporting(false);
       window.setTimeout(() => setImportProgress(0), 180);
     }
+  };
+
+  const finishImport = () => {
+    setImportOpen(false);
+    setImportResult(null);
+    setImportFile(null);
+    setImportFileStats(null);
   };
 
   const columns: ColumnDef<Expense>[] = [
@@ -463,6 +507,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       toast.success('Gasto eliminado correctamente', { id: deleteToastId });
       setPendingDeleteId(null);
       if (editingId === pendingDeleteId) setEditingId(null);
+      if (selectedExpenseDetail?.id === pendingDeleteId) setSelectedExpenseDetail(null);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId });
@@ -759,8 +804,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     .reduce((acc, g) => acc + toDisplayAmount(Number(g.amount ?? g.baseAmount ?? 0), g.currency, g.exchangeRate), 0);
 
   const kpis = [
-    { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
-    {
+    { key: 'all', title: 'Gastos Operativos',  value: data.length,                                                                         icon: Wallet,       color: 'text-blue-500',   bg: 'bg-blue-500/10'    },    {
       key: 'month',
       title: `Total del Mes (${displayCurrency}${valuationModeSuffix})`,
       value: formatCurrentAmount(monthlyTotalInDisplayCurrency, displayCurrency),
@@ -772,6 +816,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', interactive: true },
     { key: 'category', title: 'Por Categoría', value: uniqueCategories.length, icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
   ];
+
+  const detailExpense = selectedExpenseDetail ? data.find((x) => x.id === selectedExpenseDetail.id) || selectedExpenseDetail : null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -857,7 +903,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             {canPerform('PURCHASES_EXPENSES', 'create') && (
               <Button
                 variant="outline"
-                onClick={() => { setImportOpen(true); setImportResult(null); }}
+                onClick={() => { setImportOpen(true); setImportResult(null); setImportFile(null); setImportFileStats(null); }}
                 className="h-10 min-w-0 w-full gap-2 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto"
               >
                 <Upload className="size-4" /> Importar
@@ -907,7 +953,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId}
+        <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailExpense ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+          <div className="min-w-0">
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -942,6 +990,22 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             </div>
           )}
         />
+        </div>
+        {detailExpense && (
+          <ExpenseDetailPanel
+            expense={detailExpense}
+            supplierName={suppliers.find((s) => s.id === detailExpense.supplierId)?.name || detailExpense.supplier?.name}
+            canEdit={canPerform('PURCHASES_EXPENSES', 'edit')}
+            canApprove={canPerform('PURCHASES_EXPENSES', 'approve')}
+            canDelete={canPerform('PURCHASES_EXPENSES', 'delete')}
+            onClose={() => setSelectedExpenseDetail(null)}
+            onEdit={() => setEditingId(detailExpense.id)}
+            onMarkPending={() => void handleStatusAction(detailExpense, 'PENDING')}
+            onPay={() => openPaymentDialog(detailExpense)}
+            onDelete={() => setPendingDeleteId(detailExpense.id)}
+          />
+        )}
+        </div>
         <ConfirmDialog
           open={!!pendingDeleteId}
           onOpenChange={(open) => !open && setPendingDeleteId(null)}
@@ -997,41 +1061,56 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             <DialogHeader data-tour="purchases-expense-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
               <DialogDescription>
-                Sube un CSV para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
+                Sube un archivo Excel o CSV para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
               </DialogDescription>
               <PurchaseViewTutorial view="expenses" context="form" labelOverride="Cómo importar gastos" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-expense-modal" />
             </DialogHeader>
 
             <div className="space-y-4" data-tour="purchases-expense-modal-data">
-              <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
-                <p className="text-xs text-muted-foreground">
-                  Columnas: <span className="font-mono">date,description,category,amount,currency,paymentSource,paidTo,reference,status,notes</span>
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  category: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · status: DRAFT/PENDING/PAID
-                </p>
-                <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadExpenseTemplate}>
-                  <FileDown className="size-4" /> Descargar plantilla CSV
-                </Button>
-              </div>
+              {!importResult && (
+                <>
+                  <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
+                    <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
+                    <p className="text-xs text-muted-foreground">
+                      Columnas (Excel o CSV): <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Fuente de pago, Pagado a, Referencia, Estado</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Categoría: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · Estado: DRAFT/PENDING/PAID · Moneda: NIO/USD · Fuente: EFECTIVO/BAC/LAFISE/ATLANTIDA/FICOHSA/BANPRO/BDF/AVANZ
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Si la categoría es OTRO, la columna "Categoría personalizada" es obligatoria. Acepta encabezados en español o inglés.
+                    </p>
+                    <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadExpenseTemplate}>
+                      <FileDown className="size-4" /> Descargar plantilla Excel
+                    </Button>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-muted-foreground">Archivo CSV</label>
-                <Input type="file" accept=".csv,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
-                {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
-                {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
-                {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="gastos" />}
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV</label>
+                    <Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(e) => { void handleExpenseFileChange(e.target.files?.[0]); e.target.value = ''; }} />
+                    {importFile && <p className="text-xs text-muted-foreground">Archivo: <b>{importFile.name}</b> ({Math.round(importFile.size / 1024)} KB)</p>}
+                    {importFileStats && <p className="text-xs font-semibold text-muted-foreground">Prevalidación: <span className="text-emerald-600">{importFileStats.valid} válidos</span> · <span className={importFileStats.skipped ? 'text-rose-600' : 'text-muted-foreground'}>{importFileStats.skipped} se omitirán</span></p>}
+                    {importFileStats && <ImportReviewSummary total={importFileStats.total} valid={importFileStats.valid} skipped={importFileStats.skipped} entityLabel="gastos" />}
+                  </div>
+                </>
+              )}
 
               {importResult && (
-                <div className="rounded-xl border border-border/60 p-4 bg-background">
-                  <p className="text-xs font-black uppercase tracking-widest mb-2">Resultado</p>
+                <div className="space-y-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600"><CheckCircle2 className="size-5" /></div>
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-tight text-emerald-700">Importación finalizada</p>
+                      <p className="text-xs text-muted-foreground">Los gastos creados ya aparecen en la tabla de Gastos.</p>
+                    </div>
+                  </div>
                   <ImportReviewSummary total={importResult.total} valid={importResult.created} skipped={importResult.skipped} entityLabel="gastos" />
                   {importResult.errors.length > 0 && (
-                    <div className="mt-2 space-y-1 text-xs text-amber-500">
-                      <p className="font-semibold flex items-center gap-1"><Info className="size-3" /> Detalles:</p>
-                      {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-amber-600">Se omitieron {importResult.errors.length} fila(s) con error</p>
+                      <div className="max-h-32 space-y-1 overflow-y-auto text-xs text-amber-600">
+                        {importResult.errors.map((err, i) => <p key={i}>- {err}</p>)}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1039,10 +1118,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             </div>
 
             <DialogFooter data-tour="purchases-expense-modal-actions">
-              <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
-              <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
-                <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}
-              </Button>
+              {importResult ? (
+                <Button onClick={finishImport} className="gap-2">
+                  <CheckCircle2 className="size-4" /> Terminar
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
+                  <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
+                    <Upload className="size-4" /> {importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}
+                  </Button>
+                </>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1050,9 +1137,140 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           open={importing}
           progress={importProgress}
           title="Importando gastos"
-          description="Leyendo el CSV, validando cada fila y registrando los gastos en la base de datos."
+          description="Leyendo el archivo, validando cada fila y registrando los gastos en la base de datos."
         />
       </div>
     </div>
+  );
+}
+
+function DetailField({ label, value, mono = false, full = false }: { label: string; value?: React.ReactNode; mono?: boolean; full?: boolean }) {
+  if (value === undefined || value === null || value === '') return null;
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">{label}</p>
+      <p className={`mt-0.5 break-words text-xs font-semibold ${mono ? 'font-mono' : ''}`}>{value}</p>
+    </div>
+  );
+}
+
+function ExpenseDetailPanel({
+  expense,
+  supplierName,
+  canEdit,
+  canApprove,
+  canDelete,
+  onClose,
+  onEdit,
+  onMarkPending,
+  onPay,
+  onDelete,
+}: {
+  expense: Expense;
+  supplierName?: string;
+  canEdit: boolean;
+  canApprove: boolean;
+  canDelete: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onMarkPending: () => void;
+  onPay: () => void;
+  onDelete: () => void;
+}) {
+  const { formatConvertedAmount } = useCurrency();
+  const statusKey = String(expense.status || '').toUpperCase();
+  const statusLabel = statusKey === 'PAID' ? 'Pagado' : statusKey === 'PENDING' || statusKey === 'APPROVED' ? 'Pendiente' : statusKey === 'REJECTED' ? 'Rechazado' : 'Borrador';
+  const statusColor = statusKey === 'PAID' ? 'bg-emerald-500/10 text-emerald-600' : statusKey === 'PENDING' || statusKey === 'APPROVED' ? 'bg-amber-500/10 text-amber-600' : 'bg-slate-500/10 text-slate-500';
+
+  return (
+    <Card className="min-w-0 self-start rounded-2xl border-border/50 bg-card/70 p-5 shadow-sm animate-in slide-in-from-right duration-300">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{expense.number}</p>
+          <h3 className="mt-1 text-lg font-black leading-tight">{expense.description}</h3>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', statusColor)}>{statusLabel}</Badge>
+          <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground" onClick={onClose} aria-label="Cerrar detalle"><X className="size-4" /></Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/40 pt-4">
+        <DetailField label="Fecha" value={`${formatDateEs(expense.date)}${expense.time ? ` · ${expense.time}` : ''}`} />
+        <DetailField
+          label="Categoría"
+          value={String(expense.category || '').toUpperCase() === 'OTRO' ? (expense.categoryCustom || 'OTRO') : expense.category || '—'}
+        />
+        <DetailField label="Pagado a" value={expense.paidTo} />
+        <DetailField label="Proveedor" value={supplierName} />
+        <DetailField label="Fuente de pago" value={paymentSourceLabel(expense.paymentSource)} />
+        <DetailField label="Referencia" value={expense.reference} mono />
+        {expense.notes && <DetailField label="Notas" value={expense.notes} full />}
+        {expense.evidenceFileName && (
+          <div className="col-span-2 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
+            <FileText className="size-3.5 shrink-0 text-primary" />
+            {expense.evidenceFileUrl ? (
+              <a href={expense.evidenceFileUrl} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[11px] font-bold text-primary hover:underline">{expense.evidenceFileName}</a>
+            ) : (
+              <span className="min-w-0 truncate text-[11px] font-semibold">{expense.evidenceFileName}</span>
+            )}
+            {expense.evidenceFileSize ? <span className="shrink-0 text-[10px] text-muted-foreground/60">{Math.round(expense.evidenceFileSize / 1024)} KB</span> : null}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border border-border/40 bg-muted/20 p-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Monto</p>
+          <p className="text-2xl font-black text-rose-500">{formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate)}</p>
+          <p className="text-[10px] text-muted-foreground/70">
+            {Number(expense.amount || 0).toLocaleString()} {expense.currency}
+            {expense.exchangeRate ? ` · TC ${Number(expense.exchangeRate).toLocaleString()}` : ''}
+          </p>
+        </div>
+        {statusKey === 'PAID' && (
+          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-600">
+            <Lock className="size-3" /> Contabilizado
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-border/40 pt-4">
+        {canEdit && statusKey === 'DRAFT' && (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-amber-600" onClick={onMarkPending}>
+            <Send className="size-3.5" /> Enviar a pendientes
+          </Button>
+        )}
+        {canApprove && statusKey === 'PENDING' && (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-emerald-600" onClick={onPay}>
+            <CircleDollarSign className="size-3.5" /> Registrar pago
+          </Button>
+        )}
+        {canEdit && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(statusKey) && (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={onEdit}>
+            <Pencil className="size-3.5" /> Editar
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest"
+          onClick={() => generateExpensePDF({
+            expense,
+            tenantName: 'Nova Hub',
+            targetKey: 'compras.expense',
+            formatAmount: (amount: number, currency?: string, rate?: number) => formatConvertedAmount(Number(amount || 0), currency || (expense.currency as any), rate || expense.exchangeRate),
+          })}
+        >
+          <Download className="size-3.5" /> PDF
+        </Button>
+        <PurchaseAuditButton entity="EXPENSE" entityId={expense.id} title="Auditoría del Gasto" />
+        {canDelete && statusKey !== 'PAID' && (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-rose-500" onClick={onDelete}>
+            <Ban className="size-3.5" /> Anular
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
