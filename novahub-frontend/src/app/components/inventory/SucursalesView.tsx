@@ -157,6 +157,7 @@ export function SucursalesView({
       setIsFormOpen(false);
       fetchBranches();
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      window.dispatchEvent(new CustomEvent('sucursales-changed'));
       onRefresh?.();
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al guardar sucursal'));
@@ -172,6 +173,7 @@ export function SucursalesView({
       await api.delete(`/sucursales/${deleteId}`);
       toast.success('Sucursal eliminada');
       fetchBranches();
+      window.dispatchEvent(new CustomEvent('sucursales-changed'));
     } catch (e: any) {
       toast.error(getApiErrorMessage(e, 'Error al eliminar sucursal'));
     } finally {

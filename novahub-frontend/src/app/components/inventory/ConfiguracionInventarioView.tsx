@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import {
   Settings2, Building2, Link2, Activity, Factory, RefreshCw,
   Loader2, Sparkles, Plus, CircleHelp, Warehouse, CheckCircle2, AlertTriangle, GitBranch,
-  ChevronRight, ChevronDown,
+  ChevronRight, ChevronDown, Unlink, Info,
 } from 'lucide-react'
 import { Card } from '../ui/card'
 import { Badge } from '../ui/badge'
@@ -17,6 +17,7 @@ import { Combobox } from '../ui/Combobox'
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour'
 import { Switch } from '../ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { inventoryService } from '../../services/inventario.service'
@@ -67,6 +68,16 @@ const flattenAccounts = (list: any[]): any[] => {
   };
   recurse(list);
   return result;
+};
+
+// Estado derivado de la cuenta contable vinculada. Sin cuenta -> PENDIENTE;
+// con cuenta inactiva o que no acepta posteos -> error; en cualquier otro
+// caso la vinculación está vigente (VINCULADO).
+const accountStatusFromAccount = (account?: { isActive?: boolean; acceptsPostings?: boolean } | null): string => {
+  if (!account) return 'PENDIENTE';
+  if (account.isActive === false) return 'CUENTA_INACTIVA';
+  if (account.acceptsPostings === false) return 'CUENTA_NO_POSTEABLE';
+  return 'VINCULADO';
 };
 
 const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
@@ -138,7 +149,12 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const [configBranch, setConfigBranch] = useState<any | null>(null)
   const [configMode, setConfigMode] = useState<'auto' | 'existing'>('auto')
   const [existingAccountId, setExistingAccountId] = useState('')
+  const [branchAccountId, setBranchAccountId] = useState('')
   const [configSaving, setConfigSaving] = useState(false)
+
+  // Desvincular dialog
+  const [unlinkTarget, setUnlinkTarget] = useState<{ wh: any; branch: any } | null>(null)
+  const [unlinkSaving, setUnlinkSaving] = useState(false)
 
   const isManufacturing = tenantIndustry === 'MANUFACTURING'
 
@@ -191,6 +207,33 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const flatAccounts = flattenAccounts(accounts);
   const activeAccounts = flatAccounts.filter((a) => String(a.type || '').toUpperCase() === 'ASSET');
 
+  // Cuentas elegibles para vincular a un almacén: solo de Activo, activas y
+  // que aceptan posteos. El backend rechaza (400) cualquier otra cuenta, por
+  // lo que la lista solo ofrece combinaciones válidas.
+  const linkableAccounts = useMemo(
+    () => activeAccounts.filter((a: any) => a.isActive !== false && a.acceptsPostings !== false),
+    [activeAccounts],
+  );
+  const excludedAccountCount = activeAccounts.length - linkableAccounts.length;
+
+  // Cuentas agrupadoras candidatas para la sucursal: Activo, activas, que NO
+  // aceptan posteos directos y sin movimientos (se adopta una cuenta limpia).
+  const branchGroupAccounts = useMemo(
+    () => flatAccounts.filter((a: any) =>
+      String(a.type || '').toUpperCase() === 'ASSET' &&
+      a.isActive !== false &&
+      a.acceptsPostings !== true &&
+      ((a as any)._count?.transactions ?? 0) === 0,
+    ),
+    [flatAccounts],
+  );
+
+  // Cuenta agrupadora ya existente de una sucursal (INV_GROUP:<branchId>).
+  const branchGroupFor = (branchId?: string) => {
+    if (!branchId) return null
+    return flatAccounts.find((a: any) => a.notes === `INV_GROUP:${branchId}`) || null
+  }
+
   // Solo cuentas llamadas exactamente "Inventario". Si la guardada no coincide
   // (legacy), se muestra en el trigger pero no se ofrece en la lista.
   const inventoryControlOptions = useMemo(() => {
@@ -230,11 +273,17 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const linkInfo = (wh: any, branchId?: string) => {
     const links = Array.isArray(wh?.branches) ? wh.branches : []
     const link = branchId ? links.find((b: any) => b.id === branchId) || null : null
+    const linkAccount = link?.inventoryAccount ?? null
+    const whAccount = wh?.inventoryAccount ?? null
+    const account = linkAccount ?? whAccount
+    // El backend entrega el estado calculado; si falta (datos antiguos), se
+    // deriva de la cuenta: sin cuenta -> pendiente; con cuenta -> vinculado.
+    const status = link?.accountingStatus ?? wh?.accountingStatus ?? accountStatusFromAccount(account)
     return {
       link,
-      status: link?.accountingStatus ?? wh?.accountingStatus ?? 'PENDIENTE',
-      account: link?.inventoryAccount ?? wh?.inventoryAccount ?? null,
-      accountId: link?.inventoryAccount?.id ?? wh?.inventoryAccountId ?? null,
+      status,
+      account,
+      accountId: linkAccount?.id ?? link?.inventoryAccountId ?? wh?.inventoryAccountId ?? null,
     }
   }
 
@@ -245,6 +294,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     setConfigBranch(branch || null)
     setConfigMode('auto')
     setExistingAccountId(info.accountId || '')
+    setBranchAccountId(branchGroupFor(branch?.id)?.id || '')
   }
 
   const buildHierarchyPreview = (wh: any, branchOverride?: any) => {
@@ -270,7 +320,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           toast.error('Selecciona una cuenta contable')
           return
         }
-        await inventoryService.updateWarehouse(configTarget.id, { inventoryAccountId: existingAccountId, targetBranchId: configBranch?.id } as any)
+        await inventoryService.updateWarehouse(configTarget.id, { inventoryAccountId: existingAccountId, branchAccountId: branchAccountId || undefined, targetBranchId: configBranch?.id } as any)
         toast.success('Cuenta vinculada al almacén. Revisa Contabilidad → Plan de Cuentas')
       } else {
         await inventoryService.autoCreateAccountingLink(configTarget.id, configBranch?.id)
@@ -283,6 +333,22 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       toast.error(getApiErrorMessage(e, 'Error al configurar el almacén'))
     } finally {
       setConfigSaving(false)
+    }
+  }
+
+  const runUnlink = async () => {
+    if (!unlinkTarget) return
+    setUnlinkSaving(true)
+    try {
+      await inventoryService.updateWarehouse(unlinkTarget.wh.id, { inventoryAccountId: null, targetBranchId: unlinkTarget.branch?.id } as any)
+      toast.success('Cuenta contable desvinculada del almacén')
+      setUnlinkTarget(null)
+      await refresh()
+    } catch (e: any) {
+      toast.error(getApiErrorMessage(e, 'Error al desvincular la cuenta contable'))
+      throw e
+    } finally {
+      setUnlinkSaving(false)
     }
   }
 
@@ -577,8 +643,14 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                           <TableCell><StatusBadge status={info.status} /></TableCell>
                           <TableCell className="text-right">
                             {info.status === 'VINCULADO' ? (
-                              <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest opacity-60" disabled title="Este almacén ya tiene su cuenta vinculada en esta sucursal. Si necesitas cambiarla, inhabilita la cuenta en el Plan de Cuentas y configura una nueva.">
-                                <CheckCircle2 className="size-3.5 text-emerald-500" /> Vinculado
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                                onClick={() => setUnlinkTarget({ wh, branch })}
+                                title={`Desvincular la cuenta contable del almacén ${wh.name} en ${branch.name}`}
+                              >
+                                <Unlink className="size-3.5" /> Desvincular
                               </Button>
                             ) : (
                               <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh, branch)} title={`Configurar la cuenta contable del almacén ${wh.name} en ${branch.name}`}>
@@ -666,7 +738,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           <DialogHeader data-tour="inventory-config-modal-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
             <DialogDescription>
-              Vincula este almacén con su cuenta contable de inventario{configBranch ? <> en la sucursal <span className="font-semibold text-foreground">{configBranch.name}</span></> : null}. Las cuentas creadas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+              Vincula este almacén con su cuenta contable de inventario{configBranch ? <> en la sucursal <span className="font-semibold text-foreground">{configBranch.name}</span></> : null}. Elige la cuenta agrupadora de la sucursal y la cuenta posteable del almacén; si faltan, el sistema las crea automáticamente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
             </DialogDescription>
             <InventoryViewTutorial label="Cómo vincular almacén a contabilidad" targetPrefix="inventory-config-modal" copy={{ data: { description: 'Elige crear la cuenta automáticamente o vincular una cuenta de Activo existente.' }, actions: { description: 'Confirma para guardar la configuración contable del almacén.' } }} />
           </DialogHeader>
@@ -695,7 +767,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-black uppercase tracking-widest leading-tight">Vincular existente</span>
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Usar una cuenta de Activo ya creada</span>
+                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Elige la cuenta de sucursal y la del almacén</span>
                 </span>
               </Button>
             </div>
@@ -720,29 +792,103 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
             )}
 
             {configMode === 'existing' && (
-              <div className="space-y-2">
-                <Label>Cuenta contable</Label>
-                <Combobox
-                  options={activeAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.code }))}
-                  value={existingAccountId}
-                  onChange={setExistingAccountId}
-                  placeholder="Buscar cuenta de Activo..."
-                  searchPlaceholder="Buscar por código o nombre..."
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Solo se muestran cuentas de Activo. La cuenta debe estar activa y aceptar movimientos para poder registrar los movimientos del almacén.
-                </p>
+              <div className="space-y-4">
+                {/* Cuenta agrupadora de la sucursal */}
+                <div className="space-y-2">
+                  <Label>Cuenta de sucursal (agrupadora)</Label>
+                  {(() => {
+                    const existingGroup = branchGroupFor(configBranch?.id)
+                    const options = [
+                      ...(existingGroup ? [{ label: `${existingGroup.code} - ${existingGroup.name} (existente)`, value: existingGroup.id, description: existingGroup.code }] : []),
+                      ...branchGroupAccounts
+                        .filter((a: any) => a.id !== existingGroup?.id && !String(a.notes || '').startsWith('INV_GROUP:'))
+                        .map((a: any) => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.code })),
+                    ]
+                    if (options.length === 0) {
+                      return (
+                        <div className="flex items-start gap-2 rounded-xl border border-border/40 bg-muted/30 p-3">
+                          <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            No hay cuentas agrupadoras disponibles. Se creará automáticamente bajo la cuenta control de Inventario.
+                          </p>
+                        </div>
+                      )
+                    }
+                    return (
+                      <Combobox
+                        options={options}
+                        value={branchAccountId}
+                        onChange={setBranchAccountId}
+                        placeholder="Selecciona la agrupadora de la sucursal..."
+                        searchPlaceholder="Buscar por código o nombre..."
+                        emptyMessage="No se encontraron cuentas agrupadoras."
+                      />
+                    )
+                  })()}
+                  {branchGroupFor(configBranch?.id) && branchAccountId === branchGroupFor(configBranch?.id)?.id ? (
+                    <p className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                      <CheckCircle2 className="size-3" /> Esta sucursal ya tiene cuenta agrupadora y se reutilizará.
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">
+                      Agrupadora no posteable bajo la cuenta control. Si no seleccionas una, el sistema la crea o reutiliza automáticamente.
+                    </p>
+                  )}
+                </div>
+
+                {/* Cuenta del almacén (posteo) */}
+                <div className="space-y-2">
+                  <Label>Cuenta del almacén (recibe movimientos)</Label>
+                  {linkableAccounts.length === 0 ? (
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                      <p className="text-[11px] leading-snug text-amber-700">
+                        No hay cuentas de Activo activas que acepten posteos. Crea una desde <span className="font-semibold">Contabilidad → Plan de Cuentas</span> o usa <span className="font-semibold">Crear automáticamente</span>.
+                      </p>
+                    </div>
+                  ) : (
+                    <Combobox
+                      options={linkableAccounts.map((a) => ({ label: `${a.code} - ${a.name}`, value: a.id, description: a.code }))}
+                      value={existingAccountId}
+                      onChange={setExistingAccountId}
+                      placeholder="Buscar cuenta de Activo..."
+                      searchPlaceholder="Buscar por código o nombre..."
+                      emptyMessage="No se encontraron cuentas elegibles."
+                    />
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Solo se muestran cuentas de Activo activas que aceptan movimientos (posteables), que son las que el sistema puede vincular.{excludedAccountCount > 0 ? ` Hay ${excludedAccountCount} cuenta${excludedAccountCount !== 1 ? 's' : ''} de Activo inactiva${excludedAccountCount !== 1 ? 's' : ''} o sin posteos que no se incluye${excludedAccountCount !== 1 ? 'n' : ''}.` : ''}
+                  </p>
+                </div>
               </div>
             )}
           </div>
           <DialogFooter data-tour="inventory-config-modal-actions">
             <Button variant="outline" onClick={() => setConfigTarget(null)}>Cancelar</Button>
-            <Button onClick={runConfigure} disabled={configSaving}>
+            <Button
+              onClick={runConfigure}
+              disabled={configSaving || (configMode === 'existing' && (!existingAccountId || linkableAccounts.length === 0))}
+            >
               {configSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null} {configMode === 'auto' ? 'Crear y vincular' : 'Vincular'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!unlinkTarget}
+        onOpenChange={(open) => { if (!open && !unlinkSaving) setUnlinkTarget(null) }}
+        title="¿Desvincular cuenta contable?"
+        description={(() => {
+          if (!unlinkTarget) return ''
+          const info = linkInfo(unlinkTarget.wh, unlinkTarget.branch?.id)
+          return `Se quitará la cuenta ${info.account ? `${info.account.code} - ${info.account.name}` : 'vinculada'} del almacén "${unlinkTarget.wh.name}"${unlinkTarget.branch ? ` en la sucursal ${unlinkTarget.branch.name}` : ''}. El almacén pasará a estado Pendiente y podrás configurar otra cuenta cuando lo necesites.`
+        })()}
+        confirmLabel="Desvincular"
+        variant="destructive"
+        loading={unlinkSaving}
+        onConfirm={runUnlink}
+      />
 
       {showTutorial && <GuidedTour steps={CONFIG_INVENTORY_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Configuración de Inventario" allowTargetInteraction />}
     </div>

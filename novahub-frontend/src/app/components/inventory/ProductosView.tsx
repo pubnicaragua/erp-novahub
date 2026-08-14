@@ -14,6 +14,7 @@ import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -395,6 +396,17 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
+  const [showAllWarehouseProducts, setShowAllWarehouseProducts] = useState(true);
+  // Almacenes vinculados a alguna sucursal (todas las sucursales): se usa para
+  // ocultar los productos de almacenes sin vínculo cuando el check está inactivo.
+  const linkedWarehouseIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const branch of branches || []) {
+      if (branch.warehouseId) ids.add(branch.warehouseId);
+      for (const w of branch.warehouses || []) ids.add(w.id);
+    }
+    return ids;
+  }, [branches]);
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out'>(initialStockFilter || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
@@ -688,7 +700,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     setPage(1);
     pagination?.onPageChange(1);
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, catalogItemType]);
+  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, showAllWarehouseProducts, catalogItemType]);
 
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
@@ -730,6 +742,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     ].filter(Boolean);
     const matchesWarehouse = warehouseFilters.length === 0
       || warehouseFilters.some((warehouseId) => productWarehouseIds.includes(warehouseId));
+    // Con el filtro de sucursal en "Todas las sucursales", el check controla si
+    // también se muestran los productos de almacenes que no están vinculados a
+    // ninguna sucursal. Los productos sin almacén asignado siempre se muestran.
+    const matchesLinkedScope = selectedBranchId || showAllWarehouseProducts
+      || productWarehouseIds.length === 0
+      || productWarehouseIds.some((warehouseId) => linkedWarehouseIds.has(warehouseId));
     const pType = String(p.itemType || p.type || 'PRODUCT').toUpperCase();
     const matchesType = pType === catalogItemType;
     const stock = getProductStock(p);
@@ -746,7 +764,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesType && matchesStock && matchesStatus && matchesAvailability;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability;
       })
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
@@ -835,7 +853,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const branchStockStats = useMemo(() => {
     const stats = new Map<string, { warehouses: number; products: number; units: number }>();
     for (const branch of branches || []) {
-      const warehouseIds = [branch.warehouseId, ...((branch.warehouses || []) as any[]).map((w: any) => w.id)].filter(Boolean) as string[];
+      const linked = ((branch.warehouses || []) as any[]).filter((w: any) => w.isActive !== false);
+      const warehouseIds = [
+        ...(linked.length === 0 && branch.warehouseId ? [branch.warehouseId] : []),
+        ...linked.map((w: any) => w.id),
+      ].filter(Boolean) as string[];
       const products = new Set<string>();
       let units = 0;
       for (const productId of Object.keys(stockByProduct)) {
@@ -2248,7 +2270,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </SelectContent>
             </Select>
           )}
-          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL')) && (
+          {!selectedBranchId && !isServiceView && (
+            <label
+              className="col-span-2 flex min-w-0 cursor-pointer select-none items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-1.5 sm:col-span-1 sm:py-2"
+              title="Cuando está marcado se muestran todos los productos, incluyendo los de almacenes que no están vinculados a ninguna sucursal."
+            >
+              <Checkbox
+                checked={showAllWarehouseProducts}
+                onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)}
+                className="size-4"
+              />
+              <span className="text-[11px] font-bold leading-tight text-muted-foreground">
+                Mostrar productos de todos los almacenes
+              </span>
+            </label>
+          )}
+          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || !showAllWarehouseProducts) && (
             <Button
               variant="ghost"
               size="sm"
@@ -2263,6 +2300,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 setAvailabilityFilter('all');
                 setLocalProductStatusFilter('ALL');
                 onProductStatusFilterChange?.('ALL');
+                setShowAllWarehouseProducts(true);
               }}
             >
               <X className="size-3.5 mr-1" />

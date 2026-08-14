@@ -61,7 +61,7 @@ interface InventarioPageProps {
 export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: InventarioPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches } = useBranchScope();
+  const { selectedBranchId, setSelectedBranchId, branchWarehouseIds, allBranches, refreshBranches } = useBranchScope();
   const [activeTab, setActiveTab] = useState(activeSubModule === 'dashboard' ? 'productos' : (activeSubModule || 'productos'));
   const tenantKey = user?.tenantId || 'anonymous';
   const branchScopeEnabled = Boolean(selectedBranchId);
@@ -299,12 +299,28 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const firstError = activeQueries.find((query) => query.error)?.error;
   const loadError = firstError ? (firstError as Error).message : '';
   const fetchData = useCallback(async (scope: 'all' | 'products' = 'all') => {
+    // El alcance de la sucursal vive en useBranchScope: se refresca junto con
+    // el inventario para que los almacenes vinculados (activos) y los
+    // productos reflejen la última edición de la sucursal.
+    refreshBranches();
     if (scope === 'products') {
       await queryClient.invalidateQueries({ queryKey: ['inventory', 'products', tenantKey] });
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ['inventory'] });
-  }, [queryClient, tenantKey]);
+  }, [queryClient, tenantKey, refreshBranches]);
+
+  // Si la sucursal se edita desde otro módulo (Configuración, etc.), el
+  // evento refresca el alcance y vuelve a consultar el inventario para que el
+  // filtro por sucursal y los productos queden al día.
+  useEffect(() => {
+    const handleBranchesChanged = () => {
+      refreshBranches();
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    };
+    window.addEventListener('sucursales-changed', handleBranchesChanged);
+    return () => window.removeEventListener('sucursales-changed', handleBranchesChanged);
+  }, [queryClient, refreshBranches]);
 
   const productItems = data.products.filter((product: any) => product.itemType !== 'SERVICE');
   const serviceItems = data.products.filter((product: any) => product.itemType === 'SERVICE');
