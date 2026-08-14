@@ -349,6 +349,8 @@ export interface PaymentReceived {
   exchangeRate?: number;
   baseAmount?: number;
   accountId?: string;
+  bankAccountId?: string;
+  bankAccount?: { id: string; bankName: string; accountNumber: string; currency?: string };
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -748,6 +750,7 @@ export interface PaymentMade {
   exchangeRate?: number;
   baseAmount?: number;
   accountId?: string;
+  bankAccountId?: string;
   method: PaymentMethod;
   reference?: string;
   notes?: string;
@@ -868,7 +871,7 @@ export interface Expense {
   };
   description: string;
   paidTo?: string;
-  paymentSource?: 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
+  paymentSource?: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'OTHER' | 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
   evidenceFileName?: string;
   evidenceFileType?: string;
   evidenceFileSize?: number;
@@ -881,7 +884,7 @@ export interface Expense {
   updatedAt: string;
 }
 
-export type ExpenseStatus = 'pending' | 'approved' | 'paid' | 'rejected' | 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED';
+export type ExpenseStatus = 'draft' | 'pending' | 'paid' | 'approved' | 'rejected' | 'DRAFT' | 'PENDING' | 'PAID' | 'APPROVED' | 'REJECTED';
 
 // ---- Recurring Expenses ----
 export interface RecurringExpense {

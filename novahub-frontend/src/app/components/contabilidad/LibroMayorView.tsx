@@ -205,71 +205,81 @@ export function LibroMayorView() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
-        <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
-          <Filter className="size-3.5" /> Filtros
+      <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/50 px-3 py-1.5">
+              <Filter className="size-3.5" /> Filtros
+            </span>
+            <span className="hidden text-[10px] font-medium normal-case tracking-normal text-muted-foreground/70 sm:inline">Refina los movimientos del libro</span>
+          </div>
         </div>
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end lg:gap-4">
-          <div className="flex min-w-0 flex-col gap-1.5 sm:min-w-[240px] lg:flex-1 lg:min-w-[280px]">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Cuenta Contable</label>
+
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-1 lg:col-span-3">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</label>
             <Combobox
               options={accountOptions}
               value={filterAccountId}
               onChange={setFilterAccountId}
               placeholder="Todas las cuentas"
               emptyMessage="Sin resultados"
+              className="h-9"
             />
           </div>
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:min-w-[280px] lg:flex-1">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Buscar movimiento</label>
-            <div className="relative">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-5">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Buscar movimiento</label>
+            <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={filterSearch}
                 onChange={event => setFilterSearch(event.target.value)}
                 placeholder="Cuenta, descripción o referencia"
-                className="h-9 pl-9"
+                className="h-9 w-full pl-9"
               />
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Desde</label>
-            <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Desde" className="sm:w-[180px]" />
+          <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desde</label>
+            <DateField value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Fecha inicial" className="w-full" />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Hasta</label>
-            <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Hasta" className="sm:w-[180px]" />
+          <div className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Hasta</label>
+            <DateField value={filterDateTo} onChange={setFilterDateTo} placeholder="Fecha final" className="w-full" />
           </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Movimiento</label>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-3 border-t border-border/30 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[220px] lg:max-w-[280px]">
+            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Movimiento</label>
             <Select value={filterMovement || 'ALL'} onValueChange={value => setFilterMovement(value === 'ALL' ? '' : value)}>
-              <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue placeholder="Débitos y créditos" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Débitos y créditos" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Débitos y créditos</SelectItem>
                 {MOVEMENT_TYPES.map(type => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <label className="flex items-center gap-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest"><ArrowDownUp className="size-3" /> Orden</label>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[220px] lg:max-w-[280px]">
+            <label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><ArrowDownUp className="size-3" /> Orden</label>
             <Select value={sortOrder} onValueChange={value => setSortOrder(value as 'asc' | 'desc')}>
-              <SelectTrigger className="h-9 w-full sm:w-[200px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="asc">Más antiguos primero</SelectItem>
                 <SelectItem value="desc">Más recientes primero</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          {hasFilters && (
-            <button onClick={clearFilters} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all">
-              <X className="size-3" /> Limpiar
-            </button>
-          )}
-        </div>
-        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20">
-          <Button variant="outline" size="sm" onClick={loadEntries} disabled={loading} className="h-9">
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            {hasFilters && (
+              <button onClick={clearFilters} className="flex h-9 items-center gap-1.5 rounded-xl border border-dashed border-border/60 px-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground transition-all hover:bg-rose-500/5 hover:text-rose-500">
+                <X className="size-3" /> Limpiar
+              </button>
+            )}
+            <Button variant="outline" size="sm" onClick={loadEntries} disabled={loading} className="h-9 w-full sm:w-auto">
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
+            </Button>
+          </div>
         </div>
       </div>
 

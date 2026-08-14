@@ -2,6 +2,7 @@ export interface NotificationNavigation {
   module: string;
   subModule?: string;
   filter?: string;
+  targetId?: string;
 }
 
 type NotificationLike = {
@@ -36,8 +37,9 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
 
 export function getNotificationNavigation(notification: NotificationLike): NotificationNavigation {
   const metadata = asRecord(notification.metadata);
+  const targetId = String(metadata.targetId || metadata.expenseId || metadata.entityId || '').trim() || undefined;
   const explicit = normalizeNavigation(metadata.navigation || metadata.route || metadata);
-  if (explicit) return explicit;
+  if (explicit) return { ...explicit, targetId };
 
   const link = String(notification.link || '').toLowerCase();
   if (link.includes('ticket')) return { module: 'tickets', subModule: 'tickets' };

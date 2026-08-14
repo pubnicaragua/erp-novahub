@@ -87,11 +87,11 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'payment', label: 'Cobros', icon: Receipt,
-    description: 'Cuando la factura queda pagada, se registra el cobro según su forma de pago',
+    description: 'Cuando la factura queda pagada, se registra el cobro según su forma de pago y banco global',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita el efectivo recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'Se debita la cuenta configurada para tarjetas', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'Se debita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
       { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta para otros medios de cobro', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
@@ -99,11 +99,11 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'cashSale', label: 'Facturación por Caja', icon: Wallet,
-    description: 'Venta POS pagada en el momento → medios de cobro + Ingresos + IVA',
+    description: 'Venta POS pagada en el momento → banco hijo o medio de cobro + Ingresos + IVA',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'Se debita la cuenta POS configurada para tarjetas', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'Se debita la cuenta POS configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
+      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
+      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta POS configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
       { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta POS para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
@@ -365,23 +365,35 @@ function isGroupingAccount(account: Pick<AccountInfo, 'isLeaf' | 'subtype'>) {
   return account.isLeaf === false || GROUP_ACCOUNT_SUBTYPES.has(String(account.subtype || '').toUpperCase())
 }
 
-function getAccountOptionStateForType(account: AccountInfo, expectedType: ModuleField['defaultType']): AccountOptionState {
+function isBankParentMapping(moduleId: string | undefined, fieldKey: string) {
+  return (fieldKey === 'card' || fieldKey === 'transfer')
+    && (moduleId === 'payment' || moduleId === 'cashSale')
+}
+
+function getAccountOptionStateForType(
+  account: AccountInfo,
+  expectedType: ModuleField['defaultType'],
+  allowBankParent = false,
+): AccountOptionState {
   if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
-  if (account.acceptsPostings === false) return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
   if (String(account.type).toUpperCase() !== expectedType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
   }
-  if (isGroupingAccount(account)) {
-    // Las cuentas agrupadoras (con subcuentas) también pueden elegirse: el
-    // motor registra el asiento en la cuenta indicada y el balance general
-    // muestra el saldo directo de la agrupadora junto al de sus subcuentas.
-    return { disabled: false, label: 'Activa · Agrupadora (acumula sus subcuentas)', className: 'text-amber-500' }
+  const grouping = isGroupingAccount(account)
+  if (account.acceptsPostings === false && !(allowBankParent && grouping)) {
+    return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
+  }
+  if (grouping) {
+    if (allowBankParent) {
+      return { disabled: false, label: 'Activa · Cuenta mayor; recibe el subtotal de sus bancos hijos', className: 'text-amber-500' }
+    }
+    return { disabled: true, label: 'Activa · Agrupadora; requiere cuenta de detalle', className: 'text-red-500' }
   }
   return { disabled: false, label: 'Activa · Disponible', className: 'text-emerald-600' }
 }
 
-function getAccountOptionState(account: AccountInfo, field: ModuleField) {
-  return getAccountOptionStateForType(account, field.defaultType)
+function getAccountOptionState(account: AccountInfo, field: ModuleField, moduleId?: string) {
+  return getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key))
 }
 
 const normalizeText = (value: string) => String(value || '')
@@ -493,31 +505,36 @@ function ModuleStatusBadge({ status }: { status: { total: number; defined: numbe
   )
 }
 
-function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
+function AccountCodeInput({ code, field, moduleId, account, accountOptions, onChange }: {
   code: string
   field: ModuleField
+  moduleId?: string
   account?: AccountInfo
   accountOptions: AccountOption[]
   onChange: (val: string) => void
 }) {
-  const accountState = account ? getAccountOptionState(account, field) : null
+  const accountState = account ? getAccountOptionState(account, field, moduleId) : null
   const accountUnavailable = Boolean(accountState?.disabled)
   const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
-  const accountIsGroup = account?.isLeaf === false
-  const recommended = useMemo(() => getRecommendedAccounts(field, accountOptions), [field, accountOptions])
+  const accountIsGroup = account ? isGroupingAccount(account) : false
+  const effectiveAccountOptions = useMemo(() => accountOptions.map(accountOption => {
+    const optionState = getAccountOptionState(accountOption, field, moduleId)
+    return { ...accountOption, disabled: optionState.disabled, optionState }
+  }), [accountOptions, field, moduleId])
+  const recommended = useMemo(() => getRecommendedAccounts(field, effectiveAccountOptions), [field, effectiveAccountOptions])
   const recommendedCodes = useMemo(() => new Set(recommended.map(entry => entry.option.code)), [recommended])
   const topRecommendation = recommended[0]?.option
   const [subtypeFilter, setSubtypeFilter] = useState('ALL')
   const availableSubtypes = useMemo(() => {
     const seen = new Set<string>()
-    for (const option of accountOptions) {
+    for (const option of effectiveAccountOptions) {
       if (option.disabled) continue
       seen.add(String(option.subtype || '').toUpperCase())
     }
     return Array.from(seen).sort()
-  }, [accountOptions])
+  }, [effectiveAccountOptions])
   const accountSelectOptions = useMemo(() => {
-    const options = accountOptions.map(accountOption => {
+    const options = effectiveAccountOptions.map(accountOption => {
       const recommendation = recommended.find(entry => entry.option.code === accountOption.code)
       const subtype = subtypeLabel(accountOption.subtype)
       const baseDescription = `${accountTypeLabel(accountOption.type)} · ${subtype} · ${accountOption.optionState.label}`
@@ -544,7 +561,7 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
     // agrupadora/inactiva o ya no exista en el catálogo, sin convertirla en una
     // opción seleccionable.
     if (code && !options.some(option => option.value === code)) {
-      const currentOption = accountOptions.find(option => option.code === code)
+      const currentOption = effectiveAccountOptions.find(option => option.code === code)
       options.push({
         value: code,
         label: `${code} · ${currentOption?.name || 'Cuenta configurada'}`,
@@ -560,7 +577,7 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
       ? options
       : options.filter(option => option.subtype === subtypeFilter || option.value === code)
     return filtered
-  }, [accountOptions, code, recommended, recommendedCodes, subtypeFilter])
+  }, [code, effectiveAccountOptions, recommended, recommendedCodes, subtypeFilter])
 
   return (
     <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
@@ -578,7 +595,9 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
       <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
         <span>Referencia: <span className="font-mono font-bold">{field.defaultCode}</span> · {field.defaultName}</span>
         <span>Este proceso usa varias cuentas a la vez: elegí 1 cuenta por campo (Debe/Haber).</span>
-        <span>Podés elegir cuentas de detalle, auxiliares o agrupadoras con subcuentas.</span>
+        <span>{isBankParentMapping(moduleId, field.key)
+          ? 'Esta cuenta es la mayor; cada banco hijo recibirá el asiento y su saldo se consolidará aquí.'
+          : 'Podés elegir cuentas de detalle o auxiliares; las agrupadoras requieren una cuenta hija.'}</span>
         {recommended.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
       </div>
       <div className="flex min-w-0 items-center gap-2">
@@ -614,7 +633,7 @@ function AccountCodeInput({ code, field, account, accountOptions, onChange }: {
             {accountTypeMismatch
               ? ` · Tipo incorrecto: ${accountTypeLabel(account.type)}; se espera ${accountTypeLabel(field.defaultType)}`
               : accountIsGroup
-                ? ' · Agrupadora: acumula sus subcuentas en el balance'
+                ? ` · ${accountState?.label || 'Agrupadora'}`
                 : accountUnavailable
                   ? ` · ${accountState?.label || 'No seleccionable'}`
                   : ` · ${subtypeLabel(account.subtype)} · Disponible`}
@@ -806,7 +825,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const module = allModuleDefs.find(item => item.id === moduleId)
     const field = module?.fields.find(item => item.key === fieldKey)
     const account = allAccounts.find(item => item.code === value)
-    const optionState = field && account ? getAccountOptionState(account, field) : undefined
+    const optionState = field && account ? getAccountOptionState(account, field, moduleId) : undefined
     if (account && optionState?.disabled) {
       toast.error(`No se puede seleccionar ${account.code}: ${optionState.label}`)
       return
@@ -1035,6 +1054,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
               key={field.key}
               code={modMapping[field.key] || field.defaultCode}
               field={field}
+              moduleId={mod.id}
               account={accountsByCode.get(modMapping[field.key] || field.defaultCode)}
               accountOptions={accountOptionsByType[field.defaultType] || []}
               onChange={value => updateMapping(mod.id, field.key, value)}
@@ -1126,6 +1146,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 key={`${module.id}-${field.key}`}
                 code={code}
                 field={field}
+                moduleId={module.id}
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 onChange={value => updateMapping(module.id, field.key, value)}
@@ -1162,6 +1183,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 key={field.key}
                 code={code}
                 field={field}
+                moduleId={mod.id}
                 account={accountsByCode.get(code)}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 onChange={value => updateMapping(mod.id, field.key, value)}

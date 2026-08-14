@@ -22,8 +22,10 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { isBankPaymentMethod } from '../../utils/paymentMethods';
 
 interface Props {
   data: PaymentMade[];
@@ -112,6 +114,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             currency: (prefilled.currency as any) || displayCurrency,
             exchangeRate: prefilled.exchangeRate || globalRate,
             method: normalizeMethod(prefilled.method as any),
+            bankAccountId: prefilled.bankAccountId || '',
             reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
             notes: prefilled.notes || '',
            });
@@ -235,6 +238,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     if (!String(localDoc.reference || '').trim()) return toast.error('Ingrese el número de referencia del pago');
+    if (isBankPaymentMethod(localDoc.method) && !localDoc.bankAccountId) return toast.error('Seleccione el banco global del pago');
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     if (paymentEvidenceFiles.length > 0 && !localDoc.supplierInvoiceId) {
       return toast.error('Seleccione una factura de proveedor para asociar las evidencias del pago');
@@ -253,6 +257,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       const payload = {
         ...localDoc,
         method: normalizeMethod(localDoc.method as any),
+        bankAccountId: isBankPaymentMethod(localDoc.method) ? localDoc.bankAccountId : undefined,
       } as any;
       if (isMixed) {
         const nioAmount = Number((localDoc as any).amountNio || 0);
@@ -365,14 +370,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     <p className="text-[10px] text-muted-foreground mb-1">Factura a Pagar / Abono (Opcional)</p>
                     <Combobox
                       disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      options={currentBills.map(s => ({ label: `${s.number} (Total: ${s.total})`, value: s.id }))}
+                      options={currentBills.map(s => ({ label: `${s.number} (Saldo: ${s.balance ?? s.total})`, value: s.id }))}
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
                           const b = currentBills.find(x => x.id === val);
                           setLocalDoc({
                             ...localDoc,
                             supplierInvoiceId: val,
-                            amount: b ? b.total : localDoc.amount,
+                            amount: b ? (b.balance ?? b.total) : localDoc.amount,
                             currency: (b?.currency as any) || localDoc.currency || displayCurrency,
                             exchangeRate: b?.exchangeRate || localDoc.exchangeRate || globalRate,
                           });
@@ -396,12 +401,33 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                     <select 
                       disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
                       value={normalizeMethod(localDoc.method as any)} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value as any })}
+                      onChange={(e) => {
+                        const nextMethod = e.target.value as any;
+                        setLocalDoc({
+                          ...localDoc,
+                          method: nextMethod,
+                          bankAccountId: isBankPaymentMethod(nextMethod) ? localDoc.bankAccountId : '',
+                        });
+                      }}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
                       {methodOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
+                  {isBankPaymentMethod(localDoc.method) ? (
+                    <div className="col-span-2">
+                      <BankAccountSelect
+                        value={localDoc.bankAccountId}
+                        onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })}
+                        label="Banco global del egreso"
+                      />
+                      <p className="mt-1 text-[10px] text-muted-foreground">El asiento contable utilizará la cuenta hija vinculada a este banco.</p>
+                    </div>
+                  ) : (
+                    <div className="col-span-2 rounded-lg border border-primary/15 bg-primary/[0.03] px-3 py-2 text-[10px] text-muted-foreground">
+                      La cuenta contable del egreso se toma de la configuración de Contabilidad para este método.
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia / Transferencia #</p>
                     <Input 

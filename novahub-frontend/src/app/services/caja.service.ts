@@ -158,6 +158,7 @@ export interface PosPaymentLine {
   method: PosPaymentMethod;
   amount: number;
   reference?: string;
+  bankAccountId?: string;
 }
 
 export interface DashboardKPIs {

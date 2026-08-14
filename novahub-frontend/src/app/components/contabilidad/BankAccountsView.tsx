@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Edit2, Loader2, Landmark, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Landmark, AlertTriangle, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -14,6 +14,7 @@ import { api, getApiErrorMessage } from '../../services/api';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
+import { cn } from '../ui/utils';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Cuenta Corriente' },
@@ -38,11 +39,19 @@ export function BankAccountsView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [detailAccount, setDetailAccount] = useState<any>(null);
   const [form, setForm] = useState({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '' });
 
   const accountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
   const accounts = accountsQuery.data || [];
   const loading = accountsQuery.isLoading || accountsQuery.isFetching;
+  const movementQuery = useAccountingQuery<any>(
+    ['bank-account-movements', detailAccount?.id || 'none'],
+    async (signal) => contabilidadService.getBankAccountMovements(detailAccount.id, { page: 1, pageSize: 100 }, signal),
+    { enabled: Boolean(detailAccount?.id) },
+  );
+  const movementPayload = movementQuery.data || {};
+  const movements = Array.isArray(movementPayload.data) ? movementPayload.data : [];
 
   // Plan de cuentas del tenant: solo cuentas de activo, de detalle/subcuenta
   // (hojas), activas y posteables. Se priorizan las de la misma moneda que el
@@ -192,6 +201,7 @@ export function BankAccountsView() {
                   </TableCell>
                   <TableCell><Badge variant={a.isActive ? 'default' : 'secondary'} className="text-[9px]">{a.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>
                   <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" className="size-7 text-primary" title="Ver movimientos del banco" aria-label={`Ver movimientos de ${a.bankName}`} onClick={() => setDetailAccount(a)}><Eye className="size-3.5" /></Button>
                     {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
                     {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                   </TableCell>
@@ -214,6 +224,7 @@ export function BankAccountsView() {
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
                 <span>{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType} · {a.currency}</span>
                 <span className="shrink-0">
+                  <Button variant="ghost" size="icon" className="size-7 text-primary" title="Ver movimientos del banco" aria-label={`Ver movimientos de ${a.bankName}`} onClick={() => setDetailAccount(a)}><Eye className="size-3.5" /></Button>
                   {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
                   {canDeactivateBankAccount && <Button variant="ghost" size="icon" className="size-7 text-red-500" onClick={() => handleDelete(a.id)}><Trash2 className="size-3.5" /></Button>}
                 </span>
@@ -271,12 +282,12 @@ export function BankAccountsView() {
               </div>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-xs font-bold">Cuenta Contable (para conciliaciones)</label>
+              <label className="text-xs font-bold">Cuenta Contable Hija (movimientos y conciliaciones)</label>
               <Combobox
                 options={accountOptions}
                 value={form.accountId || ''}
                 onChange={(v) => setForm({ ...form, accountId: v })}
-                placeholder="Seleccionar cuenta del plan (ej. 1101-001-001 LAFISE)"
+                placeholder="Seleccionar cuenta hija (ej. 1101-001-001 LAFISE)"
                 searchPlaceholder="Buscar por código o nombre..."
                 maxVisibleOptions={200}
                 className="h-9 text-xs"
@@ -304,6 +315,53 @@ export function BankAccountsView() {
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
             {(editing ? canEditBankAccount : canCreateBankAccount) && <Button onClick={handleSave} disabled={saving}>{saving && <Loader2 className="size-3.5 mr-1 animate-spin" />}Guardar</Button>}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(detailAccount)} onOpenChange={(open) => !open && setDetailAccount(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-4xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight"><Landmark className="size-4 text-primary" /> Movimientos de la cuenta bancaria</DialogTitle>
+            <DialogDescription>
+              {detailAccount ? `${detailAccount.bankName} · ${detailAccount.accountNumber} · ${detailAccount.currency || 'NIO'}` : ''}. Los ingresos y egresos se vinculan con la cuenta hija; su saldo se consolida en la cuenta mayor configurada. Esta vista no crea un asiento adicional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo neto vinculado (base NIO)</p>
+              <p className={cn('mt-1 text-xl font-black', Number(movementPayload.totalBaseAmount || 0) < 0 ? 'text-rose-600' : 'text-primary')}>C$ {Number(movementPayload.totalBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Entradas vinculadas (base NIO)</p>
+              <p className="mt-1 text-xl font-black text-emerald-600">C$ {Number(movementPayload.incomingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Salidas vinculadas (base NIO)</p>
+              <p className="mt-1 text-xl font-black text-rose-600">C$ {Number(movementPayload.outgoingBaseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Movimientos consultados</p>
+              <p className="mt-1 text-xl font-black">{movementPayload.total || 0}</p>
+            </div>
+          </div>
+          <div className="max-h-[50vh] overflow-auto rounded-xl border border-border/40">
+            <Table>
+              <TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-bold">Fecha</TableHead><TableHead className="text-[10px] font-bold">Origen</TableHead><TableHead className="text-[10px] font-bold">Método</TableHead><TableHead className="text-[10px] font-bold">Referencia</TableHead><TableHead className="text-right text-[10px] font-bold">Monto base</TableHead><TableHead className="text-[10px] font-bold">Estado</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {movementQuery.isLoading ? <TableRow><TableCell colSpan={6} className="py-8 text-center"><Loader2 className="mx-auto size-5 animate-spin" /></TableCell></TableRow>
+                  : movements.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Aún no hay pagos vinculados a esta cuenta bancaria.</TableCell></TableRow>
+                    : movements.map((movement: any) => <TableRow key={movement.id}>
+                      <TableCell className="whitespace-nowrap text-xs">{movement.date ? new Date(movement.date).toLocaleDateString('es-NI') : '—'}</TableCell>
+                      <TableCell className="text-xs font-medium">{movement.sourceNumber || movement.paymentReceived?.number || movement.paymentMade?.number || movement.sourceType || '—'}</TableCell>
+                      <TableCell className="text-xs">{movement.method === 'TRANSFER' ? 'Transferencia' : movement.method === 'CARD' ? 'Tarjeta' : movement.method || '—'}</TableCell>
+                      <TableCell className="max-w-40 truncate text-xs text-muted-foreground">{movement.reference || '—'}</TableCell>
+                      <TableCell className={cn('text-right text-xs font-black', movement.direction === 'OUT' ? 'text-rose-600' : 'text-emerald-600')}>{movement.direction === 'OUT' ? '-' : '+'}C$ {Number(movement.baseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell><Badge variant={movement.status === 'POSTED' ? 'default' : 'secondary'} className="text-[9px]">{movement.status === 'POSTED' ? 'Activo' : 'Cancelado'}</Badge></TableCell>
+                    </TableRow>)}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setDetailAccount(null)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

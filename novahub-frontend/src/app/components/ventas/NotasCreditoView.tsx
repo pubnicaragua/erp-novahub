@@ -18,6 +18,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,6 +30,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -92,6 +94,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('TRANSFER');
   const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentReference, setPaymentReference] = useState('');
   const [referenceNow] = useState(() => Date.now());
@@ -274,6 +277,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     setPaymentAmount(String(Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0))));
     setPaymentMethod('TRANSFER');
     setPaymentAccountId('');
+    setPaymentBankAccountId('');
     setPaymentReference(credit.number);
   };
 
@@ -281,12 +285,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
     if (!paymentCredit) return;
     const amount = Number(paymentAmount);
-    if (!paymentAccountId) return void toast.error('Selecciona la cuenta que recibió el pago');
+    if (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) return void toast.error('Selecciona la cuenta que recibió el pago');
     if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
+    if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) return void toast.error('Selecciona el banco global donde se recibió el pago');
     const paymentToastId = toast.loading('Registrando pago del crédito...');
     try {
       setPaymentLoading(true);
-      await creditNotesService.apply(paymentCredit.id, { amount, paymentMethod, accountId: paymentAccountId, reference: paymentReference || undefined });
+      await creditNotesService.apply(paymentCredit.id, { amount, paymentMethod, accountId: requiresManualPaymentAccount(paymentMethod) ? paymentAccountId : undefined, bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined, reference: paymentReference || undefined });
       toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
       setPaymentCredit(null);
       onRefresh();
@@ -493,7 +498,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Eliminar crédito?" description="Solo deben eliminarse créditos que aún no hayan sido emitidos." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Eliminando crédito...'); try { setDeleteLoading(true); await creditNotesService.delete(pendingDeleteId); toast.success('Crédito eliminado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
 
-      <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}><DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl"><DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle><DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription></DialogHeader>{paymentCredit && <div className="space-y-4"><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentCredit.number} · {customerName(paymentCredit)}</p><p className="mt-1 text-2xl font-black text-primary">Saldo: {formatConvertedAmount(Number(paymentCredit.balance ?? paymentCredit.total ?? 0), paymentCredit.currency, paymentCredit.exchangeRate)}</p></div><Badge className="bg-primary/10 text-primary">{statusFor(paymentCredit.status)?.label}</Badge></div></div><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto</p><Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></div><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div></div><AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</p><Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Número de recibo, transferencia..." /></div></div>}<DialogFooter><Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button><Button onClick={handlePayment} disabled={paymentLoading} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}><DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl"><DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle><DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription></DialogHeader>{paymentCredit && <div className="space-y-4"><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentCredit.number} · {customerName(paymentCredit)}</p><p className="mt-1 text-2xl font-black text-primary">Saldo: {formatConvertedAmount(Number(paymentCredit.balance ?? paymentCredit.total ?? 0), paymentCredit.currency, paymentCredit.exchangeRate)}</p></div><Badge className="bg-primary/10 text-primary">{statusFor(paymentCredit.status)?.label}</Badge></div></div><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto</p><Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></div><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value; setPaymentMethod(nextMethod); setPaymentAccountId(requiresManualPaymentAccount(nextMethod) ? paymentAccountId : ''); setPaymentBankAccountId(isBankPaymentMethod(nextMethod) ? paymentBankAccountId : ''); }} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div></div>{requiresManualPaymentAccount(paymentMethod) && <AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" />}{isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Banco global de destino" />}<div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</p><Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Número de recibo, transferencia..." /></div></div>}<DialogFooter><Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button><Button onClick={handlePayment} disabled={paymentLoading || (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) || (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }

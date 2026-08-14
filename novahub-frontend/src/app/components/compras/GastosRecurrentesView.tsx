@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { recurringExpensesService } from '../../services/compras.service';
-import type { RecurringExpense, Supplier, Account } from '../../types';
+import type { RecurringExpense, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -20,6 +20,7 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -36,9 +37,7 @@ const statusOpts = [
   { label: 'Finalizado', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-interface PropsWithCatalog extends Props { accountCatalog?: Account[]; }
-
-export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], accountCatalog = [], pagination, onSearchChange }: PropsWithCatalog) {
+export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,21 +46,18 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringExpense> | null>(null);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
-    setAccounts(accountCatalog);
-  }, [supplierCatalog, accountCatalog]);
+  }, [supplierCatalog]);
 
   const openEditor = (id: string | null) => {
     setEditingId(id);
     if (id === 'NEW') {
       setLocalDoc({
-        accountId: '',
         description: '',
         frequency: 'monthly',
         startDate: new Date().toISOString(),
@@ -199,6 +195,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           </div>
         </div>
 
+        <ExpenseAccountingNotice />
+
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
@@ -225,12 +223,6 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
                     placeholder="Asociar a un proveedor..."
                   />
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-[10px] text-muted-foreground mb-1 font-black uppercase text-primary">Cuenta contable</p>
-                  <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
-                    Se aplica la cuenta global de Gastos configurada en Contabilidad
-                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>

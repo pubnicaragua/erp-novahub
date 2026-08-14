@@ -40,6 +40,26 @@ const GUARANTEES = [
 
 const TERMS = [6, 12, 18, 24, 36, 48, 60];
 
+const INDUSTRY_DISPLAY_NAMES: Record<string, string> = {
+  RETAIL: 'Comercio',
+  TECHNOLOGY: 'Tecnología',
+  ARCHITECTURE: 'Arquitectura',
+  SERVICES: 'Servicios',
+  MANUFACTURING: 'Manufactura',
+  CONSTRUCTION: 'Construcción',
+  RESTAURANT: 'Restaurante',
+  HEALTHCARE: 'Salud',
+  EDUCATION: 'Educación',
+  OTHER: 'Otra industria',
+  CUSTOM: 'Industria personalizada',
+};
+
+const getIndustryDisplayName = (value: unknown) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) return '';
+  return INDUSTRY_DISPLAY_NAMES[rawValue.toUpperCase()] || rawValue;
+};
+
 const FINANCING_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="financing-title"]',
@@ -243,12 +263,12 @@ function PaymentCalculator() {
           <div className="space-y-1.5">
             <Label className="text-[10px] uppercase font-black tracking-widest">Monto (C$)</Label>
             <Input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))}
-              className="h-11 rounded-xl" />
+              placeholder="Ingresá el monto" className="h-11 rounded-xl" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-[10px] uppercase font-black tracking-widest">Plazo (meses)</Label>
             <Select value={term.toString()} onValueChange={(v) => setTerm(Number(v))}>
-              <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Seleccioná el plazo" /></SelectTrigger>
               <SelectContent>
                 {TERMS.map((t) => <SelectItem key={t} value={t.toString()}>{t} meses</SelectItem>)}
               </SelectContent>
@@ -257,7 +277,7 @@ function PaymentCalculator() {
           <div className="space-y-1.5">
             <Label className="text-[10px] uppercase font-black tracking-widest">Tasa anual (%)</Label>
             <Input type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} step={0.5}
-              className="h-11 rounded-xl" />
+              placeholder="Ingresá la tasa anual" className="h-11 rounded-xl" />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
@@ -330,7 +350,7 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
           setCompany((prev) => ({
             companyName: data.companyName || prev.companyName,
             ruc: data.ruc || prev.ruc,
-            industry: data.industry || prev.industry,
+            industry: getIndustryDisplayName(data.industry) || prev.industry,
             yearsOfOperation: data.yearsOfOperation != null ? String(data.yearsOfOperation) : prev.yearsOfOperation,
             address: data.address || prev.address,
             phone: data.phone || prev.phone,
@@ -406,15 +426,20 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mb-2">
+      <div className="relative mb-2 grid w-full grid-cols-5 items-start">
+        <div className="absolute left-[10%] right-[10%] top-4 z-0 h-0.5 rounded bg-muted">
+          <div
+            className="h-full rounded bg-primary transition-[width] duration-300"
+            style={{ width: `${Math.min(100, (step / (steps.length - 1)) * 100)}%` }}
+          />
+        </div>
         {steps.map((s, i) => (
-          <div key={s} className="flex items-center gap-2 flex-1 min-w-0">
-            <div className={cn('size-8 rounded-full flex items-center justify-center text-xs font-black shrink-0',
+          <div key={s} className="relative z-10 flex min-w-0 flex-col items-center gap-1.5 text-center">
+            <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-background text-xs font-black',
               i === step ? 'bg-primary text-primary-foreground' : i < step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')}>
               {i < step ? <CheckCircle2 className="size-4" /> : i + 1}
             </div>
-            <span className={cn('text-xs font-bold hidden sm:block min-w-0 truncate', i === step ? 'text-primary' : 'text-muted-foreground')}>{s}</span>
-            {i < 4 && <div className={cn('flex-1 h-0.5 rounded min-w-4', i < step ? 'bg-primary' : 'bg-muted')} />}
+            <span className={cn('min-w-0 max-w-full break-words text-[9px] font-bold leading-tight sm:text-xs', i === step ? 'text-primary' : 'text-muted-foreground')}>{s}</span>
           </div>
         ))}
       </div>
@@ -435,14 +460,14 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <EditField label="Nombre de la empresa" value={company.companyName} readOnly={company.companyName !== ''} onChange={(v) => setCompany({ ...company, companyName: v })} />
-                    <EditField label="RUC/NIT" value={company.ruc} readOnly={company.ruc !== ''} onChange={(v) => setCompany({ ...company, ruc: v })} />
-                    <EditField label="Giro de negocio" value={company.industry} readOnly={company.industry !== ''} onChange={(v) => setCompany({ ...company, industry: v })} />
-                    <EditField label="Años de operación" value={company.yearsOfOperation} readOnly={company.yearsOfOperation !== ''} onChange={(v) => setCompany({ ...company, yearsOfOperation: v })} />
-                    <EditField label="Dirección fiscal" value={company.address} readOnly={company.address !== ''} onChange={(v) => setCompany({ ...company, address: v })} />
-                    <EditField label="Teléfono" value={company.phone} readOnly={company.phone !== ''} onChange={(v) => setCompany({ ...company, phone: v })} />
-                    <EditField label="Representante legal" value={company.legalRepresentative} readOnly={company.legalRepresentative !== ''} onChange={(v) => setCompany({ ...company, legalRepresentative: v })} />
-                    <EditField label="Email" value={company.legalRepresentativeEmail} readOnly={company.legalRepresentativeEmail !== ''} onChange={(v) => setCompany({ ...company, legalRepresentativeEmail: v })} />
+                    <EditField label="Nombre de la empresa" value={company.companyName} placeholder="Nombre legal de la empresa" readOnly={company.companyName !== ''} onChange={(v) => setCompany({ ...company, companyName: v })} />
+                    <EditField label="RUC/NIT" value={company.ruc} placeholder="Ingresá el RUC o NIT" readOnly={company.ruc !== ''} onChange={(v) => setCompany({ ...company, ruc: v })} />
+                    <EditField label="Giro de negocio" value={company.industry} placeholder="Ej. Comercio, servicios o tecnología" readOnly={company.industry !== ''} onChange={(v) => setCompany({ ...company, industry: v })} />
+                    <EditField label="Años de operación" value={company.yearsOfOperation} placeholder="Ej. 5" readOnly={company.yearsOfOperation !== ''} onChange={(v) => setCompany({ ...company, yearsOfOperation: v })} />
+                    <EditField label="Dirección fiscal" value={company.address} placeholder="Dirección fiscal completa" readOnly={company.address !== ''} onChange={(v) => setCompany({ ...company, address: v })} />
+                    <EditField label="Teléfono" value={company.phone} placeholder="Ej. 8888-8888" readOnly={company.phone !== ''} onChange={(v) => setCompany({ ...company, phone: v })} />
+                    <EditField label="Representante legal" value={company.legalRepresentative} placeholder="Nombre del representante legal" readOnly={company.legalRepresentative !== ''} onChange={(v) => setCompany({ ...company, legalRepresentative: v })} />
+                    <EditField label="Email" value={company.legalRepresentativeEmail} placeholder="correo@empresa.com" readOnly={company.legalRepresentativeEmail !== ''} onChange={(v) => setCompany({ ...company, legalRepresentativeEmail: v })} />
                   </div>
                 </>
               )}
@@ -456,19 +481,19 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Ingresos mensuales promedio</Label>
-                  <Input type="number" value={form.monthlyRevenue || ''} onChange={(e) => setForm({ ...form, monthlyRevenue: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.monthlyRevenue || ''} onChange={(e) => setForm({ ...form, monthlyRevenue: Number(e.target.value) })} placeholder="Ej. 50,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Gastos operativos mensuales</Label>
-                  <Input type="number" value={form.monthlyExpenses || ''} onChange={(e) => setForm({ ...form, monthlyExpenses: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.monthlyExpenses || ''} onChange={(e) => setForm({ ...form, monthlyExpenses: Number(e.target.value) })} placeholder="Ej. 30,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Activos totales</Label>
-                  <Input type="number" value={form.totalAssets || ''} onChange={(e) => setForm({ ...form, totalAssets: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.totalAssets || ''} onChange={(e) => setForm({ ...form, totalAssets: Number(e.target.value) })} placeholder="Ej. 100,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Pasivos totales</Label>
-                  <Input type="number" value={form.totalLiabilities || ''} onChange={(e) => setForm({ ...form, totalLiabilities: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.totalLiabilities || ''} onChange={(e) => setForm({ ...form, totalLiabilities: Number(e.target.value) })} placeholder="Ej. 40,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="rounded-2xl bg-muted/30 p-4 border border-border/30">
                   <div className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Patrimonio neto</div>
@@ -476,7 +501,7 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Nómina mensual</Label>
-                  <Input type="number" value={form.monthlyPayroll || ''} onChange={(e) => setForm({ ...form, monthlyPayroll: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.monthlyPayroll || ''} onChange={(e) => setForm({ ...form, monthlyPayroll: Number(e.target.value) })} placeholder="Ej. 15,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="rounded-2xl bg-muted/30 p-4 border border-border/30">
                   <div className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Nivel de endeudamiento</div>
@@ -494,25 +519,25 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Monto solicitado (C$)</Label>
-                  <Input type="number" value={form.requestedAmount} onChange={(e) => setForm({ ...form, requestedAmount: Number(e.target.value) })} className="h-11 rounded-xl" />
+                  <Input type="number" value={form.requestedAmount} onChange={(e) => setForm({ ...form, requestedAmount: Number(e.target.value) })} placeholder="Ej. 100,000" className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Plazo en meses</Label>
                   <Select value={form.termMonths.toString()} onValueChange={(v) => setForm({ ...form, termMonths: Number(v) })}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Seleccioná el plazo" /></SelectTrigger>
                     <SelectContent>{TERMS.map((t) => <SelectItem key={t} value={t.toString()}>{t} meses</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Destino del crédito</Label>
                   <Select value={form.purpose} onValueChange={(v) => setForm({ ...form, purpose: v })}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Seleccioná el destino" /></SelectTrigger>
                     <SelectContent>{PURPOSES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-black tracking-widest">Fuente de repago</Label>
-                  <Input value={form.repaymentSource} onChange={(e) => setForm({ ...form, repaymentSource: e.target.value })} className="h-11 rounded-xl" />
+                  <Input value={form.repaymentSource} onChange={(e) => setForm({ ...form, repaymentSource: e.target.value })} placeholder="Ej. Ingresos por ventas mensuales" className="h-11 rounded-xl" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -549,14 +574,14 @@ function ApplicationWizard({ tenantId, onBack, onComplete }: { tenantId: string;
                 {form.hasActiveCredits && (
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-black tracking-widest">Detalle</Label>
-                    <Input value={form.activeCreditDetail} onChange={(e) => setForm({ ...form, activeCreditDetail: e.target.value })} placeholder="Institución, monto, cuota" className="h-11 rounded-xl" />
+                    <Input value={form.activeCreditDetail} onChange={(e) => setForm({ ...form, activeCreditDetail: e.target.value })} placeholder="Ej. Banco, saldo pendiente y cuota mensual" className="h-11 rounded-xl" />
                   </div>
                 )}
                 <ToggleField label="¿Morosidades en últimos 24 meses?" value={form.hasPastDue} onChange={(v) => setForm({ ...form, hasPastDue: v })} />
                 {form.hasPastDue && (
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-black tracking-widest">Detalle</Label>
-                    <Input value={form.pastDueDetail} onChange={(e) => setForm({ ...form, pastDueDetail: e.target.value })} placeholder="Institución, monto, si fue regularizado" className="h-11 rounded-xl" />
+                    <Input value={form.pastDueDetail} onChange={(e) => setForm({ ...form, pastDueDetail: e.target.value })} placeholder="Ej. Institución, monto y si fue regularizado" className="h-11 rounded-xl" />
                   </div>
                 )}
                 <ToggleField label="Inscrito en RUC" value={form.isRucRegistered} onChange={(v) => setForm({ ...form, isRucRegistered: v })} />
@@ -702,11 +727,12 @@ function ApplicationDetail({ app, onBack, onRefresh }: { app: FinancingApplicati
   );
 }
 
-function EditField({ label, value, onChange, readOnly }: { label: string; value: string; onChange: (v: string) => void; readOnly?: boolean }) {
+function EditField({ label, value, placeholder, onChange, readOnly }: { label: string; value: string; placeholder: string; onChange: (v: string) => void; readOnly?: boolean }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-[10px] uppercase font-black tracking-widest">{label}</Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} readOnly={readOnly}
+        placeholder={placeholder}
         className={cn('h-11 rounded-xl', readOnly && 'bg-muted/40 text-muted-foreground cursor-not-allowed')} />
     </div>
   );

@@ -29,6 +29,8 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlerts
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { isBankPaymentMethod } from '../../utils/paymentMethods';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -193,6 +195,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
 
 function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
   const [method, setMethod] = useState<PaymentMethod>('TRANSFER');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
@@ -208,6 +211,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   useEffect(() => {
     if (!draft) return;
     setMethod('TRANSFER');
+    setBankAccountId('');
     setAmount(String(Number(draft.amount || 0)));
     setReference(draft.reference || '');
     setNotes(draft.notes || '');
@@ -244,6 +248,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     if (!draft) return;
     const resolvedInvoiceId = invoiceId || draft.supplierInvoiceId;
     if (!resolvedInvoiceId) return toast.error('Registra primero la factura y su evidencia.');
+    if (isBankPaymentMethod(method) && !bankAccountId) return toast.error('Selecciona el banco global del egreso.');
     const requiresReference = ['TRANSFER', 'CHECK', 'CARD'].includes(method);
     const paymentReference = reference.trim();
     if (requiresReference && !paymentReference) {
@@ -264,6 +269,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         currency: draft.currency,
         exchangeRate: draft.exchangeRate,
         method,
+        bankAccountId: isBankPaymentMethod(method) ? bankAccountId : undefined,
         reference: paymentReference || undefined,
         notes: notes.trim() || `Pago de la recepción ${draft.receiptNumber}`,
       });
@@ -326,8 +332,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Monto</p><Input type="text" value={formatReceiptAmount(Number(amount), draft.currency)} readOnly aria-readonly="true" disabled={saving} className="h-10 border-2 border-primary/20 bg-muted/20 font-black tabular-nums text-foreground" /></div>
-                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Método</p><select value={method} onChange={(event) => { const nextMethod = event.target.value as PaymentMethod; setMethod(nextMethod); if (nextMethod === 'CASH') setReference(''); }} disabled={saving} className="h-10 w-full rounded-xl border-2 border-primary/20 bg-background px-3 text-xs font-bold uppercase outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Monto a aplicar</p><Input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} disabled={saving} className="h-10 border-2 border-primary/20 bg-background font-black tabular-nums text-foreground" /><p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)}</p></div>
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Método</p><select value={method} onChange={(event) => { const nextMethod = event.target.value as PaymentMethod; setMethod(nextMethod); setBankAccountId(isBankPaymentMethod(nextMethod) ? bankAccountId : ''); if (nextMethod === 'CASH') setReference(''); }} disabled={saving} className="h-10 w-full rounded-xl border-2 border-primary/20 bg-background px-3 text-xs font-bold uppercase outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                {isBankPaymentMethod(method) ? <div className="sm:col-span-2"><BankAccountSelect value={bankAccountId} onChange={setBankAccountId} label="Banco global del egreso" /><p className="mt-1 text-[10px] text-muted-foreground">El asiento contable utilizará la cuenta hija vinculada al banco.</p></div> : <div className="sm:col-span-2 rounded-lg border border-primary/15 bg-primary/[0.03] px-3 py-2 text-[10px] text-muted-foreground">La cuenta contable del egreso se toma de la configuración de Contabilidad para este método.</div>}
                 {method !== 'CASH' && <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de referencia {['TRANSFER', 'CHECK', 'CARD'].includes(method) ? '*' : '(opcional)'}</p><Input value={reference} onChange={(event) => setReference(event.target.value)} disabled={saving} required={['TRANSFER', 'CHECK', 'CARD'].includes(method)} placeholder={method === 'OTHER' ? 'Opcional: referencia, comprobante o nota' : 'Ej. TRANSF-000123, cheque o voucher'} className="h-10 font-mono" /></div>}
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>

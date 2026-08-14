@@ -43,6 +43,7 @@ import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -728,6 +729,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
     if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
       toast.error('La transferencia requiere una referencia');
+      return;
+    }
+    if (payments.some((payment) => ['CARD', 'TRANSFER'].includes(payment.method) && !payment.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada pago con tarjeta o transferencia');
       return;
     }
     submittingRef.current = true;
@@ -1510,7 +1515,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined } : item))}>
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, bankAccountId: ['CARD', 'TRANSFER'].includes(value) ? item.bankAccountId : undefined } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -1525,6 +1530,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         {payment.method === 'TRANSFER' && (
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
+                        {['CARD', 'TRANSFER'].includes(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
                       </div>
                     ))}
                   </div>

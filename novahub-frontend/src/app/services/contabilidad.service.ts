@@ -21,6 +21,8 @@ export const contabilidadService = {
     api.get<any>('/accounting/journals', { params, signal }),
   getWarehouseAccountingAllocations: (params?: { warehouseId?: string; accountId?: string; productId?: string; sourceType?: string; sourceId?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
     api.get<any>('/accounting/warehouse-allocations', { params, signal }),
+  getBankAccountMovements: (bankAccountId: string, params?: { dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+    api.get<any>(`/bank-accounts/${bankAccountId}/movements`, { params, signal }),
   getJournal: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/journals/${id}`, { signal }),
   updateJournal: (id: string, data: any) => api.put<any>(`/accounting/journals/${id}`, data),
   postJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/post`, {}),

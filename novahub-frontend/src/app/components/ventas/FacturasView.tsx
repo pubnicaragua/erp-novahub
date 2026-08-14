@@ -19,6 +19,7 @@ import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -35,6 +36,7 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -145,6 +147,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
 
@@ -348,6 +351,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setPaymentAmount(amount.toFixed(2));
     setPaymentMethod('CASH');
     setPaymentAccountId('');
+    setPaymentBankAccountId('');
     setPaymentReference('');
     setPaymentDialogOpen(true);
   };
@@ -375,6 +379,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('La referencia es obligatoria para una transferencia');
       return;
     }
+    if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
+      toast.error('Selecciona el banco global donde se recibió el pago');
+      return;
+    }
+    if (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) {
+      toast.error('Selecciona la cuenta contable que recibirá el pago');
+      return;
+    }
 
     const invoice = paymentInvoice;
     const payToastId = toast.loading(`Registrando pago de factura ${invoice.number}...`);
@@ -396,7 +408,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         currency: invoice.currency,
         exchangeRate: invoice.exchangeRate || globalRate,
         method: paymentMethod,
-        accountId: paymentAccountId || undefined,
+        accountId: requiresManualPaymentAccount(paymentMethod) ? paymentAccountId || undefined : undefined,
+        bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined,
         reference: paymentReference.trim() || undefined,
         notes: `Cobro registrado desde Facturas (${invoice.number})`,
       } as any);
@@ -1439,12 +1452,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </div>
                 <div>
                   <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
-                  <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                  <select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value; setPaymentMethod(nextMethod); setPaymentAccountId(requiresManualPaymentAccount(nextMethod) ? paymentAccountId : ''); setPaymentBankAccountId(isBankPaymentMethod(nextMethod) ? paymentBankAccountId : ''); }} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                   </select>
                 </div>
               </div>
-              <AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" />
+              {requiresManualPaymentAccount(paymentMethod) && <AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" />}
+              {isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Banco global de destino" />}
               <div>
                 <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia {paymentMethod === 'TRANSFER' ? '*' : '(opcional)'}</p>
                 <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Transferencia, voucher, cheque..." />
@@ -1453,7 +1467,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || !paymentAccountId} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) || (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>

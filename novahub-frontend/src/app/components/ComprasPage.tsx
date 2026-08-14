@@ -22,7 +22,6 @@ import {
   purchaseRequestsService,
 } from '../services/compras.service';
 import { contabilidadService } from '../services/contabilidad.service';
-import { accountsService } from '../services/finanzas.service';
 import { inventoryService } from '../services/inventario.service';
 import type {
   Supplier, Expense, RecurringExpense, PurchaseOrder,
@@ -208,12 +207,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     enabled: activeSection === 'gastos',
     staleTime: 30_000,
   });
-  const accountCatalogQuery = useQuery({
-    queryKey: ['purchases', 'financial-accounts-catalog', tenantKey],
-    queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 200 }, signal),
-    enabled: activeSection === 'gastos-rec',
-    staleTime: 30_000,
-  });
   const warehouseCatalogQuery = useQuery({
     queryKey: ['purchases', 'warehouses-catalog', tenantKey],
     queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
@@ -243,7 +236,6 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   });
   const chartAccountCatalog = useMemo(() => toArr(chartAccountsQuery.data) as any[], [chartAccountsQuery.data]);
   const expenseCategoryCatalog = useMemo(() => toArr(expenseCategoriesQuery.data) as any[], [expenseCategoriesQuery.data]);
-  const accountCatalog = useMemo(() => toArr(accountCatalogQuery.data) as any[], [accountCatalogQuery.data]);
   const warehouseCatalog = useMemo(() => toArr(warehouseCatalogQuery.data) as any[], [warehouseCatalogQuery.data]);
   const productCatalog = useMemo(() => toArr(productCatalogQuery.data) as any[], [productCatalogQuery.data]);
   const productCategories = useMemo(() => toArr(productCategoriesQuery.data) as any[], [productCategoriesQuery.data]);
@@ -397,17 +389,25 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     const receiptItems: PurchaseAlertItem[] = (filteredData.recepciones as PurchaseReceipt[])
       .filter((receipt) => ['PENDING', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || 'PENDING').toUpperCase()))
       .map((receipt) => ({ id: String(receipt.id), label: receipt.number, detail: receipt.supplier?.name || 'Sin proveedor asignado' }));
+    const expenseItems: PurchaseAlertItem[] = (filteredData.gastos as Expense[])
+      .filter((expense) => String(expense.status || '').toUpperCase() === 'PENDING')
+      .map((expense) => ({
+        id: String(expense.id),
+        label: expense.number,
+        detail: `${expense.description || 'Gasto'} · ${expense.supplier?.name || 'Sin proveedor'}`,
+      }));
 
-    const bySection: Record<'solicitudes' | 'ordenes' | 'recepciones', PurchaseAlertDetail> = {
+    const bySection: Record<'solicitudes' | 'ordenes' | 'recepciones' | 'gastos', PurchaseAlertDetail> = {
       solicitudes: { label: 'Solicitudes nuevas', singularLabel: 'solicitud nueva', count: requestItems.length, items: requestItems },
       ordenes: { label: 'Órdenes nuevas', singularLabel: 'orden nueva', count: orderItems.length, items: orderItems },
       recepciones: { label: 'Recepciones nuevas', singularLabel: 'recepción nueva', count: receiptItems.length, items: receiptItems },
+      gastos: { label: 'Gastos nuevos', singularLabel: 'gasto nuevo', count: expenseItems.length, items: expenseItems },
     };
     if (!(Object.keys(bySection) as Array<keyof typeof bySection>).includes(activeSection as keyof typeof bySection)) {
       return null;
     }
     return bySection[activeSection as keyof typeof bySection];
-  }, [activeSection, filteredData.ordenes, filteredData.recepciones, filteredData.solicitudes]);
+  }, [activeSection, filteredData.gastos, filteredData.ordenes, filteredData.recepciones, filteredData.solicitudes]);
 
   return (
     <div className="purchases-module flex min-w-0 flex-1 overflow-x-hidden bg-background w-full">
@@ -479,8 +479,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                  >
                     {section.id === 'solicitudes'  && <SolicitudCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} warehouseCatalog={warehouseCatalog} supplierCatalog={supplierCatalog} productCatalog={productCatalog} data={filteredData.solicitudes} pagination={pagination.solicitudes} onSearchChange={(value) => updateSearch('solicitudes', value)} onStatusChange={(value) => updateStatus('solicitudes', value)} />}
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
-                    {section.id === 'gastos'        && <GastosView         {...commonProps} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
-                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} accountCatalog={accountCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
+                    {section.id === 'gastos'        && <GastosView         {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'gastos' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
+                    {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
                      {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
                        {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}

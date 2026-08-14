@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, Info, CheckCircle2, Ban, Lock
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -30,9 +30,11 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
+import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 
-interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; }
-type KpiFilter = { type: 'none' } | { type: 'pending' } | { type: 'category'; category: string };
+interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
+type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
@@ -52,17 +54,23 @@ const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 };
 const paymentSourceLabel = (value?: string | null) => PAYMENT_SOURCE_LABELS[String(value || '').toUpperCase()] || value || '-';
+const paymentMethodOptions = [
+  { label: 'Efectivo', value: 'CASH' },
+  { label: 'Tarjeta', value: 'CARD' },
+  { label: 'Transferencia', value: 'TRANSFER' },
+  { label: 'Cheque', value: 'CHECK' },
+  { label: 'Otro', value: 'OTHER' },
+] as const;
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 const statusOpts = [
+  { label: 'Borrador',  value: 'DRAFT',    color: 'bg-slate-500/10 text-slate-500' },
   { label: 'Pendiente', value: 'PENDING',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobado',  value: 'APPROVED', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Pagado',    value: 'PAID',     color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Rechazado', value: 'REJECTED', color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange }: Props) {
+export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
@@ -96,6 +104,24 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
+  const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const [paymentExpense, setPaymentExpense] = useState<Expense | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<(typeof paymentMethodOptions)[number]['value']>('CASH');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
+  useEffect(() => {
+    if (!highlightedAlertId) return;
+    const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedAlertId]);
+
+  useEffect(() => {
+    if (!targetId || !data.some((expense) => expense.id === targetId)) return;
+    setHighlightedAlertId(targetId);
+    setEditingId(targetId);
+    onClearTargetId?.();
+  }, [targetId, data, onClearTargetId]);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -116,8 +142,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               expenseCategoryId: '',
               description: '',
               paidTo: '',
-              paymentSource: 'EFECTIVO',
-              status: 'PENDING',
+              status: 'DRAFT',
               evidenceFileName: '',
               evidenceFileType: '',
               evidenceFileSize: 0,
@@ -143,6 +168,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
     if (!matchesSearch) return false;
 
+    if (activeKpiFilter.type === 'draft') return String(g.status || '').toUpperCase() === 'DRAFT';
     if (activeKpiFilter.type === 'pending') return String(g.status || '').toUpperCase() === 'PENDING';
     if (activeKpiFilter.type === 'category') return String(g.category || '').toUpperCase() === activeKpiFilter.category;
     return true;
@@ -239,8 +265,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
   const normalizeExpenseStatus = (raw: string) => {
     const status = String(raw || '').trim().toUpperCase();
-    if (['APPROVED', 'PAID', 'REJECTED'].includes(status)) return status;
-    return 'PENDING';
+    if (['DRAFT', 'PENDING', 'PAID'].includes(status)) return status;
+    return 'DRAFT';
   };
 
   const isValidExpenseImportRow = (row: Record<string, string>) => {
@@ -371,7 +397,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES', 'edit') },
     { key: 'paidTo',      header: 'Pagado a', width: '170px',
       render: (val) => <span className="text-xs font-medium text-foreground">{val || '-'}</span> },
-    { key: 'paymentSource', header: 'Cuenta Origen', width: '130px',
+    { key: 'paymentSource', header: 'Método de pago', width: '145px',
       render: (val) => <span className="text-xs font-black text-muted-foreground">{paymentSourceLabel(val)}</span> },
     { key: 'amount',      header: 'Monto',     width: '130px',
       headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />,
@@ -379,7 +405,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-rose-500" />
       ) },
     { key: 'status',      header: 'Estado',    width: '120px',
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label || (String(val || '').toUpperCase() === 'APPROVED' ? 'Pendiente' : val) || 'Borrador'}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Expense>) => {
@@ -393,15 +419,40 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
   };
 
-  const handleStatusAction = async (row: Expense, status: 'APPROVED' | 'PAID' | 'REJECTED') => {
-    const labels = { APPROVED: 'Gasto aprobado', PAID: 'Gasto marcado como pagado', REJECTED: 'Gasto rechazado' };
-    const statusToastId = toast.loading(status === 'APPROVED' ? 'Aprobando gasto...' : status === 'PAID' ? 'Marcando gasto como pagado...' : 'Rechazando gasto...');
+  const handleStatusAction = async (row: Expense, status: 'DRAFT' | 'PENDING') => {
+    const statusToastId = toast.loading(status === 'DRAFT' ? 'Guardando gasto como borrador...' : 'Enviando gasto a pendientes...');
     try {
       await expensesService.update(row.id, { status } as any);
-      toast.success(labels[status], { id: statusToastId });
+      toast.success(status === 'DRAFT' ? 'Gasto guardado como borrador' : 'Gasto guardado como pendiente', { id: statusToastId });
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado del gasto', { id: statusToastId });
+    }
+  };
+
+  const openPaymentDialog = (row: Expense) => {
+    setPaymentExpense(row);
+    setPaymentMethod('CASH');
+    setPaymentReference(row.reference || row.number || '');
+  };
+
+  const handlePayment = async () => {
+    if (!paymentExpense) return;
+    const paymentToastId = toast.loading(`Marcando ${paymentExpense.number} como pagado...`);
+    try {
+      setPaymentLoading(true);
+      await expensesService.update(paymentExpense.id, {
+        status: 'PAID',
+        paymentSource: paymentMethod,
+        reference: paymentReference.trim() || undefined,
+      } as any);
+      toast.success('Gasto pagado y enviado a Finanzas', { id: paymentToastId });
+      setPaymentExpense(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago del gasto', { id: paymentToastId });
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -421,7 +472,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       setDeleteLoading(false);
     }
   };
-  const handleSaveDoc = async () => {
+  const handleSaveDoc = async (statusToSave: 'DRAFT' | 'PENDING' = 'PENDING') => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     // Clean data (ensure numbers and remove nested objects)
@@ -430,6 +481,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       amount: Number(localDoc.amount),
       exchangeRate: Number(localDoc.exchangeRate),
       baseAmount: Number(localDoc.baseAmount),
+      status: statusToSave,
     };
     delete (cleanedDoc as any).account;
     delete (cleanedDoc as any).supplier;
@@ -457,14 +509,14 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       }
     }
 
-    const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando gasto...' : 'Guardando gasto...');
+    const saveToastId = toast.loading(statusToSave === 'DRAFT' ? 'Guardando gasto como borrador...' : 'Guardando gasto como pendiente...');
     try {
       if (editingId === 'NEW') {
         await expensesService.create(cleanedDoc as any);
-        toast.success('Gasto registrado', { id: saveToastId });
+        toast.success(statusToSave === 'DRAFT' ? 'Gasto guardado como borrador' : 'Gasto registrado como pendiente', { id: saveToastId });
       } else {
         await expensesService.update(editingId!, cleanedDoc as any);
-        toast.success('Gasto guardado', { id: saveToastId });
+        toast.success(statusToSave === 'DRAFT' ? 'Gasto guardado como borrador' : 'Gasto guardado como pendiente', { id: saveToastId });
       }
       setEditingId(null);
       setEvidenceFile(null);
@@ -477,7 +529,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const isPaidLocked = !isNew && String(localDoc.status || '').toUpperCase() === 'PAID';
-    const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
     const canMutate = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : (canPerform('PURCHASES_EXPENSES', 'edit') && !isPaidLocked);
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
@@ -507,9 +558,14 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               </div>
             )}
             {((isNew && canPerform('PURCHASES_EXPENSES', 'create')) || (!isNew && canPerform('PURCHASES_EXPENSES', 'edit'))) && !isPaidLocked && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                Guardar Gasto
-              </Button>
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="flex-1 rounded-xl px-4 font-black uppercase text-[10px] tracking-widest sm:flex-none">
+                  Guardar borrador
+                </Button>
+                <Button onClick={() => handleSaveDoc('PENDING')} className="flex-1 rounded-xl bg-primary px-5 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 sm:flex-none">
+                  Guardar pendiente
+                </Button>
+              </div>
             )}
             <Button
               variant="outline"
@@ -526,6 +582,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             </Button>
           </div>
         </div>
+
+        <ExpenseAccountingNotice />
 
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">
@@ -606,25 +664,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       placeholder="Nombre de persona o proveedor"
                     />
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta de Origen</p>
-                    <select
-                      disabled={!canMutate}
-                      value={(localDoc.paymentSource as string) || 'EFECTIVO'}
-                      onChange={(e) => setLocalDoc({ ...localDoc, paymentSource: e.target.value as any })}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                    >
-                      {paymentSourceOptions.map(source => (
-                        <option key={source} value={source}>{paymentSourceLabel(source)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Cuenta contable</p>
-                    <div className="flex h-8 items-center rounded-md border border-primary/20 bg-primary/5 px-2 text-[10px] font-bold text-primary">
-                      Se aplica la cuenta global de Gastos configurada en Contabilidad
-                    </div>
-                  </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
                       <p className="text-[10px] text-muted-foreground mb-1">Categoría personalizada</p>
@@ -637,10 +676,6 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       />
                     </div>
                   )}
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
-                    <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
-                  </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia (Factura/Recibo)</p>
                     <Input 
@@ -735,16 +770,18 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',
     },
+    { key: 'draft', title: 'Borradores', value: data.filter(g => (g.status || '').toUpperCase() === 'DRAFT').length, icon: FileText, color: 'text-slate-500', bg: 'bg-slate-500/10', interactive: true },
     { key: 'pending', title: 'Pendientes', value: data.filter(g => (g.status || '').toUpperCase() === 'PENDING').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', interactive: true },
     { key: 'category', title: 'Por Categoría', value: uniqueCategories.length, icon: Tag, color: 'text-purple-500', bg: 'bg-purple-500/10', interactive: true },
   ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => {
           const isActive =
             (k.key === 'pending' && activeKpiFilter.type === 'pending') ||
+            (k.key === 'draft' && activeKpiFilter.type === 'draft') ||
             (k.key === 'category' && activeKpiFilter.type === 'category');
           return (
           <PurchaseKpiCard
@@ -760,6 +797,10 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               if (!k.interactive) return;
               if (k.key === 'pending') {
                 setActiveKpiFilter(prev => prev.type === 'pending' ? { type: 'none' } : { type: 'pending' });
+                return;
+              }
+              if (k.key === 'draft') {
+                setActiveKpiFilter(prev => prev.type === 'draft' ? { type: 'none' } : { type: 'draft' });
                 return;
               }
               if (k.key === 'category') {
@@ -780,6 +821,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
+            {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
               <Popover>
                 <PopoverTrigger asChild>
@@ -867,7 +909,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -883,16 +925,13 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
+              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'DRAFT' && (
+                <Button title="Enviar gasto a pendientes" aria-label="Enviar gasto a pendientes" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={() => void handleStatusAction(row, 'PENDING')}><Send className="size-4" /></Button>
+              )}
               {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'PENDING' && (
-                <Button title="Aprobar gasto" aria-label="Aprobar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'APPROVED')}><CheckCircle2 className="size-4" /></Button>
+                <Button title="Registrar pago del gasto" aria-label="Registrar pago del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => openPaymentDialog(row)}><CircleDollarSign className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'APPROVED' && (
-                <Button title="Marcar gasto como pagado" aria-label="Marcar gasto como pagado" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => void handleStatusAction(row, 'PAID')}><CheckCircle2 className="size-4" /></Button>
-              )}
-              {canPerform('PURCHASES_EXPENSES', 'delete') && ['PENDING', 'APPROVED'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Rechazar gasto" aria-label="Rechazar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => void handleStatusAction(row, 'REJECTED')}><Ban className="size-4" /></Button>
-              )}
-              {(['PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase())) && (
+              {(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase())) && (
                 <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
               )}
               {String(row.status || '').toUpperCase() === 'PAID' && (
@@ -915,6 +954,46 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           loading={deleteLoading}
         />
 
+        <Dialog open={Boolean(paymentExpense)} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+                <CircleDollarSign className="size-5 text-primary" /> Registrar pago del gasto
+              </DialogTitle>
+              <DialogDescription>
+                El gasto quedará pagado, contabilizado con las cuentas configuradas y visible en Finanzas con su detalle.
+              </DialogDescription>
+            </DialogHeader>
+            {paymentExpense && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentExpense.number}</p>
+                  <p className="mt-1 text-sm font-bold text-foreground">{paymentExpense.description}</p>
+                  <p className="mt-2 text-2xl font-black text-primary">{formatConvertedAmount(Number(paymentExpense.amount || 0), paymentExpense.currency, paymentExpense.exchangeRate)}</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
+                    <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as typeof paymentMethod)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                      {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</p>
+                    <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." className="h-10 text-xs" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPaymentExpense(null)} disabled={paymentLoading}>Cancelar</Button>
+              <Button onClick={() => void handlePayment()} disabled={paymentLoading} className="bg-primary font-black uppercase tracking-widest">
+                {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader data-tour="purchases-expense-modal-title">
@@ -932,7 +1011,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                   Columnas: <span className="font-mono">date,description,category,amount,currency,paymentSource,paidTo,reference,status,notes</span>
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  category: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · status: PENDING/APPROVED/PAID/REJECTED
+                  category: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · status: DRAFT/PENDING/PAID
                 </p>
                 <Button variant="ghost" size="sm" className="mt-3 gap-2 h-8" onClick={downloadExpenseTemplate}>
                   <FileDown className="size-4" /> Descargar plantilla CSV

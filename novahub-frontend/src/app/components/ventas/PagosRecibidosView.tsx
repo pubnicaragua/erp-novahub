@@ -15,6 +15,7 @@ import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationCon
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -24,6 +25,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 
@@ -108,6 +110,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       exchangeRate: globalRate,
       method: 'TRANSFER',
       accountId: '',
+      bankAccountId: '',
       reference: '',
       notes: '',
     });
@@ -119,7 +122,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
-    if (!localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
+    if (requiresManualPaymentAccount(localDoc.method) && !localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
+    if (isBankPaymentMethod(localDoc.method) && !localDoc.bankAccountId) { toast.error('Selecciona el banco global donde se recibió el pago'); return; }
     const saveToastId = toast.loading('Registrando pago...');
     try {
       await paymentsService.create({
@@ -131,7 +135,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         currency: localDoc.currency,
         exchangeRate: localDoc.exchangeRate || globalRate,
         method: localDoc.method,
-        accountId: localDoc.accountId,
+        accountId: requiresManualPaymentAccount(localDoc.method) ? localDoc.accountId : undefined,
+        bankAccountId: isBankPaymentMethod(localDoc.method) ? localDoc.bankAccountId : undefined,
         reference: localDoc.reference || undefined,
         notes: localDoc.notes || undefined,
       } as any);
@@ -274,16 +279,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc.date} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
-                  <select value={localDoc.method} onChange={(e) => setLocalDoc({ ...localDoc, method: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                  <select value={localDoc.method} onChange={(e) => { const nextMethod = e.target.value; setLocalDoc({ ...localDoc, method: nextMethod, accountId: requiresManualPaymentAccount(nextMethod) ? localDoc.accountId : '', bankAccountId: isBankPaymentMethod(nextMethod) ? localDoc.bankAccountId : '' }); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
 
-                <AccountingAccountSelect
+                {requiresManualPaymentAccount(localDoc.method) && <AccountingAccountSelect
                   value={localDoc.accountId}
                   onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
                   assetOnly
                   label="Cuenta del pago"
-                />
+                />}
+
+                {['CARD', 'TRANSFER'].includes(String(localDoc.method).toUpperCase()) && <BankAccountSelect value={localDoc.bankAccountId} onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })} label="Banco global de destino" />}
 
                 <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
                   <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>
