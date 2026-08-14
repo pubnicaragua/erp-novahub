@@ -5,6 +5,7 @@ import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card"
 import { Separator } from "../ui/separator"
+import { InventoryViewTutorial } from './InventoryViewTutorial'
 
 interface InventoryDetailPanelProps {
   kind: "transfer" | "adjustment"
@@ -220,19 +221,22 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
   return (
     <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
       <Card className="overflow-hidden">
-        <CardHeader className="py-3 px-4">
+        <CardHeader className="py-3 px-4" data-tour="inventory-detail-title">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4 text-muted-foreground" />
               <CardTitle className="text-sm font-medium">{isTransfer ? 'Detalle de Transferencia' : 'Detalle de Ajuste'}</CardTitle>
             </div>
+            <div className="flex items-center gap-1" data-tour="inventory-detail-actions">
+            <InventoryViewTutorial label={isTransfer ? 'Cómo consultar transferencia' : 'Cómo consultar ajuste'} targetPrefix="inventory-detail" stepKeys={['title', 'data']} copy={{ data: { description: isTransfer ? 'Revisa origen, destino, unidades y artículos transferidos.' : 'Revisa almacén, razón, cantidades, costos y diferencias del ajuste.' } }} />
             <Button variant="ghost" size="icon" className="w-6 h-6" onClick={onClose}>
               <X className="w-3.5 h-3.5" />
             </Button>
+            </div>
           </div>
         </CardHeader>
         <Separator />
-        <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5">
+        <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5" data-tour="inventory-detail-data">
           {data && (isTransfer ? <TransferDetail data={data} /> : <AdjustmentDetail data={data} />)}
         </CardContent>
       </Card>

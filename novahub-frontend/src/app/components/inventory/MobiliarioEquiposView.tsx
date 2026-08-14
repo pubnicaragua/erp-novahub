@@ -18,6 +18,7 @@ import { storageService } from '../../services/storage.service';
 import { api } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -413,11 +414,11 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm" data-tour="mobiliario-list-title">
         <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
           <Building2 className="size-3.5" /> Activos de la empresa
         </div>
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4" data-tour="mobiliario-list-data">
           <div className="relative min-w-0 sm:col-span-2 lg:flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar por nombre, código, serie, marca..." className="h-9 pl-9" />
@@ -437,7 +438,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
             </select>
           )}
         </div>
-        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2">
+        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2" data-tour="mobiliario-list-actions">
+          <InventoryViewTutorial label="Cómo gestionar mobiliario" targetPrefix="mobiliario-list" copy={{ data: { description: 'Busca y filtra los activos por nombre, código, categoría, estado o sucursal.' }, actions: { description: 'Registra, importa, descarga la plantilla o actualiza los activos existentes.' } }} />
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
@@ -602,11 +604,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       {/* Create/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader data-tour="mobiliario-form-title">
             <DialogTitle>{editing ? `Editar activo: ${editing.code}` : 'Registrar activo (Mobiliario y Equipos)'}</DialogTitle>
             <DialogDescription>Control operativo del bien. La contabilización (costo, depreciación) se hace desde Contabilidad → Activos Fijos.</DialogDescription>
+            <InventoryViewTutorial label={editing ? 'Cómo editar activo' : 'Cómo registrar activo'} targetPrefix="mobiliario-form" copy={{ data: { description: 'Completa identificación, categoría, estado, ubicación, responsable, proveedor, costo y respaldo.' }, actions: { description: 'Guarda los cambios o registra el nuevo activo en el control de mobiliario.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2" data-tour="mobiliario-form-data">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="asset-code">Código interno</Label>
@@ -730,7 +733,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0" data-tour="mobiliario-form-actions">
             <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="size-4 animate-spin mr-1" /> : null} {editing ? 'Guardar cambios' : 'Registrar activo'}
@@ -742,14 +745,15 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       {/* Import dialog */}
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportOpen(false); setImportResult(null); } }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader data-tour="mobiliario-import-title">
             <DialogTitle>Importar Mobiliario y Equipos</DialogTitle>
             <DialogDescription>
               {importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; las filas con errores se omiten sin afectar al resto.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo importar mobiliario" targetPrefix="mobiliario-import" copy={{ data: { description: 'Revisa el archivo, las filas detectadas y los errores antes de registrar los activos.' }, actions: { description: 'Confirma la importación para crear los activos válidos.' } }} />
           </DialogHeader>
           {importResult ? (
-            <div className="space-y-3">
+            <div className="space-y-3" data-tour="mobiliario-import-data">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
                   <p className="text-2xl font-black text-emerald-600">{importResult.createdCount ?? 0}</p>
@@ -772,7 +776,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               )}
             </div>
           ) : (
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-border/50">
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-border/50" data-tour="mobiliario-import-data">
               <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 <FileSpreadsheet className="size-3.5" /> Vista previa (primeras filas)
               </div>
@@ -785,7 +789,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               {importRowsData.length > 8 && <p className="px-3 py-1.5 text-[10px] text-muted-foreground">...y {importRowsData.length - 8} filas más</p>}
             </div>
           )}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0" data-tour="mobiliario-import-actions">
             {!importResult ? (
               <>
                 <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cancelar</Button>

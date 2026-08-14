@@ -65,6 +65,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { toast } from 'sonner';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 // ============================================================================
 // Tipos del componente
@@ -441,7 +442,7 @@ export function ProductDetailDrawer({
           className="flex flex-col flex-1 min-h-0 gap-0"
         >
           {/* ===== Header sticky ===== */}
-          <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2">
+          <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2" data-tour="inventory-product-detail-title">
             <div className="flex items-start gap-3 pr-8">
               {product?.imageUrl ? (
                 <button
@@ -537,10 +538,11 @@ export function ProductDetailDrawer({
                 Historial
               </TabsTrigger>
             </TabsList>
+            <InventoryViewTutorial label={isService ? 'Cómo consultar servicio' : 'Cómo consultar producto'} targetPrefix="inventory-product-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa información general, stock por bodega, kardex, series y movimientos históricos.' } }} />
           </SheetHeader>
 
         {/* ===== Contenido con scroll ===== */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1" data-tour="inventory-product-detail-data">
           <div className="px-6 py-4">
             {error && !product && (
               <Card className="p-4 border-rose-500/30 bg-rose-500/5 flex items-start gap-3">
@@ -982,7 +984,7 @@ export function ProductDetailDrawer({
         </ScrollArea>
 
         {/* ===== Footer sticky con acción ===== */}
-        <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex items-center justify-between gap-2">
+        <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex items-center justify-between gap-2" data-tour="inventory-product-detail-actions">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
             Detalle del producto
           </p>

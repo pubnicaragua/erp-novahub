@@ -20,6 +20,7 @@ import { api, getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
@@ -761,11 +762,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
       <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between">
+        <DialogHeader className="flex flex-row items-center justify-between" data-tour="inventory-pos-manager-title">
           <div>
             <DialogTitle className="flex items-center gap-2 text-lg font-black"><Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)</DialogTitle>
             <DialogDescription>Crea y gestiona las cajas para el sistema POS</DialogDescription>
           </div>
+          <InventoryViewTutorial label="Cómo gestionar cajas" targetPrefix="inventory-pos-manager" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Consulta las cajas existentes, sus sucursales, ubicación y estado.' }, actions: { description: 'Crea una caja nueva o abre sus accesos y edición.' } }} />
           {canManagePos && <Button onClick={() => {
             setIsManageDialogOpen(false);
             setCajaForm({ isActive: true });
@@ -774,7 +776,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Plus className="size-4" /> Nueva Caja
           </Button>}
         </DialogHeader>
-        <div className="py-4 overflow-y-auto">
+        <div className="py-4 overflow-y-auto" data-tour="inventory-pos-manager-data">
           {cajasLoading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="size-6 animate-spin text-primary" /></div>
           ) : (
@@ -832,7 +834,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-pos-manager-actions">
           <Button variant="outline" onClick={() => setIsManageDialogOpen(false)}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
@@ -844,11 +846,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       if (!open) setIsManageDialogOpen(true);
     }}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-cash-register-title">
           <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
           <DialogDescription>Completa la información de la caja.</DialogDescription>
+          <InventoryViewTutorial label={cajaForm.id ? 'Cómo editar caja' : 'Cómo crear caja'} targetPrefix="inventory-cash-register" copy={{ data: { description: 'Completa código, nombre, sucursal, ubicación y estado de la caja.' }, actions: { description: 'Guarda la caja para que esté disponible en el sistema POS.' } }} />
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4" data-tour="inventory-cash-register-data">
           <div className="space-y-2">
             <Label>Código *</Label>
             <Input value={cajaForm.code || ''} onChange={e => setCajaForm({...cajaForm, code: e.target.value})} placeholder="Ej. CJ-01" />
@@ -877,7 +880,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-cash-register-actions">
           <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
           {canManagePos && <Button onClick={async () => {
             if (!canManagePos) return;
@@ -907,11 +910,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       if (!open) setIsManageDialogOpen(true);
     }}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-cash-access-title">
           <DialogTitle>Accesos - {accessCaja?.name}</DialogTitle>
           <DialogDescription>Selecciona qué usuarios pueden usar esta caja</DialogDescription>
+          <InventoryViewTutorial label="Cómo asignar accesos" targetPrefix="inventory-cash-access" copy={{ data: { description: 'Activa o desactiva los usuarios autorizados para utilizar esta caja.' }, actions: { description: 'Guarda los accesos para aplicar los permisos seleccionados.' } }} />
         </DialogHeader>
-        <div className="py-4">
+        <div className="py-4" data-tour="inventory-cash-access-data">
           {accessLoading ? (
             <div className="flex items-center justify-center py-8"><Loader2 className="size-6 animate-spin text-primary" /></div>
           ) : (
@@ -942,7 +946,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             </div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter data-tour="inventory-cash-access-actions">
           <Button variant="outline" onClick={() => setIsAccessModalOpen(false)}>Cancelar</Button>
           {canManagePos && <Button onClick={handleSaveAccess} disabled={accessLoading}>Guardar Accesos</Button>}
         </DialogFooter>

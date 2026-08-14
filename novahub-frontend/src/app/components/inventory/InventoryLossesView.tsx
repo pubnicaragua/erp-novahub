@@ -10,6 +10,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const REASON_LABELS: Record<string, string> = {
   DISCREPANCY: 'Discrepancia',
@@ -58,7 +59,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="inventory-losses-title">
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10">
             <TrendingDown className="size-5 text-red-500" />
@@ -70,7 +71,8 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="inventory-losses-actions">
+          <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, almacén y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
           <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Desde" />
           <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Hasta" />
           <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>
@@ -79,7 +81,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-tour="inventory-losses-data">
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">

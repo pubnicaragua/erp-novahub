@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { api, getApiErrorMessage } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 function toSucursalPayload(form: any) {
   const warehouseIds = Array.isArray(form.warehouseIds) ? form.warehouseIds : [];
@@ -180,7 +181,7 @@ export function SucursalesView({
 
   return (
     <Card className={isModal ? "border-none shadow-none bg-transparent" : "p-4 border bg-card rounded-xl"}>
-      <div className={`flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between ${isModal ? 'pt-2' : ''}`}>
+      <div className={`flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between ${isModal ? 'pt-2' : ''}`} data-tour="inventory-branches-title">
         {!isModal ? (
           <div>
             <h3 className="font-black text-lg uppercase tracking-tight italic">Sucursales</h3>
@@ -189,6 +190,8 @@ export function SucursalesView({
             </p>
           </div>
         ) : <div />}
+        <div className="flex flex-wrap items-center gap-2" data-tour="inventory-branches-actions">
+        <InventoryViewTutorial label="Cómo gestionar sucursales" targetPrefix="inventory-branches" copy={{ data: { description: 'Consulta sucursales, almacenes vinculados, cajas y usuarios con acceso.' }, actions: { description: 'Crea, edita o asigna usuarios a una sucursal.' } }} />
         {canCreateBranch && <Button 
           size="sm" 
           onClick={() => { setForm({ warehouseIds: [], primaryWarehouseId: '', isActive: true }); setIsFormOpen(true); }}
@@ -196,9 +199,10 @@ export function SucursalesView({
         >
           <Plus className="mr-2 size-4" /> Agregar Sucursal
         </Button>}
+        </div>
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailBranch ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailBranch ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`} data-tour="inventory-branches-data">
         <div className="min-w-0">
       <div className="space-y-3 lg:hidden">
         {loading ? <Card className="rounded-2xl p-8 text-center"><Loader2 className="mx-auto size-6 animate-spin text-primary" /></Card> : branches.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Store className="mx-auto mb-2 size-9 opacity-20" /><p>No hay sucursales</p></Card> : branches.map((branch) => {
@@ -366,11 +370,12 @@ export function SucursalesView({
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-branch-form-title">
             <DialogTitle>{form.id ? 'Editar' : 'Nueva'} Sucursal</DialogTitle>
             <DialogDescription>Completa la información de la sucursal.</DialogDescription>
+            <InventoryViewTutorial label={form.id ? 'Cómo editar sucursal' : 'Cómo crear sucursal'} targetPrefix="inventory-branch-form" copy={{ data: { description: 'Completa código, nombre, ubicación, almacenes vinculados y almacén primario.' }, actions: { description: 'Guarda la sucursal para actualizar la estructura operativa.' } }} />
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="inventory-branch-form-data">
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Código</label>
               <Input value={form.code || ''} onChange={e => setForm({...form, code: e.target.value})} placeholder="Ej. SUC-01" />
@@ -423,7 +428,7 @@ export function SucursalesView({
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-branch-form-actions">
             <Button variant="outline" onClick={() => setIsFormOpen(false)}>Cancelar</Button>
             {(form.id ? canEditBranch : canCreateBranch) && <Button onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : 'Guardar'}</Button>}
           </DialogFooter>
@@ -441,7 +446,7 @@ export function SucursalesView({
 
       <Dialog open={!!usersDialogBranch} onOpenChange={(o) => !o && setUsersDialogBranch(null)}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-branch-users-title">
             <DialogTitle className="flex items-center gap-2">
               <Users className="size-5" />
               Usuarios - {usersDialogBranch?.name}
@@ -449,8 +454,9 @@ export function SucursalesView({
             <DialogDescription>
               Selecciona los usuarios que tendrán acceso a esta sucursal.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo asignar usuarios a sucursal" targetPrefix="inventory-branch-users" copy={{ data: { description: 'Activa los usuarios autorizados para operar en esta sucursal.' }, actions: { description: 'Guarda la selección para actualizar los accesos.' } }} />
           </DialogHeader>
-          <div className="max-h-80 overflow-y-auto space-y-1 py-2">
+          <div className="max-h-80 overflow-y-auto space-y-1 py-2" data-tour="inventory-branch-users-data">
             {loadingUsers ? (
               <div className="flex justify-center py-8"><Loader2 className="size-6 animate-spin" /></div>
             ) : branchUsers.length === 0 ? (
@@ -478,7 +484,7 @@ export function SucursalesView({
               ))
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-branch-users-actions">
             <Button variant="outline" onClick={() => setUsersDialogBranch(null)}>Cancelar</Button>
             {canAssignBranchUsers && <Button onClick={saveBranchUsers} disabled={savingUsers}>
               {savingUsers && <Loader2 className="size-4 mr-1 animate-spin" />}
