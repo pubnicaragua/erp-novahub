@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertTriangle, ArrowLeftRight, BookOpenCheck, CheckCircle2, FileCheck2, Info, Loader2, RefreshCw, RotateCcw, Save, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, BookOpenCheck, CheckCircle2, FileCheck2, Info, Loader2, RefreshCw, RotateCcw, Save, Settings, TrendingDown, TrendingUp } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -75,6 +75,14 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString('es-NI');
 }
 
+function rateSourceLabel(source?: string | null) {
+  if (!source) return '—';
+  if (source === 'CURRENT_CONFIGURATION') return 'Configuración actual';
+  if (source === 'MANUAL') return 'Manual';
+  if (source === 'AUTOMATIC' || source === 'AUTO') return 'Automática (BCN)';
+  return source;
+}
+
 export function DiferenciasCambiariasView() {
   const { canPerform } = useAuth();
   const canCreate = canPerform('ACCOUNTING', 'create');
@@ -113,6 +121,10 @@ export function DiferenciasCambiariasView() {
     setAppliedAsOfDate(asOfDate);
     setAppliedRate(rateInput.trim());
     setRun(null);
+  };
+
+  const goToExchangeRateConfig = () => {
+    window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'configuracion', subModule: 'currency' } }));
   };
 
   const unwrap = (response: any) => response?.data || response;
@@ -257,7 +269,12 @@ export function DiferenciasCambiariasView() {
           <Card className="rounded-2xl shadow-sm">
             <CardContent className="flex min-w-0 flex-col gap-2 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>Base: <strong className="text-foreground">{preview.baseCurrency}</strong> · Tasa: <strong className="text-foreground">{preview.valuationRate}</strong> · Corte: <strong className="text-foreground">{formatDate(preview.asOfDate)}</strong></span>
-              <span>Origen: <strong className="text-foreground">{preview.rateSource}</strong></span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span>Origen: <strong className="text-foreground">{rateSourceLabel(preview.rateSource)}</strong></span>
+                <Button type="button" variant="outline" size="sm" onClick={goToExchangeRateConfig} className="gap-1.5 rounded-lg text-[11px] font-bold">
+                  <Settings className="size-3.5" /> Configurar tasa
+                </Button>
+              </span>
             </CardContent>
           </Card>
 
@@ -292,7 +309,7 @@ export function DiferenciasCambiariasView() {
                         <tr key={row.id} className="hover:bg-muted/20">
                           <td className="px-4 py-3">
                             <p className="font-bold">{formatDate(row.asOfDate)}</p>
-                            <p className="text-[11px] text-muted-foreground">{row.itemCount ?? 0} saldo(s) · {row.rateSource || '—'}</p>
+                            <p className="text-[11px] text-muted-foreground">{row.itemCount ?? 0} saldo(s) · {rateSourceLabel(row.rateSource)}</p>
                           </td>
                           <td className="px-4 py-3"><Badge variant="outline" className="text-[9px] uppercase tracking-wider">{statusLabel(row.status)}</Badge></td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.valuationRate} {row.baseCurrency || preview.baseCurrency}</td>

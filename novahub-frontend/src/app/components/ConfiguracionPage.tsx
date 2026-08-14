@@ -424,6 +424,57 @@ const PRICING_MODULES = [
   ]},
 ];
 
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Creación',
+  UPDATE: 'Edición',
+  DELETE: 'Eliminación',
+  PAYMENT: 'Pago',
+  STATUS_CHANGE: 'Cambio de estado',
+  LOGIN: 'Inicio de sesión',
+  AUDIT: 'Auditoría',
+  SENT_TO_CORRECT: 'Enviado a corregir',
+  CANCELLED: 'Anulación',
+  REISSUE: 'Reemisión',
+};
+
+const AUDIT_MODULE_LABELS: Record<string, string> = {
+  SALES: 'Ventas',
+  PURCHASES: 'Compras',
+  INVENTORY: 'Inventario',
+  HR: 'Recursos Humanos',
+  FINANCES: 'Finanzas',
+  ACCOUNTING: 'Contabilidad',
+  AUTH: 'Acceso',
+  TOOLS: 'Soporte',
+};
+
+function auditActionLabel(action: string) {
+  return AUDIT_ACTION_LABELS[action] || action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function auditModuleLabel(module: string) {
+  return AUDIT_MODULE_LABELS[module] || module;
+}
+
+function auditTone(action: string): 'success' | 'warning' | 'info' | 'danger' {
+  if (['LOGIN', 'PAYMENT'].includes(action)) return 'success';
+  if (['UPDATE', 'STATUS_CHANGE', 'AUDIT', 'SENT_TO_CORRECT'].includes(action)) return 'warning';
+  if (['DELETE', 'CANCELLED'].includes(action)) return 'danger';
+  return 'info';
+}
+
+function auditTimeAgo(iso?: string | null) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Ahora mismo';
+  if (minutes < 60) return `Hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days} día${days > 1 ? 's' : ''}`;
+}
+
 export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: string }) {
   const { themeConfig, updateTheme, updateConfig, resetTheme } = useTheme();
   const { user, canPerform } = useAuth();
@@ -540,6 +591,59 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
   const [sessionTimeout, setSessionTimeout] = useState('480');
   const [ipWhitelist, setIpWhitelist] = useState('');
+  const [singleSession, setSingleSession] = useState(true);
+
+  // Registro de Auditoría (datos reales del backend)
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditRefreshKey, setAuditRefreshKey] = useState(0);
+  const canViewSecuritySettings = canPerform('CONFIG_SECURITY', 'view');
+
+  useEffect(() => {
+    if (!canViewSecuritySettings) return;
+    let active = true;
+    api.get<any>('/tools/security-settings')
+      .then((res: any) => {
+        if (!active) return;
+        const data = res?.data || res;
+        if (typeof data?.singleSession === 'boolean') setSingleSession(data.singleSession);
+        if (data?.sessionTimeoutMinutes) setSessionTimeout(String(data.sessionTimeoutMinutes));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [canViewSecuritySettings]);
+
+  useEffect(() => {
+    if (activeTab !== 'seguridad') return;
+    let active = true;
+    setAuditLoading(true);
+    api.get<any>('/audit/logs', { params: { page: auditPage, pageSize: 12, search: auditSearch || undefined } })
+      .then((res: any) => {
+        if (!active) return;
+        const data = res?.data || res;
+        setAuditLogs(Array.isArray(data?.items) ? data.items : []);
+        setAuditTotal(Number(data?.total || 0));
+      })
+      .catch(() => { if (active) setAuditLogs([]); })
+      .finally(() => { if (active) setAuditLoading(false); });
+    return () => { active = false; };
+  }, [activeTab, auditPage, auditSearch, auditRefreshKey]);
+
+  const handleToggleSingleSession = (value: boolean) => {
+    setSingleSession(value);
+    api.patch('/tools/security-settings', { singleSession: value })
+      .then(() => toast.success(value ? 'Sesión única por dispositivo activada' : 'Sesión única por dispositivo desactivada'))
+      .catch(() => { setSingleSession(!value); toast.error('No se pudo actualizar la configuración de sesión'); });
+  };
+
+  const handleSaveSessionTimeout = () => {
+    api.patch('/tools/security-settings', { sessionTimeoutMinutes: Number(sessionTimeout) })
+      .then(() => toast.success('Tiempo de expiración de sesión guardado'))
+      .catch(() => toast.error('No se pudo guardar el tiempo de sesión'));
+  };
 
   // Tenancy state
   const [strictIsolation, setStrictIsolation] = useState(true);
@@ -1639,6 +1743,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardHeader>
               <CardContent className="pt-6 space-y-4">
                 {[
+                  { label: 'Sesión única por dispositivo', desc: 'Cierra la sesión de otros equipos cuando inicias sesión desde uno nuevo', value: singleSession, setter: handleToggleSingleSession, tag: 'Activo' },
                   { label: 'Autenticación de Dos Factores (2FA)', desc: 'Protege el acceso con un segundo factor de verificación', value: twoFaEnabled, setter: setTwoFaEnabled, tag: 'Recomendado' },
                   { label: 'Forzar 2FA para Administradores', desc: 'Todos los usuarios admin deben activar 2FA obligatoriamente', value: false, setter: () => { }, tag: 'Enterprise' },
                   { label: 'Inicio de Sesión con Google SSO', desc: 'Permite autenticación con cuentas corporativas de Google', value: false, setter: () => { }, tag: 'Próximo' },
@@ -1666,7 +1771,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <option value="480">8 horas</option>
                       <option value="1440">24 horas</option>
                     </select>
-                    <Button disabled={!canEditSecurity} className="rounded-xl h-11 gap-2 font-bold" onClick={() => toast.success('Configuración guardada')}>
+                    <Button disabled={!canEditSecurity} className="rounded-xl h-11 gap-2 font-bold" onClick={handleSaveSessionTimeout}>
                       <Save className="size-4" />Guardar
                     </Button>
                   </div>
@@ -1692,24 +1797,75 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="border-b border-border/30 bg-muted/10">
                   <CardTitle className="flex items-center gap-2 font-black"><BarChart3 className="size-5 text-primary" />Registro de Auditoría</CardTitle>
+                  <CardDescription>Actividad real de los usuarios del sistema · {auditTotal} registro(s)</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-3">
-                  {[
-                    { action: 'Login exitoso', user: user?.email || 'admin@novahub.com', time: 'Hace 2 min', type: 'success' },
-                    { action: 'Rol editado', user: user?.email || 'admin@novahub.com', time: 'Hace 15 min', type: 'warning' },
-                    { action: 'Branding actualizado', user: user?.email || 'admin@novahub.com', time: 'Hace 1h', type: 'info' },
-                    { action: 'Usuario creado', user: 'partner@novahub.io', time: 'Hace 3h', type: 'success' },
-                  ].map(({ action, user: u, time, type }, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-muted/10 border border-border/30">
-                      <div className={cn('size-2 rounded-full flex-shrink-0',
-                        type === 'success' ? 'bg-emerald-500' : type === 'warning' ? 'bg-amber-500' : 'bg-blue-500')} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{action}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{u}</p>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{time}</span>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="audit-log-search"
+                        placeholder="Buscar por módulo, acción o detalle..."
+                        className="h-9 pl-8 text-xs"
+                        value={auditSearch}
+                        onChange={(e) => { setAuditSearch(e.target.value); setAuditPage(1); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.currentTarget.id === 'audit-log-search') {
+                            setAuditRefreshKey(k => k + 1);
+                          }
+                        }}
+                      />
                     </div>
-                  ))}
+                    <Button variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg" onClick={() => setAuditRefreshKey(k => k + 1)}
+                      disabled={auditLoading} aria-label="Actualizar auditoría">
+                      <RefreshCw className={`size-3.5 ${auditLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                  <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                    {auditLoading && auditLogs.length === 0 ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="h-14 rounded-xl bg-muted/10 border border-border/30 animate-pulse" />
+                        ))}
+                      </div>
+                    ) : auditLogs.length === 0 ? (
+                      <p className="p-6 text-center text-xs text-muted-foreground">Aún no hay actividad registrada.</p>
+                    ) : (
+                      auditLogs.map((log: any) => {
+                        const tone = auditTone(log.action);
+                        const dotColor = tone === 'success' ? 'bg-emerald-500' : tone === 'warning' ? 'bg-amber-500' : tone === 'danger' ? 'bg-rose-500' : 'bg-blue-500';
+                        return (
+                          <div key={log.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/10 border border-border/30">
+                            <div className={`size-2 rounded-full flex-shrink-0 ${dotColor}`} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold truncate">{auditActionLabel(log.action)} · {auditModuleLabel(log.module)}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {log.user?.name || log.user?.email || 'Sistema'}
+                                {log.entity ? ` · ${log.entity.replace(/_/g, ' ').toLowerCase()}` : ''}
+                                {log.details ? ` · ${String(log.details).slice(0, 60)}` : ''}
+                              </p>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{auditTimeAgo(log.createdAt)}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  {auditTotal > 12 && (
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[10px] text-muted-foreground">Página {auditPage} de {Math.max(1, Math.ceil(auditTotal / 12))}</p>
+                      <div className="flex gap-1.5">
+                        <Button variant="outline" size="sm" className="h-8 gap-1 rounded-lg text-[10px] font-bold"
+                          disabled={auditPage <= 1 || auditLoading} onClick={() => setAuditPage(p => Math.max(1, p - 1))}>
+                          Anterior
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 gap-1 rounded-lg text-[10px] font-bold"
+                          disabled={auditPage >= Math.ceil(auditTotal / 12) || auditLoading} onClick={() => setAuditPage(p => p + 1)}>
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

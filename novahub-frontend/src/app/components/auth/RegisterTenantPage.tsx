@@ -75,7 +75,7 @@ const STEP_MESSAGES = [
 
 const LEFT_BRANDING = [
   {
-    title: 'Probá NovaHub gratis por 3 días',
+    title: 'Probá NovaHub gratis: 3 días de Demo',
     subtitle: 'Acceso completo a las herramientas que usan las empresas que crecen. Sin tarjeta, sin compromiso.',
     benefits: ['Ventas, Inventario y Compras integrados', 'Reportes en tiempo real con datos reales', 'Configura tu empresa en minutos', 'Soporte por email incluido'],
   },
@@ -92,7 +92,7 @@ const LEFT_BRANDING = [
   {
     title: '¡Todo listo!',
     subtitle: 'Tu workspace está preparado. Bienvenido a NovaHub, el ERP que se adapta a vos.',
-    benefits: ['3 días de prueba gratis', 'Sin tarjeta de crédito', 'Soporte incluido', 'Empezá a facturar hoy'],
+    benefits: ['3 días de Demo gratis', 'Sin tarjeta de crédito', 'Soporte incluido', 'Empezá a facturar hoy'],
   },
 ];
 
@@ -367,7 +367,7 @@ export function RegisterTenantPage() {
 
   const sendWhatsApp = () => {
     if (!waConfirmed) setWaStarted(true);
-    const msg = `Hola, he iniciado mi prueba gratuita de 3 días en Nova ERP, con mi empresa ${companyNameValue.trim()}, mi nombre es ${userNameValue.trim()} y mi cargo es ${cargoValue.trim()}.`;
+    const msg = `Hola, he iniciado mi Demo gratuito de 3 días en Nova ERP, con mi empresa ${companyNameValue.trim()}, mi nombre es ${userNameValue.trim()} y mi cargo es ${cargoValue.trim()}.`;
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
     startWaTimer();
   };
@@ -710,7 +710,7 @@ export function RegisterTenantPage() {
             </span>
             <div>
               <p className="text-xs font-black text-primary">Último paso: verifica por WhatsApp</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Es requisito enviar el mensaje para activar tu prueba gratuita de 3 días.</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Es requisito enviar el mensaje para activar tu Demo gratuito de 3 días.</p>
             </div>
           </div>
           <Button type="button" variant="outline" onClick={sendWhatsApp}
@@ -947,7 +947,7 @@ export function RegisterTenantPage() {
                       <div className="text-sm font-bold">{mod.name}</div>
                       <p className="text-[11px] text-muted-foreground/80 mt-1 leading-tight">{PARENT_DESCRIPTIONS_ES[mod.module] || 'Módulo del sistema'}</p>
                       <div className={cn('text-[10px] mt-1.5', recommended ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-muted-foreground')}>
-                        {recommended ? 'Incluido en tu trial' : /* `$${mod.price}/mes` */ ''}
+                        {recommended ? 'Incluido en tu Demo' : /* `$${mod.price}/mes` */ ''}
                       </div>
                     </div>
                     {hasSubs && showSubs && (
@@ -990,19 +990,32 @@ export function RegisterTenantPage() {
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">Basado en tu industria, te recomendamos estos módulos:</p>
         <div className="space-y-3">
-          <h4 className="text-[10px] uppercase font-black tracking-widest text-emerald-600">Incluidos en tu trial</h4>
+          <h4 className="text-[10px] uppercase font-black tracking-widest text-emerald-600">Incluidos en tu Demo</h4>
           {renderParentCards(recommendedParents, true)}
         </div>
         <div className="space-y-3">
-          <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Módulos adicionales</h4>
+          <div className="flex items-center justify-between">
+            <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Módulos adicionales</h4>
+            <span className="text-[9px] uppercase font-black tracking-widest text-primary">Sin costo en tu Demo</span>
+          </div>
           {renderParentCards(optionalParents, false)}
         </div>
         {availableParents.length > 0 && (
           <div className="space-y-3">
-            <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Otros Módulos</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Otros Módulos</h4>
+              <span className="text-[9px] uppercase font-black tracking-widest text-primary">Sin costo en tu Demo</span>
+            </div>
             {renderParentCards(availableParents, false)}
           </div>
         )}
+        <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 flex items-start gap-3">
+          <Sparkles className="size-4 text-primary mt-0.5 shrink-0" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            <strong className="text-foreground">Todos los módulos disponibles en tu Demo.</strong>{' '}
+            Puedes activar cualquier módulo adicional sin costo durante tus 3 días de Demo y probarlos todos; solo pagas cuando decidas contratar lo que realmente necesitas.
+          </p>
+        </div>
         {/* <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center justify-between">
           <div>
             <span className="text-sm text-emerald-700 dark:text-emerald-400">Total estimado si contratas:</span>
@@ -1178,7 +1191,7 @@ export function RegisterTenantPage() {
             className="fixed top-0 inset-x-0 z-50 bg-emerald-600 text-white px-4 py-3 shadow-lg flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4"
           >
             <span className="text-xs font-bold text-center sm:text-left">
-              ¡Ya casi terminas! No olvides enviar el mensaje de WhatsApp para activar tu prueba gratuita de 3 días.
+              ¡Ya casi terminas! No olvides enviar el mensaje de WhatsApp para activar tu Demo gratuito de 3 días.
             </span>
             <Button type="button" onClick={sendWhatsApp} size="sm" className="bg-white text-emerald-700 hover:bg-emerald-50 font-black text-[11px] rounded-lg gap-1.5 shrink-0">
               <WhatsAppIcon className="size-3.5" /> Reenviar mensaje

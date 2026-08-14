@@ -81,15 +81,15 @@ export function TrialCountdownBanner() {
         <div className="min-w-0">
           <p className="text-xs sm:text-sm font-bold truncate">
             {days > 0
-              ? `Te quedan ${days} ${days === 1 ? 'día' : 'días'}${hours > 0 ? ` y ${hours} ${hours === 1 ? 'hora' : 'horas'}` : ''} de prueba gratis`
-              : `Te quedan ${hours} ${hours === 1 ? 'hora' : 'horas'} de prueba gratis`}
+              ? `Te quedan ${days} ${days === 1 ? 'día' : 'días'}${hours > 0 ? ` y ${hours} ${hours === 1 ? 'hora' : 'horas'}` : ''} de Demo gratis`
+              : `Te quedan ${hours} ${hours === 1 ? 'hora' : 'horas'} de Demo gratis`}
           </p>
           <p className="text-[10px] text-white/80 truncate hidden sm:block">
             {isUrgent
-              ? '⚠️ Tu prueba vence pronto. Actualizá tu plan para no perder tus datos.'
+              ? '⚠️ Tu Demo vence pronto. Actualizá tu plan para no perder tus datos.'
               : isWarning
               ? `🗓️ Te quedan ${days} días. Recordá actualizar antes de que venza tu plan.`
-              : `✅ Estás en período de prueba por ${days} días más. Disfrutá de todas las funciones.`}
+              : `✅ Estás en período de Demo por ${days} días más. Disfrutá de todas las funciones.`}
           </p>
         </div>
       </div>

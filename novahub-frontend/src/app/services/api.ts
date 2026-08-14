@@ -214,6 +214,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       throw err;
     }
 
+    if (response.status === 401 && errorBody?.error === 'SESSION_CLOSED') {
+      localStorage.removeItem('nh-auth-token');
+      const err = new Error('Tu sesión se cerró porque se inició sesión en otro dispositivo.');
+      err.name = 'SessionClosedError';
+      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: 'SESSION_CLOSED' } }));
+      throw err;
+    }
+
     // Handle nested message objects (e.g., ForbiddenException wrapping)
     const rawMessage = typeof errorBody?.message === 'object' && errorBody.message !== null
       ? (errorBody.message as any)?.message || (errorBody.message as any)?.error || ''

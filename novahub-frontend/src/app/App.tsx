@@ -8,10 +8,12 @@ import { CurrencyProvider } from './contexts/CurrencyContext';
 import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
+import { SessionClosedPage } from './components/auth/SessionClosedPage';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
+import { FloatingChat } from './components/ai/FloatingChat';
 
 const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
 const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
@@ -224,6 +226,7 @@ function DashboardLayout() {
         </main>
       </div>
       <Toaster position="top-right" />
+      <FloatingChat />
     </div>
   );
 }
@@ -232,6 +235,7 @@ function AppContent() {
   const { isAuthenticated, login, logout } = useAuth();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -242,6 +246,17 @@ function AppContent() {
     };
     window.addEventListener('trial-expired', handler);
     return () => window.removeEventListener('trial-expired', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.code === 'SESSION_CLOSED') {
+        setSessionClosed(true);
+      }
+    };
+    window.addEventListener('session-closed', handler);
+    return () => window.removeEventListener('session-closed', handler);
   }, []);
 
   useEffect(() => {
@@ -277,6 +292,15 @@ function AppContent() {
 
   return (
     <>
+      {sessionClosed && (
+        <SessionClosedPage
+          onLogout={() => {
+            localStorage.removeItem('nh-auth-token');
+            logout?.();
+            window.location.reload();
+          }}
+        />
+      )}
       {trialExpired && (
         <TrialExpiredPage
           onLogout={() => {

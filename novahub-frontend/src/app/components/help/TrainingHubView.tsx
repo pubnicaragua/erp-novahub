@@ -14,6 +14,7 @@ import {
   Save,
   Loader2,
   Sparkles,
+  Bot,
   DollarSign,
   ShoppingCart,
   Package,
@@ -155,6 +156,12 @@ export function TrainingHubView() {
     return matchesSearch && matchesCategory;
   });
 
+  const openAiChat = () => {
+    window.dispatchEvent(new CustomEvent('open-erp-chat', {
+      detail: search.trim() ? { message: search.trim() } : {},
+    }));
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-6 p-4 animate-in fade-in duration-500 sm:p-6 md:p-10">
       {/* Header Original */}
@@ -205,9 +212,21 @@ export function TrainingHubView() {
             placeholder="¿Qué quieres aprender hoy?..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && search.trim()) {
+                openAiChat();
+              }
+            }}
             className="pl-11 bg-background/50 border-transparent focus:bg-background rounded-2xl h-12 text-sm font-bold shadow-none"
           />
         </div>
+        <Button
+          onClick={openAiChat}
+          className="bg-gradient-to-br from-primary to-emerald-600 hover:from-primary/90 hover:to-emerald-600/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 h-12 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all"
+        >
+          <Bot className="size-5 mr-2" />
+          Pregúntale a la IA
+        </Button>
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 px-2 no-scrollbar">
           {MODULE_CATEGORIES.map(cat => (
             <button
