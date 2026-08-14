@@ -74,7 +74,6 @@ const paymentMethodOptions = [
   { label: 'Tarjeta', value: 'CARD' },
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
-  { label: 'Otro', value: 'OTHER' },
 ];
 
 const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => {

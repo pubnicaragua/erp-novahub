@@ -114,8 +114,10 @@ export const inventoryService = {
     warehouseId?: string | null;
     supervisorId?: string | null;
     supervisorName?: string | null;
+    supervisors?: { userId?: string | null; name: string }[] | null;
     stockKeeperId?: string | null;
     stockKeeperName?: string | null;
+    stockKeepers?: { userId?: string | null; name: string }[] | null;
     notes?: string | null;
     actaUri?: string | null;
     actaFileName?: string | null;

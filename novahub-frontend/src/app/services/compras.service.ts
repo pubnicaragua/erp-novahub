@@ -77,7 +77,7 @@ export const supplierCreditsService = {
   create: (data: Partial<SupplierCredit>) => api.post<SupplierCredit>('/purchases/credits', data),
   update: (id: string, data: Partial<SupplierCredit>) => api.patch<SupplierCredit>(`/purchases/credits/${id}`, data),
   issue: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/issue`, {}),
-  apply: (id: string, data: { paymentMethod?: string } = {}) => api.post<SupplierCredit>(`/purchases/credits/${id}/apply`, data),
+  apply: (id: string, data: { paymentMethod?: string; bankAccountId?: string } = {}) => api.post<SupplierCredit>(`/purchases/credits/${id}/apply`, data),
   void: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/void`, {}),
   delete: (id: string) => api.delete<void>(`/purchases/credits/${id}`),
 };

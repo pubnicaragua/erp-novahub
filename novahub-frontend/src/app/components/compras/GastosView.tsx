@@ -51,7 +51,6 @@ const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   CHECK: 'Cheque',
   CARD: 'Tarjeta',
   BANK: 'Banco',
-  OTHER: 'Otro',
 };
 const paymentSourceLabel = (value?: string | null) => PAYMENT_SOURCE_LABELS[String(value || '').toUpperCase()] || value || '-';
 const paymentMethodOptions = [
@@ -59,7 +58,6 @@ const paymentMethodOptions = [
   { label: 'Tarjeta', value: 'CARD' },
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
-  { label: 'Otro', value: 'OTHER' },
 ] as const;
 const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;

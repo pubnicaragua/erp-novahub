@@ -1521,15 +1521,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                               <SelectItem value="CASH">Efectivo</SelectItem>
                               <SelectItem value="CARD">Tarjeta</SelectItem>
                               <SelectItem value="TRANSFER">Transferencia</SelectItem>
+                              <SelectItem value="CHECK">Cheque</SelectItem>
                             </SelectContent>
                           </Select>
                           <Input type="number" min="0" step="0.01" placeholder="Monto" value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
-                        {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia (opcional)" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
+                        {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
                         {payment.method === 'TRANSFER' && (
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
+                        {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
                         {['CARD', 'TRANSFER'].includes(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
                       </div>
                     ))}

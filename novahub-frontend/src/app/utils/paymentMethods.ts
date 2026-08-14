@@ -5,10 +5,10 @@ export function isBankPaymentMethod(method?: string | null): boolean {
 }
 
 /**
- * Efectivo usa la cuenta configurada en Contabilidad. Solo otros medios
- * manuales (por ejemplo cheque u otro) requieren seleccionar una cuenta.
+ * Efectivo y cheque usan la cuenta configurada en Contabilidad. Tarjeta y
+ * transferencia se resuelven mediante el banco global seleccionado.
  */
 export function requiresManualPaymentAccount(method?: string | null): boolean {
   const normalized = String(method || '').toUpperCase();
-  return normalized !== 'CASH' && !isBankPaymentMethod(normalized);
+  return !['CASH', 'CHECK'].includes(normalized) && !isBankPaymentMethod(normalized);
 }

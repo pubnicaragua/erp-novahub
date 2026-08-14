@@ -17,7 +17,7 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
   const [type, setType] = useState<'ENTRY' | 'EXIT'>('ENTRY');
   const [amountNIO, setAmountNIO] = useState('');
   const [amountUSD, setAmountUSD] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER' | 'OTHER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER' | 'CHECK' | 'CARD'>('CASH');
   const [description, setDescription] = useState('');
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -109,7 +109,8 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
               <SelectContent>
                 <SelectItem value="CASH">Efectivo</SelectItem>
                 <SelectItem value="TRANSFER">Transferencia / Depósito</SelectItem>
-                <SelectItem value="OTHER">Otro</SelectItem>
+                <SelectItem value="CHECK">Cheque</SelectItem>
+                <SelectItem value="CARD">Tarjeta</SelectItem>
               </SelectContent>
             </Select>
           </div>

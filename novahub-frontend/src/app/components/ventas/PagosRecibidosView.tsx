@@ -49,7 +49,6 @@ const methodOptions = [
   { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Otro', value: 'OTHER', color: 'bg-slate-500/10 text-slate-500' },
 ];
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {

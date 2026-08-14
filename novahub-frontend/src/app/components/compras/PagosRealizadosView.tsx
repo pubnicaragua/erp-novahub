@@ -46,7 +46,6 @@ const methodOpts = [
   { label: 'Efectivo',        value: 'CASH' },
   { label: 'Cheque',          value: 'CHECK' },
   { label: 'Tarjeta',         value: 'CARD' },
-  { label: 'Otro',            value: 'OTHER' },
 ];
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, targetId, onClearTargetId }: Props) {
@@ -76,10 +75,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return () => window.clearTimeout(timeout);
   }, [targetId, data, onClearTargetId]);
 
-  const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' => {
+  const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' => {
     const normalized = String(method || 'TRANSFER').toUpperCase();
-    if (['CASH', 'TRANSFER', 'CHECK', 'CARD', 'OTHER'].includes(normalized)) {
-      return normalized as 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
+    if (['CASH', 'TRANSFER', 'CHECK', 'CARD'].includes(normalized)) {
+      return normalized as 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD';
     }
     return 'TRANSFER';
   };

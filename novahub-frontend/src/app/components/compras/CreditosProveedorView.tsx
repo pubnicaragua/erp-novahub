@@ -23,6 +23,8 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { isBankPaymentMethod } from '../../utils/paymentMethods';
 import * as XLSX from 'xlsx';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
@@ -55,7 +57,6 @@ const PAYMENT_METHOD_OPTIONS = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
   { label: 'Tarjeta', value: 'CARD' },
-  { label: 'Otro', value: 'OTHER' },
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
@@ -75,6 +76,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [issueLoading, setIssueLoading] = useState(false);
   const [applyTarget, setApplyTarget] = useState<SupplierCredit | null>(null);
   const [applyMethod, setApplyMethod] = useState<string>('CASH');
+  const [applyBankAccountId, setApplyBankAccountId] = useState('');
   const [applyLoading, setApplyLoading] = useState(false);
   const [itemTypeFilter, setItemTypeFilter] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const [importOpen, setImportOpen] = useState(false);
@@ -309,10 +311,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     setApplyLoading(true);
     const toastId = toast.loading('Aplicando crédito de proveedor...');
     try {
-      await vendorCreditsService.apply(applyTarget.id, { paymentMethod: applyMethod });
+      if (isBankPaymentMethod(applyMethod) && !applyBankAccountId) {
+        throw new Error('Selecciona el banco global del egreso.');
+      }
+      await vendorCreditsService.apply(applyTarget.id, {
+        paymentMethod: applyMethod,
+        bankAccountId: isBankPaymentMethod(applyMethod) ? applyBankAccountId : undefined,
+      });
       toast.success('Crédito aplicado correctamente', { id: toastId });
       setApplyTarget(null);
       setApplyMethod('CASH');
+      setApplyBankAccountId('');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo aplicar el crédito', { id: toastId });
@@ -951,6 +960,13 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   ))}
                 </select>
               </div>
+              {isBankPaymentMethod(applyMethod) && (
+                <BankAccountSelect
+                  value={applyBankAccountId}
+                  onChange={setApplyBankAccountId}
+                  label="Banco global del egreso"
+                />
+              )}
             </div>
           )}
           <DialogFooter data-tour="purchases-credit-modal-actions">

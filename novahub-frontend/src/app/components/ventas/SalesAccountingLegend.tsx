@@ -24,10 +24,7 @@ const DEFAULT_ACCOUNTS: Record<string, Record<string, AccountMapping>> = {
   },
   payment: {
     cash: { code: '1000', name: 'Caja y Bancos' },
-    card: { code: '1010', name: 'Bancos - Tarjetas' },
-    transfer: { code: '1020', name: 'Bancos - Transferencias' },
     check: { code: '1030', name: 'Cheques por Depositar' },
-    other: { code: '1090', name: 'Otros Medios de Cobro' },
     receivable: { code: '1100', name: 'Cuentas por Cobrar' },
   },
   saleReturn: {
@@ -40,21 +37,17 @@ const DEFAULT_ACCOUNTS: Record<string, Record<string, AccountMapping>> = {
   },
   cashSale: {
     cash: { code: '1000', name: 'Caja y Bancos' },
-    card: { code: '1010', name: 'Bancos - Tarjetas' },
-    transfer: { code: '1020', name: 'Bancos - Transferencias' },
     check: { code: '1030', name: 'Cheques por Depositar' },
-    other: { code: '1090', name: 'Otros Medios de Cobro' },
     income: { code: '4000', name: 'Ingresos por Ventas' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
   },
 };
 
-const PAYMENT_METHODS: Record<string, { label: string; accountKey: string }> = {
+const PAYMENT_METHODS: Record<string, { label: string; accountKey: string | null }> = {
   CASH: { label: 'Efectivo', accountKey: 'cash' },
-  CARD: { label: 'Tarjeta', accountKey: 'card' },
-  TRANSFER: { label: 'Transferencia', accountKey: 'transfer' },
+  CARD: { label: 'Tarjeta · banco global', accountKey: null },
+  TRANSFER: { label: 'Transferencia · banco global', accountKey: null },
   CHECK: { label: 'Cheque', accountKey: 'check' },
-  OTHER: { label: 'Otro medio', accountKey: 'other' },
 };
 
 function normalizeAccount(value: any, fallback: AccountMapping): AccountMapping {
@@ -92,10 +85,7 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
   };
   const configuredCashSale = {
     cash: normalizeAccount(mappings?.cashSale?.cash, cashSaleAccounts.cash),
-    card: normalizeAccount(mappings?.cashSale?.card, cashSaleAccounts.card),
-    transfer: normalizeAccount(mappings?.cashSale?.transfer, cashSaleAccounts.transfer),
     check: normalizeAccount(mappings?.cashSale?.check, cashSaleAccounts.check),
-    other: normalizeAccount(mappings?.cashSale?.other, cashSaleAccounts.other),
     income: normalizeAccount(mappings?.cashSale?.income, cashSaleAccounts.income),
     ivaPayable: normalizeAccount(mappings?.cashSale?.ivaPayable, cashSaleAccounts.ivaPayable),
   };
@@ -105,8 +95,13 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
   };
   const method = paymentMethod ? (PAYMENT_METHODS[String(paymentMethod).toUpperCase()] || PAYMENT_METHODS.CASH) : null;
   const effectiveMethod = method || PAYMENT_METHODS.CASH;
-  const configuredPayment = normalizeAccount(mappings?.payment?.[effectiveMethod.accountKey], DEFAULT_ACCOUNTS.payment[effectiveMethod.accountKey]);
-  const configuredPosPayment = configuredCashSale[effectiveMethod.accountKey as keyof typeof configuredCashSale] || configuredCashSale.cash;
+  const bankPayment: AccountMapping = { code: 'BANCO', name: 'Cuenta hija del banco global seleccionado' };
+  const configuredPayment = effectiveMethod.accountKey
+    ? normalizeAccount(mappings?.payment?.[effectiveMethod.accountKey], DEFAULT_ACCOUNTS.payment[effectiveMethod.accountKey])
+    : bankPayment;
+  const configuredPosPayment = effectiveMethod.accountKey
+    ? configuredCashSale[effectiveMethod.accountKey as keyof typeof configuredCashSale] || configuredCashSale.cash
+    : bankPayment;
   const isPos = flow === 'pos';
   const effectivePayment = isPos ? configuredPosPayment : configuredPayment;
   const effectiveIncome = isPos ? configuredCashSale.income : configuredInvoice.income;

@@ -196,10 +196,13 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   });
   const warehousesQuery = useQuery({
     ...commonQueryOptions,
+    staleTime: 0,
+    refetchOnMount: 'always',
     queryKey: ['inventory', 'warehouses', tenantKey],
     queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
     enabled: Boolean(user),
   });
+  const refreshWarehouses = useCallback(() => warehousesQuery.refetch(), [warehousesQuery.refetch]);
   const categoriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'categories', tenantKey],
@@ -621,6 +624,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     warehouses={scopedWarehouses}
                     products={data.products}
                     onRefresh={() => fetchData()}
+                    onRefreshWarehouses={refreshWarehouses}
                     pagination={auditsPagination}
                   />
                 </motion.div>

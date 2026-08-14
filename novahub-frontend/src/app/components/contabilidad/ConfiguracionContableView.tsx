@@ -90,10 +90,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Cuando la factura queda pagada, se registra el cobro según su forma de pago y banco global',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita el efectivo recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta para otros medios de cobro', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
@@ -102,10 +99,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Venta POS pagada en el momento → banco hijo o medio de cobro + Ingresos + IVA',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'debit', description: 'La cuenta mayor agrupa; se debita la cuenta hija del banco seleccionado', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta POS configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de cobro', side: 'debit', description: 'Se debita la cuenta POS para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Cobro', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
@@ -121,10 +115,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'otherWithholdingPayable', label: 'Otras retenciones por pagar', side: 'credit', description: 'Se acreditan retenciones fiscales distintas de IR e IVA', defaultCode: '2130', defaultName: 'Otras Retenciones por Pagar', defaultType: 'LIABILITY' },
       { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita cuando la factura pagada sale de caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta configurada para pagos con tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta configurada para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {
@@ -133,10 +124,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'expense', label: 'Cuenta de Gasto', side: 'debit', description: 'Se debita el gasto', defaultCode: '5000', defaultName: 'Gastos Operativos', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita la salida de efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta configurada para pagos con tarjeta', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta configurada para transferencias', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta configurada para otros medios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {
@@ -201,10 +189,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'expense', label: 'Gasto de Formación', side: 'debit', description: 'Se debita el costo pagado de la capacitación', defaultCode: '5600', defaultName: 'Formación y capacitación', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Formación', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Formación', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Formación', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Formación', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta propia de otros medios para Formación', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {
@@ -213,10 +198,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'expense', label: 'Gasto de Beneficios', side: 'debit', description: 'Se debita el costo pagado de los beneficios', defaultCode: '5700', defaultName: 'Beneficios de empleados', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Beneficios', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'card', label: 'Tarjetas', side: 'credit', description: 'Se acredita la cuenta propia de tarjetas para Beneficios', defaultCode: '1010', defaultName: 'Bancos - Tarjetas', defaultType: 'ASSET' },
-      { key: 'transfer', label: 'Transferencias', side: 'credit', description: 'Se acredita la cuenta propia de transferencias para Beneficios', defaultCode: '1020', defaultName: 'Bancos - Transferencias', defaultType: 'ASSET' },
       { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Beneficios', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
-      { key: 'other', label: 'Otros medios de pago', side: 'credit', description: 'Se acredita la cuenta propia de otros medios para Beneficios', defaultCode: '1090', defaultName: 'Otros Medios de Pago', defaultType: 'ASSET' },
     ],
   },
   {

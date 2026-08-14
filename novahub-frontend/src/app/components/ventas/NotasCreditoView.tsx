@@ -59,7 +59,6 @@ const methodOptions = [
   { label: 'Efectivo', value: 'CASH' },
   { label: 'Tarjeta', value: 'CARD' },
   { label: 'Cheque', value: 'CHECK' },
-  { label: 'Otro', value: 'OTHER' },
 ];
 
 const isoDate = (value: unknown) => {

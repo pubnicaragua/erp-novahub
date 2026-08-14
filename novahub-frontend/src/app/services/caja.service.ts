@@ -153,7 +153,7 @@ export interface PotentialDuplicateSale {
   similarityScore: number;
 }
 
-export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
+export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK';
 export interface PosPaymentLine {
   method: PosPaymentMethod;
   amount: number;
@@ -361,7 +361,7 @@ export const cajaService = {
     type: 'ENTRY' | 'EXIT';
     amountNIO: number;
     amountUSD?: number;
-    paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+    paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK';
     description: string;
     reference?: string;
   }) => {

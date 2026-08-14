@@ -115,7 +115,7 @@ interface PreviewRow {
 export function DiarioView() {
   const { canPerform } = useAuth();
   const { baseCurrency, formatAmount } = useCurrency();
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('POSTED');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterAccountId, setFilterAccountId] = useState('');
@@ -148,7 +148,7 @@ export function DiarioView() {
   }, [filterSearch]);
 
   const journalParams = useMemo(() => ({
-    ...(filterStatus && filterStatus !== 'ALL' ? { status: filterStatus } : {}),
+    ...(filterStatus ? { status: filterStatus } : {}),
     ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
     ...(filterDateTo ? { dateTo: filterDateTo } : {}),
     ...(filterAccountId ? { accountId: filterAccountId } : {}),

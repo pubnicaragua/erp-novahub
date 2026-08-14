@@ -527,9 +527,6 @@ export function SesionActivaStep({
                 <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Cheques pagados en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.check)}</span></div>
                 <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Transferencias pagadas en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.transfer)}</span></div>
                 <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Pagos con tarjeta pagados en caja</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.card)}</span></div>
-                {breakdown.other > 0 && (
-                  <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">+ Otros medios de cobro</span><span className="font-mono font-bold">{symbol} {formatSalesAmount(breakdown.other)}</span></div>
-                )}
                 <div className="flex items-center justify-between border-b border-border/30 pb-1"><span className="text-muted-foreground">− Salidas de caja (egresos)</span><span className="font-mono font-bold text-rose-500">−{symbol} {formatSalesAmount(breakdown.expenses)}</span></div>
                 <div className="flex items-center justify-between pt-1"><span className="font-black uppercase tracking-widest text-foreground text-[10px]">Esperado en caja (efectivo)</span><span className="font-mono font-black text-lg">{symbol} {formatSalesAmount(breakdown.expectedInCash)}</span></div>
               </div>
