@@ -167,7 +167,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
@@ -178,7 +178,8 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Creación automática de facturas</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="recurring-invoices" context="form" />
              {!isNew && canPerform('PURCHASES_INVOICES_REC', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -194,7 +195,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Reglas de Generación</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -273,7 +274,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   )}
                 </div>
               
-                <div className="space-y-2">
+                <div className="space-y-2" data-tour="purchases-form-items">
                   <div className="grid grid-cols-12 gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground px-2">
                     <div className="col-span-6">Concepto a Facturar</div>
                     <div className="col-span-2 text-right">Cant.</div>
@@ -330,7 +331,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                   )}
                 </div>
                 
-                <div className="flex justify-end mt-4">
+                <div className="flex justify-end mt-4" data-tour="purchases-form-summary">
                    <div className="w-64 space-y-4 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
                          <div className="w-1/2">

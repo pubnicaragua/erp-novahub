@@ -443,7 +443,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   if (editingId && localDoc) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -454,7 +454,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la cotización comercial</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+            <SalesViewTutorial view="quotes" context="form" />
             {localDoc?.customerId && (
               <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
@@ -475,7 +476,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -534,7 +535,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
@@ -620,7 +621,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         </div>
 
         {/* --- PRODUCT LINE ITEMS --- */}
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>

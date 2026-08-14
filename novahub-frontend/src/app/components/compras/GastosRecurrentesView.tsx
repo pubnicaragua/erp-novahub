@@ -172,7 +172,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
@@ -183,7 +183,8 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Suscripciones y automatizaciones</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="recurring-expenses" context="form" />
              {!isNew && canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -199,7 +200,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2">
+          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Servicio/Concepto</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -281,7 +282,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1">
+          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-summary">
              <CardContent className="p-6">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto Automático Promedio</p>
                 <div className="space-y-4">

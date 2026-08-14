@@ -482,7 +482,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -493,7 +493,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de transacción</p>
             </div>
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="expenses" context="form" />
              {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
@@ -527,7 +528,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1">
+          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Gasto</p>
               <div className="space-y-3">
@@ -672,7 +673,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             </CardContent>
           </Card>
 
-          <Card className="w-full min-w-0 rounded-2xl border-border/50">
+          <Card className="w-full min-w-0 rounded-2xl border-border/50" data-tour="purchases-form-summary">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Valor del Gasto</p>
               <div className="space-y-4">
@@ -916,14 +917,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
 
         <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
           <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
+            <DialogHeader data-tour="purchases-expense-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
               <DialogDescription>
                 Sube un CSV para registrar gastos masivamente. Usa la plantilla para mantener el formato correcto.
               </DialogDescription>
+              <PurchaseViewTutorial view="expenses" context="form" labelOverride="Cómo importar gastos" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-expense-modal" />
             </DialogHeader>
 
-            <div className="space-y-4">
+            <div className="space-y-4" data-tour="purchases-expense-modal-data">
               <div className="rounded-xl border border-border/60 p-4 bg-muted/20">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Formato esperado</p>
                 <p className="text-xs text-muted-foreground">
@@ -959,7 +961,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               )}
             </div>
 
-            <DialogFooter>
+            <DialogFooter data-tour="purchases-expense-modal-actions">
               <Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>
               <Button onClick={handleImportExpenses} disabled={importing || !importFile} className="gap-2">
                 <Upload className="size-4" /> {importing ? 'Importando...' : importFileStats ? `Importar ${importFileStats.valid} válidos · omitir ${importFileStats.skipped}` : 'Importar gastos'}

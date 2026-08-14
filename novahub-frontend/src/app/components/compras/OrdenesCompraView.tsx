@@ -288,7 +288,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
 
                 return (
-                <TableRow key={`${row.sku || 'sin-sku'}-${index}`} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
+                <TableRow key={index} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} /></TableCell>
                   <TableCell className="p-1 align-top text-xs"><div className="flex min-w-[280px] flex-col gap-1"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo (requiere SKU libre)</option></select>}</div></TableCell>
@@ -334,15 +334,16 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
       </div>
       <Dialog open={categoryDialogOpen} onOpenChange={(open) => { if (!creatingCategory) setCategoryDialogOpen(open); }}>
         <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="purchases-order-category-title">
             <DialogTitle>Crear categoría</DialogTitle>
             <DialogDescription>La nueva categoría se asignará al producto seleccionado y estará disponible para las demás filas.</DialogDescription>
+            <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo crear categoría" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-order-category" />
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="purchases-order-category-data">
             <label htmlFor="new-purchase-import-category" className="text-xs font-black uppercase tracking-wider text-foreground">Nombre de categoría</label>
             <Input id="new-purchase-import-category" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Ej. Tecnología" autoFocus disabled={creatingCategory} />
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="purchases-order-category-actions">
             <Button variant="outline" onClick={() => setCategoryDialogOpen(false)} disabled={creatingCategory}>Cancelar</Button>
             <Button onClick={() => void handleCreateCategory()} disabled={creatingCategory || !newCategoryName.trim()}>{creatingCategory ? 'Creando...' : 'Crear y asignar'}</Button>
           </DialogFooter>
@@ -1521,7 +1522,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const financialTotals = calculateTotals((localDoc.items || []) as any[]);
     
     return (
-      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
@@ -1542,7 +1543,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="purchases-form-actions">
+            <PurchaseViewTutorial view="orders" context="form" />
              {!isNew && (
                 <Button variant="outline" className="rounded-xl border-primary/50 text-primary hover:bg-primary/10 font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPreviewOrder(localDoc)}>
@@ -1584,7 +1586,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -1724,7 +1726,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="purchases-form-summary">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Resumen Financiero</p>
               <div className="space-y-3">
@@ -1768,7 +1770,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           </Card>
         </div>
 
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="purchases-form-items">
           <CardContent className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Ítems de Orden</p>
@@ -1969,11 +1971,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
         <Dialog open={importIntroOpen} onOpenChange={setImportIntroOpen}>
           <DialogContent className="max-w-2xl rounded-2xl">
-            <DialogHeader>
+            <DialogHeader data-tour="purchases-order-import-intro-title">
               <DialogTitle className="flex items-center gap-2"><CircleHelp className="size-5 text-primary" /> Importar productos a la orden</DialogTitle>
               <DialogDescription>Carga varios ítems desde Excel sin crear una nueva orden de compra.</DialogDescription>
+              <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo importar productos" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-order-import-intro" />
             </DialogHeader>
-            <div className="space-y-4 text-sm">
+            <div className="space-y-4 text-sm" data-tour="purchases-order-import-intro-data">
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                 <p className="font-black uppercase tracking-widest text-primary">Guía rápida</p>
                 <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
@@ -1984,7 +1987,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 </ol>
               </div>
             </div>
-            <DialogFooter className="flex-wrap gap-2">
+            <DialogFooter className="flex-wrap gap-2" data-tour="purchases-order-import-intro-actions">
               <Button variant="outline" onClick={handleDownloadPurchaseTemplate}><Download className="mr-2 size-4" /> Descargar plantilla</Button>
               <Button onClick={() => { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); setImportIntroOpen(false); setImportModalOpen(true); }}><Upload className="mr-2 size-4" /> Continuar con la carga</Button>
             </DialogFooter>
@@ -1997,11 +2000,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
           <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
-            <DialogHeader>
+            <DialogHeader data-tour="purchases-order-import-title">
               <DialogTitle className="flex items-center gap-2"><FileText className="size-5" /> Cargar productos</DialogTitle>
               <DialogDescription>Selecciona un Excel o CSV. Los productos se agregarán a la orden solo después de revisar la previsualización.</DialogDescription>
+              <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo importar productos" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-order-import" />
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4" data-tour="purchases-order-import-data">
               <div className="grid gap-3 rounded-xl border-2 border-primary/20 bg-primary/5 p-3 text-xs sm:grid-cols-2">
                 <div>
                   <p className="font-black uppercase tracking-widest text-primary">Moneda de la orden</p>
@@ -2036,7 +2040,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 {importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importData.length} producto(s) detectados</p>}
               </div>
             </div>
-            <DialogFooter className="flex-wrap">
+            <DialogFooter className="flex-wrap" data-tour="purchases-order-import-actions">
               <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importProcessing}>Cerrar</Button>
               {importFileName && <Button onClick={handleOpenPurchaseImportPreview} disabled={importProcessing || importData.length === 0 || previewLoading}><Check className="mr-2 size-4" /> Previsualizar productos</Button>}
             </DialogFooter>

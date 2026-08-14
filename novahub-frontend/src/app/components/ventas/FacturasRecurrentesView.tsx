@@ -411,7 +411,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   // ─── INLINE EDITOR ─────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
@@ -420,7 +420,8 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar nueva factura recurrente' : 'Editar factura recurrente'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+            <SalesViewTutorial view="recurring" context="form" />
             {canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
@@ -434,7 +435,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Datos de Factura Recurrente</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -494,7 +495,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen por Ciclo</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
@@ -535,7 +536,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           </Card>
         </div>
 
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>

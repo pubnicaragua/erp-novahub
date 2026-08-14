@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { cn } from '../../ui/utils';
 import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
+import { PurchaseViewTutorial } from '../PurchaseViewTutorial';
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   PENDING: { label: 'Pendiente', className: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' },
@@ -132,7 +133,7 @@ export function PurchaseOrderPreviewDialog({
       <SheetContent side="right" className="w-full gap-0 border-l border-border/50 bg-background p-0 sm:max-w-2xl">
         {order && (
           <>
-            <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
+            <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchase-order-detail-title">
               <div className="flex items-start gap-3">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
                   <CheckCircle2 className="size-5" />
@@ -155,9 +156,10 @@ export function PurchaseOrderPreviewDialog({
                 <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">{originLabel}</Badge>
                 {order.requestedBy && <span>Solicitada por {order.requestedBy}</span>}
               </div>
+              <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo consultar orden" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchase-order-detail" />
             </SheetHeader>
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" data-tour="purchase-order-detail-data">
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span>
@@ -222,7 +224,7 @@ export function PurchaseOrderPreviewDialog({
                 </div>
               </section>
 
-              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm sm:grid-cols-4" data-tour="purchase-order-detail-summary">
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Subtotal</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.subtotal)}</p></div>
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">IVA</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.taxAmount)}</p></div>
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Retención</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.withholdingTotal)}</p></div>
@@ -263,7 +265,7 @@ export function PurchaseOrderPreviewDialog({
               </section>
             </div>
 
-            <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6">
+            <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchase-order-detail-actions">
               <div className="flex w-full flex-wrap justify-end gap-2">
                 {onDownloadPdf && (
                   <Button variant="outline" className="gap-2 rounded-xl text-xs font-black uppercase tracking-wider" onClick={onDownloadPdf}>

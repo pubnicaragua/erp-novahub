@@ -25,6 +25,7 @@ import { CustomerImportPreview, type CustomerImportResult, type CustomerImportRo
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -640,7 +641,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               onClick={() => setShowTutorial(true)}
               className="h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"
             >
-              <CircleHelp className="mr-2 size-4" /> Tutorial
+              <CircleHelp className="mr-2 size-4" /> Cómo gestionar clientes
             </Button>
             <Button
               variant="outline"
@@ -771,7 +772,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Elige qué información quieres ver. La tabla se ajustará automáticamente al espacio disponible.</DialogDescription>
+            <DialogDescription>Elige qué información quieres ver. La tabla se ajustará automáticamente al espacio disponible y actualizará la vista al instante.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {columnOptions.map((option) => {
@@ -791,18 +792,18 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           </div>
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
-            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,1400px)] !flex-col overflow-hidden rounded-3xl p-0">
-          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7">
+          <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="sales-form-title">
             <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo cliente</DialogTitle>
           <DialogDescription>Completa los datos del cliente y usa “Agregar a la lista” para preparar varios registros antes de guardarlos juntos.</DialogDescription>
+            <SalesViewTutorial view="customers" context="form" />
           </DialogHeader>
-          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7">
+          <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7" data-tour="sales-form-data">
             <div className="min-w-0 space-y-6">
               <section className="space-y-3">
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El número de cliente se genera automáticamente.</p></div>
@@ -813,7 +814,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {String(newCustomer.type).toUpperCase() === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={newCustomer.ruc} onChange={(e) => setNewCustomer({ ...newCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
                 </div>
               </section>
-              <section className="space-y-3 border-t border-border/40 pt-5">
+              <section className="space-y-3 border-t border-border/40 pt-5" data-tour="sales-form-summary">
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Contacto y ubicación</h3><p className="text-xs text-muted-foreground">Completa la información esencial del cliente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Correo</label><Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} placeholder="correo@ejemplo.com" className="h-11 rounded-xl" /></div>
@@ -822,7 +823,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ciudad</label><Input value={newCustomer.city} onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })} placeholder="Ciudad" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Departamento</label><Input value={newCustomer.department} onChange={(e) => setNewCustomer({ ...newCustomer, department: e.target.value })} placeholder="Departamento" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">País</label><Input value={newCustomer.country} onChange={(e) => setNewCustomer({ ...newCustomer, country: e.target.value })} placeholder="País" className="h-11 rounded-xl" /></div>
-                  <div className="space-y-1.5 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={newCustomer.notes} onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
+                  <div className="space-y-1.5 xl:col-span-3"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</label><textarea value={newCustomer.notes} onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })} placeholder="Observaciones opcionales" className="min-h-20 w-full resize-y rounded-xl border border-foreground/20 bg-background px-3 py-2 text-sm outline-none focus:border-primary" /></div>
                 </div>
               </section>
               <section className="space-y-3 border-t border-border/40 pt-5">
@@ -850,7 +851,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               </aside>
             )}
           </div>
-          <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7">
+          <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7" data-tour="sales-form-actions">
             <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full rounded-xl sm:w-auto">Cerrar</Button>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Button variant="outline" onClick={handleAddPendingCustomer} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">Agregar a la lista</Button>

@@ -10,6 +10,7 @@ import { Banknote, Plus, Loader2, Edit2, Ban, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { api, getApiErrorMessage } from '../../../services/api';
+import { SalesViewTutorial } from '../SalesViewTutorial';
 
 interface AdministrarCajasModalProps {
   open: boolean;
@@ -233,11 +234,12 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
         if (!open) onOpenChange(true);
       }}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="sales-form-title">
             <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
             <DialogDescription>Completa la información de la caja.</DialogDescription>
+            <SalesViewTutorial view="cash-registers" context="form" />
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="sales-form-data">
             <div className="space-y-2">
               <Label>Código *</Label>
               <Input value={cajaForm.code || ''} onChange={e => setCajaForm({...cajaForm, code: e.target.value})} placeholder="Ej. CJ-01" />
@@ -261,7 +263,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
               <Label>Ubicación</Label>
               <Input value={cajaForm.location || ''} onChange={e => setCajaForm({...cajaForm, location: e.target.value})} placeholder="Primer Piso" />
             </div>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground" data-tour="sales-form-summary">
               Las cuentas contables de efectivo, tarjetas, transferencias, ingresos e IVA se configuran de forma global en Contabilidad → Configuración → Facturación por Caja.
             </div>
             <div className="flex items-center justify-between">
@@ -269,7 +271,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
               <Switch checked={cajaForm.isActive} onCheckedChange={c => setCajaForm({...cajaForm, isActive: c})} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="sales-form-actions">
             <Button variant="outline" onClick={() => setIsCajaFormOpen(false)}>Cancelar</Button>
             <Button onClick={async () => {
               if (!cajaForm.name || !cajaForm.code) return toast.error('Nombre y código son obligatorios');

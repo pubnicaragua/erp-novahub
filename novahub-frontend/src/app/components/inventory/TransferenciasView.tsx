@@ -218,7 +218,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         {canPerform('INVENTORY_TRANSFERS', 'create') && (
           <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
             <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl">
-              <CircleHelp className="size-3.5 mr-1" /> Tutorial
+              <CircleHelp className="size-3.5 mr-1" /> Cómo transferir inventario
             </Button>
             <Button 
               size="sm" 

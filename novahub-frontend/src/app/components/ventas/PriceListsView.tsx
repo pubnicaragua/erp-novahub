@@ -18,7 +18,9 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
+import { SalesViewTutorial } from './SalesViewTutorial';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -122,7 +124,7 @@ function PriceImportPreviewPage({
             </TableHeader>
             <TableBody>
               {rows.map((row, index) => (
-                <TableRow key={`${row.code}-${index}`} className={row.error ? 'bg-rose-500/5' : ''}>
+                <TableRow key={index} className={row.error ? 'bg-rose-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className="h-9 font-mono text-xs" value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell className="font-medium">{row.name || 'Producto no encontrado'}</TableCell>
@@ -168,7 +170,7 @@ function PriceImportPreviewPage({
   );
 }
 
-export function PriceListsView({ products = [], isSidebarCollapsed = true }: PriceListsViewProps) {
+export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = true }: PriceListsViewProps) {
   const { baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const canCreatePriceList = canPerform('SALES_PRICE_LISTS', 'create');
@@ -188,7 +190,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const lists = useMemo(() => matrixQuery.data?.lists || [], [matrixQuery.data]);
   const matrixItems = useMemo(() => (matrixQuery.data?.items || []) as PriceListItem[], [matrixQuery.data]);
   const matrixProducts = useMemo(() => matrixQuery.data?.products || [], [matrixQuery.data]);
-  const [visibleListIds, setVisibleListIds] = useState<string[]>([]);
+  const [visibleListIds, setVisibleListIds] = useLocalStorageState<string[] | null>(`sales-price-lists-columns-${tenantKey}`, null, 24 * 365);
   const [displayCurrency, setDisplayCurrency] = useState<'NIO' | 'USD'>(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [paginationEnabled, setPaginationEnabled] = useState(false);
   const [page, setPage] = useState(1);
@@ -215,6 +217,9 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   const [importCurrency, setImportCurrency] = useState(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [importRate, setImportRate] = useState<number>(Number(exchangeRate || 1));
   const [newListOpen, setNewListOpen] = useState(false);
+  const [editingListId, setEditingListId] = useState<string | null>(null);
+  const [editingListName, setEditingListName] = useState('');
+  const [savingListName, setSavingListName] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [newListName, setNewListName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -223,7 +228,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
     () => (matrixProducts.length ? matrixProducts : products).filter((product) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE'),
     [matrixProducts, products],
   );
-  const visibleLists = useMemo(() => lists.filter((list) => visibleListIds.includes(list.id)), [lists, visibleListIds]);
+  const visibleLists = useMemo(() => lists.filter((list) => visibleListIds?.includes(list.id)), [lists, visibleListIds]);
   const itemsByProduct = useMemo(() => {
     const result = new Map<string, Map<string, PriceListItem>>();
     matrixItems.forEach((item) => {
@@ -257,28 +262,28 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
   useEffect(() => {
     if (matrixQuery.isError) toast.error((matrixQuery.error as any)?.message || 'No se pudo cargar la matriz de precios');
   }, [matrixQuery.isError, matrixQuery.error]);
-  const [prevLists, setPrevLists] = useState(lists);
-  if (prevLists !== lists && lists.length) {
-    setPrevLists(lists);
-    setVisibleListIds((current) => current.length ? [...current.filter((id) => lists.some((list) => list.id === id)), ...lists.filter((list) => !current.includes(list.id)).map((list) => list.id)] : lists.map((list) => list.id));
-  }
-  const [prevBaseCurrency, setPrevBaseCurrency] = useState(baseCurrency);
-  if (prevBaseCurrency !== baseCurrency) {
-    setPrevBaseCurrency(baseCurrency);
+  useEffect(() => {
+    if (!lists.length) return;
+    setVisibleListIds((current) => {
+      if (current === null) return lists.map((list) => list.id);
+      const validIds = current.filter((id) => lists.some((list) => list.id === id));
+      return current.length > 0
+        ? [...validIds, ...lists.filter((list) => !validIds.includes(list.id)).map((list) => list.id)]
+        : [];
+    });
+  }, [lists, setVisibleListIds]);
+
+  useEffect(() => {
     setDisplayCurrency(baseCurrency === 'USD' ? 'USD' : 'NIO');
-  }
-  const [prevTotalPages, setPrevTotalPages] = useState(totalPages);
-  if (prevTotalPages !== totalPages) {
-    setPrevTotalPages(totalPages);
+  }, [baseCurrency]);
+
+  useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
-  }
-  const [prevMissingOpen, setPrevMissingOpen] = useState(missingOpen);
-  const [prevMissingProducts, setPrevMissingProducts] = useState(missingProducts);
-  if (missingOpen && (prevMissingOpen !== missingOpen || prevMissingProducts !== missingProducts)) {
-    setPrevMissingOpen(missingOpen);
-    setPrevMissingProducts(missingProducts);
-    setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
-  }
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (missingOpen) setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
+  }, [missingOpen, missingProducts]);
 
   const toggleProduct = (id: string, source: 'main' | 'missing' = 'main') => {
     const setter = source === 'main' ? setSelectedProductIds : setMissingSelectedIds;
@@ -562,10 +567,45 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
     } catch (error: any) { toast.error(error.message || 'No se pudo crear la lista'); }
   };
 
+  const beginEditListName = (list: (typeof lists)[number]) => {
+    if (!canEditPriceList) return;
+    setEditingListId(list.id);
+    setEditingListName(list.name);
+  };
+
+  const saveListName = async () => {
+    if (!editingListId || !canEditPriceList) return;
+    const name = editingListName.trim();
+    if (!name) {
+      toast.error('El nombre de la lista es requerido');
+      return;
+    }
+
+    setSavingListName(true);
+    try {
+      const updated = await priceListsService.update(editingListId, { name });
+      queryClient.setQueryData(['sales', 'price-lists', 'matrix', tenantKey], (current: any) => {
+        if (!current) return current;
+        return {
+          ...current,
+          lists: (current.lists || []).map((list: any) => list.id === updated.id ? { ...list, ...updated } : list),
+        };
+      });
+      setEditingListId(null);
+      setEditingListName('');
+      await onRefresh?.();
+      toast.success('Nombre de lista actualizado');
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo actualizar el nombre de la lista');
+    } finally {
+      setSavingListName(false);
+    }
+  };
+
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h2 className="text-2xl font-black tracking-tight" data-tour="price-lists-title">Listas de Precios</h2><p className="text-sm text-muted-foreground">Configura las tarifas visibles y actualiza varias listas en una sola plantilla.</p></div>
-      <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="rounded-xl" onClick={() => setShowTutorial(true)}><CircleHelp className="mr-2 size-4" /> Tutorial</Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="rounded-xl" onClick={() => setShowTutorial(true)}><CircleHelp className="mr-2 size-4" /> Cómo actualizar precios</Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -576,7 +616,7 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
     </div>
 
     <div className="flex flex-wrap justify-end gap-2"><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-currency"><span className="text-xs font-bold text-muted-foreground">Moneda</span><Select value={displayCurrency} onValueChange={(value: 'NIO' | 'USD') => setDisplayCurrency(value)}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-[10px] text-muted-foreground">Tasa {Number(exchangeRate || 1).toFixed(4)}</span></div><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-pagination"><span className="text-xs font-bold text-muted-foreground">Paginación</span><Select value={paginationEnabled ? 'on' : 'off'} onValueChange={(value) => { setPaginationEnabled(value === 'on'); setPage(1); }}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="off">Desactivada</SelectItem><SelectItem value="on">Activada</SelectItem></SelectContent></Select>{paginationEnabled && <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger className="h-8 w-20 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent></Select>}</div><Button variant="outline" className="rounded-xl" onClick={() => setColumnConfigOpen(true)} data-tour="price-lists-columns"><Settings2 className="mr-2 size-4" /> Configurar columnas <Badge variant="secondary" className="ml-2">{visibleLists.length}</Badge></Button></div>
-    <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle><DialogDescription>Elige qué listas se muestran en la tabla y cuáles aparecerán en la plantilla.</DialogDescription></DialogHeader><div className="flex flex-wrap gap-2">{lists.map((list) => { const active = visibleListIds.includes(list.id); return <button key={list.id} type="button" onClick={() => setVisibleListIds((current) => active ? current.filter((id) => id !== list.id) : [...current, list.id])} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted/20 opacity-60'}`}><span className={`flex size-5 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>{active && <CheckCircle2 className="size-3.5" />}</span><span><b>{list.name}</b></span></button>; })}</div><DialogFooter><Button variant="outline" onClick={() => setVisibleListIds(lists.map((list) => list.id))}>Mostrar todas</Button><Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle><DialogDescription>Elige qué listas se muestran en la tabla y cuáles aparecerán en la plantilla. Los cambios se reflejan inmediatamente.</DialogDescription></DialogHeader><div className="flex flex-col gap-2">{lists.map((list) => { const active = visibleListIds?.includes(list.id) ?? false; return <div key={list.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted/20 opacity-60'}`}><button type="button" onClick={() => setVisibleListIds((current) => active ? (current || []).filter((id) => id !== list.id) : [...(current || []), list.id])} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"><span className={`flex size-5 shrink-0 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>{active && <CheckCircle2 className="size-3.5" />}</span><span className="min-w-0 truncate"><b>{list.name}</b><span className="ml-2 text-[10px] font-mono text-muted-foreground">{list.code}</span></span></button>{canEditPriceList && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" title={`Editar nombre de ${list.name}`} aria-label={`Editar nombre de ${list.name}`} onClick={() => beginEditListName(list)}><Pencil className="size-4" /></Button>}</div>; })}</div><DialogFooter><Button variant="outline" onClick={() => setVisibleListIds(lists.map((list) => list.id))}>Mostrar todas</Button><Button onClick={() => setVisibleListIds([])}>Ocultar todas</Button></DialogFooter></DialogContent></Dialog>
 
     <Card className="rounded-2xl" data-tour="price-lists-matrix"><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Matriz de precios</CardTitle><p className="mt-1 text-xs text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p></div><Badge variant="outline">{selectedCount} seleccionados</Badge></CardHeader><CardContent><div className="overflow-x-auto rounded-xl border"><Table className="min-w-[980px]"><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60">{allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Categoría</TableHead>{visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}<TableHead className="w-24 text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={5 + visibleLists.length} className="py-10 text-center text-muted-foreground">Cargando matriz…</TableCell></TableRow> : displayedProducts.map((product) => { const byList = itemsByProduct.get(product.id); const isEditing = editingProductIds.has(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id)}>{selectedProductIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>{visibleLists.map((list) => { const item = byList?.get(list.id); return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={editingPrices[product.id]?.[list.id] ?? ''} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>; })}<TableCell className="text-right">{isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}</TableCell></TableRow>; })}</TableBody></Table></div>{paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {catalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /></Button></div></div>}{!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}{!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}</CardContent></Card>
 
@@ -592,7 +632,8 @@ export function PriceListsView({ products = [], isSidebarCollapsed = true }: Pri
         <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar actualización</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
-    <Dialog open={newListOpen} onOpenChange={setNewListOpen}><DialogContent><DialogHeader><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription></DialogHeader><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /><DialogFooter><Button variant="outline" onClick={() => setNewListOpen(false)}>Cancelar</Button><Button onClick={createList} disabled={!newListName.trim()}>Crear lista</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={newListOpen} onOpenChange={setNewListOpen}><DialogContent><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)}>Cancelar</Button><Button onClick={createList} disabled={!newListName.trim()}>Crear lista</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={editingListId !== null} onOpenChange={(open) => { if (!open && !savingListName) { setEditingListId(null); setEditingListName(''); } }}><DialogContent><DialogHeader><DialogTitle>Editar nombre de lista</DialogTitle><DialogDescription>El cambio se aplicará a la lista existente. Los clientes asignados seguirán vinculados a la misma lista y mostrarán el nuevo nombre automáticamente.</DialogDescription></DialogHeader><Input placeholder="Nombre de la lista" value={editingListName} onChange={(event) => setEditingListName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveListName(); }} autoFocus disabled={savingListName} /><DialogFooter><Button variant="outline" onClick={() => { setEditingListId(null); setEditingListName(''); }} disabled={savingListName}>Cancelar</Button><Button onClick={() => void saveListName()} disabled={savingListName || !editingListName.trim()}>{savingListName ? 'Guardando…' : 'Guardar nombre'}</Button></DialogFooter></DialogContent></Dialog>
     <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
     {showTutorial && <GuidedTour steps={PRICE_LISTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Listas de precios" allowTargetInteraction />}
   </div>;

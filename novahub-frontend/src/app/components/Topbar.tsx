@@ -80,6 +80,13 @@ function getSavedDarkMode() {
   return localStorage.getItem('erp-theme-mode') !== 'light';
 }
 
+function getAvatarInitials(name?: string) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const initials = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts;
+  return initials.map((part) => part[0]).join('').toUpperCase();
+}
+
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
@@ -559,7 +566,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <Avatar className="size-9 rounded-full border-2 border-primary/30">
                 <AvatarImage src={user?.avatar} alt={user?.name} className="object-cover" />
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {user?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                  {getAvatarInitials(user?.name)}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden flex-col items-start text-left lg:flex leading-tight">

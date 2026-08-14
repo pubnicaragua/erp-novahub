@@ -171,7 +171,7 @@ export function EmployeeImportPreview({
               {rows.map((row, index) => {
                 const rowPositions = positions.filter((position: any) => !row.departmentId || position.departmentId === row.departmentId);
                 return (
-                  <TableRow key={`${row.sourceRow}-${row.employeeNumber}-${index}`} className={row._hasError ? 'bg-rose-500/5' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                  <TableRow key={index} className={row._hasError ? 'bg-rose-500/5' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                     <TableCell className="text-center">{row._hasError ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row._hasWarning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                     <TableCell><Input className={fieldClass} value={row.employeeNumber} onChange={(event) => onRowUpdate(index, 'employeeNumber', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell><Input className={fieldClass} value={row.firstName} onChange={(event) => onRowUpdate(index, 'firstName', event.target.value)} disabled={importing} /></TableCell>

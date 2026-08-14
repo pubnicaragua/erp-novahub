@@ -342,7 +342,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-1 size-3.5" /> Tutorial
+            <CircleHelp className="mr-1 size-3.5" /> Cómo configurar inventario
           </Button>
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar

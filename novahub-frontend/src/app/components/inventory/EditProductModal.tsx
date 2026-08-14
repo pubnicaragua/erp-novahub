@@ -9,6 +9,7 @@ import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 import { Package, Check } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 interface EditProductModalProps {
   product: any | null;
@@ -221,13 +222,18 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
 
   return (
     <Dialog open={!!product} onOpenChange={(v) => { if (!isSaving && !v) onClose(); }}>      <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-        <DialogHeader>
+        <DialogHeader data-tour="inventory-product-edit-title">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Package className="size-5 text-primary" /> Editar Producto
           </DialogTitle>
+          <InventoryViewTutorial
+            label={isService ? 'Cómo editar servicio' : 'Cómo editar producto'}
+            targetPrefix="inventory-product-edit"
+            copy={{ data: { description: 'Actualiza código, nombre, categoría, moneda, costos, almacén y controles de stock.' }, actions: { description: 'Guarda los cambios para actualizar el catálogo.' } }}
+          />
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 py-4" data-tour="inventory-product-edit-data">
           <div className="md:col-span-1 flex flex-col gap-4">
             <div className="flex flex-col items-center gap-2">
               <ProductImagePicker
@@ -378,7 +384,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           </div>
         </div>
 
-        <DialogFooter className="mt-2 pt-4 border-t">
+        <DialogFooter className="mt-2 pt-4 border-t" data-tour="inventory-product-edit-actions">
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancelar
           </Button>

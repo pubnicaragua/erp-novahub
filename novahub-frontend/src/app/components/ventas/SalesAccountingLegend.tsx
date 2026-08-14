@@ -103,9 +103,10 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
     returns: normalizeAccount(mappings?.[flow === 'creditNote' ? 'creditNote' : 'saleReturn']?.returns, DEFAULT_ACCOUNTS[flow === 'creditNote' ? 'creditNote' : 'saleReturn'].returns),
     receivable: normalizeAccount(mappings?.[flow === 'creditNote' ? 'creditNote' : 'saleReturn']?.receivable, DEFAULT_ACCOUNTS[flow === 'creditNote' ? 'creditNote' : 'saleReturn'].receivable),
   };
-  const method = PAYMENT_METHODS[String(paymentMethod || 'CASH').toUpperCase()] || PAYMENT_METHODS.CASH;
-  const configuredPayment = normalizeAccount(mappings?.payment?.[method.accountKey], DEFAULT_ACCOUNTS.payment[method.accountKey]);
-  const configuredPosPayment = configuredCashSale[method.accountKey as keyof typeof configuredCashSale] || configuredCashSale.cash;
+  const method = paymentMethod ? (PAYMENT_METHODS[String(paymentMethod).toUpperCase()] || PAYMENT_METHODS.CASH) : null;
+  const effectiveMethod = method || PAYMENT_METHODS.CASH;
+  const configuredPayment = normalizeAccount(mappings?.payment?.[effectiveMethod.accountKey], DEFAULT_ACCOUNTS.payment[effectiveMethod.accountKey]);
+  const configuredPosPayment = configuredCashSale[effectiveMethod.accountKey as keyof typeof configuredCashSale] || configuredCashSale.cash;
   const isPos = flow === 'pos';
   const effectivePayment = isPos ? configuredPosPayment : configuredPayment;
   const effectiveIncome = isPos ? configuredCashSale.income : configuredInvoice.income;
@@ -114,12 +115,14 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
   const summary = flow === 'order'
     ? 'Orden de venta: no genera asiento contable.'
     : flow === 'pos'
-      ? `POS: factura pagada · ${method.label} → ${effectivePayment.code}; crédito a ${effectiveIncome.code} + IVA.`
+      ? `POS: factura pagada · ${effectiveMethod.label} → ${effectivePayment.code}; crédito a ${effectiveIncome.code} + IVA.`
       : flow === 'return'
         ? 'Devolución: aplica el ajuste configurado al procesarse.'
         : flow === 'creditNote'
           ? 'Nota de crédito: aplica el ajuste al emitirse.'
-          : `Factura: sin asiento hasta pagar · asiento único al cobrar (${method.label} → ${effectivePayment.code}).`;
+          : method
+            ? `Factura: sin asiento hasta pagar · asiento único al cobrar (${method.label} → ${effectivePayment.code}).`
+            : 'Factura: sin asiento hasta pagar · el método y la cuenta se registran en cada cobro.';
 
   return (
     <div className={`flex min-w-0 items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2 ${compact ? '' : 'text-xs'}`}>
@@ -152,7 +155,7 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
                 {flow !== 'pos' && flow !== 'return' && flow !== 'creditNote' && (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Factura pagada · asiento único</p>
-                    <AccountLine label={`Cobro · ${method.label}`} side="debit" account={effectivePayment} />
+                    <AccountLine label={`Cobro · ${method?.label || 'método registrado al pagar'}`} side="debit" account={effectivePayment} />
                     <AccountLine label="Ingresos" side="credit" account={configuredInvoice.income} />
                     <AccountLine label="IVA por pagar" side="credit" account={configuredInvoice.ivaPayable} />
                   </div>
@@ -160,7 +163,7 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true }: S
                 {flow === 'pos' && (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Facturación por Caja · asiento único</p>
-                    <AccountLine label={`Cobro · ${method.label}`} side="debit" account={effectivePayment} />
+                    <AccountLine label={`Cobro · ${method?.label || 'método registrado al pagar'}`} side="debit" account={effectivePayment} />
                     <AccountLine label="Ingresos por Ventas" side="credit" account={effectiveIncome} />
                     <AccountLine label="IVA por pagar" side="credit" account={effectiveVat} />
                   </div>

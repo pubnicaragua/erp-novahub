@@ -343,7 +343,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     const editorTotals = returnTotalsFor(localDoc.items || [], selectedInvoice);
     const editorCurrency = localDoc?.currency || displayCurrency;
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button>
@@ -352,7 +352,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Aplicar saldo a favor desde una factura' : 'Detalle de la nota de crédito'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+            <SalesViewTutorial view="returns" context="form" />
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
@@ -369,7 +370,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <SalesAccountingLegend flow="return" />
@@ -419,7 +420,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm resize-none" placeholder="Describe el motivo de la nota de crédito..." /></div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen</p>
               <div className="flex justify-between items-center text-base border-b pb-3 border-border/50">
@@ -437,7 +438,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           </Card>
         </div>
 
-        <Card className="rounded-2xl border-border/50">
+        <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalle de la Nota de Crédito</p><p className="mt-1 text-[10px] text-muted-foreground">La factura seleccionada define las líneas; registra cantidades parciales y su destino.</p></div><Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">{localDoc.items?.length || 0} líneas</Badge></div>
             <div className="space-y-3">{(localDoc.items || []).map((item: any, idx: number) => {

@@ -542,7 +542,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
         <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
-            <CircleHelp className="size-3.5 mr-1" /> Tutorial
+            <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar almacenes
           </Button>
 
           {canCreateWarehouse && <Button 

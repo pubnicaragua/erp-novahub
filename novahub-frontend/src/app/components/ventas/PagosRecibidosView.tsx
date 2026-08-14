@@ -47,6 +47,7 @@ const methodOptions = [
   { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Otro', value: 'OTHER', color: 'bg-slate-500/10 text-slate-500' },
 ];
 
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
@@ -219,7 +220,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if (isCreating && localDoc) {
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
@@ -228,15 +229,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
             </div>
           </div>
-          {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
+          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+            <SalesViewTutorial view="payments" context="form" />
+            {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
               Confirmar Pago
             </Button>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Pago</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -287,7 +291,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50">
+          <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto</p>
               <div className="space-y-4">

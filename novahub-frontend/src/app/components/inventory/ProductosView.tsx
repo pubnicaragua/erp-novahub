@@ -33,6 +33,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -280,7 +281,7 @@ function ImportPreviewPage({
             </TableHeader>
             <TableBody>
               {importData.map((row, index) => (
-                <TableRow key={`${row.code || 'fila'}-${index}`} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                <TableRow key={index} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
                   <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
@@ -307,7 +308,7 @@ function ImportPreviewPage({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="p-1"><Input value={row.unit || 'unidad'} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
@@ -1578,7 +1579,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
     const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Almacén'];
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', 'unidad', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
+      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', '', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
     const wb = XLSX.utils.book_new();
@@ -1700,7 +1701,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             category: String(get('category') || '').trim(),
             itemType: 'PRODUCT',
             description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? 0.15, imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
-            unit: String(get('unit') || 'unidad').trim().toLowerCase() || 'unidad',
+            unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
             costPrice: get('costPrice') === '' || get('costPrice') === undefined ? undefined : Number(get('costPrice')),
             initialStock: Number(get('initialStock') || 0),
@@ -1831,7 +1832,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             name: row.name,
             categoryId: cat?.id,
             description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, lastPurchasePrice: row.lastPurchasePrice, trackBatch: row.trackBatch, attributes: row.attributes,
-            unit: row.unit || 'unidad',
+            unit: String(row.unit ?? '').trim(),
             costPrice: row.costPrice,
             initialStock: row.initialStock,
             minStock: row.minStock || 0,
@@ -2110,7 +2111,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center" data-tour="inventory-products-actions">
           <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-2 size-4" /> Tutorial
+            <CircleHelp className="mr-2 size-4" /> {isServiceView ? 'Cómo gestionar servicios' : 'Cómo gestionar productos'}
           </Button>
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
             type="button"
@@ -2515,11 +2516,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       />
       <Dialog open={categoryModalOpen} onOpenChange={(open) => { setCategoryModalOpen(open); if (!open) setPendingCategoryRowIndex(null); }}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-category-title">
             <DialogTitle>Nueva categoría</DialogTitle>
             <DialogDescription>Crea una categoría para usarla de inmediato en productos.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear categoría" targetPrefix="inventory-category" copy={{ data: { description: 'Escribe el nombre y una descripción breve para clasificar productos.' }, actions: { description: 'Guarda la categoría para seleccionarla inmediatamente en el catálogo.' } }} />
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3" data-tour="inventory-category-data">
             <div>
               <p className="text-[10px] text-muted-foreground mb-1">Nombre</p>
               <Input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Ej. Electrónica" className="h-9 text-xs" />
@@ -2529,7 +2531,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               <Input value={newCategoryDescription} onChange={(e) => setNewCategoryDescription(e.target.value)} placeholder="Descripción corta" className="h-9 text-xs" />
             </div>
           </div>
-          <DialogFooter className="mt-2">
+          <DialogFooter className="mt-2" data-tour="inventory-category-actions">
             <Button variant="outline" onClick={() => setCategoryModalOpen(false)}>Cancelar</Button>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleCreateCategory} disabled={creatingCategory}>
               {creatingCategory ? 'Guardando...' : 'Guardar categoría'}
@@ -2539,11 +2541,12 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </Dialog>
       <Dialog open={warehouseModalOpen} onOpenChange={(open) => { setWarehouseModalOpen(open); if (!open) setPendingWarehouseRowIndex(null); }}>
         <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-warehouse-title">
             <DialogTitle>Nuevo almacén</DialogTitle>
             <DialogDescription>Completa los mismos datos disponibles en la vista de Almacenes y Sucursales.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear almacén" targetPrefix="inventory-warehouse" copy={{ data: { description: 'Completa nombre, ubicación, tipo, almacén matriz y cuenta contable de inventario.' }, actions: { description: 'Guarda el almacén para usarlo en productos, transferencias y ajustes.' } }} />
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2" data-tour="inventory-warehouse-data">
             <div className="space-y-1 sm:col-span-2">
               <p className="text-xs font-semibold">Nombre <span className="text-red-500">*</span></p>
               <Input value={newWarehouseName} onChange={(event) => setNewWarehouseName(event.target.value)} placeholder="Ej. Bodega principal" disabled={creatingWarehouse} autoFocus />
@@ -2582,7 +2585,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-warehouse-actions">
             <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
             <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
           </DialogFooter>
@@ -2617,13 +2620,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-bulk-images-title">
             <DialogTitle className="flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Carga masiva de imágenes</DialogTitle>
             <DialogDescription>
               Esta opción queda disponible permanentemente en Productos, incluso después de completar la importación inicial. Permite reemplazar o asignar imágenes a productos existentes sin modificar sus datos, precios o existencias.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo cargar imágenes" targetPrefix="inventory-bulk-images" copy={{ data: { description: 'Selecciona un archivo ZIP o RAR y verifica las coincidencias por SKU.' }, actions: { description: 'Actualiza las imágenes reconocidas después de revisar los resultados.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-bulk-images-data">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
               <p className="font-bold">Cómo funciona</p>
               <ul className="mt-2 space-y-1.5 text-muted-foreground">
@@ -2653,7 +2657,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             {bulkImageMissingSkus.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"><p className="font-bold">No se encontraron estos SKU:</p><p className="mt-1 break-words font-mono">{bulkImageMissingSkus.slice(0, 20).join(', ')}{bulkImageMissingSkus.length > 20 ? ` y ${bulkImageMissingSkus.length - 20} más` : ''}</p></div>}
             {bulkImageResults && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm"><p className="font-bold text-emerald-700 dark:text-emerald-300">{bulkImageResults.updated} imagen(es) actualizada(s)</p>{bulkImageResults.failed.length > 0 && <p className="mt-1 text-xs text-rose-600">Con incidencia: {bulkImageResults.failed.join(', ')}</p>}</div>}
           </div>
-          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between">
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between" data-tour="inventory-bulk-images-actions">
             <Button variant="outline" onClick={() => setBulkImageModalOpen(false)} disabled={bulkImageUploading}>Cerrar</Button>
             <Button onClick={handleBulkImageUpload} disabled={bulkImageProcessing || bulkImageUploading || bulkImageProducts.length === 0}>
               {bulkImageUploading ? `Actualizando… ${bulkImageProgress}%` : `Actualizar ${bulkImageProducts.length} producto(s)`}
@@ -2663,18 +2667,19 @@ export function ProductosView({ products, categories, warehouses = [], series = 
       </Dialog>
       <Dialog open={initialImportIntroOpen} onOpenChange={setInitialImportIntroOpen}>
         <DialogContent className="max-w-xl">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-initial-import-title">
             <DialogTitle>Importación inicial de inventario</DialogTitle>
             <DialogDescription>
               Esta carga se realiza una sola vez por empresa. Primero descarga la plantilla, completa los datos y después revisa la previsualización antes de confirmar. Las imágenes opcionales pueden cargarse en ZIP o RAR.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo importar inventario" targetPrefix="inventory-initial-import" copy={{ data: { description: 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
-          <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm">
+          <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
             <p><b>La plantilla siempre incluye:</b> costo, Minorista, Mayorista y Distribuidor.</p>
             <p>Cada producto debe tener SKU único, nombre, categoría, costo y al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-initial-import-actions">
             <Button variant="outline" onClick={handleDownloadTemplate}><Download className="size-4 mr-2" />Descargar plantilla</Button>
             <Button onClick={() => { setInitialImportIntroOpen(false); setImportModalOpen(true); }}>Continuar con la carga</Button>
           </DialogFooter>
@@ -2693,13 +2698,14 @@ export function ProductosView({ products, categories, warehouses = [], series = 
         }
       }}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] flex flex-col">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-import-title">
             <DialogTitle>Importar Productos</DialogTitle>
             <DialogDescription>
               Sube el catálogo inicial. Esta carga es única por empresa y se confirma en dos pasos.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo importar productos" targetPrefix="inventory-import" copy={{ data: { description: 'Configura moneda, tasa, archivo e imágenes y revisa la previsualización del catálogo.' }, actions: { description: 'Carga el archivo y abre la previsualización antes de confirmar.' } }} />
           </DialogHeader>
-          <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3" data-tour="inventory-import-data">
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Listas incluidas</p><p className="h-9 flex items-center text-xs font-semibold">Minorista · Mayorista · Distribuidor</p></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Moneda del archivo</p><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
             <div><p className="mb-1 text-[10px] font-black uppercase text-muted-foreground">Tasa USD / moneda base</p><Input className="h-9 text-xs" type="number" min="0.0001" step="any" value={importExchangeRate} onChange={(event) => setImportExchangeRate(Number(event.target.value) || 1)} disabled={importCurrency === 'NIO'} /></div>
@@ -2837,7 +2843,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
                             </TableCell>
                             <TableCell className="p-1">
                               <Input
-                                value={row.unit || 'unidad'}
+                                value={row.unit ?? ''}
                                 onChange={(e) => handleImportRowUpdate(i, 'unit', e.target.value)}
                                 className="h-8 text-xs"
                               />
@@ -2938,7 +2944,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               </Button>
             </div>
           </div>
-          <DialogFooter className="mt-2 pt-2 border-t">
+          <DialogFooter className="mt-2 pt-2 border-t" data-tour="inventory-import-actions">
             <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing || previewLoading}>
               Cerrar
             </Button>
@@ -2957,12 +2963,13 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       <Dialog open={initialImportConfirmOpen && !importing} onOpenChange={setInitialImportConfirmOpen}>
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-initial-confirm-title">
             <DialogTitle>Formalizar importación inicial</DialogTitle>
             <DialogDescription>Esta acción creará {importData.filter((row) => !row._hasError).length} productos y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. No podrá repetirse para esta empresa. Los precios Minorista, Mayorista y Distribuidor se guardarán en {importCurrency}; las listas sin precio quedarán pendientes. Escribe IMPORTAR para confirmar.</DialogDescription>
+            <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: 'Confirma la importación para crear el catálogo inicial.' } }} />
           </DialogHeader>
-          <Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
-          <DialogFooter><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>
+          <div data-tour="inventory-initial-confirm-data"><Input value={initialImportConfirmText} onChange={(event) => setInitialImportConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus /></div>
+          <DialogFooter data-tour="inventory-initial-confirm-actions"><Button variant="outline" onClick={() => setInitialImportConfirmOpen(false)}>Cancelar</Button><Button onClick={handleFinalInitialImport} disabled={initialImportConfirmText !== 'IMPORTAR' || importing}>Confirmar importación</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2972,7 +2979,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
+          <DialogHeader data-tour="inventory-request-title">
             <div className="flex flex-col items-center gap-3 py-3 text-center">
               <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500">
                 <CheckCircle2 className="size-12 animate-pulse" />
@@ -3021,8 +3028,9 @@ export function ProductosView({ products, categories, warehouses = [], series = 
             <DialogDescription>
               Revisa y ajusta la cantidad a solicitar de cada producto. La solicitud se guardará en Compras &gt; Solicitudes.
             </DialogDescription>
+            <InventoryViewTutorial label="Cómo crear solicitud de compra" targetPrefix="inventory-request" copy={{ data: { description: 'Selecciona empleado, bodega, justificación, fecha, prioridad y productos a solicitar.' }, actions: { description: 'Crea la solicitud para enviarla al flujo de Compras.' } }} />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="inventory-request-data">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Empleado solicitante *</label>
@@ -3189,7 +3197,7 @@ export function ProductosView({ products, categories, warehouses = [], series = 
               )}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter data-tour="inventory-request-actions">
             <Button variant="outline" onClick={() => setSolicitudOpen(false)} disabled={solicitudCreating}>Cancelar</Button>
             <Button onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
               {solicitudCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}

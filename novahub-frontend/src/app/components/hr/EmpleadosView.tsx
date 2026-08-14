@@ -1196,7 +1196,7 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
-            <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados.</DialogDescription>
+            <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados. Los cambios se reflejan inmediatamente.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {columnOptions.map((option) => {
@@ -1216,7 +1216,6 @@ const EMPLEADOS_TOUR_STEPS: GuidedTourStep[] = [
           </div>
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
-            <Button onClick={() => setColumnConfigOpen(false)}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
