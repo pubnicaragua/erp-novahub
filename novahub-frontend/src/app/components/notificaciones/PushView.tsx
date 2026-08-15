@@ -33,7 +33,7 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
     { key: 'content', header: 'Contenido', width: '40%', editable: canPerform('NOTIFICATIONS_PUSH', 'edit') },
     { key: 'type', header: 'Tipo', width: '120px', editable: canPerform('NOTIFICATIONS_PUSH', 'edit'), type: 'select', options: [{label: 'Marketing', value: 'MARKETING'}, {label: 'Sistema', value: 'SYSTEM'}, {label: 'Actualización', value: 'UPDATE'}] },
     { key: 'sent', header: 'Estado', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-500')}>{val ? 'Enviada' : 'Pendiente'}</Badge> },
-    { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
+    { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => { const d = val ? new Date(val) : null; return d && !isNaN(d.getTime()) ? format(d, 'MMM dd, HH:mm') : '-'; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PushNotification>) => {

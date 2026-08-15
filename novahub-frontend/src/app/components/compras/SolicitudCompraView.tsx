@@ -123,7 +123,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       if (statusFilter !== 'all' && normalizeRequestStatus(r.status) !== statusFilter) return false;
       if (!search) return true;
       const s = search.toLowerCase();
-      return r.number.toLowerCase().includes(s)
+      return (r.number || '').toLowerCase().includes(s)
         || (r.requestedBy?.firstName?.toLowerCase().includes(s))
         || (r.requestedBy?.lastName?.toLowerCase().includes(s))
         || (r.warehouse?.name?.toLowerCase().includes(s))

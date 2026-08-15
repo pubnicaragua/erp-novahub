@@ -2342,6 +2342,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <PackageSearch className="size-4 mr-2" />
             {selectedIds.size > 0 ? `Solicitar Compra (${selectedIds.size})` : 'Solicitudes'}
           </Button>}
+          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
+            <Button
+              size="sm"
+              className="h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:w-auto"
+              onClick={() => setCreateModalOpen(true)}
+              aria-label="Crear nuevo producto"
+            >
+              <Plus className="size-4 mr-2" /> Nuevo producto
+            </Button>
+          )}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
             <>
               <Button

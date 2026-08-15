@@ -41,7 +41,7 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
     { key: 'severity', header: 'Severidad', width: '120px', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit'), type: 'select', options: severityOpts,
       render: (val: any) => { const o = severityOpts.find(x => x.value === (val||'').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color||'text-muted-foreground')}>{o?.label||val}</span>; } },
     { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
-    { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => val ? format(new Date(val), 'MMM dd, HH:mm') : '-' },
+    { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => { const d = val ? new Date(val) : null; return d && !isNaN(d.getTime()) ? format(d, 'MMM dd, HH:mm') : '-'; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Alert>) => {

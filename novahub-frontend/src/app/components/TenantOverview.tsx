@@ -168,16 +168,18 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
       : {};
 
-    let current: any | null = null;
-    try {
-      current = normalizeDashboardResponse(await withTimeout(
+    const [current, previous] = await Promise.all([
+      withTimeout(
         cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal, valuationMode),
         12000,
         () => dashboardController.abort(),
-      ));
-    } catch {
-      if (isCurrentRequest()) setDataLoadError(true);
-    }
+      ).then(normalizeDashboardResponse).catch(() => null),
+      withTimeout(
+        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal, valuationMode),
+        12000,
+        () => dashboardController.abort(),
+      ).then(normalizeDashboardResponse).catch(() => null),
+    ]);
 
     if (!isCurrentRequest()) return;
 
@@ -192,18 +194,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     }
     setLoading(false);
 
-    // La comparación con el período anterior es secundaria. Se carga después
-    // del período actual para no duplicar la carga pesada del endpoint inicial.
-    try {
-      const previous = normalizeDashboardResponse(await withTimeout(
-        cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal, valuationMode),
-        12000,
-        () => dashboardController.abort(),
-      ));
-      if (isCurrentRequest() && previous) setPrevData(previous);
-    } catch {
-      // Los KPIs actuales no dependen de esta consulta secundaria.
-    }
+    if (previous) setPrevData(previous);
   }, [period, dateFrom, dateTo, user?.enabledModules, valuationMode]);
 
   useEffect(() => {

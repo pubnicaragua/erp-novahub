@@ -181,7 +181,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
 
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia', width: '130px', editable: canPerform('PURCHASES_PAYMENTS', 'edit') },
+    { key: 'reference', header: 'Referencia', width: '130px' },
     { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
       render: (val) => {
         const invoice = bills.find((bill) => bill.id === val);
@@ -207,6 +207,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     try {
       const payload = { ...updates } as any;
       if (payload.method) payload.method = normalizeMethod(payload.method);
+      delete payload.reference;
       await paymentsService.update(id as string, payload);
       toast.success('Pago actualizado', { id: updateToastId });
       onRefresh();
@@ -273,6 +274,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       if (editingId === 'NEW') {
         savedPayment = await paymentsService.create(payload);
       } else {
+        delete payload.reference;
         savedPayment = await paymentsService.update(editingId!, payload);
       }
 
@@ -430,7 +432,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                   <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Referencia / Transferencia #</p>
                     <Input 
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                      disabled={!isNew}
                       value={localDoc.reference || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
                       className="h-8 text-xs font-mono" 

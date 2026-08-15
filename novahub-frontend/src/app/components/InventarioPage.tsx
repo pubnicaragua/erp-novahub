@@ -183,7 +183,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productCatalogQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-catalog', tenantKey, selectedBranchId],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: 'PRODUCT', report: true, page: 1, pageSize: 5000, light: true, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam }, signal),
     enabled: Boolean(user) && ['transferencias', 'ajustes', 'auditorias'].includes(activeTab),
   });
   // Catálogo completo (sin paginar) para los KPIs de Productos/Servicios: el
@@ -191,7 +191,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const productsSummaryQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, light: true, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
     enabled: Boolean(user) && ['productos', 'servicios'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
