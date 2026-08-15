@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, Trash2, ChevronLeft, FileDown
+  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,7 +10,6 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { paymentsService } from '../../services/ventas.service';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
@@ -28,6 +27,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -57,11 +57,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
-  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelLoading, setCancelLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -354,58 +352,63 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         </div>
         <EditableDataTable data={filteredData}
           pagination={pagination}
-          onBulkDelete={async (ids) => { const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await paymentsService.cancel(id as string, 'Anulación masiva'); } toast.success('Pagos anulados', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId }); } }}
           columns={columns} onRowUpdate={handleUpdate} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          showSelection={false}
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">
               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-              <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"><Eye className="size-4" /></Button>
-              {canPerform('SALES_PAYMENTS', 'delete') && (
-                <Button title="Anular" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Trash2 className="size-4" /></Button>
-              )}
+              <Button title="Ver detalle" aria-label={`Ver detalle del pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button>
             </div>
           )}
         />
       </div>
-      <ConfirmDialog
-        open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title={"¿Anular pago recibido?"}
-        description="El pago quedará anulado y se revertirá el saldo de la factura asociada. Esta acción no se puede deshacer."
-        confirmLabel="Anular Pago"
-        variant="destructive"
-        loading={cancelLoading}
-        disabled={!cancelReason.trim()}
-        onConfirm={async () => {
-          if (!pendingCancelId || !cancelReason.trim()) return;
-          const cancelToastId = toast.loading('Anulando pago recibido...');
-          try {
-            setCancelLoading(true);
-            await paymentsService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Pago anulado', { id: cancelToastId });
-            onRefresh();
-          } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'Error al anular pago', { id: cancelToastId });
-          } finally {
-            setCancelLoading(false);
-            setPendingCancelId(null);
-            setCancelReason('');
-          }
-        }}
-      >
-        <div className="mt-4">
-          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
-          <textarea
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="Ej: Pago duplicado, error en monto..."
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-        </div>
-      </ConfirmDialog>
+
+      <Sheet open={Boolean(detailPayment)} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
+        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 border-l border-border/50 bg-background p-0 sm:max-w-xl">
+          <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="sales-payment-detail-title">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Wallet className="size-5" /></div>
+              <div className="min-w-0">
+                <SheetTitle className="truncate text-lg font-black uppercase tracking-tight">Detalle del pago</SheetTitle>
+                <SheetDescription className="mt-1 truncate text-xs">{detailPayment?.number || 'Pago recibido'}</SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+          {detailPayment && (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6" data-tour="sales-payment-detail-data">
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto recibido</p>
+                <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency, detailPayment.exchangeRate)}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Badge className="border-none bg-emerald-500/10 text-emerald-600">Registrado</Badge>
+                  <span>{detailPayment.currency || baseCurrency}</span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 break-words text-sm font-bold">{detailPayment.customer?.name || 'Cliente'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateEs(detailPayment.date, true) || '—'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{methodOptions.find((method) => method.value === String(detailPayment.method || '').toUpperCase())?.label || detailPayment.method || '—'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || detailPayment.reference || 'Anticipo'}</p></div>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-border/50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información de conciliación</p>
+                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 font-semibold">{detailPayment.sourceLabel || (detailPayment.invoice?.number ? 'Factura' : detailPayment.creditNote?.number ? 'Crédito' : 'Anticipo')}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground">Referencia</p><p className="mt-1 break-words font-semibold">{detailPayment.reference || 'Sin referencia'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground">Cuenta contable</p><p className="mt-1 break-words font-semibold">{(detailPayment as any).account?.name || detailPayment.accountId || 'No especificada'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground">Banco</p><p className="mt-1 break-words font-semibold">{detailPayment.bankAccount?.bankName || detailPayment.bankAccount?.accountNumber || detailPayment.bankAccountId || 'No especificado'}</p></div>
+                </div>
+              </div>
+
+              {detailPayment.notes && <div className="rounded-2xl border border-border/50 bg-muted/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{detailPayment.notes}</p></div>}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

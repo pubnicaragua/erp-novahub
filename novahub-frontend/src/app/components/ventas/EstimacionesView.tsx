@@ -292,7 +292,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         currency: displayCurrency,
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
-        number: `COT-${Date.now().toString().slice(-6)}`
       });
       await onRefresh();
       toast.success('Estimación creada como borrador', { id: createToastId });

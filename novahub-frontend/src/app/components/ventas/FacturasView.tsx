@@ -432,12 +432,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   };
 
-  const startNewInvoice = () => {
+  const startNewInvoice = async () => {
     setIsCreating(true);
     setEditingId(null);
-    setLocalDoc({
+    const newInvoiceDraft = {
       customerId: '',
-      number: `FAC-${Date.now().toString().slice(-6)}`,
+      number: '',
       date: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       currency: displayCurrency as any,
@@ -452,8 +452,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       commissionType: 'PERCENTAGE',
       commissionRate: 0,
       commissionAmount: 0,
-    });
+    };
+    setLocalDoc(newInvoiceDraft);
     setLocalRates({ dRate: 0, tRate: 15 });
+
+    try {
+      const nextNumber = await invoicesService.getNextNumber();
+      setLocalDoc((current: any) => current ? { ...current, number: nextNumber } : current);
+    } catch (error) {
+      console.warn('No se pudo consultar la vista previa del número de factura.', error);
+    }
   };
 
   const handleSaveInvoice = async (emitir = false) => {
@@ -533,7 +541,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       if (isCreating) {
         await invoicesService.create({
           customerId: localDoc.customerId,
-          number: localDoc.number,
           date: new Date(localDoc.date).toISOString(),
           dueDate: new Date(localDoc.dueDate).toISOString(),
           currency: localDoc.currency,
@@ -851,7 +858,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                   <Input value={localDoc?.number || ''} onChange={(e) => setLocalDoc({ ...localDoc, number: e.target.value })} className="h-8 text-xs font-black uppercase" disabled={isInvoiceLocked} />
+                   <Input value={localDoc?.number || ''} readOnly={isCreating} className="h-8 text-xs font-black uppercase" disabled={isInvoiceLocked} />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>

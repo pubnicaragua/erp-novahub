@@ -61,6 +61,8 @@ const emptyCustomerDraft = (): CustomerDraft => ({
   country: 'Nicaragua', creditLimit: '', creditDays: '', notes: '', status: 'ACTIVE',
 });
 
+const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status'];
+
 const customerToDraft = (customer: Customer): CustomerDraft => ({
   name: customer.name || '',
   type: String(customer.type || '').toUpperCase() === 'COMPANY' ? 'company' : 'individual',
@@ -96,7 +98,8 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 
 export function ClientesView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ClientesViewProps) {
   const { baseCurrency, formatConvertedAmount } = useCurrency();
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const tenantKey = user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
@@ -120,7 +123,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [editCustomer, setEditCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
   const [savingEdit, setSavingEdit] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status']);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-clients-columns-${tenantKey}`, DEFAULT_CUSTOMER_COLUMN_KEYS, 24 * 365);
   const [creating, setCreating] = useState(false);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
   const [newCustomer, setNewCustomer] = useState<CustomerDraft>(emptyCustomerDraft);

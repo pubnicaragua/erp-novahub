@@ -44,6 +44,7 @@ export const salesOrdersService = {
 // ---- Invoices ----
 export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
+  getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),

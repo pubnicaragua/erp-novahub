@@ -48,6 +48,7 @@ type ParticipantRole = 'supervisor' | 'stockKeeper';
 interface AuditParticipantPickerProps {
   selected: AuditParticipant[];
   users: { id: string; name: string }[];
+  pendingUserId: string;
   manualDraft: string;
   manualPlaceholder: string;
   onManualDraftChange: (value: string) => void;
@@ -94,6 +95,7 @@ function auditParticipantNames(audit: any, role: ParticipantRole): string {
 function AuditParticipantPicker({
   selected,
   users,
+  pendingUserId,
   manualDraft,
   manualPlaceholder,
   onManualDraftChange,
@@ -119,7 +121,7 @@ function AuditParticipantPicker({
         </div>
       )}
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-        <Select value="" onValueChange={onSelectUser}>
+        <Select value={pendingUserId} onValueChange={onSelectUser}>
           <SelectTrigger className="h-9 min-w-0 text-xs"><SelectValue placeholder="Agregar usuario del sistema" /></SelectTrigger>
           <SelectContent className="max-w-[calc(100vw-2rem)]">
             {availableUsers.length > 0
@@ -140,12 +142,12 @@ function AuditParticipantPicker({
             placeholder={manualPlaceholder}
             className="h-9 min-w-0 flex-1 text-xs"
           />
-          <Button type="button" variant="outline" size="icon" aria-label="Agregar nombre" className="size-9 shrink-0" onClick={onAddManual} disabled={!manualDraft.trim()}>
+          <Button type="button" variant="outline" size="icon" aria-label="Agregar participante seleccionado" title="Agregar participante" className="size-9 shrink-0" onClick={onAddManual} disabled={!manualDraft.trim() && !pendingUserId}>
             <Plus className="size-3.5" />
           </Button>
         </div>
       </div>
-      {selected.length === 0 && <p className="text-[10px] leading-relaxed text-muted-foreground">Agrega una o varias personas. También puedes escribir un nombre manual.</p>}
+      <p className="text-[10px] leading-relaxed text-muted-foreground">Selecciona una persona o escribe un nombre y pulsa + para agregarlo. Puedes repetirlo para sumar varias.</p>
     </div>
   );
 }
@@ -210,6 +212,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     warehouseId: '',
     supervisors: [] as AuditParticipant[],
     stockKeepers: [] as AuditParticipant[],
+    supervisorPendingUserId: '',
+    stockKeeperPendingUserId: '',
     supervisorDraft: '',
     stockKeeperDraft: '',
     notes: '',
@@ -250,7 +254,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     const list = usersQuery.data || [];
     return list
       .filter((u: any) => u?.isActive !== false)
-      .map((u: any) => ({ id: u.id, name: u.name || u.email || 'Usuario' }))
+      .map((u: any) => ({ id: String(u.id), name: String(u.name || u.email || 'Usuario') }))
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
   }, [usersQuery.data]);
 
@@ -302,6 +306,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if (!name) return;
     const listField = role === 'supervisor' ? 'supervisors' : 'stockKeepers';
     const draftField = role === 'supervisor' ? 'supervisorDraft' : 'stockKeeperDraft';
+    const pendingField = role === 'supervisor' ? 'supervisorPendingUserId' : 'stockKeeperPendingUserId';
     setForm((current) => {
       const currentList = current[listField];
       const duplicate = currentList.some((currentParticipant) => (
@@ -309,22 +314,38 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           ? participant.userId === currentParticipant.userId
           : currentParticipant.name.toLocaleLowerCase() === name.toLocaleLowerCase()
       ));
-      if (duplicate) return { ...current, [draftField]: '' };
+      if (duplicate) return { ...current, [draftField]: '', [pendingField]: '' };
       return {
         ...current,
         [listField]: [...currentList, { userId: participant.userId || null, name }],
         [draftField]: '',
+        [pendingField]: '',
       };
     });
   };
 
   const handleUserSelect = (role: ParticipantRole, value: string) => {
-    const user = tenantUsers.find((u) => u.id === value);
-    if (user) addParticipant(role, { userId: user.id, name: user.name });
+    const pendingField = role === 'supervisor' ? 'supervisorPendingUserId' : 'stockKeeperPendingUserId';
+    updateForm({ [pendingField]: value } as Partial<typeof form>);
+  };
+
+  const handleManualParticipantDraftChange = (role: ParticipantRole, value: string) => {
+    const draftField = role === 'supervisor' ? 'supervisorDraft' : 'stockKeeperDraft';
+    const pendingField = role === 'supervisor' ? 'supervisorPendingUserId' : 'stockKeeperPendingUserId';
+    updateForm({
+      [draftField]: value,
+      ...(value.trim() ? { [pendingField]: '' } : {}),
+    } as Partial<typeof form>);
   };
 
   const handleManualParticipantAdd = (role: ParticipantRole) => {
     const draft = role === 'supervisor' ? form.supervisorDraft : form.stockKeeperDraft;
+    const pendingUserId = role === 'supervisor' ? form.supervisorPendingUserId : form.stockKeeperPendingUserId;
+    const pendingUser = tenantUsers.find((user) => user.id === pendingUserId);
+    if (pendingUser) {
+      addParticipant(role, { userId: pendingUser.id, name: pendingUser.name });
+      return;
+    }
     const name = draft.replace(/,+$/, '').trim();
     if (name) addParticipant(role, { userId: null, name });
   };
@@ -392,6 +413,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       warehouseId: '',
       supervisors: [],
       stockKeepers: [],
+      supervisorPendingUserId: '',
+      stockKeeperPendingUserId: '',
       supervisorDraft: '',
       stockKeeperDraft: '',
       notes: '',
@@ -547,9 +570,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <AuditParticipantPicker
                   selected={form.supervisors}
                   users={tenantUsers}
+                  pendingUserId={form.supervisorPendingUserId}
                   manualDraft={form.supervisorDraft}
                   manualPlaceholder="Escribir otro encargado"
-                  onManualDraftChange={(value) => updateForm({ supervisorDraft: value })}
+                  onManualDraftChange={(value) => handleManualParticipantDraftChange('supervisor', value)}
                   onSelectUser={(value) => handleUserSelect('supervisor', value)}
                   onRemove={(index) => removeParticipant('supervisor', index)}
                   onAddManual={() => handleManualParticipantAdd('supervisor')}
@@ -562,9 +586,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <AuditParticipantPicker
                   selected={form.stockKeepers}
                   users={tenantUsers}
+                  pendingUserId={form.stockKeeperPendingUserId}
                   manualDraft={form.stockKeeperDraft}
                   manualPlaceholder="Escribir otro usuario de bodega"
-                  onManualDraftChange={(value) => updateForm({ stockKeeperDraft: value })}
+                  onManualDraftChange={(value) => handleManualParticipantDraftChange('stockKeeper', value)}
                   onSelectUser={(value) => handleUserSelect('stockKeeper', value)}
                   onRemove={(index) => removeParticipant('stockKeeper', index)}
                   onAddManual={() => handleManualParticipantAdd('stockKeeper')}

@@ -73,6 +73,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { toast } from 'sonner';
 import type { Customer, Invoice } from '../../types';
 
@@ -779,7 +780,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
       {(invoice.paymentMethod || (invoice as any).paymentDetails) && (
         <div className="mt-4 rounded-xl border border-border/50 bg-muted/20 p-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-            <Banknote className="size-3" /> Forma de cobro: <span className="text-foreground uppercase">{invoice.paymentMethod || '—'}</span>
+            <Banknote className="size-3" /> Forma de cobro: <span className="text-foreground">{paymentMethodLabel(invoice.paymentMethod)}</span>
           </p>
           {(() => {
             const details = (invoice as any).paymentDetails;

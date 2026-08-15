@@ -441,7 +441,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
         items: [],
-        number: `ORD-${Date.now().toString().slice(-6)}`
       });
       await onRefresh();
       toast.success('Orden de venta creada como borrador', { id: createToastId });

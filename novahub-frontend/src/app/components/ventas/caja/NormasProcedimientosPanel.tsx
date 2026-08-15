@@ -11,7 +11,7 @@ import { api, getApiErrorMessage } from '../../../services/api';
 const WEEKDAYS = [
   { index: 1, label: 'L', name: 'Lunes' },
   { index: 2, label: 'M', name: 'Martes' },
-  { index: 3, label: 'X', name: 'Miércoles' },
+  { index: 3, label: 'M', name: 'Miércoles' },
   { index: 4, label: 'J', name: 'Jueves' },
   { index: 5, label: 'V', name: 'Viernes' },
   { index: 6, label: 'S', name: 'Sábado' },
@@ -40,7 +40,7 @@ interface ProtocolFieldDraft {
 export function NormasProcedimientosPanel() {
   const [norms, setNorms] = useState<any>(null);
   const [autoClose, setAutoClose] = useState<any>(null);
-  const [protocol, setProtocol] = useState<any>(null);
+  const [, setProtocol] = useState<any>(null);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [normsLoading, setNormsLoading] = useState(false);
   const [savingNorms, setSavingNorms] = useState(false);

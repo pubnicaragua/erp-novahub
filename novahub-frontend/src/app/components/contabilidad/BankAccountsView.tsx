@@ -15,6 +15,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../ui/utils';
+import { paymentMethodLabel } from '../../utils/paymentMethods';
 
 const ACCOUNT_TYPES = [
   { value: 'CHECKING', label: 'Cuenta Corriente' },
@@ -56,7 +57,10 @@ export function BankAccountsView() {
   // Plan de cuentas del tenant: solo cuentas de activo, de detalle/subcuenta
   // (hojas), activas y posteables. Se priorizan las de la misma moneda que el
   // banco (C$ para NIO, US$ para USD) y se muestra la jerarquía código + nombre.
-  const chartQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
+  // Las cuentas contables contienen IDs propios del tenant. Solicitar una
+  // lectura fresca evita que el formulario conserve un accountId de otra
+  // empresa después de cambiar de sesión/tenant.
+  const chartQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(true, signal)));
   const chartAccounts = useMemo(() => {
     const flat: any[] = [];
     const flatten = (items: any[]) => items.forEach((item: any) => {
@@ -353,7 +357,7 @@ export function BankAccountsView() {
                     : movements.map((movement: any) => <TableRow key={movement.id}>
                       <TableCell className="whitespace-nowrap text-xs">{movement.date ? new Date(movement.date).toLocaleDateString('es-NI') : '—'}</TableCell>
                       <TableCell className="text-xs font-medium">{movement.sourceNumber || movement.paymentReceived?.number || movement.paymentMade?.number || movement.sourceType || '—'}</TableCell>
-                      <TableCell className="text-xs">{movement.method === 'TRANSFER' ? 'Transferencia' : movement.method === 'CARD' ? 'Tarjeta' : movement.method || '—'}</TableCell>
+                      <TableCell className="text-xs">{paymentMethodLabel(movement.method)}</TableCell>
                       <TableCell className="max-w-40 truncate text-xs text-muted-foreground">{movement.reference || '—'}</TableCell>
                       <TableCell className={cn('text-right text-xs font-black', movement.direction === 'OUT' ? 'text-rose-600' : 'text-emerald-600')}>{movement.direction === 'OUT' ? '-' : '+'}C$ {Number(movement.baseAmount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                       <TableCell><Badge variant={movement.status === 'POSTED' ? 'default' : 'secondary'} className="text-[9px]">{movement.status === 'POSTED' ? 'Activo' : 'Cancelado'}</Badge></TableCell>

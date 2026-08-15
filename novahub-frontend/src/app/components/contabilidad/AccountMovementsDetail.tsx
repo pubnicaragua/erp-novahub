@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, FileText, Loader2 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { referenceTypeLabel } from '../../utils/accountingLabels';
 
 interface AccountMovementsDetailProps {
   accountId: string;
@@ -21,14 +22,43 @@ interface MovementRow {
   description?: string;
   reference?: string;
   journalNumber?: string | null;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  referenceNumber?: string | null;
+  sourceDocument?: SourceDocument | null;
   debit: number;
   credit: number;
   balance: number;
 }
 
+interface SourceDocumentItem {
+  id: string;
+  description?: string | null;
+  quantity: number;
+  unitPrice: number;
+  taxRate?: number;
+  discount?: number;
+  total: number;
+}
+
+interface SourceDocument {
+  type: string;
+  id: string;
+  number?: string | null;
+  date?: string | null;
+  total: number;
+  currency?: string | null;
+  counterpartyName?: string | null;
+  items: SourceDocumentItem[];
+}
+
 const formatCurrency = (value: number) => new Intl.NumberFormat('es-NI', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+}).format(Number(value || 0));
+
+const formatQuantity = (value: number) => new Intl.NumberFormat('es-NI', {
+  maximumFractionDigits: 4,
 }).format(Number(value || 0));
 
 const formatDate = (value?: string) => {
@@ -49,6 +79,25 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
         description: row.description || 'Sin descripción',
         reference: row.reference || '—',
         journalNumber: row.journalNumber || null,
+        referenceType: row.referenceType || null,
+        referenceId: row.referenceId || null,
+        referenceNumber: row.referenceNumber || null,
+        sourceDocument: row.sourceDocument
+          ? {
+            ...row.sourceDocument,
+            total: Number(row.sourceDocument.total || 0),
+            items: Array.isArray(row.sourceDocument.items)
+              ? row.sourceDocument.items.map((item: any) => ({
+                ...item,
+                quantity: Number(item.quantity || 0),
+                unitPrice: Number(item.unitPrice || 0),
+                taxRate: Number(item.taxRate || 0),
+                discount: Number(item.discount || 0),
+                total: Number(item.total || 0),
+              }))
+              : [],
+          }
+          : null,
         debit: Number(row.debit || 0),
         credit: Number(row.credit || 0),
         balance: Number(row.balance || 0),
@@ -57,7 +106,18 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
     { enabled: Boolean(accountId) },
   );
 
-  const rows = query.data || [];
+  const rows = useMemo(() => query.data || [], [query.data]);
+  const sourceDocuments = useMemo(() => {
+    const seen = new Set<string>();
+    return rows.reduce<SourceDocument[]>((documents, row) => {
+      const source = row.sourceDocument;
+      if (!source || seen.has(source.id)) return documents;
+      seen.add(source.id);
+      documents.push(source);
+      return documents;
+    }, []);
+  }, [rows]);
+  const [isSourceDocumentOpen, setIsSourceDocumentOpen] = useState(false);
   const totals = useMemo(() => {
     const debit = rows.reduce((sum, row) => sum + row.debit, 0);
     const credit = rows.reduce((sum, row) => sum + row.credit, 0);
@@ -95,11 +155,12 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
         </div>
       ) : (
         <div className="min-w-0 overflow-x-auto rounded-xl border border-border/60 bg-background/60">
-          <Table className="min-w-[800px]">
+          <Table className="min-w-[980px]">
             <TableHeader className="bg-muted/35">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Fecha</TableHead>
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Referencia</TableHead>
+                <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Documento origen</TableHead>
                 <TableHead className="text-[9px] font-black uppercase tracking-widest text-foreground">Descripción</TableHead>
                 <TableHead className="text-right text-[9px] font-black uppercase tracking-widest text-foreground">Débito</TableHead>
                 <TableHead className="text-right text-[9px] font-black uppercase tracking-widest text-foreground">Crédito</TableHead>
@@ -111,6 +172,16 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
                 <TableRow key={row.id} className="border-border/30 hover:bg-muted/25">
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDate(row.date)}</TableCell>
                   <TableCell className="whitespace-nowrap font-mono text-xs">{row.journalNumber || row.reference || '—'}</TableCell>
+                  <TableCell className="min-w-[13rem] text-xs">
+                    {row.referenceType ? (
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground" title={referenceTypeLabel(row.referenceType)}>{referenceTypeLabel(row.referenceType)}</p>
+                        <p className="truncate font-mono text-[10px] text-muted-foreground" title={row.referenceNumber || row.referenceId || ''}>
+                          {row.referenceNumber || row.referenceId || 'Referencia sin número'}
+                        </p>
+                      </div>
+                    ) : '—'}
+                  </TableCell>
                   <TableCell className="max-w-[28rem] whitespace-normal break-words text-xs">{row.description}</TableCell>
                   <TableCell className={cn('text-right font-mono text-xs tabular-nums', row.debit > 0 && 'text-emerald-600')}>
                     {formatCurrency(row.debit)}
@@ -122,7 +193,23 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
                 </TableRow>
               ))}
               <TableRow className="border-t-2 border-primary/25 bg-primary/10 font-black">
-                <TableCell colSpan={3} className="text-xs uppercase tracking-widest">Totales</TableCell>
+                <TableCell colSpan={4} className="text-xs uppercase tracking-widest">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Totales</span>
+                    {sourceDocuments.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsSourceDocumentOpen((open) => !open)}
+                        aria-expanded={isSourceDocumentOpen}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-background/70 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <FileText className="size-3.5" />
+                        {isSourceDocumentOpen ? 'Ocultar documento' : 'Ver documento origen'}
+                        {isSourceDocumentOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                      </button>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right font-mono text-xs tabular-nums text-emerald-600">{formatCurrency(totals.debit)}</TableCell>
                 <TableCell className="text-right font-mono text-xs tabular-nums text-rose-600">{formatCurrency(totals.credit)}</TableCell>
                 <TableCell className="text-right font-mono text-xs tabular-nums text-primary">{formatCurrency(totals.balance)}</TableCell>
@@ -130,6 +217,39 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {!query.isLoading && !query.error && isSourceDocumentOpen && sourceDocuments.length > 0 && (
+        <section className="mt-3 space-y-3" aria-label="Documentos origen relacionados">
+          {sourceDocuments.map((source) => (
+            <div key={source.id} className="overflow-hidden rounded-xl border border-primary/20 bg-background/70 shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-border/50 bg-primary/[0.06] px-3 py-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-wide text-foreground">
+                    {referenceTypeLabel(source.type)} · {source.number || 'Sin número'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {formatDate(source.date || undefined)}{source.counterpartyName ? ` · ${source.counterpartyName}` : ''}
+                  </p>
+                </div>
+                <p className="shrink-0 font-mono text-sm font-black text-primary">
+                  {source.currency || 'NIO'} {formatCurrency(source.total)}
+                </p>
+              </div>
+              <div className="divide-y divide-border/50">
+                {source.items.length > 0 ? source.items.map((item) => (
+                  <div key={item.id} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                    <p className="min-w-0 break-words text-xs font-semibold text-foreground">{item.description || 'Detalle sin descripción'}</p>
+                    <p className="whitespace-nowrap text-[11px] text-muted-foreground">{formatQuantity(item.quantity)} × {formatCurrency(item.unitPrice)}</p>
+                    <p className="whitespace-nowrap text-right font-mono text-xs font-bold text-foreground">{formatCurrency(item.total)}</p>
+                  </div>
+                )) : (
+                  <p className="px-3 py-3 text-xs text-muted-foreground">La factura no tiene líneas de detalle registradas.</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
       )}
     </div>
   );

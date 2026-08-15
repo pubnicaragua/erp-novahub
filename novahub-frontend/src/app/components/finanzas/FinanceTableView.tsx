@@ -24,6 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { translatePaymentMethodText } from '../../utils/paymentMethods';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
@@ -308,6 +309,7 @@ export function FinanceTableView({
           if (col.type === 'currency') return Number(item[col.key] || 0);
           if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]) : null;
           if (col.type === 'select') return getLabelForValue(col, item[col.key]);
+          if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
           return item[col.key] || '';
         });
         const r = ws.getRow(currentRow);
@@ -405,6 +407,7 @@ export function FinanceTableView({
         if (col.type === 'currency') return formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
         if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
         if (col.type === 'select') return getLabelForValue(col, item[col.key]);
+        if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
         return String(item[col.key] || '-');
       }));
 
@@ -469,6 +472,9 @@ export function FinanceTableView({
           {isManual ? 'Manual' : (value || 'Automático')}
         </Badge>
       );
+    }
+    if (col.key === 'description' || col.key === 'notes') {
+      return translatePaymentMethodText(value) || '-';
     }
     return value || '-';
   };
