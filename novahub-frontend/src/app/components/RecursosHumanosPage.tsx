@@ -15,6 +15,7 @@ import {
   HandHeart,
   Settings2,
   Building2,
+  BadgePercent,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +31,7 @@ import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
 import { ConfigNominaView } from './hr/ConfigNominaView';
+import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
 
 interface RecursosHumanosPageProps {
@@ -229,6 +231,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             { id: 'empleados', label: 'Empleados', icon: Users, module: 'HR_EMPLOYEES' },
             { id: 'departamentos', label: 'Departamentos', icon: Building2, module: 'HR_EMPLOYEES' },
             { id: 'nominas', label: 'Nóminas', icon: DollarSign, module: 'HR_PAYROLL' },
+            { id: 'comisiones', label: 'Comisiones', icon: BadgePercent, module: 'HR_PAYROLL' },
             { id: 'asistencia', label: 'Asistencia', icon: UserCheck, module: 'HR_ATTENDANCE' },
             { id: 'ausencias', label: 'Vacaciones', icon: Calendar, module: 'HR_LEAVES' },
             { id: 'ausencias-config', label: 'Tipos Ausencia', icon: Calendar, module: 'HR_LEAVES' },
@@ -357,6 +360,10 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
               <TabsContent value="beneficios" className="m-0">
                 <BeneficiosView benefits={data.benefits} employees={data.employees} onRefresh={refreshData} />
+              </TabsContent>
+
+              <TabsContent value="comisiones" className="m-0">
+                <ComisionesView />
               </TabsContent>
 
               <TabsContent value="config-nomina" className="m-0">

@@ -38,6 +38,7 @@ export const hrService = {
   calculatePayroll: (data: any) => api.post('/hr/payroll/calculate', data),
   getPayrollPeriods: (signal?: AbortSignal) => api.get('/hr/payroll/periods', withSignal(undefined, signal)),
   getPayrollReports: (period?: string, signal?: AbortSignal) => api.get('/hr/payroll/reports', withSignal({ period }, signal)),
+  getCommissionReport: (filters?: any, signal?: AbortSignal) => api.get('/hr/reports/commissions', withSignal(filters, signal)),
   updatePayrollStatus: (id: string, status: string) => api.patch(`/hr/payroll/${id}/status`, { status }),
   deletePayroll: (id: string) => api.delete(`/hr/payroll/${id}`),
 
