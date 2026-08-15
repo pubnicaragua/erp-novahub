@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, Variants } from 'motion/react';
+import { safeSetItem } from '../services/safe-storage';
 import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle,
@@ -467,7 +468,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         summary={setupSummary}
         onNavigateToDashboard={() => {
           setSkipSetup(true);
-          localStorage.setItem('erp-skip-setup', 'true');
+          safeSetItem('erp-skip-setup', 'true');
           onNavigateToDashboard?.();
           loadData();
         }}

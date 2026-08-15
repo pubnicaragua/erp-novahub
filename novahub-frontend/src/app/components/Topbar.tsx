@@ -38,6 +38,7 @@ import { useAuth, type Module } from '../contexts/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { safeSetItem } from '../services/safe-storage';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
@@ -234,7 +235,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       // clic. Si ya existe una intención más reciente, no debe sobrescribirla.
       if (requestVersion !== themeChangeVersion) return;
       root.classList.toggle('dark', nextDark);
-      localStorage.setItem('erp-theme-mode', nextDark ? 'dark' : 'light');
+      safeSetItem('erp-theme-mode', nextDark ? 'dark' : 'light');
       flushSync(() => setIsDark(nextDark));
       requestedDarkMode = null;
     };

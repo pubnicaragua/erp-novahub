@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
 
 export type Currency = 'USD' | 'NIO';
@@ -92,20 +93,20 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
         const nextBaseCurrency = normalizeDisplayCurrency(data.baseCurrency);
         setBaseCurrency(nextBaseCurrency);
-        localStorage.setItem(STORAGE_BASE_CURRENCY_KEY, nextBaseCurrency);
+        safeSetItem(STORAGE_BASE_CURRENCY_KEY, nextBaseCurrency);
 
         const nextLockedDisplayCurrency = normalizeDisplayCurrency(data.displayCurrency || nextBaseCurrency);
         setLockedDisplayCurrency(nextLockedDisplayCurrency);
-        localStorage.setItem(STORAGE_LOCKED_DISPLAY_CURRENCY_KEY, nextLockedDisplayCurrency);
+        safeSetItem(STORAGE_LOCKED_DISPLAY_CURRENCY_KEY, nextLockedDisplayCurrency);
 
         const allowCurrencySwitch = data.allowCurrencySwitch !== false;
         setCurrencyInteractionEnabled(allowCurrencySwitch);
-        localStorage.setItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY, allowCurrencySwitch ? 'true' : 'false');
+        safeSetItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY, allowCurrencySwitch ? 'true' : 'false');
 
         // Aplicar la moneda global definida por configuración del tenant.
         const configuredCurrency = toAppCurrency(nextLockedDisplayCurrency);
         setCurrencyState(configuredCurrency);
-        localStorage.setItem(STORAGE_CURRENCY_KEY, configuredCurrency);
+        safeSetItem(STORAGE_CURRENCY_KEY, configuredCurrency);
       }
     } catch (error) {
       console.error('Error fetching exchange rate:', error);
@@ -120,7 +121,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const setCurrency = (c: Currency) => {
     if (!currencyInteractionEnabled) return;
     setCurrencyState(c);
-    localStorage.setItem(STORAGE_CURRENCY_KEY, c);
+    safeSetItem(STORAGE_CURRENCY_KEY, c);
   };
 
   const toggleCurrency = () => {
@@ -248,12 +249,12 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const setValuationMode = (mode: ValuationMode) => {
     setValuationModeState(mode);
-    localStorage.setItem(STORAGE_VALUATION_MODE_KEY, mode);
+    safeSetItem(STORAGE_VALUATION_MODE_KEY, mode);
   };
 
   const setShowValuationLegend = (show: boolean) => {
     setShowValuationLegendState(show);
-    localStorage.setItem(STORAGE_VALUATION_LEGEND_KEY, show ? 'true' : 'false');
+    safeSetItem(STORAGE_VALUATION_LEGEND_KEY, show ? 'true' : 'false');
   };
 
   return (

@@ -1,3 +1,5 @@
+import { safeSetItem } from './safe-storage';
+
 export const MAX_ACCESS_TOKEN_BYTES = 8 * 1024;
 
 function decodePayload(token: string): Record<string, unknown> | null {
@@ -33,5 +35,5 @@ export function storeAuthToken(token: string): void {
   if (!isSafeAuthToken(token)) {
     throw new Error('La sesión recibida no es válida o excede el tamaño permitido.');
   }
-  localStorage.setItem('nh-auth-token', token);
+  safeSetItem('nh-auth-token', token);
 }

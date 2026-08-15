@@ -9,6 +9,7 @@ import { Badge } from './ui/badge';
 import { cn } from './ui/utils';
 import { reportsService } from '../services/ventas.service';
 import { purchasesReportsService } from '../services/compras.service';
+import { safeSetItem } from '../services/safe-storage';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -62,7 +63,7 @@ function DashboardCxc() {
   });
 
   useEffect(() => {
-    localStorage.setItem('erp-cierre-checklist', JSON.stringify(checklist));
+    safeSetItem('erp-cierre-checklist', JSON.stringify(checklist));
   }, [checklist]);
 
   const loadData = useCallback(async () => {

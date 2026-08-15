@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
 
 export interface BrandColors {
@@ -135,7 +136,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
     if (themeConfig.tenantId === activeTenantId) {
-      localStorage.setItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
+      safeSetItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
     }
   }, [themeConfig, activeTenantId]);
 

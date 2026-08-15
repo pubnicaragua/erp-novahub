@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { safeSetItem, safeRemoveItem } from '../services/safe-storage';
 
 export function useLocalStorageState<T>(key: string, initialValue: T, expirationHours = 1) {
     // Initialize state
@@ -11,7 +12,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, expiration
 
                 // If expired, or forced invalid structure
                 if (parsed.expiry && now > parsed.expiry) {
-                    window.localStorage.removeItem(`nh-erp-${key}`);
+                    safeRemoveItem(`nh-erp-${key}`);
                     return initialValue;
                 }
                 return parsed.value;
@@ -30,7 +31,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, expiration
                 value: state,
                 expiry: now + expirationHours * 60 * 60 * 1000, // hours to milliseconds
             };
-            window.localStorage.setItem(`nh-erp-${key}`, JSON.stringify(item));
+            safeSetItem(`nh-erp-${key}`, JSON.stringify(item));
         } catch (error) {
             console.warn(`Error setting localStorage key "nh-erp-${key}":`, error);
         }
