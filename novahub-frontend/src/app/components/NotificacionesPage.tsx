@@ -10,6 +10,7 @@ import { PushView } from './notificaciones/PushView';
 import { alertsService, messagesService, pushNotificationsService } from '../services/notificaciones.service';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { useAuth } from '../contexts/AuthContext';
 
 const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
