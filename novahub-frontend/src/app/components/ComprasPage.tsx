@@ -274,7 +274,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   });
   const invoicesCatalogQuery = useQuery({
     queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200, selectedBranchId],
-    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, light: true, branchId: selectedBranchId || undefined }, signal),
+    queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, branchId: selectedBranchId || undefined }, signal),
     enabled: ['pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
