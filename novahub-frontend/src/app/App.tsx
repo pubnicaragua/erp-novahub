@@ -234,10 +234,48 @@ function DashboardLayout() {
 }
 
 function AppContent() {
-  const { isAuthenticated, login, logout } = useAuth();
+  const { isAuthenticated, login, logout, user } = useAuth();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
+
+  // Redirección forzosa por expiración de trial/suscripción.
+  // Se valida contra `clientTenant.expiresAt` (datos del servidor vía /auth/profile),
+  // no contra flags locales editables. Si el período ya venció, la interfaz se
+  // bloquea de inmediato en el panel de "Suscripción Expirada" (el backend además
+  // rechaza toda mutación con 403 TRIAL_EXPIRED).
+  useEffect(() => {
+    if (!isAuthenticated || !user?.clientTenant) return;
+    const expiresAt = user.clientTenant.expiresAt ? new Date(user.clientTenant.expiresAt).getTime() : null;
+    const isInactive = user.clientTenant.isActive === false;
+    if (expiresAt && expiresAt <= Date.now()) {
+      setTrialExpired(true);
+    } else if (isInactive) {
+      setTrialExpired(true);
+    }
+  }, [isAuthenticated, user?.clientTenant?.expiresAt, user?.clientTenant?.isActive]);
+
+  // Un 401/403 de sesión inválida también debe expulsar de la UI (no dejar la
+  // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.
+  useEffect(() => {
+    const handler = () => {
+      if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
+      setSessionClosed(true);
+    };
+    window.addEventListener('session-closed', handler);
+    return () => window.removeEventListener('session-closed', handler);
+  }, [location.pathname]);
+
+  // Un 401/403 de sesión inválida también debe expulsar de la UI (no dejar la
+  // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.
+  useEffect(() => {
+    const handler = () => {
+      if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
+      setSessionClosed(true);
+    };
+    window.addEventListener('session-closed', handler);
+    return () => window.removeEventListener('session-closed', handler);
+  }, [location.pathname]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -248,17 +286,6 @@ function AppContent() {
     };
     window.addEventListener('trial-expired', handler);
     return () => window.removeEventListener('trial-expired', handler);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.code === 'SESSION_CLOSED') {
-        setSessionClosed(true);
-      }
-    };
-    window.addEventListener('session-closed', handler);
-    return () => window.removeEventListener('session-closed', handler);
   }, []);
 
   // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.

@@ -34,6 +34,9 @@ export function TrialCountdownBanner() {
     }
   });
 
+  const expiresAt = (user as any)?.clientTenant?.expiresAt;
+  const { days, hours, totalMs } = getTimeRemaining(expiresAt);
+
   useEffect(() => {
     // Re-renderiza el componente cada 60s para que getTimeRemaining recalcule
     // días/horas contra Date.now(). El estado `now` no se lee porque
@@ -42,11 +45,16 @@ export function TrialCountdownBanner() {
     return () => clearInterval(interval);
   }, []);
 
-  const expiresAt = (user as any)?.clientTenant?.expiresAt;
-  if (!expiresAt) return null;
+  // Si el período venció en vivo, forzar la redirección al panel de
+  // "Suscripción Expirada" (App.tsx lo consume y bloquea la interfaz).
+  useEffect(() => {
+    if (expiresAt && totalMs <= 0) {
+      window.dispatchEvent(new CustomEvent('trial-expired', { detail: { code: 'TRIAL_EXPIRED' } }));
+    }
+  }, [expiresAt, totalMs]);
 
-  const { days, hours, totalMs } = getTimeRemaining(expiresAt);
-  // Si ya expiró, el guard del backend se encarga — no mostramos banner
+  if (!expiresAt) return null;
+  // Si ya expiró, el guard del backend y App.tsx se encargan — no mostramos banner
   if (totalMs <= 0) return null;
   // Si quedan más de 15 días, no mostrar (probablemente no es trial)
   if (days > 15) return null;

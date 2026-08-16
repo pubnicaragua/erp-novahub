@@ -86,6 +86,16 @@ export interface User {
   isTenantUser: boolean;
   isTenantAdmin: boolean;
   branchIds?: string[];
+  /** Datos del tenant propietario tal como los devuelve /auth/profile.
+   *  `expiresAt` es la fecha real de expiración de la suscripción/trial
+   *  (validada contra el servidor, no un flag local editable). */
+  clientTenant?: {
+    name?: string;
+    expiresAt?: string | null;
+    isActive?: boolean;
+    plan?: string;
+    logo?: string;
+  } | null;
 }
 
 /**
@@ -400,6 +410,15 @@ const createUserObject = (apiPayload: any): User => {
     isTenantUser: !isPlatformAdmin,
     isTenantAdmin: role === 'admin' && !isPlatformAdmin,
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
+    clientTenant: apiUser.clientTenant
+      ? {
+          name: apiUser.clientTenant.name,
+          expiresAt: apiUser.clientTenant.expiresAt ?? null,
+          isActive: apiUser.clientTenant.isActive,
+          plan: apiUser.clientTenant.plan,
+          logo: apiUser.clientTenant.logo,
+        }
+      : null,
   };
 };
 

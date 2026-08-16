@@ -229,6 +229,25 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       throw err;
     }
 
+    // Un 401 genérico con token presente significa que el token expiró o fue
+    // revocado. No dejar la interfaz "operativa": se limpia el token y se fuerza
+    // la expulsión a login. Se excluyen las rutas de arranque/login donde un 401
+    // es un flujo normal (credenciales incorrectas o perfil aún sin restaurar).
+    const authFlowPath =
+      path === '/auth/login' ||
+      path === '/auth/register' ||
+      path === '/auth/register-tenant' ||
+      path === '/auth/session-status' ||
+      path === '/auth/me/branches' ||
+      path === '/auth/switch-context';
+    if (response.status === 401 && !authFlowPath && localStorage.getItem('nh-auth-token')) {
+      localStorage.removeItem('nh-auth-token');
+      const err = new Error('Tu sesión expiró. Inicia sesión nuevamente.');
+      err.name = 'SessionClosedError';
+      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: 'SESSION_CLOSED' } }));
+      throw err;
+    }
+
     // Handle nested message objects (e.g., ForbiddenException wrapping)
     const rawMessage = typeof errorBody?.message === 'object' && errorBody.message !== null
       ? (errorBody.message as any)?.message || (errorBody.message as any)?.error || ''
