@@ -261,6 +261,17 @@ function AppContent() {
     return () => window.removeEventListener('session-closed', handler);
   }, []);
 
+  // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.
+  useEffect(() => {
+    if (!sessionClosed) return;
+    const timer = setTimeout(() => {
+      safeRemoveItem('nh-auth-token');
+      logout?.();
+      window.location.reload();
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [sessionClosed, logout]);
+
   useEffect(() => {
     const isDark = safeGetItem('erp-theme-mode') === 'light' ? false : true;
     if (isDark) {

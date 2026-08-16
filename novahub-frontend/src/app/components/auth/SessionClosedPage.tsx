@@ -39,7 +39,7 @@ export function SessionClosedPage({ onLogout }: SessionClosedPageProps) {
           </div>
 
           <p className="text-[10px] text-center text-muted-foreground pt-4">
-            Si fuiste vos, simplemente inicia sesión de nuevo en este dispositivo.
+            Si fuiste tú, simplemente inicia sesión de nuevo en este dispositivo.
           </p>
         </div>
       </div>
