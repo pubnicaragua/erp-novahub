@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BellRing, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { notificationsService } from '../../services/notifications.service';
+import { safeSetItem } from '../../services/safe-storage';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
@@ -95,7 +96,7 @@ export function PurchaseAlertsButton({
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(Array.from(readAlertIds)));
+      safeSetItem(storageKey, JSON.stringify(Array.from(readAlertIds)));
     } catch {
       // La lectura local es opcional; el contador sigue funcionando en memoria.
     }

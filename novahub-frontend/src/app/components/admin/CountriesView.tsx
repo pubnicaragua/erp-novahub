@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeSetItem } from '../../services/safe-storage';
 import {
   Globe, Loader2, Search, ChevronDown, ChevronRight,
   Save, DollarSign, Percent, Building2,
@@ -181,7 +182,7 @@ function CountryDetail({ country, onRefresh, canEdit }: { country: CountryConfig
       const cur: ChangeStatus = prev[key] || 'pending';
       const next: ChangeStatus = cur === 'pending' ? 'in-progress' : cur === 'in-progress' ? 'done' : 'pending';
       const updated = { ...prev, [key]: next };
-      localStorage.setItem(STORAGE_KEY(form.code), JSON.stringify(updated));
+      safeSetItem(STORAGE_KEY(form.code), JSON.stringify(updated));
       return updated;
     });
   };

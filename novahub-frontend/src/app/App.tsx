@@ -15,6 +15,7 @@ import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { FloatingChat } from './components/ai/FloatingChat';
+import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 
 const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
 const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
@@ -70,37 +71,37 @@ const ErrorBoundaryFallback = () => (
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
-    const storedModule = localStorage.getItem('erp-active-module');
+    const storedModule = safeGetItem('erp-active-module');
     if (storedModule === 'roles') return 'suscripciones';
     if (storedModule === 'dashboard-cxc') return 'overview';
     return (storedModule as Module | 'overview') || 'overview';
   });
   const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
-    const storedSubModule = localStorage.getItem('erp-active-submodule');
+    const storedSubModule = safeGetItem('erp-active-submodule');
     return storedSubModule === 'dashboard' ? 'productos' : (storedSubModule || undefined);
   });
 
   useEffect(() => {
-    localStorage.setItem('erp-active-module', activeModule);
+    safeSetItem('erp-active-module', activeModule);
   }, [activeModule]);
 
   useEffect(() => {
     if (activeSubModule) {
-      localStorage.setItem('erp-active-submodule', activeSubModule);
+      safeSetItem('erp-active-submodule', activeSubModule);
     } else {
-      localStorage.removeItem('erp-active-submodule');
+      safeRemoveItem('erp-active-submodule');
     }
   }, [activeSubModule]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // optional: read from localStorage if you want persistence
-    return localStorage.getItem('erp-sidebar-collapsed') === 'true';
+    return safeGetItem('erp-sidebar-collapsed') === 'true';
   });
 
   useEffect(() => {
     const handleImportPreviewOpened = () => {
       setIsCollapsed(true);
-      localStorage.setItem('erp-sidebar-collapsed', 'true');
+      safeSetItem('erp-sidebar-collapsed', 'true');
     };
     window.addEventListener('erp-import-preview-opened', handleImportPreviewOpened);
     return () => window.removeEventListener('erp-import-preview-opened', handleImportPreviewOpened);
@@ -109,7 +110,7 @@ function DashboardLayout() {
   const handleToggleCollapse = () => {
     const newVal = !isCollapsed;
     setIsCollapsed(newVal);
-    localStorage.setItem('erp-sidebar-collapsed', String(newVal));
+    safeSetItem('erp-sidebar-collapsed', String(newVal));
   };
 
   const handleModuleChange = (module: Module, subModule?: string) => {
@@ -261,7 +262,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const isDark = localStorage.getItem('erp-theme-mode') === 'light' ? false : true;
+    const isDark = safeGetItem('erp-theme-mode') === 'light' ? false : true;
     if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
@@ -296,7 +297,7 @@ function AppContent() {
       {sessionClosed && (
         <SessionClosedPage
           onLogout={() => {
-            localStorage.removeItem('nh-auth-token');
+            safeRemoveItem('nh-auth-token');
             logout?.();
             window.location.reload();
           }}
@@ -305,7 +306,7 @@ function AppContent() {
       {trialExpired && (
         <TrialExpiredPage
           onLogout={() => {
-            localStorage.removeItem('nh-auth-token');
+            safeRemoveItem('nh-auth-token');
             logout?.();
             window.location.reload();
           }}

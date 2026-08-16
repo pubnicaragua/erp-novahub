@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { safeSetItem, safeRemoveItem } from '../../services/safe-storage';
 import {
   Package, Mail, Lock, User, Building2, CheckCircle2, ArrowRight, ArrowLeft,
   Sparkles, Loader2, Store, Laptop, Wrench, Factory, HardHat, UtensilsCrossed,
@@ -447,8 +448,8 @@ export function RegisterTenantPage() {
       const token = response?.access_token || response?.data?.access_token;
       const user = response?.user || response?.data?.user;
       if (token && user) {
-        localStorage.removeItem('erp-skip-setup');
-        localStorage.setItem('erp-active-module', 'overview');
+        safeRemoveItem('erp-skip-setup');
+        safeSetItem('erp-active-module', 'overview');
         setSession(token, user);
         setShowWelcome(true);
         setTimeout(() => navigate('/dashboard', { replace: true }), 7000);

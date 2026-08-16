@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { safeSetItem } from '../../services/safe-storage';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -483,7 +484,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   useEffect(() => {
     try {
-      localStorage.setItem(CATALOG_VIEW_STORAGE_KEY, catalogView);
+      safeSetItem(CATALOG_VIEW_STORAGE_KEY, catalogView);
     } catch {
       // La preferencia es opcional; la vista sigue funcionando sin almacenamiento local.
     }

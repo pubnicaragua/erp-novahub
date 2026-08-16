@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
 import { CalendarDays, ChevronDown, FileDown, FileText, Loader2, LockKeyhole, Printer, ShieldCheck, WalletCards } from 'lucide-react';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '../../services/safe-storage';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 async function publicRequest(path: string, init: RequestInit = {}) { const response = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers || {}) } }); const body = await response.json().catch(() => ({})); if (!response.ok) { const raw = body?.message; const message = typeof raw === 'string' ? raw : raw?.message || raw?.error || body?.error || 'No se pudo abrir el enlace.'; throw new Error(message); } return body; }
@@ -100,14 +101,14 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
           return;
         }
 
-        const savedSession = localStorage.getItem(storageKey);
+        const savedSession = safeGetItem(storageKey);
         if (savedSession) {
           try {
             const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': savedSession } });
             if (!cancelled) setData(result);
             return;
           } catch {
-            localStorage.removeItem(storageKey);
+            safeRemoveItem(storageKey);
           }
         }
 
@@ -115,7 +116,7 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
         if (cancelled) return;
         if (result?.requiresVerification) setGate(result);
         else {
-          if (result?.sessionToken) localStorage.setItem(storageKey, result.sessionToken);
+          if (result?.sessionToken) safeSetItem(storageKey, result.sessionToken);
           setData(result);
         }
       } catch (e: any) {
@@ -127,7 +128,7 @@ export function PublicAccessPage({ mode }: { mode: 'document' | 'portal' }) {
   }, [mode, token, storageKey]);
 
   if (error) return <AccessShell><div className="rounded-2xl border border-rose-500/30 bg-slate-900 p-8 text-center"><FileText className="mx-auto mb-3 size-9 text-rose-400" /><h1 className="text-xl font-semibold">Enlace no disponible</h1><p className="mt-2 text-slate-400">{error}</p></div></AccessShell>;
-  if (gate) return <AccessShell><OtpForm token={token} mode={mode} maskedTarget={gate.maskedTarget} onVerified={async session => { localStorage.setItem(storageKey, session); if (mode === 'document') { const result = await publicRequest(`/public-access/document/${token}`, { headers: { 'x-public-session': session } }); setData(result); setGate(null); } else { const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': session } }); setData(result); setGate(null); } }} /></AccessShell>;
+  if (gate) return <AccessShell><OtpForm token={token} mode={mode} maskedTarget={gate.maskedTarget} onVerified={async session => { safeSetItem(storageKey, session); if (mode === 'document') { const result = await publicRequest(`/public-access/document/${token}`, { headers: { 'x-public-session': session } }); setData(result); setGate(null); } else { const result = await publicRequest('/public-access/portal/session', { headers: { 'x-public-session': session } }); setData(result); setGate(null); } }} /></AccessShell>;
   if (!data) return <AccessShell><div className="p-12 text-center text-slate-400">Cargando documento…</div></AccessShell>;
   return mode === 'document' ? <DocumentView data={data.data} permissions={data.permissions} /> : <PortalView data={data} />;
 }

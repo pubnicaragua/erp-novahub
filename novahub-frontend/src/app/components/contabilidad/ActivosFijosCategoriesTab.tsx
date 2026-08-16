@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { safeSetItem } from '../../services/safe-storage';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -232,7 +233,7 @@ export function ActivosFijosCategoriesTab() {
       if (editing) {
         const sendCode = isDefaultCategoryCode(editing.code);
         if (sendCode && form.code !== editing.code) {
-          localStorage.setItem(`cat_code_override_${editing.id}`, form.code);
+          safeSetItem(`cat_code_override_${editing.id}`, form.code);
         }
         await contabilidadService.updateFixedAssetCategory(editing.id, { ...form, code: undefined });
         toast.success('Categoría actualizada');

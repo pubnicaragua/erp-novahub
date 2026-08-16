@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { aiService, type ChatGuide } from '../../services/ai.service';
 import { trainingService } from '../../services/training.service';
+import { safeSetItem } from '../../services/safe-storage';
 
 const HISTORY_KEY = 'erp-ai-chat-history';
 
@@ -80,7 +81,7 @@ export function FloatingChat() {
   // Persistir historial por sesión
   useEffect(() => {
     try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-60)));
+      safeSetItem(HISTORY_KEY, JSON.stringify(messages.slice(-60)));
     } catch {
       // localStorage puede fallar en modos estrictos; el chat sigue funcionando.
     }

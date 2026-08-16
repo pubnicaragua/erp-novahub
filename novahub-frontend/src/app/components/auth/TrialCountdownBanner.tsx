@@ -3,6 +3,7 @@ import { Clock, X, Sparkles, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
+import { safeSetItem } from '../../services/safe-storage';
 
 const DISMISS_KEY = 'trial-banner-dismissed';
 
@@ -58,7 +59,7 @@ export function TrialCountdownBanner() {
   const handleDismiss = () => {
     setDismissed(true);
     try {
-      localStorage.setItem(DISMISS_KEY, 'true');
+      safeSetItem(DISMISS_KEY, 'true');
     } catch { /* intentionally empty */ }
   };
 

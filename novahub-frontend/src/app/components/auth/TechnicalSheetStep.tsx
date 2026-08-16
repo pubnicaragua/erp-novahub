@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, FileText, Info, CheckCircle2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Input } from '../ui/input';
+import { safeSetItem } from '../../services/safe-storage';
 
 export interface TechnicalSheetPrefill {
   companyName: string;
@@ -310,7 +311,7 @@ export function TechnicalSheetStep({ prefill, onData }: { prefill: TechnicalShee
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      localStorage.setItem('nova-technical-sheet', JSON.stringify(sheet));
+      safeSetItem('nova-technical-sheet', JSON.stringify(sheet));
       onData({ ...sheet, _requiredComplete: requiredComplete });
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1200);
