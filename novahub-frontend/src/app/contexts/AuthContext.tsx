@@ -385,15 +385,6 @@ const createUserObject = (apiPayload: any): User => {
     }
   });
 
-  console.log('[Auth] User Loaded:', { 
-    id: apiUser.id, 
-    role, 
-    customRoleName: apiUser.customRoleName,
-    isPlatformAdmin, 
-    tenant: apiUser.clientTenantId,
-    permissionsCount: mergedPermissions.length
-  });
-
   return {
     id: apiUser.id,
     name: apiUser.name,

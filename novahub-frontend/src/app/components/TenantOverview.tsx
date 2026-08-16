@@ -63,8 +63,17 @@ const statusLabel: Record<string, string> = {
   REORDEN: 'Reordenar',
 };
 
+const LOADING_STEPS = [
+  'Cargando el resumen de tu empresa...',
+  'Consultando ventas del período...',
+  'Consultando gastos y compras...',
+  'Calculando indicadores de caja...',
+  'Preparando los datos...',
+];
+
 export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOverviewProps) {
   const [loading, setLoading] = useState(true);
+  const [loadStep, setLoadStep] = useState(0);
   const [period, setPeriod] = useState('month');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -76,6 +85,12 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [isExporting, setIsExporting] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)), 2000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
 
@@ -146,6 +161,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     const dashboardController = new AbortController();
     dashboardControllerRef.current = dashboardController;
     setLoading(true);
+    setLoadStep(0);
     setDataLoadError(false);
 
     // La validación de implementación no debe bloquear la primera pintura del
@@ -552,6 +568,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
       {loading && !cajaData ? (
         <div className="space-y-4 py-8">
+          <div className="flex items-center justify-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" />
+            <span>{LOADING_STEPS[Math.min(loadStep, LOADING_STEPS.length - 1)]}</span>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-28 rounded-2xl bg-muted/30 animate-pulse" />

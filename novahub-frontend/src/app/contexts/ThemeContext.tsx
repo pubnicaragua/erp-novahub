@@ -151,36 +151,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty('--role-border', tokens.border);
   }, [user?.role]);
 
-  // Handle branding from server — re-fetch when token changes (login/switch)
-  const [tokenTrigger, setTokenTrigger] = useState(() => localStorage.getItem('nh-auth-token'));
-
+  // Handle branding from server — re-fetch when user/token changes (login/switch/logout).
+  // No se usa polling: `user` de useAuth cambia en login, switch de empresa y logout,
+  // y el evento `storage` cubre los cambios desde otras pestañas. El tema por usuario
+  // (clave por tenant + tokens de rol) se conserva intacto.
   useEffect(() => {
-    // Listen for token changes (login, switch company, logout)
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'nh-auth-token') {
-        setTokenTrigger(e.newValue);
-        if (!e.newValue) {
-          // Logged out — reset branding
-          setThemeConfig(createDefaultTheme('default'));
-        }
+      if (e.key !== 'nh-auth-token') return;
+      if (!e.newValue) {
+        // Logged out — reset branding
+        setThemeConfig(createDefaultTheme('default'));
       }
     };
     window.addEventListener('storage', onStorage);
-
-    // Also poll for same-window changes (storage event only fires cross-tab)
-    const interval = setInterval(() => {
-      const current = localStorage.getItem('nh-auth-token');
-      setTokenTrigger(prev => prev !== current ? current : prev);
-    }, 1000);
-
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      clearInterval(interval);
-    };
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   useEffect(() => {
-    if (!tokenTrigger || activeTenantId === 'default') return;
+    if (!user || activeTenantId === 'default') return;
     let cancelled = false;
 
     api.get<any>('/branding/current')
@@ -204,7 +192,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       });
 
     return () => { cancelled = true; };
-  }, [tokenTrigger, activeTenantId]);
+  }, [user, activeTenantId]);
 
   const updateTheme = (colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({

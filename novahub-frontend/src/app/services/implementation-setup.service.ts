@@ -72,10 +72,15 @@ const SUMMARY_CACHE_TTL_MS = 45000;
 let cachedSummary: { value: ImplementationSetupSummary; createdAt: number; moduleKey: string } | null = null;
 
 export function rememberImplementationTourContext(context: Omit<ImplementationTourContext, 'createdAt'>) {
-  sessionStorage.setItem(IMPLEMENTATION_TOUR_STORAGE_KEY, JSON.stringify({
-    ...context,
-    createdAt: Date.now(),
-  }));
+  try {
+    sessionStorage.setItem(IMPLEMENTATION_TOUR_STORAGE_KEY, JSON.stringify({
+      ...context,
+      createdAt: Date.now(),
+    }));
+  } catch {
+    // sessionStorage también puede lanzar QuotaExceededError (modo privado/lleno);
+    // el tour simplemente no se recuerda y no debe romper la interacción.
+  }
 }
 
 export function consumeImplementationTourContext(module: string, subModule?: string) {

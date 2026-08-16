@@ -1076,8 +1076,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
         clientTenantId: user?.tenantId
       };
 
-      console.log('Guardando rol con payload:', payload);
-
       if (editingRole.id) {
         await rolesService.update(editingRole.id, payload);
         toast.success('Rol actualizado con éxito');
