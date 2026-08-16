@@ -14,13 +14,24 @@ interface EquityRow {
   accountId: string;
   accountCode: string;
   accountName: string;
+  component?: string;
   openingBalance: number;
   periodChange: number;
   closingBalance: number;
 }
 
+interface EquityComponent {
+  key: string;
+  label: string;
+  rows: EquityRow[];
+  totalOpening: number;
+  totalPeriodChange: number;
+  totalClosing: number;
+}
+
 interface EquityData {
   rows: EquityRow[];
+  components?: EquityComponent[];
   totalOpening: number;
   totalClosing: number;
   netIncome: number;
@@ -51,12 +62,30 @@ export function CambiosPatrimonioView() {
         accountId: r.accountId || r.accountCode || '',
         accountCode: r.accountCode || r.codigo || '',
         accountName: r.accountName || r.cuenta || '',
+        component: r.component || '',
         openingBalance: r.openingBalance || r.saldoInicial || 0,
         periodChange: r.periodChange || r.cambioPeriodo || 0,
         closingBalance: r.closingBalance || r.saldoFinal || 0,
       }));
+      const components: EquityComponent[] = Array.isArray(raw?.components) ? raw.components.map((c: any) => ({
+        key: c.key || '',
+        label: c.label || 'Componente',
+        rows: (c.rows || []).map((r: any) => ({
+          accountId: r.accountId || r.accountCode || '',
+          accountCode: r.accountCode || r.codigo || '',
+          accountName: r.accountName || r.cuenta || '',
+          component: r.component || c.key || '',
+          openingBalance: r.openingBalance || r.saldoInicial || 0,
+          periodChange: r.periodChange || r.cambioPeriodo || 0,
+          closingBalance: r.closingBalance || r.saldoFinal || 0,
+        })),
+        totalOpening: c.totalOpening || 0,
+        totalPeriodChange: c.totalPeriodChange || 0,
+        totalClosing: c.totalClosing || 0,
+      })) : [];
       return {
         rows,
+        components,
         totalOpening: raw?.totalOpening || raw?.totalSaldoInicial || rows.reduce((s: number, r: EquityRow) => s + r.openingBalance, 0),
         totalClosing: raw?.totalClosing || raw?.totalSaldoFinal || rows.reduce((s: number, r: EquityRow) => s + r.closingBalance, 0),
         netIncome: raw?.netIncome || raw?.resultadoEjercicio || 0,
@@ -210,6 +239,24 @@ export function CambiosPatrimonioView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {data.components && data.components.length > 0 && (
+                    data.components.map((component) => (
+                      <TableRow key={component.key || component.label} className="bg-primary/5 border-t border-primary/20">
+                        <TableCell className="font-mono text-xs text-primary" colSpan={2}>
+                          {component.label}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-primary">
+                          {formatCurrency(component.totalOpening)}
+                        </TableCell>
+                        <TableCell className={cn("text-right font-mono text-xs font-bold", component.totalPeriodChange >= 0 ? "text-emerald-600" : "text-red-600")}>
+                          {component.totalPeriodChange >= 0 ? '+' : ''}{formatCurrency(component.totalPeriodChange)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-primary">
+                          {formatCurrency(component.totalClosing)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                   {filteredRows.map((row, i) => (
                     <TableRow key={row.accountId || i} className="hover:bg-muted/30 border-border/30">
                       <TableCell className="font-mono text-xs">{row.accountCode}</TableCell>
@@ -225,6 +272,19 @@ export function CambiosPatrimonioView() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {data.netIncome !== 0 && (
+                    <TableRow className="bg-primary/5 font-bold border-t-2 border-border">
+                      <TableCell className="font-mono text-xs text-muted-foreground">—</TableCell>
+                      <TableCell className="text-xs font-bold uppercase tracking-wider">Resultado del Ejercicio</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">{formatCurrency(0)}</TableCell>
+                      <TableCell className={cn("text-right font-mono text-xs font-bold", data.netIncome >= 0 ? "text-emerald-600" : "text-red-600")}>
+                        {data.netIncome >= 0 ? '+' : ''}{formatCurrency(data.netIncome)}
+                      </TableCell>
+                      <TableCell className={cn("text-right font-mono text-xs font-bold", data.netIncome >= 0 ? "text-emerald-600" : "text-red-600")}>
+                        {formatCurrency(data.netIncome)}
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -247,6 +307,16 @@ export function CambiosPatrimonioView() {
                   <p className="mt-2 text-right text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Saldo final</p>
                 </div>
               ))}
+              {data.netIncome !== 0 && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider">Resultado del Ejercicio</span>
+                    <span className={cn("font-mono text-sm font-black", data.netIncome >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      {data.netIncome >= 0 ? '+' : ''}{formatCurrency(data.netIncome)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             </>
           )}

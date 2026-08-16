@@ -472,9 +472,11 @@ export function FlujoEfectivoView() {
               <Landmark className="size-5 text-primary" /> Cuentas de Efectivo
             </DialogTitle>
             <DialogDescription className="text-xs">
-              El Flujo de Efectivo se calcula sobre las cuentas que marques de todo el plan de cuentas (efectivo y bancos).
-              Si ninguna está marcada, el sistema usa la detección automática (cuentas vinculadas a bancos, código 1000 y nombres con caja/banco/efectivo).
-              Se sugiere marcar solo cuentas de efectivo y bancos para que el flujo cuadre con la lógica contable.
+              El Flujo de Efectivo se calcula por el método indirecto: la variación de cada cuenta de
+              balance entre el inicio y el fin del período (equivale al cierre del mes anterior vs el mes
+              actual). Se usan las cuentas de efectivo y bancos que marques para calcular el saldo inicial,
+              final y el flujo neto. Si ninguna está marcada, el sistema usa la detección automática
+              (cuentas vinculadas a bancos, código 1000 y nombres con caja/banco/efectivo).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-2">

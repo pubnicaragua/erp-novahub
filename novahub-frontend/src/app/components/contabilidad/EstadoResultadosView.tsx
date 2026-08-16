@@ -18,6 +18,8 @@ interface PnLAccount {
   codigo: string;
   cuenta: string;
   currentAmount: number;
+  isGroup?: boolean;
+  level?: number;
 }
 
 interface PnLSection {
@@ -65,6 +67,8 @@ export function EstadoResultadosView() {
         codigo: a.code || '',
         cuenta: a.name || '',
         currentAmount: a.balance || 0,
+        isGroup: Boolean(a.isGroup),
+        level: Number(a.level) || String(a.code || '').length,
       }));
       const result: PnLData = {
         ingresos: mapAccounts(curr.ingresos),
@@ -130,25 +134,29 @@ export function EstadoResultadosView() {
           <>
           {visibleAccounts.flatMap((acc, i) => {
             const isExpanded = expandedAccountId === acc.accountId;
+            const indent = Math.min(4, (acc.level || 1) - 1);
             return [
-              <TableRow key={acc.accountId || i} className="border-border/30 hover:bg-muted/30">
+              <TableRow key={acc.accountId || i} className={cn("border-border/30 hover:bg-muted/30", acc.isGroup && "bg-muted/20 font-semibold")}>
                 <TableCell className="font-mono text-xs">{acc.codigo}</TableCell>
                 <TableCell className="font-medium text-xs">
                   <button
                     type="button"
                     onClick={() => toggleAccount(acc)}
                     aria-expanded={isExpanded}
-                    className="flex min-w-0 items-center gap-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className={cn("flex min-w-0 items-center gap-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", !acc.isGroup && "pl-2")}
+                    style={{ paddingLeft: `${indent * 12}px` }}
                   >
-                    {isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
-                    <span className="break-words">{acc.cuenta}</span>
+                    {acc.isGroup ? (
+                      <ChevronDown className="size-3.5 shrink-0 text-primary" />
+                    ) : isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
+                    <span className={cn("break-words", acc.isGroup && "text-sm font-bold")}>{acc.cuenta}</span>
                   </button>
                 </TableCell>
-                <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
+                <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600", acc.isGroup && "text-base")}>
                   {fmt(acc.currentAmount)}
                 </TableCell>
               </TableRow>,
-              ...(isExpanded ? [
+              ...(!acc.isGroup && isExpanded ? [
                 <TableRow key={`detail-${acc.accountId || i}`} className="hover:bg-transparent">
                   <TableCell colSpan={3} className="p-0">
                     <AccountMovementsDetail
@@ -179,26 +187,27 @@ export function EstadoResultadosView() {
         ) : (
         visibleAccounts.map((acc, i) => {
           const isExpanded = expandedAccountId === acc.accountId;
+          const indent = Math.min(4, (acc.level || 1) - 1);
           return (
-            <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
+            <div key={acc.accountId || i} className={cn("rounded-xl border border-border/60 bg-card/60 shadow-sm", acc.isGroup && "bg-muted/30 border-primary/20")}>
               <button
                 type="button"
                 onClick={() => toggleAccount(acc)}
                 aria-expanded={isExpanded}
                 className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                <div className="flex min-w-0 items-start gap-2">
-                  {isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                <div className="flex min-w-0 items-start gap-2" style={{ paddingLeft: `${acc.isGroup ? 0 : indent * 10}px` }}>
+                  {acc.isGroup ? <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-primary" /> : isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                   <div className="min-w-0">
                   <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
-                  <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                  <p className={cn("mt-0.5 truncate text-sm", acc.isGroup ? "font-black" : "font-bold")} title={acc.cuenta}>{acc.cuenta}</p>
                   </div>
                 </div>
                 <span className={cn("shrink-0 text-right font-mono text-sm font-black", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                   {fmt(acc.currentAmount)}
                 </span>
               </button>
-              {isExpanded && (
+              {!acc.isGroup && isExpanded && (
                 <AccountMovementsDetail
                   accountId={acc.accountId}
                   codigo={acc.codigo}
