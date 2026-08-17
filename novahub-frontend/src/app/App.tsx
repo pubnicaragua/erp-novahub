@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { useLocation } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
@@ -15,6 +15,7 @@ import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { FloatingChat } from './components/ai/FloatingChat';
+import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 
 const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
@@ -70,13 +71,23 @@ const ErrorBoundaryFallback = () => (
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
+  useIncomingNotificationAlert();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
+    const urlModule = searchParams.get('m');
+    if (urlModule) {
+      if (urlModule === 'roles') return 'suscripciones';
+      if (urlModule === 'dashboard-cxc') return 'overview';
+      return (urlModule as Module | 'overview') || 'overview';
+    }
     const storedModule = safeGetItem('erp-active-module');
     if (storedModule === 'roles') return 'suscripciones';
     if (storedModule === 'dashboard-cxc') return 'overview';
     return (storedModule as Module | 'overview') || 'overview';
   });
   const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
+    const urlSubModule = searchParams.get('sm');
+    if (urlSubModule) return urlSubModule === 'dashboard' ? 'productos' : urlSubModule;
     const storedSubModule = safeGetItem('erp-active-submodule');
     return storedSubModule === 'dashboard' ? 'productos' : (storedSubModule || undefined);
   });
@@ -92,6 +103,37 @@ function DashboardLayout() {
       safeRemoveItem('erp-active-submodule');
     }
   }, [activeSubModule]);
+
+  // Sincronizar estado de navegación con la URL (?m=ventas&sm=facturas).
+  // - Cambio de módulo desde la UI: hace push (historial), el botón "atrás" vuelve al módulo previo.
+  // - Cambio de submodulo: solo reemplaza la entrada actual para no llenar el historial con tabs.
+  const lastModuleRef = React.useRef<Module | 'overview'>(activeModule);
+
+  useEffect(() => {
+    const urlModule = searchParams.get('m');
+    const urlSubModule = searchParams.get('sm');
+    if (!urlModule && !urlSubModule) return;
+    const nextModule = urlModule === 'roles' ? 'suscripciones' : urlModule === 'dashboard-cxc' ? 'overview' : ((urlModule as Module | 'overview') || 'overview');
+    if (nextModule !== activeModule) setActiveModule(nextModule);
+    const nextSubModule = urlSubModule === 'dashboard' ? 'productos' : (urlSubModule || undefined);
+    if (nextSubModule !== activeSubModule) setActiveSubModule(nextSubModule);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeModule && activeModule !== 'overview') {
+      params.set('m', activeModule);
+    }
+    if (activeSubModule) {
+      params.set('sm', activeSubModule);
+    }
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next === current) return;
+    const moduleChanged = lastModuleRef.current !== activeModule;
+    lastModuleRef.current = activeModule;
+    setSearchParams(params, { replace: !moduleChanged });
+  }, [activeModule, activeSubModule]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // optional: read from localStorage if you want persistence
@@ -133,7 +175,11 @@ function DashboardLayout() {
   };
 
   const currentModule: Module | 'overview' = (() => {
-    if (activeModule === 'overview' || hasAccess(activeModule as Module)) return activeModule;
+    if (activeModule === 'overview') {
+      if (hasAccess('dashboard')) return 'overview';
+    } else if (hasAccess(activeModule as Module)) {
+      return activeModule;
+    }
     const preferredOrder: Module[] = [
       'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
       'clientes', 'proveedores', 'actividades', 'tickets',
@@ -147,13 +193,22 @@ function DashboardLayout() {
   useEffect(() => {
     const handler = (e: any) => {
       const targetModule = e.detail.module === 'roles' ? 'suscripciones' : e.detail.module;
-      if (targetModule === 'overview' || hasAccess(targetModule)) {
+      const allowed = targetModule === 'overview' ? hasAccess('dashboard') : hasAccess(targetModule);
+      if (allowed) {
         setActiveModule(targetModule);
         setActiveSubModule(e.detail.subModule);
       }
     };
+    const subHandler = (e: any) => {
+      const subModule = e.detail?.subModule;
+      if (subModule) setActiveSubModule(subModule === 'dashboard' ? 'productos' : subModule);
+    };
     window.addEventListener('navigate-module', handler);
-    return () => window.removeEventListener('navigate-module', handler);
+    window.addEventListener('navigate-submodule', subHandler);
+    return () => {
+      window.removeEventListener('navigate-module', handler);
+      window.removeEventListener('navigate-submodule', subHandler);
+    };
   }, [hasAccess]);
 
   const renderContent = () => {

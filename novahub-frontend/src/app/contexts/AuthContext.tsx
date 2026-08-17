@@ -7,6 +7,7 @@ import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 
 export type Module =
+  | 'dashboard'
   | 'inventario'
   | 'ventas'
   | 'compras'
@@ -173,7 +174,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ALL_MODULES: Module[] = [
-  'inventario', 'ventas', 'compras', 'finanzas', 'rh',
+  'dashboard', 'inventario', 'ventas', 'compras', 'finanzas', 'rh',
   'clientes', 'proveedores', 'actividades', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',

@@ -466,7 +466,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     const headers = new Set<string>();
     let lastSection = '';
     for (const item of activeMenuArray) {
-      if (item.id !== 'overview' && !hasAccess(item.id as Module)) continue;
+      if (item.id === 'overview') {
+        if (!hasAccess('dashboard')) continue;
+      } else if (!hasAccess(item.id as Module)) {
+        continue;
+      }
       const visibleSubmenu = item.submenu
         ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
         : undefined;
@@ -534,7 +538,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             <TooltipProvider delayDuration={100}>
             <nav className="px-3 space-y-0.5">
               {activeMenuArray.map((item) => {
-                if (item.id !== 'overview' && !hasAccess(item.id as Module)) return null;
+                if (item.id === 'overview') {
+                  if (!hasAccess('dashboard')) return null;
+                } else if (!hasAccess(item.id as Module)) {
+                  return null;
+                }
                 const visibleSubmenu = item.submenu
                   ? item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id))
                   : undefined;

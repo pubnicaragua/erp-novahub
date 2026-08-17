@@ -170,7 +170,13 @@ const STEP_DEFINITIONS: StepDefinition[] = [
     load: () => api.get('/branding/current'),
     isComplete: (value) => {
       const branding = value as any;
-      return Boolean(branding?.companyName || branding?.name || branding?.logo);
+      const hasName = Boolean(branding?.companyName || branding?.name);
+      const isDefaultName = hasName && ['nova hub', 'mi empresa'].includes(String(branding?.companyName || branding?.name || '').trim().toLowerCase());
+      const hasLogo = Boolean(branding?.logo);
+      const hasCustomColors = Boolean(
+        branding?.primaryColor && !['#10b981', '#064e3b'].includes(String(branding?.primaryColor).toLowerCase()),
+      );
+      return hasName && !isDefaultName && (hasLogo || hasCustomColors);
     },
     count: (value) => {
       const branding = value as any;

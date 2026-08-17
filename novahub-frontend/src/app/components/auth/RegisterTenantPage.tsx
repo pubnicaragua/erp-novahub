@@ -1203,9 +1203,9 @@ export function RegisterTenantPage() {
       {step < 2 && renderLeftPanel()}
       <div className={cn(
         "flex-1 flex p-6 md:p-10 bg-background",
-        step === 3 ? "items-start overflow-y-auto max-h-screen justify-center" : "items-center justify-center"
+        step === 2 || step === 3 ? "items-start overflow-y-auto max-h-screen justify-center" : "items-center justify-center"
       )}>
-        <div className={cn("w-full space-y-6", step === 2 ? "max-w-4xl" : step === 3 ? "max-w-4xl pb-10" : "max-w-md")}>
+        <div className={cn("w-full space-y-6", step === 2 ? "max-w-4xl pb-10" : step === 3 ? "max-w-4xl pb-10" : "max-w-md")}>
           <div className="lg:hidden flex items-center gap-3 mb-4">
             <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Package className="size-6 text-primary" />

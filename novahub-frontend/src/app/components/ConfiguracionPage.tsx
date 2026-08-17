@@ -55,6 +55,7 @@ export type ExtendedPermission = Permission & { create?: boolean; edit?: boolean
 export type ExtendedRoleManagement = Omit<RoleManagement, 'permissions'> & { permissions: ExtendedPermission[] };
 
 const AVAILABLE_MODULES = [
+  { id: 'DASHBOARD', label: 'Dashboard', icon: BarChart3, description: 'Vista general con KPIs y resumen del negocio' },
   { id: 'FINANCING', label: 'Financiamiento PYME', icon: Landmark, description: 'Financiamiento y Créditos' },
   { id: 'SALES', label: 'Ventas', icon: TrendingUp, description: 'Cotizaciones, Facturación y Clientes' },
   { id: 'PURCHASES', label: 'Compras', icon: HandCoins, description: 'Proveedores y Órdenes de Compra' },
