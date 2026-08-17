@@ -15,6 +15,7 @@ export const inventoryService = {
   createProduct: (data: Partial<Product> & { initialStock?: number }) => api.post<Product>('/inventory/products', data),
   updateProduct: (id: string, data: Partial<Product>) => api.patch<Product>(`/inventory/products/${id}`, data),
   updateProductStatus: (id: string, isActive: boolean) => api.patch<Product>(`/inventory/products/${id}/status`, { isActive }),
+  duplicateProduct: (id: string) => api.post<Product>(`/inventory/products/${id}/duplicate`),
   checkProductCode: (code: string, excludeId?: string) => 
     api.get<{ exists: boolean }>('/inventory/products/check-code', { code, excludeId } as any),
 
@@ -124,6 +125,9 @@ export const inventoryService = {
     items?: { productId: string; code: string; name: string; systemStock: number; countedStock: number; difference: number }[];
   }) => api.post<any>('/inventory/audits', data),
   deleteAudit: (id: string) => api.delete<any>(`/inventory/audits/${id}`),
+  changeAuditStatus: (id: string, status: string) => api.patch<any>(`/inventory/audits/${id}/status`, { status }),
+  approveAudit: (id: string) => api.post<any>(`/inventory/audits/${id}/approve`),
+  getAuditTheoretical: (id: string) => api.get<any[]>(`/inventory/audits/${id}/theoretical`),
 
   // ==================== PÉRDIDAS ====================
   getLosses: (filters?: ApiFilters & { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>

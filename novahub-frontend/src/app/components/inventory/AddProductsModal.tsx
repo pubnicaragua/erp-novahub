@@ -219,14 +219,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             const variantId = fullProduct?.variants?.[0]?.id;
 
             if (variantId) {
-              await inventoryService.updateStockLevel({
-                productId: createdId,
-                warehouseId: product.initialWarehouseId,
-                variantId: variantId,
-                quantity: initialStockNum,
-                minStock: 0,
-              });
-
               await inventoryService.createMovement({
                 productId: createdId,
                 warehouseId: product.initialWarehouseId,

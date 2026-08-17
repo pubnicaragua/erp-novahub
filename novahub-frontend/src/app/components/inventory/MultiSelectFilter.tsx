@@ -109,14 +109,14 @@ export function MultiSelectFilter({
           variant="outline"
           size="sm"
           className={cn(
-            'h-9 gap-2 font-medium text-xs rounded-lg',
+            'h-7 gap-1 font-medium text-[11px] rounded px-1.5',
             selected.length > 0 && 'border-primary/50 bg-primary/5 text-primary',
             className,
           )}
           aria-label={`Filtrar por ${label}`}
         >
-          <Filter className="size-3.5" />
-          <span className="truncate max-w-[160px]">{triggerLabel}</span>
+          <Filter className="size-3" />
+          <span className="truncate max-w-[100px]">{triggerLabel}</span>
           {selected.length > 0 && (
             <Badge
               variant="secondary"

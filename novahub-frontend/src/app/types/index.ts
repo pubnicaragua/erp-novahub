@@ -34,6 +34,8 @@ export interface ApiFilters {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+  from?: string;
+  to?: string;
   page?: number;
   pageSize?: number;
   sortBy?: string;
@@ -523,7 +525,7 @@ export interface PurchaseOrder {
   evidenceFileUrl?: string;
   notes?: string;
   items: PurchaseOrderItem[];
-  receipts?: Array<{ id: string; number: string; status: string }>;
+  receipts?: Array<{ id: string; number: string; status: string; items: Array<{ id: string; productId?: string; quantityReceived: number; quantityRejected?: number }> }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -615,6 +617,11 @@ export interface PurchaseReceipt {
   currency?: Currency;
   exchangeRate?: number;
   baseTotal?: number;
+  freightCost?: number;
+  insuranceCost?: number;
+  customsCost?: number;
+  otherCosts?: number;
+  additionalCosts?: Record<string, any>;
   inventoryProcessedAt?: string;
   inventoryCostOperations?: InventoryCostOperation[];
   notes?: string;

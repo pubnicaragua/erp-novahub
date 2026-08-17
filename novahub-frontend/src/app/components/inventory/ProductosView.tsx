@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { createExtractorFromData } from 'node-unrar-js/esm/index.esm.js';
@@ -29,6 +29,7 @@ import { ProductImagePicker, ProductThumbnail } from '../ui/ProductImage';
 import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
 import { EditProductModal } from './EditProductModal';
+import { LabelPrintModal } from './LabelPrintModal';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
@@ -41,6 +42,24 @@ const WAREHOUSE_TYPES = [
   { value: 'STORE', label: 'Tienda' },
   { value: 'DISTRIBUTION_CENTER', label: 'Centro de distribución' },
   { value: 'VIRTUAL', label: 'Virtual' },
+];
+
+const UNIT_OPTIONS = [
+  { value: 'unidad', label: 'Unidad' },
+  { value: 'kilo', label: 'Kilo' },
+  { value: 'libra', label: 'Libra' },
+  { value: 'docena', label: 'Docena' },
+  { value: 'caja', label: 'Caja' },
+  { value: 'litro', label: 'Litro' },
+  { value: 'metro', label: 'Metro' },
+  { value: 'par', label: 'Par' },
+  { value: 'rollo', label: 'Rollo' },
+  { value: 'pieza', label: 'Pieza' },
+];
+
+const TAX_OPTIONS = [
+  { value: '0.15', label: 'Gravado 15%' },
+  { value: '0', label: 'Exento 0%' },
 ];
 
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
@@ -68,7 +87,7 @@ const PRODUCT_TABLE_WIDTHS = {
   price: '112px',
   cost: '112px',
   status: '112px',
-  actions: '96px',
+  actions: '128px',
 } as const;
 
 const normalizeImportHeader = (value: unknown) => String(value ?? '')
@@ -159,6 +178,9 @@ interface ProductosViewProps {
   onSearchChange?: (value: string) => void;
   onCategoryChange?: (value: string[]) => void;
   onWarehouseChange?: (value: string[]) => void;
+  onUnitChange?: (value: string) => void;
+  onTaxRateChange?: (value: string) => void;
+  onStockStatusChange?: (value: string) => void;
   itemType?: 'PRODUCT' | 'SERVICE';
   isSidebarCollapsed?: boolean;
   targetProductId?: string | null;
@@ -168,6 +190,9 @@ interface ProductosViewProps {
   onClearTargetProduct?: () => void;
   selectedBranchId?: string;
   branchWarehouseIds?: string[];
+  unitFilter?: string;
+  taxRateFilter?: string;
+  stockStatusFilter?: string;
 }
 
 interface EditingProduct {
@@ -352,7 +377,7 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [] }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
@@ -414,6 +439,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [branchDetail, setBranchDetail] = useState<any | null>(null);
   const [localProductStatusFilter, setLocalProductStatusFilter] = useState<ProductStatusFilter>('ALL');
   const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
+  const [localUnitFilter, setLocalUnitFilter] = useState('');
+  const effectiveUnitFilter = controlledUnitFilter ?? localUnitFilter;
+  const [localTaxRateFilter, setLocalTaxRateFilter] = useState('');
+  const effectiveTaxRateFilter = controlledTaxRateFilter ?? localTaxRateFilter;
+  const [localStockStatusFilter, setLocalStockStatusFilter] = useState('');
+  const effectiveStockStatusFilter = controlledStockStatusFilter ?? localStockStatusFilter;
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [initialImportIntroOpen, setInitialImportIntroOpen] = useState(false);
@@ -469,6 +500,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [labelModalOpen, setLabelModalOpen] = useState(false);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -700,7 +732,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     setPage(1);
     pagination?.onPageChange(1);
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, showAllWarehouseProducts, catalogItemType]);
+  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
 
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
@@ -764,7 +796,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const matchesAvailability = pType !== 'SERVICE' || availabilityFilter === 'all'
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability;
+    const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
+    const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesTaxRate;
       })
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true, sensitivity: 'base' }));
 
@@ -1280,6 +1314,20 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const handleToggleProductStatus = (product: any) => {
     setPendingStatusChange(product);
+  };
+
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const handleDuplicateProduct = async (product: any) => {
+    setDuplicatingId(product.id);
+    try {
+      await inventoryService.duplicateProduct(product.id);
+      toast.success(`"${product.name}" duplicado como copia`);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo duplicar el producto');
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const handleConfirmStatusChange = async () => {
@@ -2126,7 +2174,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         />
       ) : (
         <>
-      <div className="mb-5" data-tour="inventory-products-title">
+      {/* ─── Encabezado + KPIs ─── */}
+      <div className="mb-4" data-tour="inventory-products-title">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
@@ -2200,32 +2249,36 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         })()}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4" data-tour="inventory-products-filters">
-        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap">
-          <div className="relative col-span-2 min-w-0 flex-1 sm:min-w-56">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nombre o código..." 
-              className="pl-9 h-9"
+      {/* ─── Barra de herramientas: filtros + acciones en UNA sola línea ─── */}
+      <div className="mb-4 flex flex-nowrap items-center gap-1 overflow-x-auto" data-tour="inventory-products-filters">
+          {/* Búsqueda */}
+          <div className="relative w-36 shrink-0">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+            <Input
+              placeholder="Buscar..."
+              className="h-7 pl-7 text-[11px]"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
-          <div className="flex min-w-0 items-center gap-1">
+
+          {/* Categorías */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <MultiSelectFilter
               label="Categorías"
               placeholder="Buscar categoría..."
               options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
               selected={categoryFilters}
               onChange={(value) => { setCategoryFilters(value); onCategoryChange?.(value); }}
-              className="h-9 min-w-0 flex-1 rounded-lg"
+              className="h-7 rounded text-[11px]"
             />
-            <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }} title="Agregar categoría" aria-label="Agregar categoría">
-              <Plus className="size-4" />
+            <Button type="button" variant="outline" size="sm" className="h-7 w-6 shrink-0 rounded p-0" onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }} title="Agregar categoría" aria-label="Agregar categoría">
+              <Plus className="size-3" />
             </Button>
           </div>
-          <div className="flex min-w-0 items-center gap-1">
+
+          {/* Almacenes */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <MultiSelectFilter
               label="Almacenes"
               placeholder="Buscar almacén..."
@@ -2233,26 +2286,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
               selected={warehouseFilters}
               onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-              className="h-9 min-w-0 flex-1 rounded-lg"
+              className="h-7 rounded text-[11px]"
             />
-            <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 rounded-lg p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
-              <Plus className="size-4" />
+            <Button type="button" variant="outline" size="sm" className="h-7 w-6 shrink-0 rounded p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
+              <Plus className="size-3" />
             </Button>
           </div>
+
+          {/* Selects compactos */}
           {!isServiceView && (
-            <Select
-              value={effectiveProductStatusFilter}
-              onValueChange={(value) => {
-                const nextValue = value as ProductStatusFilter;
-                setLocalProductStatusFilter(nextValue);
-                onProductStatusFilterChange?.(nextValue);
-              }}
-            >
-              <SelectTrigger className="h-9 min-w-0 flex-1 rounded-lg sm:w-auto" aria-label="Filtrar productos por estado">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
+            <Select value={effectiveProductStatusFilter} onValueChange={(value) => { const nextValue = value as ProductStatusFilter; setLocalProductStatusFilter(nextValue); onProductStatusFilterChange?.(nextValue); }}>
+              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Estado"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="ALL">Estado</SelectItem>
                 <SelectItem value="ACTIVE">Activos</SelectItem>
                 <SelectItem value="INACTIVE">Inactivos</SelectItem>
               </SelectContent>
@@ -2260,117 +2306,91 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
-              <SelectTrigger className="h-9 min-w-0 flex-1 rounded-lg sm:w-auto">
-                <SelectValue placeholder="Disponibilidad" />
-              </SelectTrigger>
+              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Disponibilidad</SelectItem>
                 <SelectItem value="available">Disponibles</SelectItem>
                 <SelectItem value="unavailable">No disponibles</SelectItem>
               </SelectContent>
             </Select>
           )}
-          {!selectedBranchId && !isServiceView && (
-            <label
-              className="col-span-2 flex min-w-0 cursor-pointer select-none items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-1.5 sm:col-span-1 sm:py-2"
-              title="Cuando está marcado se muestran todos los productos, incluyendo los de almacenes que no están vinculados a ninguna sucursal."
-            >
-              <Checkbox
-                checked={showAllWarehouseProducts}
-                onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)}
-                className="size-4"
-              />
-              <span className="text-[11px] font-bold leading-tight text-muted-foreground">
-                Mostrar productos de todos los almacenes
-              </span>
-            </label>
+          {!isServiceView && (
+            <Select value={effectiveUnitFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalUnitFilter(v); onUnitChange?.(v); }}>
+              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Unidad"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Unidad</SelectItem>
+                {UNIT_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
           )}
-          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || !showAllWarehouseProducts) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="col-span-2 h-9 justify-self-start text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground sm:col-span-1"
-              onClick={() => {
-                setSearchTerm('');
-                setCategoryFilters([]);
-                setWarehouseFilters([]);
-                onCategoryChange?.([]);
-                onWarehouseChange?.([]);
-                setStockFilter('all');
-                setAvailabilityFilter('all');
-                setLocalProductStatusFilter('ALL');
-                onProductStatusFilterChange?.('ALL');
-                setShowAllWarehouseProducts(true);
-              }}
-            >
-              <X className="size-3.5 mr-1" />
-              Limpiar filtros
+          {!isServiceView && (
+            <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>
+              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Impuesto"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Impuesto</SelectItem>
+                {TAX_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          )}
+          {!isServiceView && (
+            <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); onStockStatusChange?.(v); }}>
+              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Stock"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Stock</SelectItem>
+                <SelectItem value="available">Con stock</SelectItem>
+                <SelectItem value="low">Bajo</SelectItem>
+                <SelectItem value="out">Sin stock</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Separador */}
+          <div className="h-4 w-px shrink-0 bg-border/60" />
+
+          {/* Acciones — todo en la misma fila */}
+          <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-0.5 size-3" /> Cómo
+          </Button>
+          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
+              <ImageIcon className="mr-0.5 size-3" /> Imágenes
             </Button>
           )}
-        </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center" data-tour="inventory-products-actions">
-          <Button type="button" size="sm" variant="outline" className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-2 size-4" /> {isServiceView ? 'Cómo gestionar servicios' : 'Cómo gestionar productos'}
-          </Button>
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
-            onClick={() => setBulkImageModalOpen(true)}
-            title="Actualizar imágenes masivamente por SKU"
-          >
-            <ImageIcon className="mr-2 size-4" /> Imágenes masivas
-          </Button>}
-          {!isServiceView && !initialImportCompleted && <Button
-            size="sm"
-            variant="outline"
-            className="h-9 min-w-0 w-full rounded-lg px-3 font-black text-[10px] uppercase tracking-widest sm:w-auto"
-            onClick={() => setInitialImportIntroOpen(true)}
-            data-tour="inventory-products-import"
-            disabled={initialImportCompleted}
-            title={initialImportCompleted ? 'La importación inicial ya fue completada' : 'Importar catálogo inicial'}
-          >
-            <Upload className="size-4 mr-2" /> {initialImportCompleted ? 'Carga inicial completada' : 'Importar catálogo'}
-          </Button>}
-          {!isServiceView && <Button
-            size="sm"
-            className="h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:w-auto"
-            onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}
-            aria-label={selectedIds.size > 0 ? `Solicitar compra de ${selectedIds.size} productos` : 'Abrir solicitudes de compra'}
-          >
-            <PackageSearch className="size-4 mr-2" />
-            {selectedIds.size > 0 ? `Solicitar Compra (${selectedIds.size})` : 'Solicitudes'}
-          </Button>}
+          {!isServiceView && (
+            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
+              <PackageSearch className="size-3 mr-0.5" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
+            </Button>
+          )}
+          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
+              <Barcode className="mr-0.5 size-3" /> Etiquetas
+            </Button>
+          )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button
-              size="sm"
-              className="h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:w-auto"
-              onClick={() => setCreateModalOpen(true)}
-              aria-label="Crear nuevo producto"
-            >
-              <Plus className="size-4 mr-2" /> Nuevo producto
+            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="size-3 mr-0.5" /> Nuevo
             </Button>
           )}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <>
-              <Button
-                size="sm"
-                className="hidden h-9 min-w-0 rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl 2xl:flex 2xl:w-auto"
-                onClick={handleAddRow}
-              >
-                <Plus className="size-4" /> Agregar servicio
-              </Button>
-              <Button
-                size="sm"
-                className="flex h-9 min-w-0 w-full rounded-lg bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl 2xl:hidden sm:w-auto"
-                onClick={() => setCreateModalOpen(true)}
-              >
-                <Plus className="size-4" /> Agregar servicio
-              </Button>
-            </>
+            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="size-3 mr-0.5" /> Nuevo
+            </Button>
           )}
-        </div>
+
+          {/* Checkbox + Limpiar */}
+          {!selectedBranchId && !isServiceView && (
+            <label className="flex shrink-0 cursor-pointer select-none items-center gap-1 rounded border border-border/70 bg-muted/20 px-1.5 py-0.5" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
+              <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-3" />
+              <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Todos alm.</span>
+            </label>
+          )}
+          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
+            <Button variant="ghost" size="sm" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={() => {
+              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
+            }}>
+              <X className="size-3 mr-0.5" /> Limpiar
+            </Button>
+          )}
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
@@ -2455,6 +2475,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </div>
               <div className="mt-4 flex justify-end gap-1 border-t border-border/40 pt-3">
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={(e) => { e.stopPropagation(); setModalProduct(product); }}><Pencil className="size-3.5" /></Button>}
+                {canPerform('INVENTORY_PRODUCTS', 'create') && product.isActive !== false && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-sky-600 hover:bg-sky-500 hover:text-white"
+                    title="Duplicar producto"
+                    disabled={duplicatingId === product.id}
+                    onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}
+                  >
+                    {duplicatingId === product.id ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
+                  </Button>
+                )}
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
                   variant="ghost"
                   size="icon"
@@ -2642,7 +2674,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-medium" /></TableCell>}
                      {!isServiceView && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
                      <TableCell className="text-right">
-                       <div className="flex items-center justify-end gap-1 transition-opacity">
+                         <div className="flex items-center justify-end gap-1 transition-opacity">
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
@@ -2655,7 +2687,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                            >
                              <Pencil className="size-3.5" />
                            </Button>
-                        )}
+                       )}
+                        {canPerform('INVENTORY_PRODUCTS', 'create') && product.isActive !== false && (
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
+                            className="size-7 text-sky-600 hover:text-sky-700 hover:bg-sky-500/10"
+                            title="Duplicar producto"
+                            disabled={duplicatingId === product.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDuplicateProduct(product);
+                            }}
+                          >
+                            {duplicatingId === product.id ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Copy className="size-3.5" />}
+                          </Button>
+                       )}
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
@@ -3495,6 +3542,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LabelPrintModal
+        open={labelModalOpen}
+        onClose={() => setLabelModalOpen(false)}
+        products={products.filter((p: any) => String(p.itemType || p.type || 'PRODUCT').toUpperCase() === 'PRODUCT')}
+        companyName={user?.tenantName || 'Nova Hub'}
+      />
 
       </Card>
     </>

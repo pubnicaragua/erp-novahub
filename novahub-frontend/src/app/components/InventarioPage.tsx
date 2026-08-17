@@ -69,7 +69,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [searchState, setSearchState] = useState<Record<string, string>>({});
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
   const [statusState, setStatusState] = useState<Record<string, string>>({});
-  const [movementFilters, setMovementFilters] = useState({ type: 'all', warehouseId: 'all' });
+  const [movementFilters, setMovementFilters] = useState({ type: 'all', warehouseId: 'all', from: '', to: '' });
   const [productFilters, setProductFilters] = useState<Record<string, { categoryIds: string[]; warehouseIds: string[] }>>({});
   const [paginationState, setPaginationState] = useState<Record<string, { page: number; pageSize: SalesPageSize }>>({});
   const [productTarget, setProductTarget] = useState<{ id?: string; code?: string; stockFilter?: 'all' | 'available' | 'low' | 'out' } | null>(null);
@@ -81,6 +81,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const updateStatus = (section: string, value: string) => { setStatusState((current) => ({ ...current, [section]: value })); updatePage(section, 1); };
   const updateMovementFilter = (field: 'type' | 'warehouseId', value: string) => {
     setMovementFilters((current) => ({ ...current, [field]: value }));
+    updatePage('movimientos', 1);
+  };
+  const updateMovementDateFilter = (from: string, to: string) => {
+    setMovementFilters((current) => ({ ...current, from, to }));
     updatePage('movimientos', 1);
   };
   const updateProductFilters = (section: string, field: 'categoryIds' | 'warehouseIds', value: string[]) => {
@@ -235,13 +239,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   });
   const movementsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'movements', tenantKey, pageFor('movimientos').page, pageFor('movimientos').pageSize, searchFor('movimientos'), movementFilters.type, movementFilters.warehouseId, selectedBranchId],
+    queryKey: ['inventory', 'movements', tenantKey, pageFor('movimientos').page, pageFor('movimientos').pageSize, searchFor('movimientos'), movementFilters.type, movementFilters.warehouseId, movementFilters.from, movementFilters.to, selectedBranchId],
     queryFn: ({ signal }) => inventoryService.getMovements({
       page: pageFor('movimientos').page,
       pageSize: pageFor('movimientos').pageSize,
       search: searchFor('movimientos'),
       type: movementFilters.type !== 'all' ? movementFilters.type : undefined,
       warehouseId: movementFilters.warehouseId !== 'all' ? movementFilters.warehouseId : scopeWarehouseParam,
+      from: movementFilters.from || undefined,
+      to: movementFilters.to || undefined,
     }, signal),
     enabled: Boolean(user) && activeTab === 'movimientos',
   });
@@ -594,13 +600,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  <MovimientosView 
+                   <MovimientosView 
                     movements={data.movements}
                     warehouses={scopedWarehouses}
                     pagination={movementsPagination}
                     onSearchChange={(value) => updateSearch('movimientos', value)}
                     onTypeChange={(value) => updateMovementFilter('type', value)}
                     onWarehouseChange={(value) => updateMovementFilter('warehouseId', value)}
+                    onDateChange={updateMovementDateFilter}
                   />
                 </motion.div>
               </TabsContent>

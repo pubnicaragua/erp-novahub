@@ -254,28 +254,12 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         checks.push({ ...entry, fromQty, toQty });
       }
 
-      // 2) Crear la transferencia con todos los artículos
+      // 2) Crear la transferencia con todos los artículos (el backend aplica stock automáticamente)
       await inventoryService.createTransfer({
         fromId: newTransfer.fromId,
         toId: newTransfer.toId,
         items: checks.map((c) => ({ variantId: c.variantId, quantity: c.quantity })),
       } as any);
-
-      // 3) Restar del almacén origen y sumar en el destino por cada artículo
-      for (const c of checks) {
-        await inventoryService.updateStockLevel({
-          productId: c.product.id,
-          warehouseId: newTransfer.fromId,
-          variantId: c.variantId,
-          quantity: c.fromQty - c.quantity,
-        });
-        await inventoryService.updateStockLevel({
-          productId: c.product.id,
-          warehouseId: newTransfer.toId,
-          variantId: c.variantId,
-          quantity: c.toQty + c.quantity,
-        });
-      }
 
       const totalUnits = checks.reduce((sum, c) => sum + c.quantity, 0);
       toast.success(`Transferencia creada con ${checks.length} ${checks.length === 1 ? 'producto' : 'productos'} (${totalUnits} unidades)`);

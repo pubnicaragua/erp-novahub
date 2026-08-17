@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp } from 'lucide-react';
+import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -19,6 +19,7 @@ interface MovimientosViewProps {
   onSearchChange?: (value: string) => void;
   onTypeChange?: (value: string) => void;
   onWarehouseChange?: (value: string) => void;
+  onDateChange?: (from: string, to: string) => void;
 }
 
 const TYPE_OPTIONS = [
@@ -64,11 +65,13 @@ const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="movements-pagination"]', title: 'Paginación', description: 'Selecciona la cantidad de registros por página y utiliza los controles para revisar todo el historial.', placement: 'top' },
 ];
 
-export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange }: MovimientosViewProps) {
+export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const filteredMovements = movements.filter(m => {
     const matchesSearch = !searchTerm || 
@@ -92,6 +95,26 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
     .map(([, label]) => ({ value: label, label, count: filteredMovements.filter((m) => (m.product?.name || 'Producto sin nombre') === label).length }));
   const warehouseOptions = [...new Map(filteredMovements.map((m) => [m.warehouse?.name || '—', m.warehouse?.name || '—'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filteredMovements.filter((m) => (m.warehouse?.name || '—') === label).length }));
+
+  const movementSummary = (() => {
+    let entradas = 0;
+    let salidas = 0;
+    let stockTotal = 0;
+    const lastByProductWarehouse = new Map<string, any>();
+    for (const m of filteredMovements) {
+      if (m.type === 'IN') entradas += Number(m.quantity || 0);
+      if (m.type === 'OUT') salidas += Number(m.quantity || 0);
+      const key = `${m.productId || m.product?.id}-${m.warehouseId || m.warehouse?.id}`;
+      const existing = lastByProductWarehouse.get(key);
+      const mDate = new Date(m.createdAt || m.date || 0).getTime();
+      const eDate = existing ? new Date(existing.createdAt || existing.date || 0).getTime() : 0;
+      if (!existing || mDate > eDate) lastByProductWarehouse.set(key, m);
+    }
+    for (const m of lastByProductWarehouse.values()) {
+      stockTotal += Number(m.resultingQty ?? 0);
+    }
+    return { entradas, salidas, stockTotal };
+  })();
 
   const getMovementIcon = (type: string) => {
     switch (type) {
@@ -161,6 +184,23 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
               {(warehouses || []).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); onDateChange?.(e.target.value, dateTo); }}
+              className="h-9 w-full sm:w-32 text-xs"
+              placeholder="Desde"
+            />
+            <span className="text-muted-foreground text-xs">–</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); onDateChange?.(dateFrom, e.target.value); }}
+              className="h-9 w-full sm:w-32 text-xs"
+              placeholder="Hasta"
+            />
+          </div>
         </div>
         <div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Cómo consultar movimientos</Button><Button variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
       </div>
@@ -169,9 +209,15 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         {filteredData.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredData.map((move: any) => (
           <Card key={move.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Hora</p><p>{new Date(move.date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock Ant. → Res.</p><p className="tabular-nums text-muted-foreground">{move.previousQty != null ? Number(move.previousQty) : '—'} → <span className="font-medium text-foreground">{move.resultingQty != null ? Number(move.resultingQty) : '—'}</span></p></div></div>
           </Card>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border/40 bg-muted/20 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+        <span className="flex items-center gap-1.5"><ArrowDownLeft className="size-3.5 text-emerald-500" /> Entradas: <b className="text-emerald-600">{movementSummary.entradas}</b></span>
+        <span className="flex items-center gap-1.5"><ArrowUpRight className="size-3.5 text-red-500" /> Salidas: <b className="text-red-600">{movementSummary.salidas}</b></span>
+        <span className="flex items-center gap-1.5"><Package className="size-3.5 text-primary" /> Stock actual total: <b className="text-foreground">{movementSummary.stockTotal}</b></span>
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="movements-table">
@@ -183,13 +229,16 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Producto<ColumnFilterMenu label="Producto" options={productOptions} selected={colFilters.state.product?.values || []} onSelect={(values) => colFilters.setValues('product', values)} sort={colFilters.state.product?.sort || null} onSort={(sort) => colFilters.setSort('product', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Almacén<ColumnFilterMenu label="Almacén" options={warehouseOptions} selected={colFilters.state.warehouse?.values || []} onSelect={(values) => colFilters.setValues('warehouse', values)} sort={colFilters.state.warehouse?.sort || null} onSort={(sort) => colFilters.setSort('warehouse', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Cantidad</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock Ant.</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock Res.</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest">Usuario</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Referencia</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <History className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay movimientos</p>
                 </TableCell>
@@ -212,6 +261,15 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
                     <span className={`font-medium ${move.type === 'IN' ? 'text-green-600' : move.type === 'OUT' ? 'text-red-600' : 'text-blue-600'}`}>
                       {move.type === 'OUT' ? '-' : '+'}{move.quantity}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground tabular-nums">
+                    {move.previousQty != null ? Number(move.previousQty) : '—'}
+                  </TableCell>
+                  <TableCell className="text-right text-xs tabular-nums font-medium">
+                    {move.resultingQty != null ? Number(move.resultingQty) : '—'}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {move.userId ? move.userId.slice(0, 8) : '—'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</TableCell>
                 </TableRow>

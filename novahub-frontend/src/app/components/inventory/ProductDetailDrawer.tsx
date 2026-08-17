@@ -837,6 +837,8 @@ export function ProductDetailDrawer({
                             <TableHead className="text-[10px] uppercase tracking-widest">Fecha</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Tipo</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Cantidad</TableHead>
+                            <TableHead className="text-[10px] uppercase tracking-widest text-right">Stock Ant.</TableHead>
+                            <TableHead className="text-[10px] uppercase tracking-widest text-right">Stock Res.</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Costo Unit.</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Referencia</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Almacén</TableHead>
@@ -874,6 +876,12 @@ export function ProductDetailDrawer({
                                     {String(move.type).toUpperCase() === 'OUT' ? '-' : '+'}
                                     {Number(move.quantity || 0)}
                                   </span>
+                                </TableCell>
+                                <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                                  {move.previousQty != null ? Number(move.previousQty) : '—'}
+                                </TableCell>
+                                <TableCell className="text-right text-xs tabular-nums font-medium">
+                                  {move.resultingQty != null ? Number(move.resultingQty) : '—'}
                                 </TableCell>
                                 <TableCell className="text-right text-xs">
                                   {move.unitCost !== undefined && move.unitCost !== null ? (

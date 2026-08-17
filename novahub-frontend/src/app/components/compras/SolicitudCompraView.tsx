@@ -633,8 +633,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                                 <p className="text-[10px] text-muted-foreground">solicitadas</p>
                               </div>
                             </div>
-                            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/30 pt-2 text-xs">
+                            <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/30 pt-2 text-xs">
                               <span className="text-muted-foreground">Stock actual <b className="ml-1 text-foreground">{item.currentStock}</b></span>
+                              <span className="text-center text-muted-foreground">Stock mín <b className="ml-1 text-foreground">{item.minStock ?? '—'}</b></span>
                               <span className="text-right text-muted-foreground">Total <b className="ml-1 font-mono text-foreground">{managementItem ? formatRequestAmount(managementItem.total, mgmt?.currency, mgmt?.exchangeRate) : '—'}</b></span>
                             </div>
                           </div>

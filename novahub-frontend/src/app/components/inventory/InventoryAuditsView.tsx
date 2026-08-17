@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, Eye, Paperclip, Upload, UserCheck, Warehouse as WarehouseIcon, X, ChevronLeft,
+  Play, PauseCircle, CheckCircle2, RotateCcw, XCircle,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -207,6 +208,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const [detailAudit, setDetailAudit] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState<string | null>(null);
+  const [comparisonAudit, setComparisonAudit] = useState<any | null>(null);
+  const [theoreticalItems, setTheoreticalItems] = useState<any[]>([]);
+  const [loadingTheoretical, setLoadingTheoretical] = useState(false);
   const [form, setForm] = useState({
     auditDate: toLocalDateTime(new Date()),
     warehouseId: '',
@@ -404,6 +409,109 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo abrir el acta');
+    }
+  };
+
+  const auditStatusLabel = (status?: string): string => {
+    const s = String(status || 'OPEN').toUpperCase();
+    const labels: Record<string, string> = {
+      OPEN: 'ABIERTO',
+      IN_PROGRESS: 'EN CONTEO',
+      CLOSED: 'CERRADO',
+      APPROVED: 'APROBADO',
+      CANCELLED: 'CANCELADO',
+      REOPENED: 'REABIERTO',
+    };
+    return labels[s] || s;
+  };
+
+  const auditStatusBadgeClass = (status?: string): string => {
+    const s = String(status || 'OPEN').toUpperCase();
+    const classes: Record<string, string> = {
+      OPEN: 'bg-gray-100 text-gray-700 border-gray-200',
+      IN_PROGRESS: 'bg-blue-100 text-blue-700 border-blue-200',
+      CLOSED: 'bg-orange-100 text-orange-700 border-orange-200',
+      APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      CANCELLED: 'bg-red-100 text-red-700 border-red-200',
+      REOPENED: 'bg-purple-100 text-purple-700 border-purple-200',
+    };
+    return classes[s] || 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const handleWorkflow = async (audit: any, targetStatus: string) => {
+    const labels: Record<string, string> = {
+      IN_PROGRESS: 'iniciar el conteo',
+      CLOSED: 'cerrar el conteo',
+      APPROVED: 'aprobar las diferencias',
+      REOPENED: 'reabrir el conteo',
+      CANCELLED: 'cancelar',
+    };
+    const label = labels[targetStatus] || targetStatus;
+    if (!window.confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} del acta ${audit.number}?`)) return;
+
+    // When closing, show comparison table first
+    if (targetStatus === 'CLOSED' && audit.snapshotAt) {
+      try {
+        setLoadingTheoretical(true);
+        const items = await inventoryService.getAuditTheoretical(audit.id);
+        setTheoreticalItems(items || []);
+      } catch {
+        setTheoreticalItems(Array.isArray(audit.items) ? audit.items : []);
+      } finally {
+        setLoadingTheoretical(false);
+      }
+      setComparisonAudit(audit);
+      return;
+    }
+
+    try {
+      setWorkflowLoading(audit.id);
+      if (targetStatus === 'APPROVED') {
+        await inventoryService.approveAudit(audit.id);
+      } else {
+        await inventoryService.changeAuditStatus(audit.id, targetStatus);
+      }
+      toast.success(`Acta ${audit.number}: ${label} exitoso`);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || `No se pudo ${label}`);
+    } finally {
+      setWorkflowLoading(null);
+    }
+  };
+
+  const confirmCloseAndApprove = async () => {
+    if (!comparisonAudit) return;
+    try {
+      setWorkflowLoading(comparisonAudit.id);
+      // First close
+      await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      // Then approve
+      await inventoryService.approveAudit(comparisonAudit.id);
+      toast.success(`Acta ${comparisonAudit.number}: diferencias aprobadas, ajuste generado`);
+      setComparisonAudit(null);
+      setTheoreticalItems([]);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo aprobar las diferencias');
+    } finally {
+      setWorkflowLoading(null);
+    }
+  };
+
+  const confirmCloseOnly = async () => {
+    if (!comparisonAudit) return;
+    try {
+      setWorkflowLoading(comparisonAudit.id);
+      await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      toast.success(`Acta ${comparisonAudit.number}: conteo cerrado`);
+      setComparisonAudit(null);
+      setTheoreticalItems([]);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo cerrar el conteo');
+    } finally {
+      setWorkflowLoading(null);
     }
   };
 
@@ -693,6 +801,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Acta</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha y hora</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Encargado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Usuario Bodega</TableHead>
@@ -713,6 +822,11 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <TableCell>
                     <span className="font-mono text-xs font-bold">{audit.number}</span>
                   </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[9px] font-bold border ${auditStatusBadgeClass(audit.status)}`}>
+                      {auditStatusLabel(audit.status)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {audit.auditDate ? new Date(audit.auditDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
                   </TableCell>
@@ -729,12 +843,76 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {/* Workflow buttons */}
+                      {audit.status === 'OPEN' && (
+                        <>
+                          <Button
+                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                            disabled={workflowLoading === audit.id}
+                            onClick={() => handleWorkflow(audit, 'IN_PROGRESS')}
+                            title="Iniciar conteo"
+                          >
+                            <Play className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-red-50 hover:text-red-600"
+                            disabled={workflowLoading === audit.id}
+                            onClick={() => handleWorkflow(audit, 'CANCELLED')}
+                            title="Cancelar"
+                          >
+                            <XCircle className="size-4" />
+                          </Button>
+                        </>
+                      )}
+                      {audit.status === 'IN_PROGRESS' && (
+                        <Button
+                          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-orange-50 hover:text-orange-600"
+                          disabled={workflowLoading === audit.id}
+                          onClick={() => handleWorkflow(audit, 'CLOSED')}
+                          title="Cerrar conteo"
+                        >
+                          <PauseCircle className="size-4" />
+                        </Button>
+                      )}
+                      {audit.status === 'CLOSED' && (
+                        <>
+                          <Button
+                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
+                            disabled={workflowLoading === audit.id}
+                            onClick={() => handleWorkflow(audit, 'APPROVED')}
+                            title="Aprobar diferencias"
+                          >
+                            <CheckCircle2 className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-purple-50 hover:text-purple-600"
+                            disabled={workflowLoading === audit.id}
+                            onClick={() => handleWorkflow(audit, 'REOPENED')}
+                            title="Reabrir"
+                          >
+                            <RotateCcw className="size-4" />
+                          </Button>
+                        </>
+                      )}
+                      {audit.status === 'REOPENED' && (
+                        <Button
+                          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                          disabled={workflowLoading === audit.id}
+                          onClick={() => handleWorkflow(audit, 'IN_PROGRESS')}
+                          title="Reanudar"
+                        >
+                          <Play className="size-4" />
+                        </Button>
+                      )}
+                      {/* View + Delete always available */}
                       <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle">
                         <Eye className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar">
-                        <Trash2 className="size-4" />
-                      </Button>
+                      {(audit.status === 'OPEN' || audit.status === 'CANCELLED') && (
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar">
+                          <Trash2 className="size-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

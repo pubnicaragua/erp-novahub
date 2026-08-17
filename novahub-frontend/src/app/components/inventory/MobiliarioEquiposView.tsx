@@ -498,19 +498,28 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar por nombre, código, serie, marca..." className="h-9 pl-9" />
           </div>
-          <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1); }} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="all">Todas las categorías</option>
-            {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-            <option value="all">Todos los estados</option>
-            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+          <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
+            <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Categoría" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las categorías</SelectItem>
+              {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estados</SelectItem>
+              {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
           {!externalBranchId && (
-            <select value={branchFilter} onChange={e => { setBranchFilter(e.target.value); setPage(1); }} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm">
-              <option value="all">Todas las sucursales</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <Select value={branchFilter} onValueChange={(v) => { setBranchFilter(v); setPage(1); }}>
+              <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Sucursal" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las sucursales</SelectItem>
+                {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           )}
           <Select value={monthCutoff || '__none'} onValueChange={(v) => { setMonthCutoff(v === '__none' ? '' : v); setPage(1); }}>
             <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Corte por mes" /></SelectTrigger>

@@ -215,6 +215,21 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    id: 'reportes',
+    label: 'Reportes',
+    icon: <BarChart3 className="size-5" />,
+    submenu: [
+      { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
+      { id: 'reportes-compras', label: 'Compras', icon: <ShoppingCart className="size-4" /> },
+      { id: 'reportes-financieros', label: 'Financiero', icon: <DollarSign className="size-4" /> },
+      { id: 'reportes-inventario', label: 'Inventario de Mercancías', icon: <Package className="size-4" /> },
+      { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
+      { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
+      { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
+      { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
+    ]
+  },
+  {
     id: 'rh',
     label: 'Recursos Humanos',
     icon: <Users className="size-5" />,
@@ -234,7 +249,7 @@ const menuItems: MenuItem[] = [
   {
     id: 'actividades',
     label: 'Actividades',
-    icon: <Activity className="size-5" />,
+    icon: <ClipboardList className="size-5" />,
     section: 'Herramientas',
     submenu: [
       { id: 'tareas', label: 'Tareas', icon: <ListTodo className="size-4" /> },
@@ -290,22 +305,6 @@ const menuItems: MenuItem[] = [
       { id: 'alertas', label: 'Alertas', icon: <AlertTriangle className="size-4" /> },
       { id: 'mensajes', label: 'Mensajes', icon: <MessageSquare className="size-4" /> },
       { id: 'push', label: 'Push', icon: <Send className="size-4" /> }
-    ]
-  },
-  {
-    id: 'reportes',
-    label: 'Reportes',
-    icon: <BarChart3 className="size-5" />,
-    section: 'Sistema',
-    submenu: [
-      { id: 'reportes-ventas', label: 'Ventas', icon: <ShoppingCart className="size-4" /> },
-      { id: 'reportes-compras', label: 'Compras', icon: <ShoppingCart className="size-4" /> },
-      { id: 'reportes-financieros', label: 'Financiero', icon: <DollarSign className="size-4" /> },
-      { id: 'reportes-inventario', label: 'Inventario de Mercancías', icon: <Package className="size-4" /> },
-      { id: 'reportes-clientes', label: 'Clientes', icon: <Users className="size-4" /> },
-      { id: 'reportes-proveedores', label: 'Proveedores', icon: <Truck className="size-4" /> },
-      { id: 'reportes-rrhh', label: 'Recursos Humanos', icon: <Users className="size-4" /> },
-      { id: 'reportes-suscripciones', label: 'Suscripciones', icon: <Layers className="size-4" /> },
     ]
   },
   { id: 'suscripciones', label: 'Mi Empresa', icon: <Zap className="size-5" />, section: 'Sistema' },

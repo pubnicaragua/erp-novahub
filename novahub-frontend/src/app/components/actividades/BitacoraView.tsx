@@ -10,6 +10,7 @@ import { activityLogsService, tasksService, eventsService } from '../../services
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { format } from 'date-fns';
+import { InventoryViewTutorial } from '../inventory/InventoryViewTutorial';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
@@ -178,6 +179,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p></div>
           <div className="flex items-center gap-3">
+            <InventoryViewTutorial label="Qué es la Bitácora" targetPrefix="bitacora-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Bitácora de Auditoría', description: 'La bitácora registra automáticamente todas las acciones del sistema: creaciones, ediciones, eliminaciones y subidas de archivos. Sirve para auditoría y seguimiento.' }, data: { title: 'Consulta', description: 'Usa la búsqueda y los filtros para encontrar acciones específicas por usuario, módulo o fecha.' }, actions: { title: 'Exportar', description: 'Puedes exportar el registro completo para auditorías externas o reportes.' } }} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_LOGS', 'create') && (
               <Button
