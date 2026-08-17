@@ -161,6 +161,130 @@ export interface PosPaymentLine {
   bankAccountId?: string;
 }
 
+// ==================== VENTAS SUSPENDIDAS / RESERVADAS ====================
+
+export type PosHoldStatus = 'SUSPENDED' | 'READY' | 'DELIVERED' | 'CANCELLED';
+export type PosDeliveryStatus = 'PENDING' | 'DELIVERED';
+
+export interface BranchProductAvailability {
+  branchId: string;
+  branchName: string;
+  warehouseId: string | null;
+  warehouseName: string | null;
+  currentStock: number;
+  requestedQuantity: number;
+  available: boolean;
+}
+
+export interface PosHoldItem {
+  id: string;
+  productId?: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  priceListId?: string | null;
+  taxRate: number;
+  discount: number;
+  irRate: number;
+  irTaxId?: string | null;
+  irAmount: number;
+  deliveryWarehouseId?: string | null;
+  total: number;
+}
+
+export interface PosHold {
+  id: string;
+  number: string;
+  registerId: string;
+  sessionId: string;
+  customerId?: string | null;
+  customCustomerName?: string | null;
+  date: string;
+  billingBranchId: string;
+  billingWarehouseId?: string | null;
+  deliveryBranchId: string;
+  status: PosHoldStatus;
+  deliveryStatus: PosDeliveryStatus;
+  payNow: boolean;
+  discountPercent: number;
+  includeTax: boolean;
+  pricingMode: 'global' | 'individual';
+  irRate: number;
+  irTaxId?: string | null;
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  irAmount: number;
+  total: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
+  baseTotal?: number;
+  priceListId?: string | null;
+  notes?: string | null;
+  createdById?: string | null;
+  confirmedById?: string | null;
+  confirmedAt?: string | null;
+  deliveredById?: string | null;
+  deliveredAt?: string | null;
+  cancelledById?: string | null;
+  cancelledAt?: string | null;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
+  paymentDetails?: any;
+  createdAt: string;
+  updatedAt: string;
+  customer?: PosCustomer | null;
+  register?: { id: string; code: string; name: string } | null;
+  billingBranch?: { id: string; name: string } | null;
+  deliveryBranch?: { id: string; name: string } | null;
+  createdBy?: { id: string; name: string } | null;
+  confirmedBy?: { id: string; name: string } | null;
+  deliveredBy?: { id: string; name: string } | null;
+  items: PosHoldItem[];
+}
+
+export interface PosHoldItemInput extends PosInvoiceItem {
+  deliveryWarehouseId?: string;
+}
+
+export interface CreatePosHoldDto {
+  registerId: string;
+  sessionId: string;
+  customerId?: string;
+  customCustomerName?: string;
+  date: string;
+  discountPercent?: number;
+  pricingMode?: 'global' | 'individual';
+  irRate?: number;
+  irTaxId?: string | null;
+  includeTax?: boolean;
+  priceListId?: string;
+  deliveryBranchId: string;
+  items: PosHoldItemInput[];
+  currency?: 'NIO' | 'USD';
+  exchangeRate?: number;
+  payments?: PosPaymentLine[];
+  payNow?: boolean;
+  notes?: string;
+}
+
+export interface HoldFilters {
+  status?: string;
+  billingBranchId?: string;
+  deliveryBranchId?: string;
+  registerId?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface HoldListResponse {
+  items: PosHold[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface DashboardKPIs {
   totalRevenue: number;
   totalExpenses: number;
@@ -322,6 +446,26 @@ export const cajaService = {
     const res = await api.get<any>('/caja/invoices/recent', { params });
     return res?.data !== undefined ? res.data : res;
   },
+
+  // --- Ventas suspendidas / reservadas (entrega inter-sucursal) ---
+
+  getProductAvailability: (productId: string, quantity: number, signal?: AbortSignal) =>
+    api.get<BranchProductAvailability[]>(`/caja/products/${productId}/availability`, { params: { quantity }, signal }),
+
+  createHold: (dto: CreatePosHoldDto, idempotencyKey?: string) =>
+    api.idempotentPost<PosHold>('/caja/holds', dto, idempotencyKey),
+
+  getHolds: (filters?: HoldFilters, signal?: AbortSignal) =>
+    api.get<HoldListResponse>('/caja/holds', { params: filters as any, signal }),
+
+  confirmHold: (id: string, dto: { currency?: 'NIO' | 'USD'; exchangeRate?: number; payments: PosPaymentLine[] }, idempotencyKey?: string) =>
+    api.idempotentPatch<PosHold>(`/caja/holds/${id}/confirm`, dto, idempotencyKey),
+
+  deliverHold: (id: string, idempotencyKey?: string) =>
+    api.idempotentPatch<PosHold>(`/caja/holds/${id}/deliver`, {}, idempotencyKey),
+
+  cancelHold: (id: string, idempotencyKey?: string) =>
+    api.idempotentPatch<PosHold>(`/caja/holds/${id}/cancel`, {}, idempotencyKey),
 
   // --- Módulo de Control de Cajas (Sesiones) ---
 

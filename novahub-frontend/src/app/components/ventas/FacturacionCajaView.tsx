@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, AlertCircle, Coins, Settings2
+  UserPlus, AlertCircle, Coins, Settings2, Store
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -31,9 +31,13 @@ import {
   type CashRegisterSession,
   type CashRegisterAvailability,
   type PotentialDuplicateSale,
+  type BranchProductAvailability,
+  type CreatePosHoldDto,
+  type PosHoldItemInput,
 } from '../../services/caja.service';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
+import { BranchAvailabilityModal, type HoldReservationSelection } from './caja/BranchAvailabilityModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { brandingService } from '../../services/branding.service';
 import { createIdempotencyKey } from '../../services/api';
@@ -79,12 +83,21 @@ type CatalogViewMode = 'list' | 'catalog';
 type CatalogItemFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
+const POS_SHOW_AVAILABILITY_KEY = 'novahub-pos-show-availability';
 
 function getInitialCatalogView(): CatalogViewMode {
   try {
     return localStorage.getItem(CATALOG_VIEW_STORAGE_KEY) === 'catalog' ? 'catalog' : 'list';
   } catch {
     return 'list';
+  }
+}
+
+function getInitialShowAvailability(): boolean {
+  try {
+    return localStorage.getItem(POS_SHOW_AVAILABILITY_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -327,6 +340,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [showTutorial, setShowTutorial] = useState(false);
   const [includeTax, setIncludeTax] = useState(true);
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(getInitialCatalogView);
+  const [showAvailabilityAction, setShowAvailabilityAction] = useState<boolean>(getInitialShowAvailability);
   const [showPayment, setShowPayment] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('NIO');
   const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
@@ -339,6 +353,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
 
   const [showAddCustomer, setShowAddCustomer] = useState(false);
+
+  // --- Venta suspendida / reservada inter-sucursal ---
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [availabilityProduct, setAvailabilityProduct] = useState<PosProduct | null>(null);
+  const [availabilityQuantity, setAvailabilityQuantity] = useState(1);
+  const [availabilityRows, setAvailabilityRows] = useState<BranchProductAvailability[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [holdSubmitting, setHoldSubmitting] = useState(false);
+  const [holdCreateDto, setHoldCreateDto] = useState<CreatePosHoldDto | null>(null);
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
 
@@ -491,6 +514,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [catalogView]);
 
   useEffect(() => {
+    try {
+      safeSetItem(POS_SHOW_AVAILABILITY_KEY, showAvailabilityAction ? '1' : '0');
+    } catch {
+      // La preferencia es opcional; la tabla sigue funcionando sin almacenamiento local.
+    }
+  }, [showAvailabilityAction]);
+
+  useEffect(() => {
     if (!selectedRegisterId) {
       setRecentInvoices([]);
       return;
@@ -541,6 +572,40 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     return total;
   };
 
+  const openAvailabilityFor = async (product: PosProduct, quantity: number) => {
+    setAvailabilityProduct(product);
+    setAvailabilityQuantity(Math.max(1, quantity));
+    setAvailabilityRows([]);
+    setAvailabilityOpen(true);
+    setAvailabilityLoading(true);
+    try {
+      setAvailabilityRows(await cajaService.getProductAvailability(product.id, Math.max(1, quantity)));
+    } catch (error: unknown) {
+      setAvailabilityRows([]);
+      toast.error(getErrorMessage(error, 'Error al consultar disponibilidad'));
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  const stockBlockedMessage = (product: PosProduct, requestedQty: number, globalQty: number) => {
+    return globalQty > 0
+      ? `Stock insuficiente para ${product.name}. Tienes ${globalQty} separadas en otras cajas y solo hay ${product.currentStock} disponibles acá.`
+      : `Stock insuficiente para ${product.name}. Solo hay ${product.currentStock} unidades disponibles en esta sucursal.`;
+  };
+
+  const handleAddOrCheck = (product: PosProduct) => {
+    if (product.itemType === 'SERVICE') {
+      addItem(product);
+      return;
+    }
+    if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && product.currentStock <= 0) {
+      void openAvailabilityFor(product, 1);
+      return;
+    }
+    addItem(product);
+  };
+
   const addItem = (product: PosProduct) => {
     const isService = product.itemType === 'SERVICE';
     const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
@@ -548,21 +613,24 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     if (priceMissing) {
       toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
     }
-    setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
-      const globalQty = getGlobalCartQuantity(product.id);
+    const existing = cart.find((i) => i.productId === product.id);
+    const globalQty = getGlobalCartQuantity(product.id);
+    const requestedQty = (existing?.quantity || 0) + 1;
 
-      if (existing) {
-        if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
-          if (existing.quantity + 1 + globalQty > product.currentStock) {
-            toast.error(
-              globalQty > 0
-                ? `Stock insuficiente. Tienes ${globalQty} unidades en otras cajas. Solo hay ${product.currentStock} en stock global.`
-                : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
-            );
-            return prev;
-          }
-        }
+    if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && requestedQty + globalQty > product.currentStock) {
+      toast.error(stockBlockedMessage(product, requestedQty, globalQty), {
+        action: {
+          label: 'Ver otras sucursales',
+          onClick: () => void openAvailabilityFor(product, requestedQty),
+        },
+      });
+      return;
+    }
+
+    setCart((prev) => {
+      const current = prev.find((i) => i.productId === product.id);
+
+      if (current) {
         return prev.map((i) =>
           i.productId === product.id
             ? {
@@ -572,17 +640,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             }
             : i,
         );
-      }
-
-      if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
-        if (1 + globalQty > product.currentStock) {
-          toast.error(
-            globalQty > 0
-              ? `Stock insuficiente. Tienes ${globalQty} unidades separadas en otras cajas y solo hay ${product.currentStock} en total.`
-              : `Stock insuficiente. El producto está agotado.`
-          );
-          return prev;
-        }
       }
 
       return [
@@ -609,11 +666,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     if (product && product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
       const globalQty = getGlobalCartQuantity(productId);
       if (quantity + globalQty > product.currentStock) {
-        toast.error(
-          globalQty > 0
-            ? `Stock insuficiente. Tienes ${globalQty} separadas en otras cajas y solo quedan ${Math.max(0, product.currentStock - globalQty)} disponibles acá.`
-            : `Stock insuficiente. Solo hay ${product.currentStock} unidades disponibles.`
-        );
+        toast.error(stockBlockedMessage(product, quantity, globalQty), {
+          action: {
+            label: 'Ver otras sucursales',
+            onClick: () => void openAvailabilityFor(product, quantity),
+          },
+        });
         finalQty = Math.max(1, product.currentStock - globalQty);
       }
     }
@@ -629,6 +687,140 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const removeItem = (productId: string) => {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
+  };
+
+  const refreshCatalog = useCallback(async () => {
+    const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
+    const warehouseId = selectedRegister?.resolvedWarehouseId || undefined;
+    try {
+      setProducts(await cajaService.getProducts(productSearch.trim() || undefined, warehouseId));
+    } catch {
+      // Se conserva el catálogo actual si el refresco falla.
+    }
+  }, [registers, selectedRegisterId, productSearch]);
+
+  const handleHoldReservation = async (selection: HoldReservationSelection) => {
+    if (!availabilityProduct) return;
+    if (!selectedRegisterId) {
+      toast.error('Seleccioná una caja');
+      return;
+    }
+    if (!activeSession) {
+      toast.error('La caja no tiene una sesión activa');
+      return;
+    }
+
+    const product = availabilityProduct;
+    const isService = product.itemType === 'SERVICE';
+    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const items: PosHoldItemInput[] = [{
+      productId: product.id,
+      description: product.name,
+      quantity: availabilityQuantity,
+      unitPrice: configuredPrice ?? 0,
+      priceListId: isService ? undefined : selectedPriceListId,
+      taxRate: NICARAGUA_IVA_RATE,
+      deliveryWarehouseId: selection.deliveryWarehouseId || undefined,
+    }];
+    const dto: CreatePosHoldDto = {
+      registerId: selectedRegisterId,
+      sessionId: activeSession.id,
+      customerId: selectedCustomerId,
+      date: emitDate,
+      discountPercent: pricingMode === 'global' ? discountPercent || undefined : undefined,
+      pricingMode,
+      irRate: irRate || undefined,
+      irTaxId: irTaxId || undefined,
+      includeTax,
+      priceListId: selectedPriceListId || undefined,
+      deliveryBranchId: selection.deliveryBranchId,
+      items,
+      currency: 'NIO',
+      exchangeRate: Number(activeSession.exchangeRateUSD),
+      payNow: false,
+      notes: selection.notes,
+    };
+
+    if (selection.payNow) {
+      setHoldCreateDto(dto);
+      setAvailabilityOpen(false);
+      setPayments([{ method: 'CASH', amount: 0 }]);
+      setPaymentCurrency('NIO');
+      setShowPayment(true);
+      return;
+    }
+
+    setHoldSubmitting(true);
+    try {
+      const res = await cajaService.createHold(dto, createIdempotencyKey('hold'));
+      const created = (res as any)?.data || res;
+      toast.success(`Venta ${created.number} reservada. El cliente deberá retirarla en la sucursal seleccionada.`);
+      setAvailabilityOpen(false);
+      setAvailabilityProduct(null);
+      void refreshCatalog();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'Error al reservar la venta'));
+    } finally {
+      setHoldSubmitting(false);
+    }
+  };
+
+  const submitHoldCreatePayment = async () => {
+    if (!holdCreateDto || !activeSession || submittingRef.current) return;
+    const holdTotal = calculateInvoiceSummary(
+      holdCreateDto.items.map((item) => ({
+        productId: item.productId || '',
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate || 0,
+        discount: item.discount || 0,
+        irRate: item.irRate || 0,
+        lineTotal: 0,
+      })),
+      holdCreateDto.discountPercent || 0,
+      holdCreateDto.includeTax !== false,
+      holdCreateDto.irRate || 0,
+      holdCreateDto.pricingMode,
+    ).total;
+    const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    if (received + 0.005 < holdTotal) {
+      toast.error('El monto recibido debe ser igual o mayor al total');
+      return;
+    }
+    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
+      toast.error('La transferencia requiere una referencia');
+      return;
+    }
+    if (payments.some((payment) => ['CARD', 'TRANSFER'].includes(payment.method) && !payment.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada pago con tarjeta o transferencia');
+      return;
+    }
+    submittingRef.current = true;
+    setSubmitting(true);
+    const submitToastId = toast.loading('Cobrando y reservando venta...');
+    try {
+      const res = await cajaService.createHold(
+        { ...holdCreateDto, payments, currency: 'NIO', exchangeRate: Number(activeSession.exchangeRateUSD), payNow: true },
+        createIdempotencyKey('hold'),
+      );
+      const created = (res as any)?.data || res;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales'] }),
+        queryClient.invalidateQueries({ queryKey: ['finance'] }),
+        queryClient.invalidateQueries({ queryKey: ['accounting'] }),
+      ]);
+      toast.success(`Venta ${created.number} cobrada. Factura ${created.invoiceNumber || ''} emitida desde esta caja.`, { id: submitToastId });
+      setShowPayment(false);
+      setHoldCreateDto(null);
+      setAvailabilityProduct(null);
+      void refreshCatalog();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'Error al cobrar la venta'), { id: submitToastId });
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   const changePricingMode = (mode: PricingMode) => {
@@ -711,10 +903,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setCreatedTicketCart([...cart]);
     setCreatedPaymentLines([]);
     checkoutIdempotencyKey.current = null;
+    setHoldCreateDto(null);
     setShowPayment(true);
   };
 
   const submitPayment = async (confirmedDuplicate = false) => {
+    if (holdCreateDto) {
+      await submitHoldCreatePayment();
+      return;
+    }
     if (!canPayPos) return;
     if (submittingRef.current) return;
     if (!activeSession) return;
@@ -1027,33 +1224,45 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
             <Card className="border-border/50 shadow-sm" data-tour="pos-catalog">
               <CardContent className="p-5">
-                <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="mb-4 space-y-3">
                   <div>
                     <h3 className="text-sm font-black uppercase tracking-tight">Catálogo de venta</h3>
                     <p className="mt-1 text-[11px] text-muted-foreground">{filteredProducts.length} {catalogItemFilter === 'SERVICE' ? 'servicios' : catalogItemFilter === 'PRODUCT' ? 'productos' : 'artículos'} disponibles</p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label
+                      title="Muestra en cada producto un botón para consultar su disponibilidad en otras sucursales"
+                      className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground select-none"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showAvailabilityAction}
+                        onChange={(event) => setShowAvailabilityAction(event.target.checked)}
+                        className="size-3.5 accent-primary"
+                      />
+                      Disponibilidad
+                    </label>
+                    <div className="inline-flex h-8 items-center rounded-xl border border-border/60 bg-muted/30 p-1" role="group" aria-label="Vista del catálogo">
                       <button
                         type="button"
                         aria-pressed={catalogView === 'list'}
                         onClick={() => setCatalogView('list')}
-                        className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                        className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'list' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                           }`}
                       >
-                        <List className="size-3.5" /> Lista
+                        <List className="size-3" /> Lista
                       </button>
                       <button
                         type="button"
                         aria-pressed={catalogView === 'catalog'}
                         onClick={() => setCatalogView('catalog')}
-                        className={`flex h-7 items-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                        className={`flex h-6 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wider transition-all ${catalogView === 'catalog' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                           }`}
                       >
-                        <LayoutGrid className="size-3.5" /> Catálogo
+                        <LayoutGrid className="size-3" /> Catálogo
                       </button>
                     </div>
-                    <div className="relative w-full sm:w-64">
+                    <div className="relative min-w-0 flex-1 sm:flex-none sm:w-72">
                       {isSearching ? (
                         <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
                       ) : (
@@ -1064,7 +1273,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         onChange={(e) => setProductSearch(e.target.value)}
                         placeholder="Buscar producto o servicio..."
                         disabled={isRegisterDisabled}
-                        className="pl-9 h-9 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
+                        className="pl-9 h-8 rounded-lg text-xs focus-visible:ring-primary focus-visible:border-primary"
                       />
                     </div>
                   </div>
@@ -1135,11 +1344,22 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod))}
                               </td>
                               <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
-                                <Button size="sm" variant="ghost" onClick={() => addItem(prod)}
-                                  disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
-                                  className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
-                                  <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar')}
-                                </Button>
+                                <div className="flex flex-wrap items-center justify-center gap-1">
+                                  {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                    <Button size="sm" variant="outline"
+                                      onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                      disabled={isRegisterDisabled}
+                                      title={`Consultar disponibilidad de ${prod.name} en otras sucursales`}
+                                      className="h-7 whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                      <Store className="mr-1 size-3" /> Disponibilidad
+                                    </Button>
+                                  )}
+                                  <Button size="sm" variant="ghost" onClick={() => handleAddOrCheck(prod)}
+                                    disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
+                                    className="h-7 max-w-full whitespace-nowrap rounded-lg px-1.5 sm:px-2 text-[10px] font-bold text-primary hover:bg-primary/10 disabled:opacity-50">
+                                    <Plus className="mr-1 size-3" /> {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disp.' : 'Agregar') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar')}
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1181,7 +1401,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                       )
                                     )}
                                   </div>
-                                  <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod))}</span>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                      <Button size="icon" variant="ghost"
+                                        onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                        disabled={isRegisterDisabled}
+                                        title={`Consultar disponibilidad de ${prod.name} en otras sucursales`}
+                                        className="size-6 rounded-lg text-primary hover:bg-primary/10 disabled:opacity-50">
+                                        <Store className="size-3.5" />
+                                      </Button>
+                                    )}
+                                    <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod))}</span>
+                                  </div>
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
                                 <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
@@ -1189,13 +1420,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 </p>
                               </div>
                               <Button
-                                onClick={() => addItem(prod)}
-                                disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0))}
+                                onClick={() => handleAddOrCheck(prod)}
+                                disabled={isRegisterDisabled || (prod.itemType === 'SERVICE' ? prod.isActive === false : false)}
                                 className="h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
                               >
                                 <ShoppingCart className="mr-2 size-3.5" />
-                                {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Sin Stock' : 'Agregar a factura')}
+                                {prod.itemType === 'SERVICE' ? (prod.isActive === false ? 'No Disponible' : 'Agregar a factura') : (prod.trackInventory && (!prod.currentStock || prod.currentStock <= 0) ? 'Ver otras sucursales' : 'Agregar a factura')}
                               </Button>
+                              {showAvailabilityAction && prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => void openAvailabilityFor(prod, cart.find((item) => item.productId === prod.id)?.quantity || 1)}
+                                  disabled={isRegisterDisabled}
+                                  className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-wider"
+                                >
+                                  <Store className="mr-2 size-3" /> Disponibilidad
+                                </Button>
+                              )}
                             </div>
                           </article>
                         ))}
@@ -1405,12 +1646,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       )
                     })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                 )}
+               </CardContent>
+             </Card>
+</div>
           </div>
-        </div>
-      )}
+        )}
       {createdInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-result-title">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 shadow-2xl">
@@ -1474,26 +1715,46 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             <div className="mb-5 flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-black">Checkout / Pago</h2>
+                {holdCreateDto && <p className="text-xs font-bold text-primary">Reserva con cobro inmediato</p>}
                 <p className="text-xs text-muted-foreground">Sesión: {activeSession.id.slice(0, 8)} · Tasa de cambio (Global): {Number(activeSession.exchangeRateUSD).toFixed(2)}</p>
               </div>
-              <Button variant="ghost" onClick={() => setShowPayment(false)}>✕</Button>
+              <Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); }}>✕</Button>
             </div>
 
             {(() => {
-              const totalToPay = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
+              const isHoldPayment = holdCreateDto !== null;
+              const holdTotal = holdCreateDto
+                ? calculateInvoiceSummary(
+                  holdCreateDto.items.map((item) => ({
+                    productId: item.productId || '',
+                    description: item.description,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    taxRate: item.taxRate || 0,
+                    discount: item.discount || 0,
+                    irRate: item.irRate || 0,
+                    lineTotal: 0,
+                  })),
+                  holdCreateDto.discountPercent || 0,
+                  holdCreateDto.includeTax !== false,
+                  holdCreateDto.irRate || 0,
+                  holdCreateDto.pricingMode,
+                ).total
+                : null;
+              const totalToPay = holdTotal !== null ? holdTotal : (paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total);
               const totalPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-              const changeLocal = Math.max(0, totalPaid * (paymentCurrency === 'USD' ? Number(activeSession.exchangeRateUSD) : 1) - summary.total);
+              const changeLocal = Math.max(0, totalPaid - (holdTotal !== null ? holdTotal : (paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total)));
 
               return (
                 <>
                   <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl bg-primary/10 p-3">
                       <span className="text-xs text-primary font-bold">Total a cobrar</span>
-                      <div className="text-xl font-black text-primary">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalToPay)}</div>
+                      <div className="text-xl font-black text-primary">{isHoldPayment ? 'C$' : (paymentCurrency === 'USD' ? '$' : 'C$')} {formatSalesAmount(totalToPay)}</div>
                     </div>
                     <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                       <span className="text-xs text-muted-foreground">Total pagado</span>
-                      <div className="text-xl font-black">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaid)}</div>
+                      <div className="text-xl font-black">{isHoldPayment ? 'C$' : (paymentCurrency === 'USD' ? '$' : 'C$')} {formatSalesAmount(totalPaid)}</div>
                     </div>
                     <div className={cn("rounded-xl p-3 border", changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio a entregar</span>
@@ -1503,13 +1764,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
                   <div className="mb-4 space-y-2">
                     <Label>Moneda de pago</Label>
-                    <Select value={paymentCurrency} onValueChange={(value: PaymentCurrency) => setPaymentCurrency(value)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
-                        <SelectItem value="USD">Dólares (USD)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {isHoldPayment ? (
+                      <div className="flex h-10 items-center rounded-xl border border-border/50 bg-muted/20 px-3 text-sm font-bold">
+                        Córdobas (NIO)
+                        <span className="ml-2 text-[10px] font-normal text-muted-foreground">Las ventas suspendidas se cobran en córdobas.</span>
+                      </div>
+                    ) : (
+                      <Select value={paymentCurrency} onValueChange={(value: PaymentCurrency) => setPaymentCurrency(value)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
+                          <SelectItem value="USD">Dólares (USD)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -1541,7 +1809,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 </>
               );
             })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setShowPayment(false)}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar y emitir'}</Button></div>
+            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
           </div>
         </div>
       )}
@@ -1579,6 +1847,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}
         onSuccess={handleCustomerCreated}
+      />
+      <BranchAvailabilityModal
+        open={availabilityOpen}
+        onOpenChange={(open) => {
+          setAvailabilityOpen(open);
+          if (!open) setAvailabilityProduct(null);
+        }}
+        product={availabilityProduct}
+        requestedQuantity={availabilityQuantity}
+        availability={availabilityRows}
+        loading={availabilityLoading}
+        submitting={holdSubmitting}
+        onSubmit={(selection) => void handleHoldReservation(selection)}
       />
       <AdministrarCajasModal
         open={manageCajasOpen}

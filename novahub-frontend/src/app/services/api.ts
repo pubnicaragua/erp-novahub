@@ -92,6 +92,12 @@ function describeRequest(path: string, method: RequestOptions['method']) {
   if (route.includes('/caja/sessions/') && route.endsWith('/close')) return 'cerrar la caja';
   if (route.includes('/caja/sessions/') && route.endsWith('/count')) return 'guardar el arqueo de caja';
   if (route.includes('/caja/sessions/') && route.endsWith('/movement')) return 'registrar el movimiento de caja';
+  if (route === '/caja/holds' && action === 'POST') return 'crear la venta suspendida';
+  if (route === '/caja/holds' && action === 'GET') return 'cargar las ventas suspendidas';
+  if (route.includes('/caja/holds/') && route.endsWith('/confirm')) return 'cobrar la venta suspendida';
+  if (route.includes('/caja/holds/') && route.endsWith('/deliver')) return 'registrar la entrega de la venta suspendida';
+  if (route.includes('/caja/holds/') && route.endsWith('/cancel')) return 'cancelar la venta suspendida';
+  if (route.includes('/caja/products/') && route.endsWith('/availability')) return 'consultar la disponibilidad del producto';
   if (route === '/sucursales' && action === 'POST') return 'crear la sucursal';
   if (route.startsWith('/sucursales/') && action === 'PUT') return 'guardar la sucursal';
   if (route.startsWith('/sucursales/') && action === 'DELETE') return 'eliminar la sucursal';

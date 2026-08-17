@@ -132,6 +132,7 @@ const menuItems: MenuItem[] = [
       { id: 'devoluciones-venta', label: 'Notas de crédito', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Créditos', icon: <FileMinus className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
+      { id: 'entregas', label: 'Entregas', icon: <PackageCheck className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
     ]
@@ -159,6 +160,7 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
+      { id: 'atributos', label: 'Atributos y Categoría', icon: <Tags className="size-4" /> },
       { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },

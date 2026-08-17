@@ -13,7 +13,8 @@ import {
   AlertTriangle,
   ClipboardCheck,
   TrendingDown,
-  Building2
+  Building2,
+  Tags
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -31,6 +32,7 @@ import { MobiliarioEquiposView } from './inventory/MobiliarioEquiposView';
 import { ConfiguracionInventarioView } from './inventory/ConfiguracionInventarioView';
 import { InventoryAuditsView } from './inventory/InventoryAuditsView';
 import { InventoryLossesView } from './inventory/InventoryLossesView';
+import { AtributosView } from './inventory/AtributosView';
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
@@ -42,6 +44,7 @@ import type { SalesPageSize, SalesPaginationControls } from '../types';
 const INVENTORY_SECTIONS = [
   { id: 'productos',       label: 'Productos',       icon: Package,   requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'servicios',       label: 'Servicios',       icon: BriefcaseBusiness, requiredModules: ['INVENTORY_PRODUCTS'] },
+  { id: 'atributos',       label: 'Atributos y Categoría', icon: Tags, requiredModules: ['INVENTORY_PRODUCTS'] },
   { id: 'almacenes',       label: 'Almacenes',       icon: Warehouse, requiredModules: ['INVENTORY_WAREHOUSES'] },
   { id: 'transferencias',  label: 'Transferencias',  icon: Truck,     requiredModules: ['INVENTORY_TRANSFERS'] },
   { id: 'ajustes',         label: 'Ajustes',         icon: Scale,     requiredModules: ['INVENTORY_ADJUSTMENTS'] },
@@ -544,6 +547,15 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     onWarehouseChange={(value) => updateProductFilters('servicios', 'warehouseIds', value)}
                     isSidebarCollapsed={isSidebarCollapsed}
                   />
+                </motion.div>
+              </TabsContent>
+              <TabsContent value="atributos" className="m-0" asChild>
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                >
+                  <AtributosView />
                 </motion.div>
               </TabsContent>
               <TabsContent value="almacenes" className="m-0" asChild>

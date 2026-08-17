@@ -183,7 +183,7 @@ export function FloatingChat() {
       <motion.button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group fixed right-4 bottom-6 z-50 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-all hover:scale-110 hover:shadow-primary/60 active:scale-95"
+        className="group fixed right-4 bottom-6 z-50 flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-all hover:scale-110 hover:shadow-primary/60 active:scale-95 sm:size-12"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.08 }}
@@ -200,7 +200,7 @@ export function FloatingChat() {
               exit={{ rotate: 90, opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <X className="size-6" />
+              <X className="size-4.5 sm:size-5" />
             </motion.span>
           ) : (
             <motion.span
@@ -210,7 +210,7 @@ export function FloatingChat() {
               exit={{ rotate: -90, opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <MessageCircle className="size-6" />
+              <MessageCircle className="size-4.5 sm:size-5" />
             </motion.span>
           )}
         </AnimatePresence>

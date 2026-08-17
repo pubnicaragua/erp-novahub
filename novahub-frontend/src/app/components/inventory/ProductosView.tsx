@@ -199,6 +199,7 @@ interface EditingProduct {
   id: string;
   code: string;
   name: string;
+  description?: string;
   categoryId: string;
   salePrice: number | '';
   priceCurrency?: string;
@@ -732,7 +733,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     setPage(1);
     pagination?.onPageChange(1);
-  }, [searchTerm, categoryFilters, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
+  }, [searchTerm, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
 
   // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
   // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
@@ -766,7 +767,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(p.categoryId);
+    const matchesCategory = true;
     const productWarehouseIds = [
       ...(Array.isArray(p.warehouseCatalogs) ? p.warehouseCatalogs.map((catalog: any) => catalog.warehouseId || catalog.warehouse?.id) : []),
       ...(Array.isArray(p.stockLevels) ? p.stockLevels.map((level: any) => level.warehouseId || level.warehouse?.id) : []),
@@ -963,6 +964,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       id: tempId,
       code: '',
       name: '',
+      description: '',
       categoryId: categories[0]?.id || '',
       salePrice: '',
       priceCurrency: baseCurrency,
@@ -986,6 +988,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       id: product.id,
       code: product.code,
       name: product.name,
+      description: product.description || '',
       categoryId: product.categoryId || '',
       salePrice: Number(product.salePrice) || 0,
       priceCurrency: product.priceCurrency || baseCurrency,
@@ -1178,6 +1181,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
           name: product.name,
+          description: product.description || '',
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
           salePriceOriginal: Number(product.salePrice || 0),
@@ -1236,6 +1240,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         await inventoryService.updateProduct(id, {
           code: product.code,
           name: product.name,
+          description: product.description || '',
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
           salePriceOriginal: Number(product.salePrice || 0),
@@ -1485,6 +1490,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 onChange={(e) => handleUpdateField(product.id, 'name', e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, product.id)}
                 placeholder="Nombre"
+                className="h-8 w-full min-w-0 text-xs"
+                disabled={isSaving}
+              />
+              <Input
+                value={product.description || ''}
+                onChange={(e) => handleUpdateField(product.id, 'description', e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, product.id)}
+                placeholder="Descripción"
                 className="h-8 w-full min-w-0 text-xs"
                 disabled={isSaving}
               />
@@ -2262,41 +2275,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             />
           </div>
 
-          {/* Categorías */}
-          <div className="flex shrink-0 items-center gap-0.5">
-            <MultiSelectFilter
-              label="Categorías"
-              placeholder="Buscar categoría..."
-              options={categories.map((c: any) => ({ value: c.id, label: c.name }))}
-              selected={categoryFilters}
-              onChange={(value) => { setCategoryFilters(value); onCategoryChange?.(value); }}
-              className="h-7 rounded text-[11px]"
-            />
-            <Button type="button" variant="outline" size="sm" className="h-7 w-6 shrink-0 rounded p-0" onClick={() => { setPendingCategoryRowIndex(null); setCategoryModalOpen(true); }} title="Agregar categoría" aria-label="Agregar categoría">
-              <Plus className="size-3" />
-            </Button>
-          </div>
-
           {/* Almacenes */}
-          <div className="flex shrink-0 items-center gap-0.5">
-            <MultiSelectFilter
-              label="Almacenes"
-              placeholder="Buscar almacén..."
-              searchable
-              options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
-              selected={warehouseFilters}
-              onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-              className="h-7 rounded text-[11px]"
-            />
-            <Button type="button" variant="outline" size="sm" className="h-7 w-6 shrink-0 rounded p-0" onClick={() => { setPendingWarehouseRowIndex(null); setNewWarehouseName(''); setNewWarehouseLocation(''); setNewWarehouseType('STORE'); setNewWarehouseParentId('none'); setNewWarehouseInventoryAccountId('none'); setWarehouseModalOpen(true); }} title="Agregar almacén" aria-label="Agregar almacén">
-              <Plus className="size-3" />
-            </Button>
-          </div>
+          <MultiSelectFilter
+            label="Almacenes"
+            placeholder="Buscar almacén..."
+            searchable
+            options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
+            selected={warehouseFilters}
+            onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
+            className="h-7 rounded-md border border-input text-[11px]"
+          />
 
           {/* Selects compactos */}
           {!isServiceView && (
             <Select value={effectiveProductStatusFilter} onValueChange={(value) => { const nextValue = value as ProductStatusFilter; setLocalProductStatusFilter(nextValue); onProductStatusFilterChange?.(nextValue); }}>
-              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Estado"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-6 w-auto shrink-0 rounded-md border border-input px-1.5 text-[10px]" aria-label="Estado"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Estado</SelectItem>
                 <SelectItem value="ACTIVE">Activos</SelectItem>
@@ -2306,7 +2299,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
-              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-6 w-auto shrink-0 rounded-md border border-input px-1.5 text-[10px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Disponibilidad</SelectItem>
                 <SelectItem value="available">Disponibles</SelectItem>
@@ -2316,7 +2309,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveUnitFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalUnitFilter(v); onUnitChange?.(v); }}>
-              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Unidad"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-6 w-auto shrink-0 rounded-md border border-input px-1.5 text-[10px]" aria-label="Unidad"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Unidad</SelectItem>
                 {UNIT_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
@@ -2325,7 +2318,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>
-              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Impuesto"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-6 w-auto shrink-0 rounded-md border border-input px-1.5 text-[10px]" aria-label="Impuesto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Impuesto</SelectItem>
                 {TAX_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
@@ -2334,7 +2327,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); onStockStatusChange?.(v); }}>
-              <SelectTrigger className="h-7 w-auto min-w-0 shrink-0 rounded px-1.5 text-[11px]" aria-label="Stock"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-6 w-auto shrink-0 rounded-md border border-input px-1.5 text-[10px]" aria-label="Stock"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Stock</SelectItem>
                 <SelectItem value="available">Con stock</SelectItem>
@@ -2348,47 +2341,47 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <div className="h-4 w-px shrink-0 bg-border/60" />
 
           {/* Acciones — todo en la misma fila */}
-          <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-0.5 size-3" /> Cómo
+          <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-md border border-input px-2 text-[11px]" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-1 size-3" /> Cómo
           </Button>
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
-            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
-              <ImageIcon className="mr-0.5 size-3" /> Imágenes
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-md border border-input px-2 text-[11px]" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
+              <ImageIcon className="mr-1 size-3" /> Imágenes
             </Button>
           )}
           {!isServiceView && (
-            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
-              <PackageSearch className="size-3 mr-0.5" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-md border border-input px-2 text-[11px]" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
+              <PackageSearch className="size-3 mr-1" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
-            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
-              <Barcode className="mr-0.5 size-3" /> Etiquetas
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 rounded-md border border-input px-2 text-[11px]" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
+              <Barcode className="mr-1 size-3" /> Etiquetas
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3 mr-0.5" /> Nuevo
+            <Button type="button" size="sm" className="h-7 shrink-0 rounded-md px-2 text-[11px] text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="size-3 mr-1" /> Nuevo
             </Button>
           )}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button size="sm" className="h-7 shrink-0 rounded bg-gradient-to-br from-primary to-primary/80 px-2 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3 mr-0.5" /> Nuevo
+            <Button type="button" size="sm" className="h-7 shrink-0 rounded-md px-2 text-[11px] text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="size-3 mr-1" /> Nuevo
             </Button>
           )}
 
           {/* Checkbox + Limpiar */}
           {!selectedBranchId && !isServiceView && (
-            <label className="flex shrink-0 cursor-pointer select-none items-center gap-1 rounded border border-border/70 bg-muted/20 px-1.5 py-0.5" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
+            <label className="flex shrink-0 cursor-pointer select-none items-center gap-1 rounded-md border border-input px-2 py-0.5" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
               <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-3" />
-              <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Todos alm.</span>
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap">Todos alm.</span>
             </label>
           )}
-          {(categoryFilters.length > 0 || warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
-            <Button variant="ghost" size="sm" className="h-7 shrink-0 rounded px-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground" onClick={() => {
+          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
+            <Button variant="outline" size="sm" className="h-7 shrink-0 rounded-md border border-input px-2 text-[11px] text-muted-foreground" onClick={() => {
               setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
             }}>
-              <X className="size-3 mr-0.5" /> Limpiar
+              <X className="size-3 mr-1" /> Limpiar
             </Button>
           )}
       </div>
@@ -2651,20 +2644,36 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </Badge>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {product.stockLevels && product.stockLevels.length > 0 ? (
-                            Array.from(new Set(
-                              product.stockLevels
-                                .filter((sl: any) => Number(sl.quantity) > 0)
-                                .map((sl: any) => sl.warehouse?.name)
+                          {(() => {
+                            const warehouseNames = product.stockLevels && product.stockLevels.length > 0
+                              ? Array.from(new Set(
+                                  product.stockLevels
+                                    .filter((sl: any) => Number(sl.quantity) > 0)
+                                    .map((sl: any) => sl.warehouse?.name)
+                                    .filter(Boolean)
+                                ))
+                              : [];
+                            if (warehouseNames.length > 0) {
+                              return warehouseNames.map((whName: any, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
+                                  {whName}
+                                </Badge>
+                              ));
+                            }
+                            const catalogNames = Array.from(new Set(
+                              (product.warehouseCatalogs || [])
+                                .map((wc: any) => wc.warehouse?.name)
                                 .filter(Boolean)
-                            )).map((whName: any, idx) => (
-                              <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
-                                {whName}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">-</span>
-                          )}
+                            ));
+                            if (catalogNames.length > 0) {
+                              return catalogNames.map((whName: any, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
+                                  {whName}
+                                </Badge>
+                              ));
+                            }
+                            return <span className="text-[10px] text-muted-foreground">-</span>;
+                          })()}
                         </div>
                       )}
                     </TableCell>
@@ -2676,15 +2685,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                      <TableCell className="text-right">
                          <div className="flex items-center justify-end gap-1 transition-opacity">
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                             className="size-7"
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               handleEditRow(product);
-                             }}
-                           >
+                             <Button 
+                               variant="ghost" 
+                               size="icon" 
+                              className="size-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalProduct(product);
+                              }}
+                            >
                              <Pencil className="size-3.5" />
                            </Button>
                        )}

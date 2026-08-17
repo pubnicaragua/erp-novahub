@@ -545,7 +545,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
         </div>
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailWarehouse ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailWarehouse ? 'lg:grid-cols-[1fr_380px]' : 'lg:grid-cols-1'}`}>
         <div className="min-w-0">
       <div className="space-y-3 lg:hidden" data-tour="almacenes-table">
         {Array.from(editingRows.values()).filter((warehouse) => warehouse.isNew).map(renderMobileWarehouseCard)}
@@ -554,17 +554,17 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="almacenes-table">
-        <Table>
+        <Table className="w-full table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
-               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Tipo</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Almacén matriz</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest w-44">Cuenta contable</TableHead>
+               <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Tipo</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Almacén matriz</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Cuenta contable</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest">Sucursales</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-20">Stock</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Stock</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -597,27 +597,27 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Warehouse className="size-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">{wh.name}</span>
+                        <Warehouse className="size-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-sm truncate">{wh.name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="size-3" />
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+                        <MapPin className="size-3 shrink-0" />
                         {wh.location || '-'}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-[10px] whitespace-nowrap">
                         {WAREHOUSE_TYPES.find(t => t.value === wh.type)?.label || wh.type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">
                       {wh.parent?.name || '-'}
                     </TableCell>
-                    <TableCell className="text-xs">
+                    <TableCell className="text-xs truncate max-w-[160px]">
                       {wh.inventoryAccount ? (
-                        <Badge variant="outline" className="text-[9px] font-mono">{wh.inventoryAccount.code} - {wh.inventoryAccount.name}</Badge>
+                        <Badge variant="outline" className="text-[9px] font-mono whitespace-nowrap">{wh.inventoryAccount.code} - {wh.inventoryAccount.name}</Badge>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">No asignada</span>
                       )}

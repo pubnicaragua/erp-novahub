@@ -37,7 +37,7 @@ const normalizeNavigation = (value: unknown): NotificationNavigation | null => {
 
 export function getNotificationNavigation(notification: NotificationLike): NotificationNavigation {
   const metadata = asRecord(notification.metadata);
-  const targetId = String(metadata.targetId || metadata.expenseId || metadata.entityId || '').trim() || undefined;
+  const targetId = String(metadata.targetId || metadata.expenseId || metadata.entityId || metadata.holdId || '').trim() || undefined;
   const explicit = normalizeNavigation(metadata.navigation || metadata.route || metadata);
   if (explicit) return { ...explicit, targetId };
 
@@ -64,5 +64,12 @@ export function navigateToNotification(notification: NotificationLike) {
   const metadata = asRecord(notification.metadata);
   const filter = asRecord(metadata.navigation || metadata)?.filter;
   const detail = filter ? { ...navigation, filter } : navigation;
+  if (navigation.subModule === 'entregas' && navigation.targetId) {
+    try {
+      sessionStorage.setItem('pending-pos-hold-focus', navigation.targetId);
+    } catch {
+      // El foco es opcional; la navegación sigue funcionando sin almacenamiento local.
+    }
+  }
   window.dispatchEvent(new CustomEvent('navigate-module', { detail }));
 }

@@ -48,7 +48,7 @@ import { Card } from '../ui/card';
 import { Label } from '../ui/label';
 import { Skeleton } from '../ui/skeleton';
 import { Progress } from '../ui/progress';
-import { ScrollArea } from '../ui/scroll-area';
+
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
@@ -203,6 +203,20 @@ export function ProductDetailDrawer({
   const [expandedImageOpen, setExpandedImageOpen] = useState(false);
   const [levelDrafts, setLevelDrafts] = useState<Record<string, { minStock: string; maxStock: string }>>({});
   const [savingLevelId, setSavingLevelId] = useState<string | null>(null);
+  const [catalogAttrs, setCatalogAttrs] = useState<any[]>([]);
+
+  // Cargar catálogo de atributos para resolver nombres
+  useEffect(() => {
+    if (!productId) return;
+    const controller = new AbortController();
+    inventoryService.getAttributes(controller.signal)
+      .then((res) => {
+        const data = (res as any)?.data || res || [];
+        setCatalogAttrs(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [productId]);
 
   // Sincroniza los borradores de min/max cuando cambia el detalle del producto
   useEffect(() => {
@@ -433,13 +447,13 @@ export function ProductDetailDrawer({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-3xl p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden"
       >
         {/* ===== Tabs envuelve header + contenido para que Radix comparta contexto ===== */}
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as TabKey)}
-          className="flex flex-col flex-1 min-h-0 gap-0"
+          className="flex flex-col flex-1 min-h-0 gap-0 overflow-hidden"
         >
           {/* ===== Header sticky ===== */}
           <SheetHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4 space-y-2" data-tour="inventory-product-detail-title">
@@ -542,7 +556,7 @@ export function ProductDetailDrawer({
           </SheetHeader>
 
         {/* ===== Contenido con scroll ===== */}
-        <ScrollArea className="flex-1" data-tour="inventory-product-detail-data">
+        <div className="flex-1 min-h-0 overflow-y-auto" data-tour="inventory-product-detail-data">
           <div className="px-6 py-4">
             {error && !product && (
               <Card className="p-4 border-rose-500/30 bg-rose-500/5 flex items-start gap-3">
@@ -690,6 +704,42 @@ export function ProductDetailDrawer({
                       )}
                     </div>
                   </Card>
+
+                  {/* Atributos vinculados */}
+                  {!isService && ((product?.linkedAttributes && Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) || (product?.attributes && Array.isArray(product.attributes) && product.attributes.length > 0)) && (
+                    <Card className="border-border/50">
+                      <div className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Tag className="size-4 text-primary" />
+                          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Atributos vinculados</p>
+                        </div>
+                        <div className="space-y-2">
+                          {(() => {
+                            const attrList = product.linkedAttributes || product.attributes || [];
+                            return attrList.map((linked: any, idx: number) => {
+                              const catalogAttr = catalogAttrs.find((a: any) => a.id === linked.attributeId);
+                              const name = linked.name || catalogAttr?.name || 'Atributo';
+                              const options = linked.selectedOptions || linked.options || [];
+                              return (
+                                <div key={idx} className="rounded-lg border border-border/50 bg-muted/20 p-2.5">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary">{name}</p>
+                                  {options.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {options.map((opt: string, i: number) => (
+                                        <Badge key={i} variant="secondary" className="text-[9px]">
+                                          {opt}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    </Card>
+                  )}
                 </TabsContent>
 
                 {/* ============================ TAB: STOCK ============================ */}
@@ -989,7 +1039,7 @@ export function ProductDetailDrawer({
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* ===== Footer sticky con acción ===== */}
         <div className="sticky bottom-0 z-10 bg-background border-t px-6 py-3 flex items-center justify-between gap-2" data-tour="inventory-product-detail-actions">

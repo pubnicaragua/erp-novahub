@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Badge } from '../ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
-import { Package, Check } from 'lucide-react';
+import { Package, Check, Tag } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
@@ -24,6 +25,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
   const { exchangeRate, baseCurrency } = useCurrency();
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const isService = itemType === 'SERVICE' || String(product?.itemType || product?.type || '').toUpperCase() === 'SERVICE';
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           id: product.id,
           code: product.code,
           name: product.name,
+          description: product.description || '',
           categoryId: product.categoryId || '',
           priceCurrency: baseCurrency || 'NIO',
           salePrice: Number(product.salePrice) || 0,
@@ -73,6 +76,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             product.serialNumberTracking ||
             String(product.trackingType || '').toUpperCase() === 'SERIAL',
           ),
+          imeiNumber: product.serialNumber || product.imei || '',
           itemType: (product.itemType || 'PRODUCT').toUpperCase(),
           isActive: product.isActive !== false,
           minStock: Number(product.minStock) || 0,
@@ -83,7 +87,16 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
           imageFile: null,
           imagePreviewUrl: '',
-          removeImage: false
+          removeImage: false,
+          attributeIds: Array.isArray(product.attributeIds) ? product.attributeIds : [],
+          linkedAttributes: (() => {
+            if (Array.isArray(product.linkedAttributes) && product.linkedAttributes.length > 0) return product.linkedAttributes;
+            if (Array.isArray(product.attributes) && product.attributes.length > 0) return product.attributes;
+            if (Array.isArray(product.attributeIds) && product.attributeIds.length > 0) {
+              return product.attributeIds.map((id: string) => ({ attributeId: id, selectedOptions: [] }));
+            }
+            return [];
+          })(),
         });
       } else {
         setDraft(null);
@@ -92,10 +105,80 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
     return () => clearTimeout(timer);
   }, [product, baseCurrency]);
 
+  useEffect(() => {
+    if (!product) return;
+    const controller = new AbortController();
+    inventoryService.getAttributes(controller.signal)
+      .then((res) => {
+        const data = (res as any)?.data || res || [];
+        const attrs = Array.isArray(data) ? data : [];
+        setCatalogAttributes(attrs);
+        // Enriquecer linkedAttributes con nombres del catálogo
+        setDraft((prev: any) => {
+          if (!prev || !prev.linkedAttributes || prev.linkedAttributes.length === 0) return prev;
+          return {
+            ...prev,
+            linkedAttributes: prev.linkedAttributes.map((la: any) => {
+              if (la.name) return la;
+              const attr = attrs.find((a: any) => a.id === la.attributeId);
+              return { ...la, name: attr?.name || la.attributeId };
+            }),
+          };
+        });
+      })
+      .catch(() => setCatalogAttributes([]));
+    return () => controller.abort();
+  }, [product]);
+
   if (!draft) return null;
 
   const handleUpdate = (field: string, value: any) => {
     setDraft((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleAttribute = (attrId: string) => {
+    setDraft((prev: any) => {
+      const exists = prev.linkedAttributes.find((la: any) => la.attributeId === attrId);
+      if (exists) {
+        return { ...prev, linkedAttributes: prev.linkedAttributes.filter((la: any) => la.attributeId !== attrId) };
+      }
+      const attr = catalogAttributes.find((a: any) => a.id === attrId);
+      return {
+        ...prev,
+        linkedAttributes: [...prev.linkedAttributes, { attributeId: attrId, name: attr?.name || '', selectedOptions: attr?.options || [] }],
+      };
+    });
+  };
+
+  const toggleAttributeOption = (attrId: string, option: string) => {
+    setDraft((prev: any) => ({
+      ...prev,
+      linkedAttributes: prev.linkedAttributes.map((la: any) => {
+        if (la.attributeId !== attrId) return la;
+        const has = la.selectedOptions.includes(option);
+        return {
+          ...la,
+          selectedOptions: has
+            ? la.selectedOptions.filter((o: string) => o !== option)
+            : [...la.selectedOptions, option],
+        };
+      }),
+    }));
+  };
+
+  const getSelectedAttributes = () => {
+    return catalogAttributes.filter((a: any) =>
+      draft.linkedAttributes.some((la: any) => la.attributeId === a.id)
+    );
+  };
+
+  const combinationCount = (attrs: any[]) => {
+    if (attrs.length === 0) return 0;
+    return attrs.reduce((acc: number, attr: any) => {
+      const linked = draft.linkedAttributes.find((la: any) => la.attributeId === attr.id);
+      const selectedCount = linked?.selectedOptions?.length || attr.options?.length || 0;
+      return acc * Math.max(1, selectedCount);
+    }, 1);
   };
 
   const updateAllocation = (id: string, updates: any) => {
@@ -155,6 +238,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
       await inventoryService.updateProduct(draft.id, {
         code: draft.code,
         name: draft.name,
+        description: draft.description || '',
         categoryId: draft.categoryId,
         costPrice: Number(draft.costPrice || 0) * rate,
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
@@ -166,7 +250,27 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         warehouseId: draft.itemType === 'SERVICE' ? draft.initialAllocations?.[0]?.warehouseId : undefined,
         warehouseIds: draft.itemType !== 'SERVICE' ? draft.initialAllocations?.map((a: any) => a.warehouseId).filter(Boolean) : undefined,
         imageUrl: nextImageUrl,
+        attributeIds: draft.attributeIds?.length > 0 ? draft.attributeIds : [],
+        linkedAttributes: draft.linkedAttributes?.length > 0 ? draft.linkedAttributes : [],
       });
+
+      // Manejar IMEI/Serie si está habilitado
+      if (draft.trackSerialNumbers && draft.imeiNumber && draft.imeiNumber.trim()) {
+        try {
+          // Verificar si ya existe una serie para este producto
+          const existingSeries = await inventoryService.getSeries({ productId: draft.id } as any);
+          const seriesList = Array.isArray(existingSeries) ? existingSeries : ((existingSeries as any)?.data || []);
+          if (seriesList.length === 0) {
+            // Crear nueva serie
+            await inventoryService.createSeries({
+              productId: draft.id,
+              number: draft.imeiNumber.trim(),
+            });
+          }
+        } catch (seriesErr) {
+          console.error('Error managing serial number', seriesErr);
+        }
+      }
 
       const variantId = product?.variants?.[0]?.id;
       if (draft.itemType !== 'SERVICE' && variantId && draft.initialAllocations) {
@@ -221,10 +325,11 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
   };
 
   return (
-    <Dialog open={!!product} onOpenChange={(v) => { if (!isSaving && !v) onClose(); }}>      <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl max-h-[calc(100dvh-1rem)] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+    <Dialog open={!!product} onOpenChange={(v) => { if (!isSaving && !v) onClose(); }}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader data-tour="inventory-product-edit-title">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
-            <Package className="size-5 text-primary" /> Editar Producto
+            <Package className="size-5 text-primary" /> Editar {isService ? 'Servicio' : 'Producto'}
           </DialogTitle>
           <InventoryViewTutorial
             label={isService ? 'Cómo editar servicio' : 'Cómo editar producto'}
@@ -233,156 +338,273 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           />
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 py-4" data-tour="inventory-product-edit-data">
-          <div className="md:col-span-1 flex flex-col gap-4">
-            <div className="flex flex-col items-center gap-2">
+        <div className="flex-1 overflow-auto flex flex-col gap-6 p-1" data-tour="inventory-product-edit-data">
+
+          {/* FORMULARIO SUPERIOR */}
+          <div className="flex flex-col gap-4 rounded-xl border border-dashed bg-muted/30 p-4 sm:flex-row">
+            <div>
               <ProductImagePicker
                 src={draft.imagePreviewUrl || draft.imageUrl}
                 productName={draft.name}
                 onSelect={handleImageSelected}
                 onRemove={handleImageRemoved}
               />
-              <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-widest text-center mt-2">Imagen</p>
             </div>
-            
-            {!isService && (
-              <Button
-                type="button"
-                variant={draft.trackSerialNumbers ? 'default' : 'outline'}
-                className={`h-auto min-h-9 py-2 w-full text-[10px] uppercase tracking-wider font-bold whitespace-normal text-center ${draft.trackSerialNumbers ? 'bg-primary text-primary-foreground shadow-sm' : ''}`}
-                onClick={() => handleUpdate('trackSerialNumbers', !draft.trackSerialNumbers)}
-                disabled={!isService || isSaving}
-              >
-                Seguimiento Serie/IMEI:<br/>{draft.trackSerialNumbers ? 'Activado' : 'Desactivado'}
-              </Button>
-            )}
-          </div>
-          
-          <div className="md:col-span-3 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="col-span-1">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
-              <Input 
-                value={draft.code} 
-                onChange={e => handleUpdate('code', e.target.value)} 
-                className="h-9 text-xs font-mono mt-1" 
-                placeholder="SKU-001" 
-              />
-            </div>
-
-            <div className="col-span-1">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría</label>
-              <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)} disabled={!isService || isSaving}>
-                <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
-              <Input 
-                value={draft.name} 
-                onChange={e => handleUpdate('name', e.target.value)} 
-                className="h-9 text-xs mt-1" 
-                placeholder="Nombre del producto" 
-              />
-            </div>
-
-            {!isService && (
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
               <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">U. Medida</label>
-                <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)} disabled={!isService || isSaving}>
-                  <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Código *</label>
+                <Input
+                  value={draft.code}
+                  onChange={e => handleUpdate('code', e.target.value)}
+                  className="h-8 text-xs font-mono mt-1"
+                  placeholder="SKU-001"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
+                <Input
+                  value={draft.name}
+                  onChange={e => handleUpdate('name', e.target.value)}
+                  className="h-8 text-xs mt-1"
+                  placeholder="Nombre del producto"
+                />
+              </div>
+
+              <div className="sm:col-span-2 md:col-span-5">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción</label>
+                <Input
+                  value={draft.description || ''}
+                  onChange={e => handleUpdate('description', e.target.value)}
+                  className="h-8 text-xs mt-1"
+                  placeholder="Descripción del producto"
+                />
+              </div>
+
+              <div className="sm:col-span-2 md:col-span-5">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría</label>
+                <Select value={draft.categoryId} onValueChange={v => handleUpdate('categoryId', v)} disabled={isSaving}>
+                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unidad">Unidad</SelectItem>
-                    <SelectItem value="kilo">Kilo</SelectItem>
-                    <SelectItem value="libra">Libra</SelectItem>
-                    <SelectItem value="docena">Docena</SelectItem>
-                    <SelectItem value="caja">Caja</SelectItem>
-                    <SelectItem value="litro">Litro</SelectItem>
-                    <SelectItem value="metro">Metro</SelectItem>
-                    <SelectItem value="par">Par</SelectItem>
-                    <SelectItem value="rollo">Rollo</SelectItem>
-                    <SelectItem value="pieza">Pieza</SelectItem>
+                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-            )}
 
-            <div className="col-span-1">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
-              <Select value={draft.priceCurrency} onValueChange={handleCurrencyChange} disabled={!isService || isSaving}>
-                <SelectTrigger className="h-9 text-xs mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NIO">NIO</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="sm:col-span-2">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
+                <Select value={draft.priceCurrency} onValueChange={handleCurrencyChange} disabled={isSaving}>
+                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NIO">NIO</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {!isService && <div className="col-span-1">
-              <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
-              <Input 
-                type="number" min={0} step="any"
-                value={draft.costPrice} 
-                onChange={e => handleUpdate('costPrice', e.target.value)} 
-                className="h-9 text-xs text-right mt-1 tabular-nums" readOnly
-              />
-            </div>}
-            
-            {(!isService && draft.initialAllocations?.[0]) && (
-              <>
+              {!isService && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
+                <Input
+                  type="number" min={0} step="any"
+                  value={draft.costPrice}
+                  onChange={e => handleUpdate('costPrice', e.target.value)}
+                  className="h-8 text-xs text-right mt-1 tabular-nums"
+                  readOnly
+                />
+              </div>}
+
+              {!isService && (
                 <div className="col-span-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Principal</label>
-                  <Select value={draft.initialAllocations[0].warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations[0].id, { warehouseId: v })} disabled>
-                    <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Almacén..." /></SelectTrigger>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">U. Medida</label>
+                  <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)} disabled={isSaving}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unidad">Unidad</SelectItem>
+                      <SelectItem value="kilo">Kilo</SelectItem>
+                      <SelectItem value="libra">Libra</SelectItem>
+                      <SelectItem value="docena">Docena</SelectItem>
+                      <SelectItem value="caja">Caja</SelectItem>
+                      <SelectItem value="litro">Litro</SelectItem>
+                      <SelectItem value="metro">Metro</SelectItem>
+                      <SelectItem value="par">Par</SelectItem>
+                      <SelectItem value="rollo">Rollo</SelectItem>
+                      <SelectItem value="pieza">Pieza</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {!isService && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
+                <Button
+                  type="button"
+                  variant={draft.trackSerialNumbers ? 'default' : 'outline'}
+                  className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider ${draft.trackSerialNumbers ? 'bg-primary text-primary-foreground' : ''}`}
+                  onClick={() => handleUpdate('trackSerialNumbers', !draft.trackSerialNumbers)}
+                  disabled={isSaving}
+                >
+                  {draft.trackSerialNumbers ? 'Sí' : 'No'}
+                </Button>
+              </div>}
+
+              {!isService && draft.trackSerialNumbers && (
+                <div className="col-span-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">IMEI / Serie *</label>
+                  <Input
+                    value={draft.imeiNumber}
+                    onChange={e => handleUpdate('imeiNumber', e.target.value)}
+                    className="h-8 text-xs font-mono mt-1"
+                    placeholder="Número de serie o IMEI"
+                  />
+                </div>
+              )}
+
+              {!isService && (
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén</label>
+                  <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })} disabled>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Almacén..." /></SelectTrigger>
                     <SelectContent>
                       {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Actual</label>
-                  <Input type="number" disabled min={0} value={draft.initialAllocations[0].quantity} onChange={e => updateAllocation(draft.initialAllocations[0].id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Stock" />
-                </div>
-                <div className="col-span-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Mínimo</label>
-                  <Input type="number" min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Min" />
-                </div>
-                <div className="col-span-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Máximo</label>
-                  <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-9 text-xs text-right mt-1" placeholder="Max" />
-                </div>
-              </>
-            )}
+              )}
 
-            {isService && (
-              <div className="sm:col-span-2">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Vinculado *</label>
-                <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })}>
-                  <SelectTrigger className="h-9 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén..." /></SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              {!isService && draft.initialAllocations?.[0] && (
+                <>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Actual</label>
+                    <Input type="number" disabled min={0} value={draft.initialAllocations[0].quantity} onChange={e => updateAllocation(draft.initialAllocations[0].id, { quantity: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Stock" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Mínimo</label>
+                    <Input type="number" min={0} value={draft.initialAllocations[0].minStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { minStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Min" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Máximo</label>
+                    <Input type="number" min={0} value={draft.initialAllocations[0].maxStock} onChange={e => updateAllocation(draft.initialAllocations[0].id, { maxStock: Math.max(0, parseInt(e.target.value) || 0) })} className="h-8 text-xs text-right mt-1" placeholder="Max" />
+                  </div>
+                </>
+              )}
+
+              {isService && (
+                <div className="sm:col-span-2 md:col-span-3">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén Vinculado *</label>
+                  <Select value={draft.initialAllocations?.[0]?.warehouseId || ''} onValueChange={v => updateAllocation(draft.initialAllocations?.[0]?.id, { warehouseId: v })}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén..." /></SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {isService && (
+                <div className="col-span-1 sm:col-span-2 md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
+                  <Select value={draft.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdate('isActive', v === 'available')}>
+                    <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="available">Disponible</SelectItem>
+                      <SelectItem value="unavailable">No disponible</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+
+        {/* Selector de atributos del catálogo */}
+        {!isService && (
+          <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Tag className="size-4 text-primary" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-primary">Atributos del producto</h4>
               </div>
-            )}
+              {getSelectedAttributes().length > 0 && (
+                <Badge variant="outline" className="text-[9px] font-mono">
+                  {combinationCount(getSelectedAttributes())} variante{combinationCount(getSelectedAttributes()) !== 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
 
-            {isService && (
-              <div className="col-span-1">
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
-                <Select value={draft.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdate('isActive', v === 'available')}>
-                  <SelectTrigger className="h-9 text-xs mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="available">Disponible</SelectItem>
-                    <SelectItem value="unavailable">No disponible</SelectItem>
-                  </SelectContent>
-                </Select>
+            {catalogAttributes.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">Selecciona los atributos y sus opciones específicas para este producto.</p>
+            ) : (
+              <div className="space-y-2">
+                {catalogAttributes.map((attr: any) => {
+                  const linked = draft.linkedAttributes.find((la: any) => la.attributeId === attr.id);
+                  const isSelected = !!linked;
+                  return (
+                    <div
+                      key={attr.id}
+                      className={`rounded-lg border p-3 transition-colors ${
+                        isSelected
+                          ? 'border-primary/40 bg-primary/10'
+                          : 'border-border/60 bg-background/80 hover:border-primary/20 cursor-pointer'
+                      }`}
+                      onClick={() => !isSelected && toggleAttribute(attr.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`size-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
+                            {isSelected && <Check className="size-2.5 text-primary-foreground" />}
+                          </div>
+                          <span className="text-xs font-bold uppercase tracking-wider">{attr.name}</span>
+                        </div>
+                        {isSelected && (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-[9px]">
+                              {linked.selectedOptions.length} de {attr.options?.length || 0}
+                            </Badge>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-5 text-red-500 hover:text-white hover:bg-red-500"
+                              onClick={(e) => { e.stopPropagation(); toggleAttribute(attr.id); }}
+                            >
+                              <X className="size-3" />
+                            </Button>
+                          </div>
+                        )}
+                        {!isSelected && (
+                          <Badge variant="secondary" className="text-[9px]">
+                            {attr.options?.length || 0} opciones
+                          </Badge>
+                        )}
+                      </div>
+                      {isSelected && attr.options && attr.options.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2.5 ml-6" onClick={(e) => e.stopPropagation()}>
+                          {attr.options.map((opt: string, i: number) => {
+                            const isOptSelected = linked.selectedOptions.includes(opt);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => toggleAttributeOption(attr.id, opt)}
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+                                  isOptSelected
+                                    ? 'border-primary/40 bg-primary text-primary-foreground'
+                                    : 'border-border/60 bg-background text-muted-foreground hover:border-primary/30'
+                                }`}
+                              >
+                                {isOptSelected && <Check className="size-2.5" />}
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-        </div>
+        )}
 
         <DialogFooter className="mt-2 pt-4 border-t" data-tour="inventory-product-edit-actions">
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
@@ -401,6 +623,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
             Guardar Cambios
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

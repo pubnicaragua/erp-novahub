@@ -138,6 +138,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'notas-credito': ['SALES_CREDIT_NOTES'],
   'facturacion-caja': ['RETAIL_POS', 'SALES_POS'],
   'control-caja': ['RETAIL_POS', 'SALES_POS'],
+  'entregas': ['RETAIL_POS', 'SALES_POS'],
   'listas-precios': ['SALES_PRICE_LISTS'],
 
   solicitudes: ['PURCHASES_REQUESTS', 'PURCHASES'],

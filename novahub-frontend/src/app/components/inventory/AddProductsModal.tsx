@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
-import { Trash2, Plus, Package } from 'lucide-react';
+import { Trash2, Plus, Package, X, Tag, Check } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
@@ -38,7 +38,10 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   initialStock: '',
   initialWarehouseId: '',
   imageFile: null as File | null,
-  imagePreviewUrl: ''
+  imagePreviewUrl: '',
+  isVariable: false,
+  linkedAttributes: [] as Array<{ attributeId: string; selectedOptions: string[] }>,
+  imeiNumber: '',
 });
 
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
@@ -58,6 +61,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   }, [open, categories, warehouses]);
 
   const effectiveCategories = categories ?? internalCategories;
+  const [extraCategories, setExtraCategories] = useState<any[]>([]);
+  const allCategories = useMemo(() => {
+    const map = new Map<string, any>();
+    [...effectiveCategories, ...extraCategories].forEach((c: any) => map.set(c.id, c));
+    return Array.from(map.values());
+  }, [effectiveCategories, extraCategories]);
   const effectiveWarehouses = warehouses ?? internalWarehouses;
   const catalogItemType = itemType;
 
@@ -69,6 +78,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
   const [draftProduct, setDraftProduct] = useState<any>({ ...defaultDraft });
   
   const [skuError, setSkuError] = useState('');
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDesc, setNewCategoryDesc] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const validateSkuDebounced = (code: string) => {
@@ -86,6 +100,89 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         console.error('Error validating SKU', e);
       }
     }, 1000);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    inventoryService.getAttributes(controller.signal)
+      .then((res) => {
+        const data = (res as any)?.data || res || [];
+        setCatalogAttributes(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setCatalogAttributes([]));
+    return () => controller.abort();
+  }, [open]);
+
+  const getSelectedAttributes = () => {
+    return catalogAttributes.filter((a: any) =>
+      draftProduct.linkedAttributes.some((la: any) => la.attributeId === a.id)
+    );
+  };
+
+  const combinationCount = (attrs: any[]) => {
+    if (attrs.length === 0) return 0;
+    return attrs.reduce((acc: number, attr: any) => {
+      const linked = draftProduct.linkedAttributes.find((la: any) => la.attributeId === attr.id);
+      const selectedCount = linked?.selectedOptions?.length || attr.options?.length || 0;
+      return acc * Math.max(1, selectedCount);
+    }, 1);
+  };
+
+  const toggleAttribute = (attrId: string) => {
+    setDraftProduct((prev: any) => {
+      const exists = prev.linkedAttributes.find((la: any) => la.attributeId === attrId);
+      if (exists) {
+        return { ...prev, linkedAttributes: prev.linkedAttributes.filter((la: any) => la.attributeId !== attrId) };
+      }
+      const attr = catalogAttributes.find((a: any) => a.id === attrId);
+      return {
+        ...prev,
+        linkedAttributes: [...prev.linkedAttributes, { attributeId: attrId, name: attr?.name || '', selectedOptions: attr?.options || [] }],
+      };
+    });
+  };
+
+  const toggleAttributeOption = (attrId: string, option: string) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      linkedAttributes: prev.linkedAttributes.map((la: any) => {
+        if (la.attributeId !== attrId) return la;
+        const has = la.selectedOptions.includes(option);
+        return {
+          ...la,
+          selectedOptions: has
+            ? la.selectedOptions.filter((o: string) => o !== option)
+            : [...la.selectedOptions, option],
+        };
+      }),
+    }));
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Ingresa un nombre para la categoría');
+      return;
+    }
+    setCreatingCategory(true);
+    try {
+      const created = await inventoryService.createCategory({
+        name: newCategoryName.trim(),
+        description: newCategoryDesc.trim() || undefined,
+        type: catalogItemType as 'PRODUCT' | 'SERVICE',
+      });
+      const newCat = (created as any)?.data || created;
+      setExtraCategories((prev) => [...prev, newCat]);
+      handleUpdateDraft('categoryId', newCat.id);
+      setNewCategoryName('');
+      setNewCategoryDesc('');
+      setNewCategoryOpen(false);
+      toast.success('Categoría creada');
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al crear categoría');
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   // Categories arrive asynchronously when this modal is opened from POS.
@@ -120,9 +217,23 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       toast.error('Código, Nombre y Categoría son obligatorios');
       return;
     }
-    const initialStockNum = Number(draftProduct.initialStock || 0);
-    if (draftProduct.itemType === 'PRODUCT' && initialStockNum > 0 && !draftProduct.initialWarehouseId) {
-      toast.error('Debes seleccionar un almacén para el stock inicial');
+    if (draftProduct.isVariable) {
+      if (draftProduct.linkedAttributes.length === 0) {
+        toast.error('Selecciona al menos un atributo del catálogo');
+        return;
+      }
+      const invalid = draftProduct.linkedAttributes.find((la: any) => la.selectedOptions.length === 0);
+      if (invalid) {
+        toast.error('Cada atributo debe tener al menos una opción seleccionada');
+        return;
+      }
+    }
+    if (draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
+      toast.error('Debes seleccionar un almacén para el producto');
+      return;
+    }
+    if (draftProduct.isVariable && !draftProduct.initialWarehouseId) {
+      toast.error('Debes seleccionar un almacén para el producto');
       return;
     }
     if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
@@ -157,9 +268,23 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         toast.error('Corrige el error en el código antes de guardar');
         return;
       }
-      const initialStockNum = Number(draftProduct.initialStock || 0);
-      if (draftProduct.itemType === 'PRODUCT' && initialStockNum > 0 && !draftProduct.initialWarehouseId) {
-        toast.error('Debes seleccionar un almacén para el stock inicial');
+      if (draftProduct.isVariable) {
+        if (draftProduct.linkedAttributes.length === 0) {
+          toast.error('Selecciona al menos un atributo del catálogo');
+          return;
+        }
+        const invalidAttr = draftProduct.linkedAttributes.find((la: any) => la.selectedOptions.length === 0);
+        if (invalidAttr) {
+          toast.error('Cada atributo debe tener al menos una opción seleccionada');
+          return;
+        }
+      }
+      if (!draftProduct.isVariable && draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
+        toast.error('Debes seleccionar un almacén para el producto');
+        return;
+      }
+      if (draftProduct.isVariable && !draftProduct.initialWarehouseId) {
+        toast.error('Debes seleccionar un almacén para el producto');
         return;
       }
       if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
@@ -206,33 +331,25 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
           imageUrl: uploadedImageUri || undefined,
+          isVariable: Boolean(product.isVariable),
+          linkedAttributes: product.isVariable ? product.linkedAttributes : undefined,
         } as any);
 
         const created = (createdResponse as any)?.data || createdResponse;
         const createdId = created?.id;
-        const initialStockNum = Number(product.initialStock || 0);
 
-        if (product.itemType === 'PRODUCT' && initialStockNum > 0 && createdId && product.initialWarehouseId) {
+        // Si tiene IMEI/Serie, crear la entrada en ProductSeries
+        if (product.trackSerialNumbers && product.imeiNumber && product.imeiNumber.trim() && createdId) {
           try {
-            const productDetailResp = await inventoryService.getProduct(createdId);
-            const fullProduct = (productDetailResp as any)?.data || productDetailResp;
-            const variantId = fullProduct?.variants?.[0]?.id;
-
-            if (variantId) {
-              await inventoryService.createMovement({
-                productId: createdId,
-                warehouseId: product.initialWarehouseId,
-                variantId: variantId,
-                type: 'IN',
-                quantity: initialStockNum,
-                reference: `STOCK-INICIAL-${created.code || createdId}`,
-              });
-            }
-          } catch (err) {
-            console.error('Error allocating initial stock', err);
-            toast.error(`Error al asignar stock al ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'} ${product.name}`);
+            await inventoryService.createSeries({
+              productId: createdId,
+              number: product.imeiNumber.trim(),
+            });
+          } catch (seriesErr) {
+            console.error('Error creating serial number', seriesErr);
           }
         }
+
         successCount++;
       }
       toast.success(`${successCount} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'} guardado(s) correctamente`);
@@ -315,12 +432,50 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               </div>
               <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>
-                <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
-                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {effectiveCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {newCategoryOpen ? (
+                  <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
+                    <Input
+                      value={newCategoryName}
+                      onChange={e => setNewCategoryName(e.target.value)}
+                      className="h-7 text-xs"
+                      placeholder="Nombre de la categoría"
+                      autoFocus
+                    />
+                    <Input
+                      value={newCategoryDesc}
+                      onChange={e => setNewCategoryDesc(e.target.value)}
+                      className="h-7 text-xs"
+                      placeholder="Descripción (opcional)"
+                    />
+                    <div className="flex gap-1.5">
+                      <Button type="button" size="sm" className="h-6 flex-1 text-[9px] font-bold" onClick={handleCreateCategory} disabled={creatingCategory || !newCategoryName.trim()}>
+                        {creatingCategory ? 'Creando...' : 'Crear'}
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" className="h-6 text-[9px]" onClick={() => { setNewCategoryOpen(false); setNewCategoryName(''); setNewCategoryDesc(''); }}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5 mt-1">
+                    <Select value={draftProduct.categoryId} onValueChange={v => handleUpdateDraft('categoryId', v)}>
+                      <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => setNewCategoryOpen(true)}
+                      title="Crear nueva categoría"
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {!itemType && <div className="col-span-1">
@@ -332,6 +487,24 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                     <SelectItem value="SERVICE">Servicio</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>}
+
+              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Variable</label>
+                <Button
+                  type="button"
+                  variant={draftProduct.isVariable ? 'default' : 'outline'}
+                  className={`h-8 w-full mt-1 text-[10px] uppercase tracking-wider gap-1.5 ${draftProduct.isVariable ? 'bg-primary text-primary-foreground' : ''}`}
+                  onClick={() => {
+                    handleUpdateDraft('isVariable', !draftProduct.isVariable);
+                    if (!draftProduct.isVariable && draftProduct.attributes.length === 0) {
+                      setDraftProduct((prev: any) => ({ ...prev, isVariable: true, attributes: [{ name: '', options: [] }] }));
+                    }
+                  }}
+                >
+                  <Tag className="size-3" />
+                  {draftProduct.isVariable ? 'Sí' : 'No'}
+                </Button>
               </div>}
 
               <div className="col-span-1">
@@ -380,7 +553,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 </Button>
               </div>}
 
+              {catalogItemType !== 'SERVICE' && draftProduct.trackSerialNumbers && (
+                <div className="col-span-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">IMEI / Serie *</label>
+                  <Input
+                    value={draftProduct.imeiNumber}
+                    onChange={e => handleUpdateDraft('imeiNumber', e.target.value)}
+                    className="h-8 text-xs font-mono mt-1"
+                    placeholder="Número de serie o IMEI"
+                  />
+                </div>
+              )}
+
               {draftProduct.itemType === 'PRODUCT' ? (
+                !draftProduct.isVariable ? (
                 <>
                   <div className="sm:col-span-2">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén (Stock Inicial)</label>
@@ -394,14 +580,32 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   <div className="col-span-1">
                     <label className="text-[10px] uppercase font-bold text-muted-foreground">Stock Inicial</label>
                     <Input 
-                      type="number" min={0}
-                      value={draftProduct.initialStock} 
-                      onChange={e => handleUpdateDraft('initialStock', e.target.value)} 
-                      className="h-8 text-xs text-right mt-1 tabular-nums" 
-                      placeholder="0" 
+                      type="number"
+                      value={0}
+                      disabled
+                      className="h-8 text-xs text-right mt-1 tabular-nums bg-muted/50 text-muted-foreground cursor-not-allowed" 
+                      title="El stock inicia en 0. Se gestiona desde Inventario."
                     />
                   </div>
                 </>
+                ) : (
+                <>
+                  <div className="sm:col-span-2 md:col-span-3">
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén *</label>
+                    <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega del producto" /></SelectTrigger>
+                      <SelectContent>
+                        {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-1 sm:col-span-2 md:col-span-2 flex items-end">
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 w-full h-8 flex items-center">
+                      <p className="text-[10px] text-muted-foreground"><span className="font-bold text-primary">Stock:</span> Se configura después por variante.</p>
+                    </div>
+                  </div>
+                </>
+                )
               ) : (
                 <>
                   <div className="sm:col-span-2 md:col-span-3">
@@ -436,6 +640,104 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             </div>
           </div>
 
+          {/* SECCIÓN DE ATRIBUTOS (solo productos variables) */}
+          {draftProduct.isVariable && (
+            <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tag className="size-4 text-primary" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-primary">Atributos del producto</h4>
+                </div>
+                {getSelectedAttributes().length > 0 && (
+                  <Badge variant="outline" className="text-[9px] font-mono">
+                    {combinationCount(getSelectedAttributes())} variante{combinationCount(getSelectedAttributes()) !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+
+              <p className="text-[10px] text-muted-foreground">
+                Selecciona los atributos y sus opciones específicas para este producto.
+              </p>
+
+              {catalogAttributes.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border/60 bg-background/50 p-4 text-center">
+                  <p className="text-xs text-muted-foreground">No hay atributos creados.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Crea atributos desde <span className="font-bold text-primary">Inventario → Atributos</span> primero.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {catalogAttributes.map((attr: any) => {
+                    const linked = draftProduct.linkedAttributes.find((la: any) => la.attributeId === attr.id);
+                    const isSelected = !!linked;
+                    return (
+                      <div
+                        key={attr.id}
+                        className={`rounded-lg border p-3 transition-colors ${
+                          isSelected
+                            ? 'border-primary/40 bg-primary/10'
+                            : 'border-border/60 bg-background/80 hover:border-primary/20 cursor-pointer'
+                        }`}
+                        onClick={() => !isSelected && toggleAttribute(attr.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={`size-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
+                              {isSelected && <Check className="size-2.5 text-primary-foreground" />}
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-wider">{attr.name}</span>
+                          </div>
+                          {isSelected && (
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-[9px]">
+                                {linked.selectedOptions.length} de {attr.options?.length || 0}
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-5 text-red-500 hover:text-white hover:bg-red-500"
+                                onClick={(e) => { e.stopPropagation(); toggleAttribute(attr.id); }}
+                              >
+                                <X className="size-3" />
+                              </Button>
+                            </div>
+                          )}
+                          {!isSelected && (
+                            <Badge variant="secondary" className="text-[9px]">
+                              {attr.options?.length || 0} opciones
+                            </Badge>
+                          )}
+                        </div>
+                        {isSelected && attr.options && attr.options.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2.5 ml-6" onClick={(e) => e.stopPropagation()}>
+                            {attr.options.map((opt: string, i: number) => {
+                              const isOptSelected = linked.selectedOptions.includes(opt);
+                              return (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => toggleAttributeOption(attr.id, opt)}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${
+                                    isOptSelected
+                                      ? 'border-primary/40 bg-primary text-primary-foreground'
+                                      : 'border-border/60 bg-background text-muted-foreground hover:border-primary/30'
+                                  }`}
+                                >
+                                  {isOptSelected && <Check className="size-2.5" />}
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TABLA INFERIOR */}
           {productsList.length > 0 && (
             <div className="sales-responsive-table border rounded-md bg-card flex-1 overflow-auto min-h-[200px]" data-tour="inventory-product-add-items">
@@ -461,16 +763,23 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                          )}
                        </TableCell>
                        <TableCell className="text-xs font-mono p-2">{product.code}</TableCell>
+                        <TableCell className="text-xs p-2">
+                          {product.name}
+                          {product.trackSerialNumbers && <Badge variant="outline" className="ml-2 text-[8px] px-1 py-0 h-4">IMEI</Badge>}
+                          {product.isVariable && <Badge variant="outline" className="ml-2 text-[8px] px-1 py-0 h-4 border-primary/40 text-primary"><Tag className="size-2.5 mr-0.5" />Variable</Badge>}
+                        </TableCell>
                        <TableCell className="text-xs p-2">
-                         {product.name}
-                         {product.trackSerialNumbers && <Badge variant="outline" className="ml-2 text-[8px] px-1 py-0 h-4">IMEI</Badge>}
+                          {allCategories.find(c => c.id === product.categoryId)?.name}
                        </TableCell>
-                       <TableCell className="text-xs p-2">
-                         {effectiveCategories.find(c => c.id === product.categoryId)?.name}
-                       </TableCell>
-                       <TableCell className="text-xs text-right p-2 tabular-nums">
-                         {product.itemType === 'SERVICE' ? '-' : (product.initialStock || 0)}
-                       </TableCell>
+                        <TableCell className="text-xs text-right p-2 tabular-nums">
+                          {product.itemType === 'SERVICE' ? '-' : product.isVariable ? `${(() => {
+                            const attrs = catalogAttributes.filter((a: any) => product.linkedAttributes?.some((la: any) => la.attributeId === a.id));
+                            return attrs.length > 0 ? attrs.reduce((acc: number, attr: any) => {
+                              const linked = product.linkedAttributes?.find((la: any) => la.attributeId === attr.id);
+                              return acc * Math.max(1, linked?.selectedOptions?.length || attr.options?.length || 0);
+                            }, 1) : 0;
+                          })()} vars` : '0'}
+                        </TableCell>
                        <TableCell className="text-right p-2">
                          <Button 
                            variant="ghost" 

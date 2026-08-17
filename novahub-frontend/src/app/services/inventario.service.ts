@@ -76,6 +76,13 @@ export const inventoryService = {
   getReplenishmentReport: (period: 'weekly' | 'biweekly' | 'monthly' = 'weekly', signal?: AbortSignal) =>
     api.get<any>('/inventory/stock/replenishment-report', { params: { period }, signal }),
 
+  // ==================== ATTRIBUTES ====================
+  getAttributes: (signal?: AbortSignal) => api.get<any[]>('/inventory/attributes', { signal }),
+  getAttribute: (id: string, signal?: AbortSignal) => api.get<any>(`/inventory/attributes/${id}`, { signal }),
+  createAttribute: (data: { name: string; description?: string; options: string[] }) => api.post<any>('/inventory/attributes', data),
+  updateAttribute: (id: string, data: { name: string; description?: string; options: string[] }) => api.patch<any>(`/inventory/attributes/${id}`, data),
+  deleteAttribute: (id: string) => api.delete(`/inventory/attributes/${id}`),
+
   // ==================== BULK IMPORT ====================
   bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
     const results: { success: number; skipped: number; failed: number; errors: string[] } = { success: 0, skipped: 0, failed: 0, errors: [] };

@@ -4,7 +4,7 @@ import { cn } from './ui/utils';
 import {
   Users, FileSpreadsheet, ClipboardList, FileText,
   RotateCcw, CreditCard, FileOutput, FileMinus,
-  ShoppingCart, BarChart3, Vault, Calculator, Coins, Tags
+  ShoppingCart, BarChart3, Vault, Calculator, Coins, Tags, PackageCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +45,7 @@ import { DevolucionesView } from './ventas/DevolucionesView';
 import { NotasCreditoView } from './ventas/NotasCreditoView';
 import { FacturacionCajaView } from './ventas/FacturacionCajaView';
 import { ControlDashboardCajaView } from './ventas/ControlDashboardCajaView';
+import { EntregasView } from './ventas/EntregasView';
 import { PriceListsView } from './ventas/PriceListsView';
 
 const SALES_SECTIONS = [
@@ -57,6 +58,7 @@ const SALES_SECTIONS = [
   { id: 'devoluciones-venta', label: 'Notas de Crédito', icon: FileOutput, description: 'Retornos y saldos a favor', requiredModules: ['SALES_RETURNS'] },
   { id: 'notas-credito', label: 'Créditos', icon: FileMinus, description: 'Productos y servicios a crédito', requiredModules: ['SALES_CREDIT_NOTES'] },
   { id: 'listas-precios', label: 'Listas de Precios', icon: Tags, description: 'Tarifas de venta', requiredModules: ['SALES_PRICE_LISTS'] },
+  { id: 'entregas', label: 'Entregas', icon: PackageCheck, description: 'Ventas suspendidas y entregas inter-sucursal', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
   { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
   { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['RETAIL_POS', 'SALES_POS'] },
 ];
@@ -540,6 +542,9 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
               )}
               {activeSection === 'listas-precios' && (
                 <PriceListsView products={data.productos} onRefresh={fetchData} isSidebarCollapsed={isSidebarCollapsed} />
+              )}
+              {activeSection === 'entregas' && (
+                <EntregasView branchId={selectedBranchId || undefined} />
               )}
               {activeSection === 'facturacion-caja' && (
                 <FacturacionCajaView 
