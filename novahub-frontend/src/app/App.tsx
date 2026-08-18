@@ -7,6 +7,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
+import LandingPage from './components/LandingPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { SessionClosedPage } from './components/auth/SessionClosedPage';
 import { SessionMonitor } from './components/auth/SessionMonitor';
@@ -367,6 +368,15 @@ function AppContent() {
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.
+  if (location.pathname === '/landing') {
+    return (
+      <>
+        <LandingPage />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
   if (location.pathname === '/register') {
     return (
       <>

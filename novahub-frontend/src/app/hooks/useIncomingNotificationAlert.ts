@@ -1,27 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNotifications } from './useNotifications';
-
-let soundCtx: AudioContext | null = null;
-
-function playNotificationSound() {
-  try {
-    soundCtx = soundCtx || new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (soundCtx.state === 'suspended') void soundCtx.resume();
-    const osc = soundCtx.createOscillator();
-    const gain = soundCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.001, soundCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.25, soundCtx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, soundCtx.currentTime + 0.6);
-    osc.connect(gain);
-    gain.connect(soundCtx.destination);
-    osc.start();
-    osc.stop(soundCtx.currentTime + 0.65);
-  } catch {
-    // El audio puede estar bloqueado por el navegador; la campana sigue siendo la fuente de verdad.
-  }
-}
+import { playNotificationSound } from '../utils/notificationSound';
 
 /**
  * Detecta notificaciones entrantes nuevas (polling cada 30s) y:

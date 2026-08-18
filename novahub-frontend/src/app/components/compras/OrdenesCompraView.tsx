@@ -34,6 +34,7 @@ import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
 import { PurchaseOrderPreviewDialog } from './ui/PurchaseOrderPreviewDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -454,6 +455,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const prefillRef = useRef<Partial<PurchaseOrder> | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseOrder> | null>(null);
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<any | null>(null);
+  const [variantPickerIdx, setVariantPickerIdx] = useState<number>(0);
   const [importIntroOpen, setImportIntroOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
@@ -1394,6 +1398,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const selected = products.find((p: any) => String(p.id) === String(productId));
     if (!selected) return;
 
+    if (selected.isVariable && selected.variants && selected.variants.length > 1) {
+      setVariantPickerProduct(selected);
+      setVariantPickerIdx(idx);
+      setVariantPickerOpen(true);
+      return;
+    }
+
+    applyProductToItem(idx, selected);
+  };
+
+  const applyProductToItem = (idx: number, selected: any) => {
+    if (!localDoc) return;
+
     const newItems = [...(localDoc.items || [])];
     const currentItem = newItems[idx] || {};
     const purchasePrice = Number(selected.costPrice ?? selected.cost ?? selected.price ?? 0);
@@ -1431,6 +1448,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       total: lineTotal,
     };
     recalculateTotals(newItems);
+  };
+
+  const handlePurchaseVariantSelected = (variant: any) => {
+    if (!variantPickerProduct) return;
+    const selected = {
+      ...variantPickerProduct,
+      id: variantPickerProduct.id,
+      code: variant.sku || variantPickerProduct.code,
+      name: `${variantPickerProduct.name} - ${(variant.attributes || []).map((a: any) => a.value).join(' / ')}`,
+      costPrice: Number(variantPickerProduct.costPrice || 0) + Number(variant.costModifier || 0),
+      variantId: variant.id,
+    };
+    applyProductToItem(variantPickerIdx, selected);
   };
 
   const recalculateTotals = (items: any[]) => {
@@ -2242,6 +2272,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           onApprove={handleApproveOrder}
           onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
           onDownloadPdf={() => previewOrder && void handleDownloadOrderPdf(previewOrder)}
+        />
+
+        <PurchaseVariantPickerModal
+          open={variantPickerOpen}
+          onOpenChange={setVariantPickerOpen}
+          product={variantPickerProduct}
+          onSelect={handlePurchaseVariantSelected}
         />
 
         <Dialog open={false} onOpenChange={setImportIntroOpen}>

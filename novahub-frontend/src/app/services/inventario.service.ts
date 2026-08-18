@@ -83,6 +83,15 @@ export const inventoryService = {
   updateAttribute: (id: string, data: { name: string; description?: string; options: string[] }) => api.patch<any>(`/inventory/attributes/${id}`, data),
   deleteAttribute: (id: string) => api.delete(`/inventory/attributes/${id}`),
 
+  // ==================== PRODUCT VARIANTS ====================
+  getVariants: (productId: string, signal?: AbortSignal) => api.get<any[]>(`/inventory/products/${productId}/variants`, { signal }),
+  createVariant: (productId: string, data: { sku: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; attributes?: any[] }) =>
+    api.post<any>(`/inventory/products/${productId}/variants`, data),
+  updateVariant: (variantId: string, data: { sku?: string; name?: string; barcode?: string; priceModifier?: number; costModifier?: number; attributes?: any[] }) =>
+    api.patch<any>(`/inventory/variants/${variantId}`, data),
+  deleteVariant: (variantId: string) => api.delete(`/inventory/variants/${variantId}`),
+  regenerateVariants: (productId: string) => api.post<any[]>(`/inventory/products/${productId}/variants/regenerate`),
+
   // ==================== BULK IMPORT ====================
   bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
     const results: { success: number; skipped: number; failed: number; errors: string[] } = { success: 0, skipped: 0, failed: 0, errors: [] };

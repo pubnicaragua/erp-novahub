@@ -17,6 +17,7 @@ import {
   History,
   Eye,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { supportService } from '../../services/support.service';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { format } from 'date-fns';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { TicketFormModal } from './TicketFormModal';
 
 interface TicketsViewProps {
   data: Ticket[];
@@ -69,6 +71,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   const [commentLoading, setCommentLoading] = useState(false);
   const [pendingDeleteTicket, setPendingDeleteTicket] = useState<Ticket | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
 
   const commentsQuery = useTenantQuery<TicketComment[]>(
     ['support', 'ticket-comments', selectedTicket?.id],
@@ -180,19 +184,14 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     }
   };
 
-  const handleAdd = async () => {
-    try {
-      await supportService.create({
-        subject: 'Nuevo Ticket',
-        description: 'Describa el problema aquí...',
-        status: 'OPEN',
-        priority: 'MEDIUM',
-      } as any);
-      toast.success('Ticket creado');
-      onRefresh();
-    } catch {
-      toast.error('Error al crear');
-    }
+  const handleAdd = () => {
+    setEditingTicket(null);
+    setFormOpen(true);
+  };
+
+  const handleEdit = (ticket: Ticket) => {
+    setEditingTicket(ticket);
+    setFormOpen(true);
   };
 
   const handleDelete = async (ticket: Ticket) => {
@@ -324,6 +323,16 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
             isLoading={loading}
             actions={(row) => (
               <div className="flex justify-end items-center gap-1">
+                {canPerform('TICKETS', 'edit') && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"
+                    onClick={() => handleEdit(row)}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -425,6 +434,13 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
         </Card>
       </div>
     </div>
+
+      <TicketFormModal
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        ticket={editingTicket}
+        onRefresh={onRefresh}
+      />
 
       <ConfirmDialog
         open={pendingDeleteTicket !== null}

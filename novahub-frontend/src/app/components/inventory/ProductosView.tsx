@@ -30,6 +30,7 @@ import { storageService } from '../../services/storage.service';
 import { AddProductsModal } from './AddProductsModal';
 import { EditProductModal } from './EditProductModal';
 import { LabelPrintModal } from './LabelPrintModal';
+import { VariantManagerModal } from './VariantManagerModal';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import type { SalesPaginationControls } from '../../types';
@@ -500,6 +501,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [initialImportConfirmText, setInitialImportConfirmText] = useState('');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
+  const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
   
@@ -2480,6 +2482,17 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     {duplicatingId === product.id ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
                   </Button>
                 )}
+                {product.isVariable && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-primary hover:bg-primary/10"
+                    title="Gestionar variantes"
+                    onClick={(e) => { e.stopPropagation(); setVariantManagerProduct(product); }}
+                  >
+                    <Tag className="size-3.5" />
+                  </Button>
+                )}
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
                   variant="ghost"
                   size="icon"
@@ -2712,6 +2725,20 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             {duplicatingId === product.id ? <div className="size-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Copy className="size-3.5" />}
                           </Button>
                        )}
+                        {product.isVariable && canPerform('INVENTORY_PRODUCTS', 'edit') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-primary hover:bg-primary/10"
+                            title="Gestionar variantes"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVariantManagerProduct(product);
+                            }}
+                          >
+                            <Tag className="size-3.5" />
+                          </Button>
+                        )}
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
                             <Button 
                               variant="ghost" 
@@ -2765,6 +2792,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         warehouses={warehouses}
         itemType={catalogItemType}
         onClose={() => setModalProduct(null)}
+        onRefresh={onRefresh}
+      />
+      <VariantManagerModal
+        open={variantManagerProduct !== null}
+        onOpenChange={(v) => { if (!v) setVariantManagerProduct(null); }}
+        product={variantManagerProduct}
         onRefresh={onRefresh}
       />
       <ConfirmDialog

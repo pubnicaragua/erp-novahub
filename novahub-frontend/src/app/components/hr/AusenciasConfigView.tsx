@@ -349,7 +349,16 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       )}
 
       <div className={cn('space-y-3', showForm && 'hidden')} data-tour="hr-absence-types-actions">
-        {filteredTypes.length === 0 && (
+        {filteredTypes.length === 0 && totalTypes === 0 && (
+          <div className="text-center py-12">
+            <AlertTriangle className="size-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">No hay tipos de ausencia configurados aún</p>
+            <Button onClick={() => setShowForm(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Plus className="size-4 mr-2" /> Crear primer tipo de ausencia
+            </Button>
+          </div>
+        )}
+        {filteredTypes.length === 0 && totalTypes > 0 && (
           <div className="text-center py-12">
             <AlertTriangle className="size-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">No hay tipos de ausencia que coincidan con los filtros</p>

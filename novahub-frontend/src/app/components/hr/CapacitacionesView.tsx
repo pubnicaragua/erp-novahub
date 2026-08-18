@@ -545,7 +545,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                     </Button>
                   )}
                   {(training.status === 'IN_PROGRESS' || training.status === 'SCHEDULED') && (
-                    <Button size="sm" className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'COMPLETED')}>
+                    <Button size="sm" className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'COMPLETED')}>
                       <CheckCircle2 className="size-3 mr-1" /> Completar
                     </Button>
                   )}
@@ -574,7 +574,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                             <span className="text-xs font-medium truncate">{name}</span>
                             {training.status !== 'COMPLETED' && enrollment.status !== 'COMPLETED' && canPerform('HR_TRAINING', 'edit') ? (
                               <button
-                                className="text-[10px] font-black uppercase text-green-600 hover:text-green-700 flex items-center gap-1 shrink-0"
+                                className="text-[10px] font-black uppercase text-primary hover:text-primary/80 flex items-center gap-1 shrink-0"
                                 disabled={completingEnrollment === `${training.id}:${enrollment.employeeId}`}
                                 onClick={() => handleCompleteEnrollment(training.id, enrollment.employeeId)}
                               >

@@ -470,7 +470,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     },
   ] : [];
 
-  if (loading && !setupSummary) {
+  if (loading && !cajaData) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <Loader2 className="size-8 animate-spin text-primary/40" />

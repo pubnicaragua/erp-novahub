@@ -850,7 +850,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-x-auto min-w-0">
       <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, validando los datos y preparando los empleados para revisión." />
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-tour="hr-employees-title">

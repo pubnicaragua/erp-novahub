@@ -76,9 +76,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
   const downloadCreditTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['TIPO', 'PRODUCTO', 'DESCRIPCION', 'CANTIDAD', 'PRECIO'],
-      ['PRODUCTO', 'Código o nombre exacto', 'Cemento Holcim 50kg', '25', '210'],
-      ['SERVICIO', '', 'Flete de entrega', '1', '1500'],
+      ['TIPO', 'PRODUCTO', 'DESCRIPCION', 'CANTIDAD', 'PRECIO', 'IVA', 'TASA_IR', 'DESCUENTO'],
+      ['PRODUCTO', 'Código o nombre exacto', 'Cemento Holcim 50kg', '25', '210', 'GRAVADO', 'NONE', '0'],
+      ['SERVICIO', '', 'Flete de entrega', '1', '1500', 'EXENTO', 'IR_1', '2'],
     ]);
     const guide = XLSX.utils.aoa_to_sheet([
       ['PLANTILLA DE CRÉDITO DE PROVEEDOR - REGLAS POR COLUMNA'],
@@ -100,11 +100,32 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       ['PRECIO (obligatorio, mayor o igual a 0)'],
       ['  Precio unitario en la moneda del crédito (C$ o USD). Ejemplo: 210'],
       [''],
-      ['EJEMPLOS'],
-      ['TIPO=PRODUCTO | PRODUCTO=HOLCIM | DESCRIPCION= | CANTIDAD=25 | PRECIO=210'],
-      ['TIPO=SERVICIO | PRODUCTO= | DESCRIPCION=Flete de entrega | CANTIDAD=1 | PRECIO=1500'],
+      ['IVA (opcional, por línea)'],
+      ['  GRAVADO  -> Aplica IVA a esta línea (usa la tasa global del formulario).'],
+      ['  EXENTO   -> No aplica IVA.'],
+      ['  Si se deja vacío, se usa la configuración global del formulario.'],
       [''],
-      ['NOTA: IVA, retención IR y descuento se configuran en el formulario del crédito, no en el archivo.'],
+      ['TASA_IR (opcional, por línea)'],
+      ['  NONE    -> Sin retención IR.'],
+      ['  IR_1    -> Retención IR 1%.'],
+      ['  IR_2    -> Retención IR 2%.'],
+      ['  IR_5    -> Retención IR 5%.'],
+      ['  IR_10   -> Retención IR 10%.'],
+      ['  IR_15   -> Retención IR 15%.'],
+      ['  IR_20   -> Retención IR 20%.'],
+      ['  IR_25   -> Retención IR 25%.'],
+      ['  Si se deja vacío, se usa la configuración global del formulario.'],
+      [''],
+      ['DESCUENTO (opcional, por línea)'],
+      ['  Porcentaje de descuento para esta línea (0-100). Ejemplo: 2'],
+      ['  Si se deja vacío, se usa el descuento global del formulario.'],
+      [''],
+      ['EJEMPLOS'],
+      ['TIPO=PRODUCTO | PRODUCTO=HOLCIM | DESCRIPCION= | CANTIDAD=25 | PRECIO=210 | IVA=GRAVADO | TASA_IR=NONE | DESCUENTO=0'],
+      ['TIPO=SERVICIO | PRODUCTO= | DESCRIPCION=Flete de entrega | CANTIDAD=1 | PRECIO=1500 | IVA=EXENTO | TASA_IR=IR_1 | DESCUENTO=2'],
+      [''],
+      ['NOTA: IVA, retención IR y descuento pueden configurarse globalmente en el formulario o por línea en este archivo.'],
+      ['Los valores por línea tienen prioridad sobre la configuración global.'],
       ['El archivo puede ser .xlsx, .xls, .csv o .pdf con estas mismas columnas.'],
     ]);
     const wb = XLSX.utils.book_new();
@@ -151,6 +172,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       const iDesc = findCol('descripcion', 'descripción');
       const iCant = findCol('cantidad', 'cant');
       const iPrecio = findCol('precio', 'preciounitario', 'preciou');
+      const iIva = findCol('iva', 'tratamientoiva', 'taxtype');
+      const iIr = findCol('tasa_ir', 'tasaIr', 'retencion', 'retencionir', 'withholding');
+      const iDescuento = findCol('descuento', 'discount', 'desc');
 
       if (iDesc < 0 || iCant < 0 || iPrecio < 0) {
         setImportErrors(['El archivo debe tener las columnas: TIPO, PRODUCTO, DESCRIPCION, CANTIDAD, PRECIO. Descargue la plantilla para ver el formato.']);
@@ -166,6 +190,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         const desc = String(row[iDesc] || '').trim();
         const cant = Number(row[iCant]);
         const precio = Number(row[iPrecio]);
+        const ivaLine = iIva >= 0 ? String(row[iIva] || '').trim().toUpperCase() : '';
+        const irLine = iIr >= 0 ? String(row[iIr] || '').trim().toUpperCase() : '';
+        const descLine = iDescuento >= 0 ? Number(row[iDescuento]) : 0;
 
         const tipoNorm = tipo.startsWith('PROD') ? 'PRODUCT' : tipo.startsWith('SERV') ? 'SERVICE' : '';
         if (!tipoNorm) { errors.push(`Fila ${line}: TIPO inválido ("${tipo}"). Use PRODUCTO o SERVICIO.`); return; }
@@ -182,13 +209,19 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           return;
         }
 
+        const lineTotal = cant * precio;
+        const lineDiscount = descLine > 0 ? lineTotal * (descLine / 100) : 0;
+
         items.push({
           itemType: tipoNorm,
           productId: matched?.id || null,
           description: matched ? matched.name : desc,
           quantity: cant,
           unitPrice: precio,
-          total: cant * precio,
+          total: lineTotal - lineDiscount,
+          _lineIva: ivaLine || undefined,
+          _lineIr: irLine || undefined,
+          _lineDiscount: descLine || undefined,
         });
       });
 
@@ -485,11 +518,49 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                     disabled={!canMutate}
                     options={invoiceOptions}
                     value={localDoc.supplierInvoiceId || ''}
-                    onChange={(val) => setLocalDoc({ ...localDoc, supplierInvoiceId: val || undefined })}
+                    onChange={(val) => {
+                      if (!val) {
+                        setLocalDoc({ ...localDoc, supplierInvoiceId: undefined });
+                        return;
+                      }
+                      const inv = supplierInvoices.find((i: any) => i.id === val);
+                      if (inv) {
+                        const invItems = (inv.items || []).map((it: any) => ({
+                          id: `inv-${it.id || Date.now()}-${Math.random()}`,
+                          itemType: it.itemType || (it.productId ? 'PRODUCT' : 'SERVICE'),
+                          productId: it.productId || null,
+                          description: it.description || '',
+                          quantity: Number(it.quantity || 1),
+                          unitPrice: Number(it.unitPrice || 0),
+                          total: Number(it.quantity || 1) * Number(it.unitPrice || 0),
+                        }));
+                        const invTaxType = (inv as any).taxType || (inv.taxAmount > 0 ? 'GRAVADO' : 'EXENTO');
+                        const invTaxRate = Number((inv as any).taxRate || 15);
+                        const invWithholdingType = (inv as any).withholdingType || 'NONE';
+                        const invWithholdingRate = Number((inv as any).withholdingRate || 0);
+                        setLocalDoc({
+                          ...localDoc,
+                          supplierInvoiceId: val,
+                          supplierId: inv.supplierId,
+                          currency: inv.currency || 'NIO',
+                          exchangeRate: inv.exchangeRate || 1,
+                          date: inv.date || localDoc.date,
+                          dueDate: inv.dueDate || localDoc.dueDate,
+                          taxType: invTaxType as any,
+                          taxRate: invTaxRate,
+                          withholdingType: invWithholdingType as any,
+                          withholdingRate: invWithholdingRate,
+                          items: invItems as any,
+                          reason: `Crédito por factura ${inv.number || ''}`,
+                        });
+                      } else {
+                        setLocalDoc({ ...localDoc, supplierInvoiceId: val || undefined });
+                      }
+                    }}
                     placeholder="Sin factura vinculada (crédito general)"
                   />
                   {isNew && localDoc.supplierId && (
-                    <p className="mt-1 text-[10px] text-muted-foreground">Al vincular una factura, el crédito descuenta el saldo pendiente de esa factura.</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Al vincular una factura, se importan automáticamente los datos: proveedor, moneda, items, impuestos y descuentos.</p>
                   )}
                 </div>
                 <div>
@@ -565,6 +636,30 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Borrador'}</Badge></div>
                 </div>
                 <div className="md:col-span-4">
+                  {localDoc.date && localDoc.dueDate && (
+                    <div className="mb-3 rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-primary">Condiciones del crédito</p>
+                        <p className="mt-1 text-sm font-bold">
+                          {formatConvertedAmount(creditGrandTotal, resolveSourceCurrency((localDoc as any)?.currency), (localDoc as any)?.exchangeRate)}
+                          {' · '}
+                          vence el {formatDateEs(localDoc.dueDate)}
+                          {' · '}
+                          {(() => {
+                            const start = new Date(localDoc.date);
+                            const end = new Date(localDoc.dueDate);
+                            const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                            return diffDays > 0 ? `${diffDays} días` : 'Vence hoy';
+                          })()}
+                        </p>
+                      </div>
+                      {localDoc.hasInterest && (
+                        <Badge variant="outline" className="text-[9px] border-amber-500/30 bg-amber-500/10 text-amber-600">
+                          <Percent className="size-2.5 mr-1" /> {localDoc.interestRate || 0}% interés
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   <p className="text-[10px] text-muted-foreground mb-1">Razón / Concepto</p>
                   <Input 
                     disabled={!canMutate}
@@ -581,11 +676,14 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-summary">
             <CardContent className="p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Impuestos y descuentos</p>
+              {localDoc.supplierInvoiceId && (
+                <p className="mb-3 text-[10px] text-muted-foreground/70 bg-muted/30 rounded-lg px-3 py-1.5">Los campos de impuestos y descuentos están bloqueados porque este crédito está vinculado a una factura. Los valores se heredaron automáticamente.</p>
+              )}
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">IVA</p>
                   <select
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!localDoc.supplierInvoiceId}
                     value={String(localDoc.taxType || 'EXENTO').toUpperCase()}
                     onChange={(e) => {
                       const gravado = e.target.value === 'GRAVADO';
@@ -599,7 +697,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IVA (%)</p>
                   <Input
-                    disabled={!canMutate || String(localDoc.taxType || 'EXENTO').toUpperCase() !== 'GRAVADO'}
+                    disabled={!canMutate || !!localDoc.supplierInvoiceId || String(localDoc.taxType || 'EXENTO').toUpperCase() !== 'GRAVADO'}
                     type="number" min="0" step="0.01"
                     value={String(localDoc.taxType || 'EXENTO').toUpperCase() === 'GRAVADO' ? (localDoc.taxRate || 15) : 0}
                     onChange={(e) => setLocalDoc({ ...localDoc, taxRate: Number(e.target.value) })}
@@ -609,7 +707,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   <p className="text-[10px] text-muted-foreground mb-1">Retención IR</p>
                   <div className="flex h-8 items-center gap-2">
                     <select
-                      disabled={!canMutate}
+                      disabled={!canMutate || !!localDoc.supplierInvoiceId}
                       value={String(localDoc.withholdingType || 'NONE').toUpperCase()}
                       onChange={(e) => {
                         const withRetention = e.target.value !== 'NONE';
@@ -634,7 +732,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IR (%)</p>
                   <Input
-                    disabled={!canMutate || String(localDoc.withholdingType || 'NONE').toUpperCase() === 'NONE'}
+                    disabled={!canMutate || !!localDoc.supplierInvoiceId || String(localDoc.withholdingType || 'NONE').toUpperCase() === 'NONE'}
                     type="number" min="0" step="0.01"
                     value={String(localDoc.withholdingType || 'NONE').toUpperCase() !== 'NONE' ? (localDoc.withholdingRate || 0) : 0}
                     onChange={(e) => setLocalDoc({ ...localDoc, withholdingRate: Number(e.target.value) })}
@@ -643,7 +741,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Descuento (%)</p>
                   <Input
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!localDoc.supplierInvoiceId}
                     type="number" min="0" step="0.01"
                     value={localDoc.discountRate || 0}
                     onChange={(e) => setLocalDoc({ ...localDoc, discountRate: Number(e.target.value) })}
@@ -849,9 +947,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     .reduce((a, c) => a + toDisplayAmount(Number((c as any).total ?? (c as any).baseTotal ?? 0), resolveSourceCurrency((c as any)?.currency), (c as any)?.exchangeRate), 0);
   const kpis = [
     { title: `Crédito Disponible (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(disponible, displayCurrency), icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
-    { title: 'Total Notas', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Emitidas', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
-    { title: `Aplicadas (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(aplicados, displayCurrency), icon: CheckCircle2, color: 'text-teal-500', bg: 'bg-teal-500/10', kind: 'filter' as const, filter: 'APPLIED' as const },
+    { title: 'Total Créditos', value: data.length, icon: Hash, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+    { title: 'Emitidos', value: data.filter(c => (c.status||'').toLowerCase() === 'issued').length, icon: BadgeDollarSign, color: 'text-purple-500', bg: 'bg-purple-500/10', kind: 'filter' as const, filter: 'ISSUED' as const },
+    { title: `Pagados (${displayCurrency}${valuationModeSuffix})`, value: formatCurrentAmount(aplicados, displayCurrency), icon: CheckCircle2, color: 'text-teal-500', bg: 'bg-teal-500/10', kind: 'filter' as const, filter: 'APPLIED' as const },
   ];
 
   return (
@@ -863,15 +961,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor · Emitir para reservar el monto, Aplicar contra cuentas por pagar</p></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Administración de créditos y cuentas por pagar con proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos de proveedor" />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_RETURNS', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
             )}
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
           actions={(row) => {
@@ -909,8 +1009,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         onOpenChange={(open) => !open && setPendingIssueId(null)}
         loading={issueLoading}
         title="Emitir crédito de proveedor"
-        description="Al emitir la nota de crédito se reservará el monto a favor del proveedor y, si está vinculada a una factura, se reducirá su saldo pendiente. ¿Deseas continuar?"
-        confirmLabel="Emitir crédito"
+        description="Al emitir el crédito se reconocerá la cuenta por pagar y, si está vinculado a una factura, se descontará su saldo pendiente. ¿Deseas continuar?"
+        confirmLabel="Confirmar crédito"
         onConfirm={handleIssueConfirm}
       />
 
@@ -919,7 +1019,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <DialogHeader data-tour="purchases-credit-modal-title">
             <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="size-5 text-emerald-500" /> Aplicar crédito {applyTarget?.number}</DialogTitle>
             <DialogDescription>
-              Al aplicar la nota de crédito se generará un único asiento contable y se reducirá la cuenta por pagar. No representa una salida de efectivo ni crea un gasto financiero. Esta acción no se puede deshacer.
+              Al aplicar el crédito se cancelará la cuenta por pagar asociada y se generará el asiento contable de pago. Esta acción no se puede deshacer.
             </DialogDescription>
             <PurchaseViewTutorial view="credits" context="form" labelOverride="Cómo aplicar crédito" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchases-credit-modal" />
           </DialogHeader>
@@ -930,7 +1030,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div className="flex justify-between"><span className="text-muted-foreground">Monto</span><b className="text-emerald-600"><CurrencyValuationAmount amount={Number(applyTarget.total || 0)} sourceCurrency={resolveSourceCurrency((applyTarget as any)?.currency)} sourceExchangeRate={(applyTarget as any)?.exchangeRate} /></b></div>
               </div>
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs leading-relaxed text-muted-foreground">
-                El saldo se aplicará contra la factura de proveedor vinculada y quedará trazado en el mismo asiento contable. No se registrará pago, movimiento bancario ni gasto en Finanzas porque no hay salida de efectivo.
+                El pago cancelará la cuenta por pagar del proveedor. Se registrará el movimiento bancario y el asiento contable correspondiente.
               </div>
             </div>
           )}
