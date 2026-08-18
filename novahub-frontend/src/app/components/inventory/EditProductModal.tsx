@@ -8,7 +8,7 @@ import { ProductImagePicker } from '../ui/ProductImage';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
-import { Package, Check, Tag } from 'lucide-react';
+import { Package, Check, Tag, X } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 

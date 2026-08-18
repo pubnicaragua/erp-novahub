@@ -113,6 +113,45 @@ function describeRequest(path: string, method: RequestOptions['method']) {
   return 'procesar la solicitud';
 }
 
+const MODULE_LABELS: Record<string, string> = {
+  INVENTORY_WAREHOUSES: 'Inventario/Sucursales',
+  INVENTORY: 'Inventario',
+  SALES: 'Ventas',
+  PURCHASES: 'Compras',
+  POS: 'Caja',
+  REPORTS: 'Reportes',
+  USERS: 'Usuarios',
+  BRANCHES: 'Sucursales',
+  SETTINGS: 'Configuracion',
+  SUBSCRIPTIONS: 'Suscripciones',
+};
+
+const PERMISSION_LABELS: Record<string, string> = {
+  read: 'lectura',
+  write: 'escritura',
+  create: 'crear',
+  update: 'editar',
+  delete: 'eliminar',
+  approve: 'aprobar',
+};
+
+function humanize403Message(raw: string): string {
+  let msg = raw;
+
+  // Reemplazar permisos tecnicos (read, write, etc.)
+  msg = msg.replace(/permiso\s+'(\w+)'/gi, (_, perm) => {
+    const label = PERMISSION_LABELS[perm.toLowerCase()] || perm;
+    return `permiso de ${label}`;
+  });
+
+  // Reemplazar codigos de modulo por nombres amigables
+  msg = msg.replace(/\b(INVENTORY_WAREHOUSES|INVENTORY|SALES|PURCHASES|POS|REPORTS|USERS|BRANCHES|SETTINGS|SUBSCRIPTIONS)\b/g, (code) => {
+    return MODULE_LABELS[code] || code;
+  });
+
+  return msg;
+}
+
 function normalizeErrorMessage(message?: string, status?: number, context?: string): string {
   const raw = (message || '').trim();
   const lower = raw.toLowerCase();
@@ -133,6 +172,8 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
     if (lower.startsWith('http error') && status) {
       return normalizeErrorMessage('', status, context);
     }
+    // Para errores 403, traducir terminos tecnicos a mensajes amigables
+    if (status === 403 && raw) return humanize403Message(raw);
     // Return the backend message as-is (with prefix for context)
     return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
   }

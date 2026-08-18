@@ -5,11 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { priceListsService } from '../../services/price-lists.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import { getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { getSalesUnitPrice, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 
 interface SalesLinePriceListSelectProps {
   productId?: string | null;
+  variantId?: string | null;
   productCode?: string | null;
   productName?: string | null;
   itemType?: string | null;
@@ -22,7 +23,7 @@ interface SalesLinePriceListSelectProps {
 }
 
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
-export function SalesLinePriceListSelect({ productId, productCode, productName, itemType, value, defaultPriceListId, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
+export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
   const { user } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
@@ -50,15 +51,24 @@ export function SalesLinePriceListSelect({ productId, productCode, productName, 
     ? requestedListId
     : lists.find((list: any) => list.isDefault)?.id || lists[0]?.id || '';
 
-  /** Calcula el precio para un productId+lista dados */
+  /** Calcula el precio para un producto/variant+lista dados */
   const calcPrice = (priceListId: string, pid: string | null | undefined): { unitPrice?: number; priceMissing: boolean } => {
     if (!pid) return { priceMissing: false };
+
+    if (variantId) {
+      const resolved = resolveVariantPrice(matrixItems, priceListId, pid, variantId);
+      if (resolved) {
+        const unitPrice = getSalesUnitPrice(resolved, currency, exchangeRate);
+        if (unitPrice !== undefined && unitPrice > 0) return { unitPrice, priceMissing: false };
+      }
+    }
+
     const matchedProduct = matrixProduct || matrix.products.find((product: any) => sameSalesId(product.id, pid));
     const matrixProductId = matchedProduct?.id;
     const entry = matrixItems.find((item: any) => {
       if (!sameSalesId(item.priceListId, priceListId)) return false;
       const itemProductId = item.productId ?? item.product?.id;
-      return sameSalesId(itemProductId, pid) || sameSalesId(itemProductId, matrixProductId);
+      return (sameSalesId(itemProductId, pid) || sameSalesId(itemProductId, matrixProductId)) && (!item.variantId || item.variantId === null);
     });
     if (!entry) return { unitPrice: 0, priceMissing: true };
 
@@ -68,8 +78,6 @@ export function SalesLinePriceListSelect({ productId, productCode, productName, 
   };
 
   // Solo notificar el precio inicial cuando la matriz carga por primera vez
-  // La key incluye matrixItems.length para re-disparar cuando la data llega
-  // (si el effect corre con items=[] y luego llegan, la key cambia y re-evalúa)
   const initialAppliedRef = useRef<string>('');
   const latestOnChange = useRef(onChange);
   useEffect(() => {
@@ -77,18 +85,16 @@ export function SalesLinePriceListSelect({ productId, productCode, productName, 
   });
 
   useEffect(() => {
-    // Esperar a que la matriz tenga datos reales antes de aplicar
     if (isService || !query.isSuccess || !lists.length || !matrix || !productId || !resolvedListId || matrixItems.length === 0) return;
 
-    // Key incluye matrixItems.length: cuando items cargan (0→N) la key cambia y re-evalúa
-    const key = `${productId}_${resolvedListId}_${currency}_${Math.round((exchangeRate || 1) * 10000)}_${matrixItems.length}`;
+    const key = `${productId}_${variantId || ''}_${resolvedListId}_${currency}_${Math.round((exchangeRate || 1) * 10000)}_${matrixItems.length}`;
     if (initialAppliedRef.current === key) return;
     initialAppliedRef.current = key;
 
     const result = calcPrice(resolvedListId, productId);
     latestOnChange.current(resolvedListId, result, 'initial');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.isSuccess, lists.length, matrix, matrixItems.length, productId, resolvedListId, currency, exchangeRate, isService]);
+  }, [query.isSuccess, lists.length, matrix, matrixItems.length, productId, variantId, resolvedListId, currency, exchangeRate, isService]);
 
   if (isService) return null;
 

@@ -1018,6 +1018,32 @@ export interface Product {
   itemType?: 'PRODUCT' | 'SERVICE';
   isActive?: boolean;
   status: EntityStatus;
+  isVariable?: boolean;
+  linkedAttributes?: Array<{
+    attributeId: string;
+    name?: string;
+    selectedOptions: string[];
+  }>;
+  variants?: Array<{
+    id: string;
+    sku: string;
+    name: string;
+    priceModifier?: number;
+    costModifier?: number;
+    attributes?: Array<{
+      attributeId: string;
+      attributeName: string;
+      value: string;
+    }>;
+  }>;
+  stockLevels?: Array<{
+    warehouseId: string;
+    warehouse?: { id: string; name: string };
+    variantId?: string | null;
+    quantity: number;
+    minStock?: number;
+    maxStock?: number;
+  }>;
   createdAt: string;
   updatedAt: string;
 }

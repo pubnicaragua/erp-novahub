@@ -84,6 +84,20 @@ export interface CashRegisterCount {
   denominations?: SessionDenomination[];
 }
 
+export interface PosProductVariant {
+  id: string;
+  sku: string;
+  name: string;
+  priceModifier?: number;
+  costModifier?: number;
+  attributes?: Array<{
+    attributeId: string;
+    attributeName: string;
+    value: string;
+  }>;
+  currentStock?: number | null;
+}
+
 export interface PosProduct {
   id: string;
   code: string;
@@ -98,6 +112,8 @@ export interface PosProduct {
   isActive?: boolean;
   costPrice?: number;
   currentStock?: number | null;
+  isVariable?: boolean;
+  variants?: PosProductVariant[];
 }
 
 export interface PosCustomer {
@@ -112,6 +128,7 @@ export interface PosCustomer {
 
 export interface PosInvoiceItem {
   productId?: string;
+  variantId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -179,6 +196,7 @@ export interface BranchProductAvailability {
 export interface PosHoldItem {
   id: string;
   productId?: string | null;
+  variantId?: string | null;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -245,6 +263,7 @@ export interface PosHold {
 
 export interface PosHoldItemInput extends PosInvoiceItem {
   deliveryWarehouseId?: string;
+  variantId?: string;
 }
 
 export interface CreatePosHoldDto {

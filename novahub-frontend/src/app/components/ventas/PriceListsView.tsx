@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Pencil, Plus, Settings2, Square, SquareCheckBig, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Layers, Pencil, Plus, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -12,6 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { toast } from 'sonner';
 import { priceListsService, type PriceListItem } from '../../services/price-lists.service';
+import type { ProductVariant } from '../../types/variants';
+import { buildVariantDescription } from '../../types/variants';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
@@ -222,6 +224,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [savingListName, setSavingListName] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [variantDetailOpen, setVariantDetailOpen] = useState(false);
+  const [selectedVariantProduct, setSelectedVariantProduct] = useState<any>(null);
+  const [editingVariantPrices, setEditingVariantPrices] = useState<Record<string, Record<string, string>>>({});
+  const [editingVariantIds, setEditingVariantIds] = useState<Set<string>>(new Set());
+  const [savingVariant, setSavingVariant] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const catalogProducts = useMemo(
@@ -312,6 +319,90 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   const formatDisplayPrice = (basePrice: number) => `${displayCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(convertBaseToDisplay(basePrice))}`;
 
+  const openVariantDetail = (product: any) => {
+    if (!product.variants?.length) return;
+    setSelectedVariantProduct(product);
+    setEditingVariantIds(new Set());
+    setEditingVariantPrices({});
+    setVariantDetailOpen(true);
+  };
+
+  const beginEditVariant = (variantId: string, product: any) => {
+    if (!canEditPriceList || !product) return;
+    const values = Object.fromEntries(visibleLists.map((list) => {
+      const item = matrixItems.find(
+        (i) => i.priceListId === list.id && i.productId === product.id && i.variantId === variantId
+      );
+      const parentItem = matrixItems.find(
+        (i) => i.priceListId === list.id && i.productId === product.id && (!i.variantId || i.variantId === null)
+      );
+      const baseItem = item || parentItem;
+      return [list.id, baseItem ? formatSalesAmount(convertBaseToDisplay(Number(baseItem.basePrice))) : ''];
+    }));
+    setEditingVariantPrices((current) => ({ ...current, [variantId]: values }));
+    setEditingVariantIds((current) => new Set(current).add(variantId));
+  };
+
+  const cancelEditVariant = (variantId: string) => {
+    setEditingVariantIds((current) => {
+      const next = new Set(current);
+      next.delete(variantId);
+      return next;
+    });
+    setEditingVariantPrices((current) => {
+      const next = { ...current };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const saveVariantPrices = async (variantId: string) => {
+    if (!canEditPriceList || !selectedVariantProduct) return;
+    const values = editingVariantPrices[variantId] || {};
+    const invalidList = visibleLists.find((list) => {
+      const rawValue = String(values[list.id] ?? '').trim();
+      return rawValue !== '' && (!Number.isFinite(Number(rawValue)) || Number(rawValue) < 0);
+    });
+    if (invalidList) return toast.error(`El precio de ${invalidList.name} debe ser mayor o igual a cero`);
+    const changes = visibleLists.map((list) => {
+      const rawValue = String(values[list.id] ?? '').trim();
+      if (!rawValue) return null;
+      const price = Number(rawValue);
+      return { list, price };
+    }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
+    if (!changes.length) return cancelEditVariant(variantId);
+    setSavingVariant(variantId);
+    try {
+      await Promise.all(changes.map(({ list, price }) =>
+        priceListsService.updateItem(list.id, selectedVariantProduct.id, {
+          price,
+          currency: displayCurrency,
+          exchangeRate: displayCurrency === baseCurrency ? 1 : Number(exchangeRate || 1),
+          variantId,
+        })
+      ));
+      await refreshMatrix();
+      cancelEditVariant(variantId);
+      toast.success(`${changes.length} precio(s) de variante guardado(s)`);
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudieron guardar los precios de la variante');
+    } finally {
+      setSavingVariant(null);
+    }
+  };
+
+  const getVariantItems = (productId: string, variantId: string) => {
+    return matrixItems.filter(
+      (item) => item.productId === productId && item.variantId === variantId
+    );
+  };
+
+  const getParentItemForVariant = (productId: string, listId: string) => {
+    return matrixItems.find(
+      (item) => item.productId === productId && item.priceListId === listId && (!item.variantId || item.variantId === null)
+    );
+  };
+
   const beginEditProduct = (productId: string) => {
     if (!canEditPriceList) return;
     const byList = itemsByProduct.get(productId);
@@ -400,22 +491,43 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const downloadTemplate = (productIds: string[]) => {
     if (!canExportPriceLists) return;
     const selectedProducts = catalogProducts.filter((product) => productIds.includes(product.id));
-    const headers = ['Código', 'Producto', 'Costo (solo referencia)', ...importLists.map((list) => list.name)];
-    const rows = selectedProducts.map((product) => {
+    const hasVariants = selectedProducts.some((p) => p.variants && p.variants.length > 1);
+    const headers = hasVariants
+      ? ['SKU', 'Producto', 'Atributos', 'Costo (ref.)', ...importLists.map((list) => list.name)]
+      : ['Código', 'Producto', 'Costo (solo referencia)', ...importLists.map((list) => list.name)];
+    const rows: any[][] = [];
+    selectedProducts.forEach((product) => {
       const byList = itemsByProduct.get(product.id);
-      return [product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => byList?.get(list.id)?.price ?? '')];
+      if (hasVariants && product.variants && product.variants.length > 1) {
+        product.variants.forEach((variant: any) => {
+          const attrs = variant.attributes?.map((a: any) => `${a.attributeName}: ${a.value}`).join(', ') || '';
+          const variantItems = matrixItems.filter(
+            (i) => i.productId === product.id && i.variantId === variant.id
+          );
+          const variantPrices = importLists.map((list) => {
+            const vi = variantItems.find((i) => i.priceListId === list.id);
+            return vi?.price ?? '';
+          });
+          rows.push([variant.sku, product.name, attrs, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...variantPrices]);
+        });
+      } else {
+        rows.push([product.code, product.name, Number(product.costPrice ?? product.details?.costPrice ?? 0), ...importLists.map((list) => byList?.get(list.id)?.price ?? '')]);
+      }
     });
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    worksheet['!cols'] = [{ wch: 18 }, { wch: 34 }, { wch: 22 }, ...importLists.map(() => ({ wch: 20 }))];
+    worksheet['!cols'] = hasVariants
+      ? [{ wch: 18 }, { wch: 34 }, { wch: 30 }, { wch: 18 }, ...importLists.map(() => ({ wch: 20 }))]
+      : [{ wch: 18 }, { wch: 34 }, { wch: 22 }, ...importLists.map(() => ({ wch: 20 }))];
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA DE LLENADO · ACTUALIZACIÓN DE PRECIOS'],
-      ['1. No cambies los encabezados Código ni los nombres de las listas.'],
+      ['1. No cambies los encabezados Código/SKU ni los nombres de las listas.'],
       ['2. El costo es informativo y no se actualizará al importar.'],
       ['3. Los precios existentes se incluyen como referencia. Si mantienes el mismo valor, no se hará ningún cambio.'],
       ['4. Ingresa únicamente los precios de las listas que deseas actualizar. Las celdas vacías no modifican el precio existente.'],
       ['5. La moneda y la tasa se eligen en la ventana de carga. Guarda el archivo como .xlsx y cárgalo desde Listas de Precios.'],
+      hasVariants ? ['6. Para productos con variantes, usa el SKU de la variante (no el del producto padre).'] : [],
       ['Listas incluidas:', ...importLists.map((list) => list.name)],
-    ]);
+    ].filter((row) => row.length > 0));
     guide['!cols'] = [{ wch: 72 }, ...importLists.map(() => ({ wch: 24 }))];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Precios');
@@ -434,10 +546,14 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   };
 
   const validateImportRow = (row: ImportRow) => {
-    const product = productByCode.get(normalize(row.code));
+    const normalizedCode = normalize(row.code);
+    const product = productByCode.get(normalizedCode);
+    const variantMatch = !product ? catalogProducts.find((p) =>
+      p.variants?.some((v: any) => normalize(v.sku) === normalizedCode)
+    ) : null;
     const values = importLists.map((list) => row.prices[list.code]).filter((value) => value !== '' && value !== undefined);
     if (!row.code) return 'Código requerido';
-    if (!product) return 'Código no encontrado';
+    if (!product && !variantMatch) return 'Código no encontrado';
     if (!values.length) return 'Ingresa al menos un precio';
     if (values.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) return 'Precio inválido';
     return undefined;
@@ -461,7 +577,11 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
           listIndexes.forEach(({ list, index }) => { prices[list.code] = row[index] === '' || row[index] === undefined ? '' : Number(row[index]); });
           const code = String(row[skuIndex] || '').trim();
           const product = productByCode.get(normalize(code));
-          const next: ImportRow = { code, name: product?.name || '', cost: costIndex >= 0 && row[costIndex] !== '' && row[costIndex] !== undefined ? Number(row[costIndex]) : Number(product?.costPrice ?? product?.details?.costPrice ?? 0), prices };
+          const variantMatch = !product ? catalogProducts.find((p) =>
+            p.variants?.some((v: any) => normalize(v.sku) === normalize(code))
+          ) : null;
+          const resolvedProduct = product || variantMatch;
+          const next: ImportRow = { code, name: resolvedProduct?.name || '', cost: costIndex >= 0 && row[costIndex] !== '' && row[costIndex] !== undefined ? Number(row[costIndex]) : Number(resolvedProduct?.costPrice ?? resolvedProduct?.details?.costPrice ?? 0), prices };
           next.error = validateImportRow(next);
           return next;
         });
@@ -516,7 +636,21 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         currency: importCurrency,
         exchangeRate: importCurrency === baseCurrency ? 1 : importRate,
         listCodes: importLists.map((list) => list.code),
-        rows: importRows.map((row) => ({ code: row.code, prices: row.prices })),
+        rows: importRows.map((row) => {
+          const normalizedCode = normalize(row.code);
+          const product = productByCode.get(normalizedCode);
+          let variantId: string | undefined;
+          if (!product) {
+            const variantProduct = catalogProducts.find((p) =>
+              p.variants?.some((v: any) => normalize(v.sku) === normalizedCode)
+            );
+            if (variantProduct) {
+              const variant = variantProduct.variants?.find((v: any) => normalize(v.sku) === normalizedCode);
+              variantId = variant?.id;
+            }
+          }
+          return { code: row.code, variantId, prices: row.prices };
+        }),
         confirmText: 'ACTUALIZAR',
       });
       if (progressTimer) clearInterval(progressTimer);
@@ -618,7 +752,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     <div className="flex flex-wrap justify-end gap-2"><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-currency"><span className="text-xs font-bold text-muted-foreground">Moneda</span><Select value={displayCurrency} onValueChange={(value: 'NIO' | 'USD') => setDisplayCurrency(value)}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-[10px] text-muted-foreground">Tasa {Number(exchangeRate || 1).toFixed(4)}</span></div><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-pagination"><span className="text-xs font-bold text-muted-foreground">Paginación</span><Select value={paginationEnabled ? 'on' : 'off'} onValueChange={(value) => { setPaginationEnabled(value === 'on'); setPage(1); }}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="off">Desactivada</SelectItem><SelectItem value="on">Activada</SelectItem></SelectContent></Select>{paginationEnabled && <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger className="h-8 w-20 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent></Select>}</div><Button variant="outline" className="rounded-xl" onClick={() => setColumnConfigOpen(true)} data-tour="price-lists-columns"><Settings2 className="mr-2 size-4" /> Configurar columnas <Badge variant="secondary" className="ml-2">{visibleLists.length}</Badge></Button></div>
     <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle><DialogDescription>Elige qué listas se muestran en la tabla y cuáles aparecerán en la plantilla. Los cambios se reflejan inmediatamente.</DialogDescription></DialogHeader><div className="flex flex-col gap-2">{lists.map((list) => { const active = visibleListIds?.includes(list.id) ?? false; return <div key={list.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted/20 opacity-60'}`}><button type="button" onClick={() => setVisibleListIds((current) => active ? (current || []).filter((id) => id !== list.id) : [...(current || []), list.id])} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"><span className={`flex size-5 shrink-0 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>{active && <CheckCircle2 className="size-3.5" />}</span><span className="min-w-0 truncate"><b>{list.name}</b><span className="ml-2 text-[10px] font-mono text-muted-foreground">{list.code}</span></span></button>{canEditPriceList && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" title={`Editar nombre de ${list.name}`} aria-label={`Editar nombre de ${list.name}`} onClick={() => beginEditListName(list)}><Pencil className="size-4" /></Button>}</div>; })}</div><DialogFooter><Button variant="outline" onClick={() => setVisibleListIds(lists.map((list) => list.id))}>Mostrar todas</Button><Button onClick={() => setVisibleListIds([])}>Ocultar todas</Button></DialogFooter></DialogContent></Dialog>
 
-    <Card className="rounded-2xl" data-tour="price-lists-matrix"><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Matriz de precios</CardTitle><p className="mt-1 text-xs text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p></div><Badge variant="outline">{selectedCount} seleccionados</Badge></CardHeader><CardContent><div className="overflow-x-auto rounded-xl border"><Table className="min-w-[980px]"><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60">{allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Categoría</TableHead>{visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}<TableHead className="w-24 text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={5 + visibleLists.length} className="py-10 text-center text-muted-foreground">Cargando matriz…</TableCell></TableRow> : displayedProducts.map((product) => { const byList = itemsByProduct.get(product.id); const isEditing = editingProductIds.has(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id)}>{selectedProductIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>{visibleLists.map((list) => { const item = byList?.get(list.id); return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={editingPrices[product.id]?.[list.id] ?? ''} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>; })}<TableCell className="text-right">{isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}</TableCell></TableRow>; })}</TableBody></Table></div>{paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {catalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /></Button></div></div>}{!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}{!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}</CardContent></Card>
+    <Card className="rounded-2xl" data-tour="price-lists-matrix"><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Matriz de precios</CardTitle><p className="mt-1 text-xs text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p></div><Badge variant="outline">{selectedCount} seleccionados</Badge></CardHeader><CardContent><div className="overflow-x-auto rounded-xl border"><Table className="min-w-[980px]"><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60">{allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Categoría</TableHead>{visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}<TableHead className="w-24 text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={5 + visibleLists.length} className="py-10 text-center text-muted-foreground">Cargando matriz…</TableCell></TableRow> : displayedProducts.map((product) => { const byList = itemsByProduct.get(product.id); const isEditing = editingProductIds.has(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id)}>{selectedProductIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}{product.variants && product.variants.length > 1 && <Badge variant="outline" className="ml-2 border-primary/40 text-primary text-[9px]"><Tag className="mr-0.5 size-2.5" />{product.variants.length}v</Badge>}</TableCell><TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>{visibleLists.map((list) => { const item = byList?.get(list.id); return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={editingPrices[product.id]?.[list.id] ?? ''} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>; })}<TableCell className="text-right">{isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}{product.variants && product.variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-primary" title="Ver variantes" onClick={() => openVariantDetail(product)}><Layers className="size-4" /></Button>}</TableCell></TableRow>; })}</TableBody></Table></div>{paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {catalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /></Button></div></div>}{!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}{!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}</CardContent></Card>
 
     <Dialog open={missingOpen} onOpenChange={setMissingOpen}><DialogContent className="max-w-5xl max-h-[90vh] flex flex-col"><DialogHeader><DialogTitle>Productos con precios faltantes</DialogTitle><DialogDescription>Selecciona los productos y descarga una plantilla con las listas visibles pendientes. Las celdas vacías no modifican precios existentes.</DialogDescription></DialogHeader><div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline">{missingSelectedIds.size} seleccionados</Badge><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => openDownload([...missingSelectedIds])} disabled={!missingSelectedIds.size}><Download className="mr-2 size-4" /> Descargar plantilla</Button><Button size="sm" onClick={() => { setMissingOpen(false); openImport([...missingSelectedIds]); }} disabled={!missingSelectedIds.size}><Upload className="mr-2 size-4" /> Importar plantilla</Button></div></div><div className="min-h-0 flex-1 overflow-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(missingProducts.map((product) => product.id), 'missing')}>{missingSelectedIds.size === missingProducts.length && missingProducts.length > 0 ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Listas pendientes</TableHead></TableRow></TableHeader><TableBody>{missingProducts.map((product) => { const byList = itemsByProduct.get(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id, 'missing')}>{missingSelectedIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="flex flex-wrap gap-1">{lists.filter((list) => !byList?.has(list.id)).map((list) => <Badge key={list.id} variant="outline" className="text-[10px]">{list.name}</Badge>)}</TableCell></TableRow>; })}</TableBody></Table>{!missingProducts.length && <p className="p-8 text-center text-sm text-muted-foreground">Todos los productos tienen precios en las listas activas.</p>}</div><DialogFooter><Button variant="outline" onClick={() => setMissingOpen(false)}>Cerrar</Button></DialogFooter></DialogContent></Dialog>
 
@@ -635,6 +769,96 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     <Dialog open={newListOpen} onOpenChange={setNewListOpen}><DialogContent><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)}>Cancelar</Button><Button onClick={createList} disabled={!newListName.trim()}>Crear lista</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={editingListId !== null} onOpenChange={(open) => { if (!open && !savingListName) { setEditingListId(null); setEditingListName(''); } }}><DialogContent><DialogHeader><DialogTitle>Editar nombre de lista</DialogTitle><DialogDescription>El cambio se aplicará a la lista existente. Los clientes asignados seguirán vinculados a la misma lista y mostrarán el nuevo nombre automáticamente.</DialogDescription></DialogHeader><Input placeholder="Nombre de la lista" value={editingListName} onChange={(event) => setEditingListName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveListName(); }} autoFocus disabled={savingListName} /><DialogFooter><Button variant="outline" onClick={() => { setEditingListId(null); setEditingListName(''); }} disabled={savingListName}>Cancelar</Button><Button onClick={() => void saveListName()} disabled={savingListName || !editingListName.trim()}>{savingListName ? 'Guardando…' : 'Guardar nombre'}</Button></DialogFooter></DialogContent></Dialog>
     <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
+    <Dialog open={variantDetailOpen} onOpenChange={setVariantDetailOpen}>
+      <DialogContent className="!max-w-[90vw] !w-[90vw] max-h-[85vh] flex flex-col !overflow-hidden p-4">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Layers className="size-5 text-primary" /> Variantes — {selectedVariantProduct?.name}</DialogTitle>
+          <DialogDescription>Precios por variante. Las celdas vacías heredan el precio del producto padre. Haz clic en el lápiz para editar.</DialogDescription>
+        </DialogHeader>
+        {selectedVariantProduct?.variants && (
+          <div className="flex-1 min-h-0 overflow-auto rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-32">SKU</TableHead>
+                  <TableHead>Atributos</TableHead>
+                  {visibleLists.map((list) => (
+                    <TableHead key={list.id} className="w-36 text-right">{list.name}</TableHead>
+                  ))}
+                  <TableHead className="w-16 text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedVariantProduct.variants.map((variant: any) => {
+                  const isEditing = editingVariantIds.has(variant.id);
+                  return (
+                    <TableRow key={variant.id}>
+                      <TableCell className="font-mono text-xs">{variant.sku}</TableCell>
+                      <TableCell className="text-xs">
+                        {variant.attributes?.length
+                          ? variant.attributes.map((a: any) => (
+                              <Badge key={a.attributeId} variant="secondary" className="mr-1 text-[9px]">{a.attributeName}: {a.value}</Badge>
+                            ))
+                          : <span className="text-muted-foreground">—</span>
+                        }
+                      </TableCell>
+                      {visibleLists.map((list) => {
+                        const variantItem = getVariantItems(selectedVariantProduct.id, variant.id).find((i) => i.priceListId === list.id);
+                        const parentItem = getParentItemForVariant(selectedVariantProduct.id, list.id);
+                        const baseItem = variantItem || parentItem;
+                        const isFromParent = !variantItem && parentItem;
+                        if (isEditing) {
+                          const editValue = editingVariantPrices[variant.id]?.[list.id] ?? '';
+                          return (
+                            <TableCell key={list.id} className="text-right">
+                              <Input
+                                className="h-8 w-24 text-right text-xs"
+                                type="number"
+                                min="0"
+                                value={editValue}
+                                onChange={(e) => setEditingVariantPrices((current) => ({
+                                  ...current,
+                                  [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
+                                }))}
+                              />
+                            </TableCell>
+                          );
+                        }
+                        return (
+                          <TableCell key={list.id} className="text-right text-xs tabular-nums">
+                            {baseItem ? (
+                              <span className={isFromParent ? 'text-muted-foreground italic' : ''}>
+                                {formatDisplayPrice(convertBaseToDisplay(Number(baseItem.basePrice)))}
+                                {isFromParent && <span className="ml-1 text-[9px]">(heredado)</span>}
+                              </span>
+                            ) : (
+                              <span className="text-rose-500 text-[10px]">Sin precio</span>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <div className="flex gap-1 justify-end">
+                            <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => cancelEditVariant(variant.id)} disabled={savingVariant === variant.id}><X className="size-3.5" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="size-7 text-emerald-500" onClick={() => void saveVariantPrices(variant.id)} disabled={savingVariant === variant.id}><Check className="size-3.5" /></Button>
+                          </div>
+                        ) : canEditPriceList ? (
+                          <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => beginEditVariant(variant.id, selectedVariantProduct)}><Pencil className="size-3.5" /></Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setVariantDetailOpen(false)}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     {showTutorial && <GuidedTour steps={PRICE_LISTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Listas de precios" allowTargetInteraction />}
   </div>;
 }

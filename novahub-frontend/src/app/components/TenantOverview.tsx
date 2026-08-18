@@ -3,7 +3,7 @@ import { motion, Variants } from 'motion/react';
 import { safeSetItem } from '../services/safe-storage';
 import {
   DollarSign, TrendingDown, ShoppingCart, Target,
-  ArrowUpRight, Loader2, AlertTriangle,
+  ArrowUpRight, Loader2, AlertTriangle, ShieldAlert,
   TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
   FileDown, ClipboardCheck, CalendarDays,
 } from 'lucide-react';
@@ -82,6 +82,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
   const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
   const [dataLoadError, setDataLoadError] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user } = useAuth();
@@ -137,6 +138,13 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       : null;
   };
 
+  const handleDashboardError = (err: any): null => {
+    if (err?.response?.status === 403 || err?.statusCode === 403) {
+      setAccessDenied(true);
+    }
+    return null;
+  };
+
   const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -163,6 +171,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     setLoading(true);
     setLoadStep(0);
     setDataLoadError(false);
+    setAccessDenied(false);
 
     // La validación de implementación no debe bloquear la primera pintura del
     // dashboard. Se ejecuta en paralelo y solo cambia la vista si realmente hay
@@ -189,12 +198,12 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         cajaService.getDashboard(effectivePeriod, undefined, params.startDate, params.endDate, dashboardController.signal, valuationMode),
         12000,
         () => dashboardController.abort(),
-      ).then(normalizeDashboardResponse).catch(() => null),
+      ).then(normalizeDashboardResponse).catch(handleDashboardError),
       withTimeout(
         cajaService.getDashboard('last-month' as any, undefined, undefined, undefined, dashboardController.signal, valuationMode),
         12000,
         () => dashboardController.abort(),
-      ).then(normalizeDashboardResponse).catch(() => null),
+      ).then(normalizeDashboardResponse).catch(handleDashboardError),
     ]);
 
     if (!isCurrentRequest()) return;
@@ -583,9 +592,15 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-border/50 rounded-3xl bg-card shadow-sm">
             <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
-              <AlertTriangle className="size-12 text-muted-foreground/30" />
-              {dataLoadError ? (
+              {accessDenied ? (
                 <>
+                  <ShieldAlert className="size-12 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground font-bold">No tiene acceso a este módulo</p>
+                  <p className="text-xs text-muted-foreground/60">No tenés los permisos necesarios para ver el dashboard de caja.</p>
+                </>
+              ) : dataLoadError ? (
+                <>
+                  <AlertTriangle className="size-12 text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground font-bold">No se pudieron cargar los datos del dashboard</p>
                   <p className="text-xs text-muted-foreground/60">El servicio tardó demasiado en responder. Intentá recargar la página.</p>
                   <Button variant="outline" size="sm" onClick={() => loadData()} className="mt-2 rounded-xl">
@@ -594,6 +609,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                 </>
               ) : (
                 <>
+                  <AlertTriangle className="size-12 text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground font-bold">No hay datos de caja disponibles</p>
                   <p className="text-xs text-muted-foreground/60">Verificá que hayas realizado facturaciones en este período.</p>
                 </>

@@ -1,3 +1,5 @@
+import type { ProductVariant } from '../types/variants';
+
 export interface SalesPriceListMatrix {
   lists: any[];
   products: any[];
@@ -42,15 +44,82 @@ export function getSalesUnitPrice(item: any, currency = 'NIO', exchangeRate = 1)
     : basePrice;
 }
 
+/**
+ * Resuelve el precio para un producto/variante en una lista de precios.
+ * Prioridad: precio de variante → precio del producto padre → undefined.
+ */
+export function resolveVariantPrice(
+  items: any[],
+  priceListId: string,
+  productId: string,
+  variantId?: string | null,
+): { price: number; basePrice: number; currency: string; exchangeRate: number; isVariantPrice: boolean } | undefined {
+  if (variantId) {
+    const variantItem = items.find(
+      (item) =>
+        item.priceListId === priceListId &&
+        item.productId === productId &&
+        item.variantId === variantId
+    );
+    if (variantItem && Number(variantItem.basePrice) > 0) {
+      return {
+        price: Number(variantItem.price),
+        basePrice: Number(variantItem.basePrice),
+        currency: variantItem.currency || 'NIO',
+        exchangeRate: Number(variantItem.exchangeRate) || 1,
+        isVariantPrice: true,
+      };
+    }
+  }
+
+  const parentItem = items.find(
+    (item) =>
+      item.priceListId === priceListId &&
+      item.productId === productId &&
+      (!item.variantId || item.variantId === null)
+  );
+  if (parentItem && Number(parentItem.basePrice) > 0) {
+    return {
+      price: Number(parentItem.price),
+      basePrice: Number(parentItem.basePrice),
+      currency: parentItem.currency || 'NIO',
+      exchangeRate: Number(parentItem.exchangeRate) || 1,
+      isVariantPrice: false,
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Resuelve el precio para POS: busca precio de variante, luego del padre.
+ * Retorna el precio en la moneda de visualización.
+ */
+export function getConfiguredPriceForVariant(
+  items: any[],
+  priceListId: string,
+  productId: string,
+  variantId?: string | null,
+  currency = 'NIO',
+  exchangeRate = 1,
+): { unitPrice: number; priceMissing: boolean; isVariantPrice: boolean } {
+  const resolved = resolveVariantPrice(items, priceListId, productId, variantId);
+  if (!resolved) {
+    return { unitPrice: 0, priceMissing: true, isVariantPrice: false };
+  }
+  const unitPrice = getSalesUnitPrice(resolved, currency, exchangeRate) ?? 0;
+  return {
+    unitPrice,
+    priceMissing: unitPrice <= 0,
+    isVariantPrice: resolved.isVariantPrice,
+  };
+}
+
 /** Líneas de venta con producto que todavía no tienen un precio válido para la lista elegida. */
 export function getMissingSalesPriceItems(items: any[] = []): any[] {
   return items.filter((item) => {
     if (!item?.productId) return false;
     if (String(item?.itemType || '').toUpperCase() === 'SERVICE') return false;
-    // La línea puede conservar priceMissing de un ID histórico aunque la matriz
-    // ya haya resuelto un importe válido por código/nombre. En ese caso el
-    // backend vuelve a validar la lista y no debemos bloquear falsamente desde
-    // el formulario.
     const hasVisiblePrice = Number(item?.unitPrice) > 0;
     return (item?.priceMissing === true && !hasVisiblePrice) || (!item?.priceListId && !hasVisiblePrice);
   });
@@ -65,4 +134,28 @@ export function getMissingSalesPriceMessage(items: any[] = []): string {
     .join(', ');
   const suffix = missing.length > 3 ? ` y ${missing.length - 3} más` : '';
   return `No hay precio configurado para: ${names}${suffix}. Selecciona una lista con precio antes de continuar.`;
+}
+
+/**
+ * Construye la descripción enriquecida de una línea de venta
+ * incluyendo atributos de variante si existen.
+ */
+export function buildLineDescription(
+  productName: string,
+  variant?: ProductVariant | null,
+): string {
+  if (!variant?.attributes?.length) return productName;
+  const attrs = variant.attributes.map((a) => a.value).join(' / ');
+  return `${productName} - ${attrs}`;
+}
+
+/**
+ * Obtiene el SKU para una línea de venta.
+ * Prioridad: SKU de variante → SKU de producto.
+ */
+export function getLineSku(
+  product: { code?: string; sku?: string },
+  variant?: ProductVariant | null,
+): string {
+  return variant?.sku || product?.code || product?.sku || '';
 }

@@ -24,6 +24,7 @@ import {
   cajaService,
   type CashRegister,
   type PosProduct,
+  type PosProductVariant,
   type PosCustomer,
   type PosInvoice,
   type PosInvoiceItem,
@@ -35,6 +36,7 @@ import {
   type CreatePosHoldDto,
   type PosHoldItemInput,
 } from '../../services/caja.service';
+import { VariantPickerModal } from './VariantPickerModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
 import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { BranchAvailabilityModal, type HoldReservationSelection } from './caja/BranchAvailabilityModal';
@@ -53,6 +55,7 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
+  variantId?: string;
   lineTotal: number;
   taxRate: number;
   discount: number;
@@ -286,6 +289,7 @@ function calculateInvoiceSummary(
 function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
   return cart.map((item) => ({
     productId: item.productId,
+    variantId: item.variantId,
     description: item.description,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
@@ -363,6 +367,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [holdSubmitting, setHoldSubmitting] = useState(false);
   const [holdCreateDto, setHoldCreateDto] = useState<CreatePosHoldDto | null>(null);
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false);
+  const [variantPickerProduct, setVariantPickerProduct] = useState<PosProduct | null>(null);
 
   const cartSessions = useRef<Map<string, CartSession>>(new Map());
 
@@ -600,11 +606,59 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       addItem(product);
       return;
     }
+    if (product.isVariable && product.variants && product.variants.length > 1) {
+      setVariantPickerProduct(product);
+      setVariantPickerOpen(true);
+      return;
+    }
     if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && product.currentStock <= 0) {
       void openAvailabilityFor(product, 1);
       return;
     }
     addItem(product);
+  };
+
+  const handleVariantSelected = (product: PosProduct, variant: PosProductVariant) => {
+    const isService = product.itemType === 'SERVICE';
+    const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
+    const priceMissing = !isService && (configuredPrice === undefined || configuredPrice === 0);
+    const variantDescription = variant.attributes?.length
+      ? `${product.name} - ${variant.attributes.map((a) => a.value).join(' / ')}`
+      : product.name;
+    const globalQty = getGlobalCartQuantity(product.id);
+    const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id);
+    const requestedQty = (existing?.quantity || 0) + 1;
+
+    if (product.trackInventory && variant.currentStock != null && requestedQty + globalQty > variant.currentStock) {
+      toast.error(`Stock insuficiente para ${variantDescription}. Disponible: ${variant.currentStock}`);
+      return;
+    }
+
+    setCart((prev) => {
+      const current = prev.find((i) => i.productId === product.id && i.variantId === variant.id);
+      if (current) {
+        return prev.map((i) =>
+          i.productId === product.id && i.variantId === variant.id
+            ? { ...i, quantity: i.quantity + 1, lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice) }
+            : i,
+        );
+      }
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          variantId: variant.id,
+          description: variantDescription,
+          quantity: 1,
+          unitPrice: configuredPrice ?? 0,
+          priceListId: isService ? undefined : selectedPriceListId,
+          priceMissing,
+          discount: 0,
+          taxRate: NICARAGUA_IVA_RATE,
+          lineTotal: calculateLineTotal(1, configuredPrice ?? 0),
+        },
+      ];
+    });
   };
 
   const addItem = (product: PosProduct) => {
@@ -686,8 +740,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     );
   };
 
-  const removeItem = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  const removeItem = (productId: string, variantId?: string) => {
+    setCart((prev) => prev.filter((item) => {
+      if (variantId) return !(item.productId === productId && item.variantId === variantId);
+      return item.productId !== productId;
+    }));
   };
 
   const refreshCatalog = useCallback(async () => {
@@ -1530,7 +1587,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                             <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
                             <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal)}</td>
                             <td className="px-3 py-2 text-center">
-                              <Button variant="ghost" onClick={() => removeItem(item.productId)}
+                              <Button variant="ghost" onClick={() => removeItem(item.productId, item.variantId)}
                                 disabled={isRegisterDisabled}
                                 className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
                                 <Trash2 className="size-3.5" />
@@ -1849,6 +1906,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         open={showAddCustomer}
         onOpenChange={setShowAddCustomer}
         onSuccess={handleCustomerCreated}
+      />
+      <VariantPickerModal
+        open={variantPickerOpen}
+        onOpenChange={setVariantPickerOpen}
+        product={variantPickerProduct}
+        onSelect={(variant) => {
+          if (variantPickerProduct) handleVariantSelected(variantPickerProduct, variant);
+        }}
       />
       <BranchAvailabilityModal
         open={availabilityOpen}
