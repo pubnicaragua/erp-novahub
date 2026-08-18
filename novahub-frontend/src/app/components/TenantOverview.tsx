@@ -139,7 +139,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   };
 
   const handleDashboardError = (err: any): null => {
-    if (err?.response?.status === 403 || err?.statusCode === 403) {
+    if (err?.status === 403 || err?.response?.status === 403 || err?.statusCode === 403) {
       setAccessDenied(true);
     }
     return null;
