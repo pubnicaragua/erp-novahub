@@ -197,7 +197,7 @@ export function SucursalesView({
         {canCreateBranch && <Button 
           size="sm" 
           onClick={() => { setForm({ warehouseIds: [], primaryWarehouseId: '', isActive: true }); setIsFormOpen(true); }}
-          className="w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 sm:w-auto"
+          className="h-10 w-full rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 sm:w-auto"
         >
           <Plus className="mr-2 size-4" /> Agregar Sucursal
         </Button>}
@@ -297,7 +297,7 @@ export function SucursalesView({
                     }}>
                       <Edit2 className="size-3.5" />
                     </Button>}
-                    {canDeactivateBranch && <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-500 hover:text-white" onClick={() => setDeleteId(b.id)}>
+                    {canDeactivateBranch && <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-700 hover:text-white" onClick={() => setDeleteId(b.id)}>
                       <Trash2 className="size-3.5" />
                     </Button>}
                   </TableCell>

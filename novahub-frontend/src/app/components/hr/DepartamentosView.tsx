@@ -158,7 +158,7 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
         </div>
         <div className="flex flex-wrap items-center gap-2" data-tour="hr-departments-actions">
           {canCreate && (
-            <Button type="button" onClick={openCreate} className="h-10 shrink-0 rounded-xl px-4 text-xs font-black uppercase tracking-widest">
+            <Button type="button" onClick={openCreate} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
               <Plus className="size-4" /> Nuevo departamento
             </Button>
           )}

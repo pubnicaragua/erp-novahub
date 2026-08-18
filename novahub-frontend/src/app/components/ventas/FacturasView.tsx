@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, FileDown, History
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -18,14 +18,14 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { CurrencySelector } from '../ui/CurrencySelector';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
-import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
@@ -36,7 +36,7 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -63,6 +63,7 @@ interface FacturasViewProps {
 const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
   { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'A crédito', value: 'CREDIT', color: 'bg-violet-500/10 text-violet-500' },
   { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Anulada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Vencida', value: 'OVERDUE', color: 'bg-orange-500/10 text-orange-500' },
@@ -75,6 +76,15 @@ const paymentMethodOptions = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
 ];
+
+type InvoicePaymentLine = {
+  method: string;
+  amount: number;
+  bankAccountId?: string;
+  reference?: string;
+};
+
+type InvoiceSaveAction = 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
 const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => {
   const sourceType = String(invoice?.sourceType || '').toUpperCase();
@@ -111,10 +121,19 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     formatCurrentAmount,
     convertAmount,
     convertCurrentAmount,
+    convertBetweenCurrencies,
   } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
-  const [searchTerm, setSearchTerm] = useState(sessionStorage.getItem('global-search-module') === 'facturas' ? (sessionStorage.removeItem('global-search-module') || sessionStorage.getItem('global-search-term') || '') : '');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    try {
+      if (sessionStorage.getItem('global-search-module') !== 'facturas') return '';
+      sessionStorage.removeItem('global-search-module');
+      return sessionStorage.getItem('global-search-term') || '';
+    } catch {
+      return '';
+    }
+  });
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
@@ -140,15 +159,41 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
-  const [auditInvoiceId, setAuditInvoiceId] = useState<string | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [paymentAccountId, setPaymentAccountId] = useState('');
-  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
-  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
+  const [paymentCurrency, setPaymentCurrency] = useState<'NIO' | 'USD'>('NIO');
+  const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
+  const [creditDueDate, setCreditDueDate] = useState('');
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
+  const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
+
+  const accountingPreflightSignature = isCreating || editingId
+    ? JSON.stringify({
+      warehouseId: localDoc?.warehouseId || warehouses[0]?.id || '',
+      items: (localDoc?.items || []).map((item: any) => ({ productId: item.productId || '', warehouseId: item.warehouseId || '' })),
+    })
+    : '';
+
+  useEffect(() => {
+    if (!accountingPreflightSignature || !localDoc?.items?.length) {
+      setAccountingPreflight(null);
+      setAccountingPreflightLoading(false);
+      return;
+    }
+    let active = true;
+    setAccountingPreflightLoading(true);
+    const payload = JSON.parse(accountingPreflightSignature);
+    invoicesService.accountingPreflight(payload)
+      .then((result: any) => { if (active) setAccountingPreflight(result); })
+      .catch(() => { if (active) setAccountingPreflight({ ready: false, hasInventoryItems: true, errors: ['No se pudo validar la configuración contable del inventario.'], warnings: [] }); })
+      .finally(() => { if (active) setAccountingPreflightLoading(false); });
+    return () => { active = false; };
+  }, [accountingPreflightSignature, localDoc?.items?.length]);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -299,7 +344,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
   const filtered = data.filter(f =>
-    (statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL'].includes(String(f.status || '').toUpperCase())) || String(f.status || '').toUpperCase() === statusFilter) &&
+    (statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(f.status || '').toUpperCase())) || String(f.status || '').toUpperCase() === statusFilter) &&
     (f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -331,9 +376,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('No tienes permisos para aprobar y registrar el pago de esta factura');
       return;
     }
-    const invoiceStatus = String(invoice.status || '').toUpperCase();
+    const invoiceStatus = String(invoice.status || (!invoice.id ? 'DRAFT' : '')).toUpperCase();
     if (invoiceStatus === 'PAID') return;
-    if (!['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE'].includes(invoiceStatus)) {
+    if (!['DRAFT', 'PENDING', 'PARTIAL', 'OVERDUE', 'CREDIT'].includes(invoiceStatus)) {
       toast.error('Solo se pueden pagar facturas en borrador o emitidas');
       return;
     }
@@ -346,13 +391,24 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return;
     }
 
-    setPaymentInvoice(invoice);
-    setPaymentAmount(amount.toFixed(2));
-    setPaymentMethod('CASH');
-    setPaymentAccountId('');
-    setPaymentBankAccountId('');
-    setPaymentReference('');
+    const today = new Date().toISOString().split('T')[0];
+    const existingDueDate = invoice.dueDate ? String(invoice.dueDate).split('T')[0] : '';
+    // El borrador se presenta como pendiente únicamente dentro del modal. El
+    // backend lo crea y liquida en una sola transacción al confirmar.
+    setPaymentInvoice(invoiceStatus === 'DRAFT' ? ({ ...invoice, status: 'PENDING' } as Invoice) : invoice);
+    const invoiceCurrency = String(invoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+    setPaymentCurrency(invoiceCurrency);
+    setPaymentLines([{ method: 'CASH', amount: Number(amount.toFixed(2)) }]);
+    setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
     setPaymentDialogOpen(true);
+  };
+
+  const getCustomerCreditAvailable = (customerId?: string | null) => {
+    if (!customerId) return 0;
+    const customer = customers.find((item) => item.id === customerId);
+    const limit = Math.max(0, Number(customer?.creditLimit || 0));
+    const currentDebt = Math.max(0, -Number(customer?.balance || 0));
+    return Math.max(0, Number((limit - currentDebt).toFixed(2)));
   };
 
   const closeInvoicePayment = () => {
@@ -362,32 +418,111 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setPaymentDialogOpen(false);
   };
 
+  const openInvoiceCredit = (invoice: Invoice) => {
+    if (!canPerform('SALES_INVOICES', 'approve') || !canPerform('SALES_CREDIT_NOTES', 'approve')) {
+      toast.error('No tienes permisos para enviar esta factura a crédito');
+      return;
+    }
+    const status = String(invoice.status || (!invoice.id ? 'DRAFT' : '')).toUpperCase();
+    const actionInvoice = !invoice.id && status === 'DRAFT'
+      ? ({ ...invoice, status: 'PENDING' } as Invoice)
+      : invoice;
+    if (!['PENDING', 'PARTIAL', 'OVERDUE'].includes(String(actionInvoice.status || '').toUpperCase()) || getInvoiceBalance(actionInvoice) <= 0.01) {
+      toast.error('Solo se puede enviar a crédito una factura con saldo pendiente');
+      return;
+    }
+    if (getCustomerCreditAvailable(invoice.customerId) <= 0.01) {
+      toast.error('El cliente no tiene límite de crédito disponible para esta operación');
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const existingDueDate = invoice.dueDate ? String(invoice.dueDate).split('T')[0] : '';
+    setCreditInvoice(actionInvoice);
+    setCreditDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
+  };
+
+  const handleSendInvoiceToCredit = async () => {
+    if (!creditInvoice || !creditDueDate) {
+      toast.error('Selecciona la fecha de pago del crédito');
+      return;
+    }
+    const invoice = creditInvoice;
+    if (!invoice.id) {
+      setCreditInvoice(null);
+      await handleSaveInvoice('CREDIT', { dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString() });
+      return;
+    }
+    const creditToastId = toast.loading(`Enviando factura ${invoice.number} a crédito...`);
+    try {
+      setCreditLoading(true);
+      await invoicesService.sendToCredit(invoice.id, { dueDate: new Date(`${creditDueDate}T12:00:00`).toISOString() });
+      toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
+      setCreditInvoice(null);
+      if (localDoc?.id === invoice.id) {
+        setEditingId(null);
+        setIsCreating(false);
+        setLocalDoc(null);
+      }
+      await onRefresh();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'No se pudo enviar la factura a crédito';
+      toast.error(Array.isArray(message) ? message[0] : message, { id: creditToastId });
+    } finally {
+      setCreditLoading(false);
+    }
+  };
+
   const handleInvoicePayment = async () => {
     if (!paymentInvoice) return;
     const maxAmount = getInvoiceBalance(paymentInvoice);
-    const amount = Number(paymentAmount);
+    const amount = Number(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
+    const invoiceCurrency = String(paymentInvoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+    const paymentRate = paymentCurrency === baseCurrency ? 1 : paymentCurrency === invoiceCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
+    const amountAppliedToInvoice = Number(convertBetweenCurrencies(
+      amount,
+      paymentCurrency,
+      paymentInvoice.currency,
+      paymentRate,
+      paymentInvoice.exchangeRate,
+    ).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('El monto del pago debe ser mayor que cero');
       return;
     }
-    if (amount > maxAmount + 0.01) {
+    if (amountAppliedToInvoice > maxAmount + 0.01) {
       toast.error('El pago no puede superar el saldo pendiente de la factura');
       return;
     }
-    if (paymentMethod === 'TRANSFER' && !paymentReference.trim()) {
-      toast.error('La referencia es obligatoria para una transferencia');
+    if (paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim())) {
+      toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque');
       return;
     }
-    if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
-      toast.error('Selecciona el banco global donde se recibió el pago');
+    if (paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada tarjeta, transferencia o cheque');
       return;
     }
-    if (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) {
-      toast.error('Selecciona la cuenta contable que recibirá el pago');
+    const remaining = Math.max(0, Number((maxAmount - amountAppliedToInvoice).toFixed(2)));
+    if (remaining > 0.01 && !paymentDueDate) {
+      toast.error('Selecciona la fecha en que se pagará el saldo restante');
       return;
     }
 
     const invoice = paymentInvoice;
+    if (!invoice.id) {
+      setPaymentDialogOpen(false);
+      try {
+        setPaymentLoading(true);
+        await handleSaveInvoice('PAYMENT', {
+          payments: paymentLines,
+          currency: paymentCurrency,
+          exchangeRate: paymentRate,
+          dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+        });
+      } finally {
+        setPaymentLoading(false);
+      }
+      return;
+    }
     const payToastId = toast.loading(`Registrando pago de factura ${invoice.number}...`);
     try {
       setPaymentLoading(true);
@@ -399,17 +534,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           items: (invoice as any).items || [],
         } as any);
       }
-      await paymentsService.create({
+      const activeCredit = (invoice.creditNotes || []).find((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase()));
+      await paymentsService.createMixed({
         customerId: invoice.customerId,
-        invoiceId: invoice.id,
+        invoiceId: activeCredit ? undefined : invoice.id,
+        creditNoteId: activeCredit?.id,
         date: new Date().toISOString(),
         amount,
-        currency: invoice.currency,
-        exchangeRate: invoice.exchangeRate || globalRate,
-        method: paymentMethod,
-        accountId: requiresManualPaymentAccount(paymentMethod) ? paymentAccountId || undefined : undefined,
-        bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined,
-        reference: paymentReference.trim() || undefined,
+        currency: paymentCurrency,
+        exchangeRate: paymentRate,
+        method: paymentLines[0]?.method || 'CASH',
+        payments: paymentLines,
+        dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
         notes: `Cobro registrado desde Facturas (${invoice.number})`,
       } as any);
 
@@ -419,7 +555,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         setLocalDoc(null);
       }
 
-      const remaining = Math.max(0, maxAmount - amount);
       toast.success(remaining > 0.01 ? `Pago parcial registrado. Saldo restante: ${formatInvoiceAmount(remaining, invoice.currency, invoice.exchangeRate)}` : `Factura ${invoice.number} pagada`, { id: payToastId });
       setPaymentDialogOpen(false);
       await onRefresh();
@@ -464,8 +599,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   };
 
-  const handleSaveInvoice = async (emitir = false) => {
+  const handleSaveInvoice = async (
+    action: InvoiceSaveAction = 'DRAFT',
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string },
+  ) => {
     if (!localDoc) return;
+    const emitir = action !== 'DRAFT';
     if (!localDoc.customerId) {
       toast.error('Selecciona un cliente');
       return;
@@ -536,7 +675,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const baseNotes = String(localDoc.notes || '').split('\n[SERIALES]\n')[0];
     const finalNotes = `${baseNotes}${serialNotes}`.trim();
 
-    const saveToastId = toast.loading(emitir ? 'Emitiendo factura...' : (isCreating ? 'Guardando factura como borrador...' : 'Guardando factura...'));
+    const saveToastId = toast.loading(
+      action === 'PAYMENT'
+        ? 'Creando y registrando pago...'
+        : action === 'CREDIT'
+          ? 'Creando y enviando a crédito...'
+          : action === 'PENDING'
+            ? 'Emitiendo factura pendiente...'
+            : (isCreating ? 'Guardando factura como borrador...' : 'Guardando factura...'),
+    );
     try {
       if (isCreating) {
         await invoicesService.create({
@@ -562,7 +709,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           taxAmount: Number(localDoc.taxAmount || 0),
           discountAmount: Number(localDoc.discountAmount || 0),
           total: Number(localDoc.total || 0),
-          status: emitir ? 'PENDING' : 'DRAFT',
+          pricingMode,
+          status: action === 'PENDING' ? 'PENDING' : 'DRAFT',
+          initialAction: action === 'PAYMENT' || action === 'CREDIT' ? action : undefined,
+          initialPayment: action === 'PAYMENT' ? {
+            payments: settlement?.payments || [],
+            currency: settlement?.currency,
+            dueDate: settlement?.dueDate,
+          } : undefined,
+          initialCreditDueDate: action === 'CREDIT' ? settlement?.dueDate : undefined,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
           notes: finalNotes,
           salesOrderId: localDoc.salesOrderId || undefined,
@@ -571,7 +726,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           commissionRate: localDoc.commissionRate || undefined,
           commissionAmount: localDoc.commissionAmount || undefined,
         } as any);
-        toast.success(emitir ? 'Factura emitida' : 'Factura guardada como borrador', { id: saveToastId });
+        toast.success(
+          action === 'PAYMENT' ? 'Factura creada y pago registrado'
+            : action === 'CREDIT' ? 'Factura creada y enviada a Créditos'
+              : action === 'PENDING' ? 'Factura emitida como pendiente'
+                : 'Factura guardada como borrador',
+          { id: saveToastId },
+        );
       } else {
         const invoiceUpdates = { ...localDoc };
         delete invoiceUpdates.paymentMethod;
@@ -580,9 +741,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           ...invoiceUpdates,
           items: localDoc.items,
           notes: finalNotes,
-          status: emitir ? 'PENDING' : localDoc.status,
+          status: action === 'PENDING' ? 'PENDING' : localDoc.status,
         });
-        toast.success(emitir ? 'Factura emitida' : 'Factura guardada como borrador', { id: saveToastId });
+        toast.success(action === 'PENDING' ? 'Factura emitida como pendiente' : 'Factura guardada como borrador', { id: saveToastId });
       }
       setIsCreating(false);
       setEditingId(null);
@@ -593,6 +754,16 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`, { id: saveToastId });
     }
   };
+
+  const paymentTotal = paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  const invoicePaymentCurrency = paymentInvoice && String(paymentInvoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+  const paymentRate = paymentCurrency === baseCurrency ? 1 : paymentInvoice && paymentCurrency === invoicePaymentCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
+  const paymentTotalInInvoiceCurrency = paymentInvoice
+    ? convertBetweenCurrencies(paymentTotal, paymentCurrency, paymentInvoice.currency, paymentRate, paymentInvoice.exchangeRate)
+    : paymentTotal;
+  const paymentRemainingInInvoiceCurrency = paymentInvoice
+    ? Math.max(0, getInvoiceBalance(paymentInvoice) - paymentTotalInInvoiceCurrency)
+    : 0;
 
   const recalcTotals = (items: any[], dRate: number, tRate: number) => {
     if (pricingMode === 'individual') return recalcIndividualTotals(items);
@@ -625,7 +796,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
   };
 
-  const getInvoiceBalance = (invoice: Partial<Invoice>) => {
+  function getInvoiceBalance(invoice: Partial<Invoice>) {
     const status = String(invoice.status || '').toUpperCase();
     if (status === 'DRAFT' || status === 'CANCELLED') return 0;
     const total = Number(invoice.total);
@@ -636,13 +807,34 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       return Math.max(0, Number((total - amountPaid).toFixed(2)));
     }
     return Math.max(0, Number(invoice.balance || 0));
-  };
+  }
 
   const formatInvoiceAmount = (amount: number, currency?: string, rate?: number) => (
     valuationMode === 'CURRENT'
       ? formatCurrentAmount(amount, currency)
       : formatHistoricalAmount(amount, currency, rate)
   );
+
+  const isInvoiceCancellableFromList = (invoice: Partial<Invoice>) => {
+    const status = String(invoice.status || '').toUpperCase();
+    return !['PAID', 'PARTIAL', 'CANCELLED', 'CREDIT'].includes(status) && Number(invoice.amountPaid || 0) <= 0.01;
+  };
+
+  const handleDownloadInvoicePdf = async (invoice: Invoice) => {
+    const pdfToastId = toast.loading('Generando PDF de la factura...');
+    try {
+      await generateEstimatePDF({
+        estimate: invoice,
+        tenantName: user?.tenantName || 'Empresa',
+        formatAmount: formatConvertedAmount as any,
+        tenantLogo: themeConfig?.logo,
+        documentType: 'invoice' as any,
+      });
+      toast.success('PDF descargado', { id: pdfToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+    }
+  };
 
   const getInvoiceExchangeDifference = (amount: number, currency?: string, rate?: number) => {
     const sourceCurrency = String(currency || baseCurrency).toUpperCase();
@@ -661,7 +853,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         const source = getInvoiceSourceBadge(row);
         return (
           <div className="flex min-w-0 flex-col items-start gap-1">
-            <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={() => setEditingId(row.id)}>{val}</span>
+            <span className="text-xs font-black font-mono text-primary cursor-pointer hover:underline" onClick={(event) => { event.stopPropagation(); setDetailInvoice(row); }}>{val}</span>
             {source && <Badge className={cn('border-none px-1.5 py-0 text-[8px] font-black', source.className)}>{source.label}</Badge>}
           </div>
         );
@@ -797,7 +989,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     0,
   );
   const accountsReceivableInDisplayCurrency = data
-    .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL'].includes((invoice.status || '').toUpperCase()))
+    .filter(invoice => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes((invoice.status || '').toUpperCase()))
     .reduce((acc, invoice) => acc + displayInvoiceAmount(getInvoiceBalance(invoice), invoice.currency, invoice.exchangeRate), 0);
   const paidInDisplayCurrency = data.reduce(
     (acc, invoice) => acc + displayInvoiceAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate),
@@ -806,8 +998,20 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
-    const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
+    const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED', 'CREDIT'].includes(String(localDoc?.status || '').toUpperCase());
     const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
+    const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
+    const accountingBlocked = hasInventoryLines && (accountingPreflightLoading || !accountingPreflight?.ready);
+    const accountingErrors = accountingPreflight?.errors || [];
+    const hasCreditAvailable = getCustomerCreditAvailable(localDoc?.customerId) > 0.01;
+    const canCreateCredit = !isInvoiceLocked
+      && hasCreditAvailable
+      && canPerform('SALES_INVOICES', 'approve')
+      && canPerform('SALES_CREDIT_NOTES', 'approve');
+    const canRegisterPayment = !isInvoiceLocked
+      && canPerform('SALES_INVOICES', 'approve')
+      && canPerform('SALES_PAYMENTS', 'create')
+      && canPerform('SALES_PAYMENTS', 'approve');
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -826,23 +1030,35 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Completar datos para crear factura' : 'Detalle de la factura'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+          <div className="flex flex-wrap items-center justify-end gap-2" data-tour="sales-form-actions">
             <SalesViewTutorial view="invoices" context="form" />
             {!isCreating && localDoc?.customerId && (
-              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
             {!isInvoiceLocked && ((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => handleSaveInvoice(false)}>
+                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => handleSaveInvoice('DRAFT')}>
                   Guardar Borrador
                 </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => handleSaveInvoice(true)}>
-                  Emitir Factura
+                <Button variant="outline" className="rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300 font-black uppercase text-[10px] tracking-widest px-4"
+                  onClick={() => handleSaveInvoice('PENDING')} disabled={accountingBlocked}>
+                  Guardar como pendiente
                 </Button>
+                {canCreateCredit && (
+                  <Button variant="outline" className="rounded-xl border-violet-500/30 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300 font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => openInvoiceCredit(localDoc as Invoice)} disabled={accountingBlocked}>
+                    Enviar a crédito
+                  </Button>
+                )}
+                {canRegisterPayment && (
+                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => openInvoicePayment(localDoc as Invoice)} disabled={accountingBlocked}>
+                    Registrar pago
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -855,6 +1071,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <SalesAccountingLegend
                 flow={isCashRegisterInvoice ? 'pos' : 'invoice'}
               />
+              {hasInventoryLines && (accountingPreflightLoading || accountingErrors.length > 0) && (
+                <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                  <div className="space-y-1 text-[11px]">
+                    <p className="font-black uppercase tracking-wider">Advertencia contable antes de emitir</p>
+                    <p>{accountingPreflightLoading ? 'Validando Costo de Ventas y cuenta de Inventario del almacén…' : accountingErrors.join(' ')}</p>
+                    {!accountingPreflightLoading && accountingErrors.length > 0 && (
+                      <p className="font-semibold">Configura la cuenta indicada antes de guardar la factura. No se registrará hasta que la validación sea correcta.</p>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
@@ -1326,60 +1554,81 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           pagination={pagination}
         columns={columns}
         showHorizontalControls
-        actionsWidth="w-64"
+        actionsWidth="w-52"
         fitContent
         layoutMode={layoutMode}
         highlightedRowId={highlightedAlertId}
           onRowUpdate={async (id, updates) => { await handleUpdate(id, updates); }}
-          onRowClick={(row) => setEditingId(row.id)}
-        onBulkDelete={async (ids) => {
-            const bulkCancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'}...`);
+          onRowClick={(row) => setDetailInvoice(row)}
+          onBulkDelete={async (ids) => {
+            const rowsToCancel = data.filter((invoice) => ids.includes(invoice.id) && isInvoiceCancellableFromList(invoice));
+            const skippedCount = ids.length - rowsToCancel.length;
+            if (!rowsToCancel.length) {
+              toast.error('Las facturas pagadas o con pagos parciales no se pueden anular desde esta vista');
+              return;
+            }
+            if (skippedCount > 0) {
+              toast.info(`${skippedCount} factura${skippedCount === 1 ? '' : 's'} pagada${skippedCount === 1 ? '' : 's'} o parcial${skippedCount === 1 ? '' : 'es'} se omitió${skippedCount === 1 ? '' : 'eron'}`);
+            }
+            const bulkCancelToastId = toast.loading(`Anulando ${rowsToCancel.length} factura${rowsToCancel.length === 1 ? '' : 's'}...`);
             try {
-              await Promise.all(ids.map(id => invoicesService.cancel(id.toString(), 'Anulación masiva')));
-              toast.success(`${ids.length} Facturas anuladas`, { id: bulkCancelToastId });
+              await Promise.all(rowsToCancel.map((invoice) => invoicesService.cancel(invoice.id, 'Anulación masiva')));
+              toast.success(`${rowsToCancel.length} factura${rowsToCancel.length === 1 ? '' : 's'} anulada${rowsToCancel.length === 1 ? '' : 's'}`, { id: bulkCancelToastId });
               onRefresh();
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'No se pudieron anular las facturas', { id: bulkCancelToastId });
             }
           }}
+          bulkAction="cancel"
           isLoading={loading}
           bulkActions={() => null}
           actions={(row) => (
-              <div className="flex min-w-max items-center justify-end gap-2 pr-1">
-                <WhatsAppActionButton
-                  phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
-                  documentLabel="factura"
-                  onSend={() => handleWhatsApp(row)}
-                />
-                <Button type="button" title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="relative z-20 size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void (async () => {
-                    const pdfToastId = toast.loading('Generando PDF de la factura...');
-                    try {
-                      await generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount: formatConvertedAmount as any, tenantLogo: themeConfig?.logo, documentType: 'invoice' as any });
-                      toast.success('PDF descargado', { id: pdfToastId });
-                    } catch (error: any) {
-                      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
-                    }
-                  })();
-                }}><FileDown className="size-4 text-muted-foreground" /></Button>
-                <Button title="Ver Historial" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setAuditInvoiceId(row.id)}><History className="size-4 text-muted-foreground" /></Button>
-                {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
-                  !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
-                  getInvoiceBalance(row) > 0 && (
-                  <Button type="button" title="Registrar pago parcial o total" aria-label="Registrar pago parcial o total" variant="ghost" size="icon" disabled={paymentLoading && paymentInvoice?.id === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => openInvoicePayment(row)}>
-                    {paymentLoading && paymentInvoice?.id === row.id ? <CreditCard className="size-4 animate-pulse text-primary" /> : <CheckCircle2 className="size-4 text-muted-foreground" />}
-                  </Button>
-                )}
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
-                {canPerform('SALES_INVOICES', 'delete') && row.status !== 'CANCELLED' && (
-                  <Button title="Cancelar factura" aria-label="Cancelar factura" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4 text-muted-foreground" /></Button>
-                )}
-              </div>
+            <div className="flex min-w-max items-center justify-end gap-1 pr-1">
+              <WhatsAppActionButton
+                phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
+                documentLabel="factura"
+                onSend={() => handleWhatsApp(row)}
+              />
+              {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_CREDIT_NOTES', 'approve') &&
+                !['PAID', 'CANCELLED', 'CREDIT'].includes(String(row.status).toUpperCase()) &&
+                !row.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
+                getInvoiceBalance(row) > 0.01 && (
+                <Button type="button" title="Enviar saldo a crédito" aria-label={`Enviar saldo a crédito de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-violet-500 hover:bg-violet-500/10 transition-colors" onClick={() => openInvoiceCredit(row)}>
+                  <Send className="size-4" />
+                </Button>
+              )}
+              {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
+                !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
+                getInvoiceBalance(row) > 0 && (
+                <Button type="button" title="Registrar pago parcial o total" aria-label={`Registrar pago de ${row.number}`} variant="ghost" size="icon" disabled={paymentLoading && paymentInvoice?.id === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => openInvoicePayment(row)}>
+                  {paymentLoading && paymentInvoice?.id === row.id ? <CreditCard className="size-4 animate-pulse text-primary" /> : <CheckCircle2 className="size-4 text-muted-foreground" />}
+                </Button>
+              )}
+              {canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(row) && (
+                <Button type="button" title="Anular factura" aria-label={`Anular factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
+                  <Ban className="size-4" />
+                </Button>
+              )}
+              <Button type="button" title="Ver factura completa" aria-label={`Ver factura completa ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setDetailInvoice(null); setEditingId(row.id); }}>
+                <Eye className="size-4" />
+              </Button>
+            </div>
           )}
         />
       </div>
+
+      <InvoiceDetailSheet
+        key={detailInvoice?.id || 'invoice-detail'}
+        invoice={detailInvoice}
+        sourceBadge={getInvoiceSourceBadge(detailInvoice)}
+        open={Boolean(detailInvoice)}
+        onClose={() => setDetailInvoice(null)}
+        onOpenInvoice={(invoice) => { setDetailInvoice(null); setEditingId(invoice.id); }}
+        onDownloadPdf={(invoice) => { void handleDownloadInvoicePdf(invoice); }}
+        getBalance={getInvoiceBalance}
+        formatAmount={formatInvoiceAmount}
+        formatDate={formatDateSafe}
+      />
 
       <ConfirmDialog
         open={pendingCancelId !== null}
@@ -1421,6 +1670,39 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         </div>
       </ConfirmDialog>
 
+      <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) setCreditInvoice(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+              <Send className="size-5 text-violet-500" /> Enviar factura a crédito
+            </DialogTitle>
+            <DialogDescription>
+              Se trasladará únicamente el saldo pendiente a Créditos y se validará el límite disponible del cliente.
+            </DialogDescription>
+          </DialogHeader>
+          {creditInvoice && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number} · {creditInvoice.customer?.name || 'Cliente'}</p>
+                <p className="mt-1 text-2xl font-black text-violet-600 dark:text-violet-400">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
+                <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de pago *</p>
+                <Input type="date" value={creditDueDate} onChange={(event) => setCreditDueDate(event.target.value)} />
+                <p className="mt-1 text-[10px] text-muted-foreground">Se enviará una notificación interna un día antes.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCreditInvoice(null)} disabled={creditLoading}>Cancelar</Button>
+            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !creditDueDate} className="bg-violet-600 font-black text-white hover:bg-violet-700">
+              {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
           <DialogHeader>
@@ -1439,8 +1721,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentInvoice.number} · {paymentInvoice.customer?.name || 'Cliente'}</p>
                     <p className="mt-1 text-2xl font-black text-primary">Saldo: {formatInvoiceAmount(getInvoiceBalance(paymentInvoice), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                   </div>
-                  <Badge className={cn('border-none px-2 py-1 text-[9px] font-black uppercase', String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500')}>
-                    {String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'Pago parcial' : 'Pendiente'}
+                  <Badge className={cn('border-none px-2 py-1 text-[9px] font-black uppercase', String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'bg-blue-500/10 text-blue-500' : String(paymentInvoice.status).toUpperCase() === 'CREDIT' ? 'bg-violet-500/10 text-violet-500' : 'bg-amber-500/10 text-amber-500')}>
+                    {String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'Pago parcial' : String(paymentInvoice.status).toUpperCase() === 'CREDIT' ? 'A crédito' : 'Pendiente'}
                   </Badge>
                 </div>
                 {paymentInvoice.expectedDelivery && (
@@ -1450,43 +1732,80 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </p>
                 )}
               </div>
+              <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
+                  <span className="text-[10px] font-black text-primary">Mixto permitido</span>
+                </div>
+                <CurrencySelector
+                  value={paymentCurrency}
+                  baseCurrency={baseCurrency}
+                  exchangeRate={globalRate}
+                  label="Moneda recibida"
+                  onChange={(nextCurrency) => {
+                    const nextRate = nextCurrency === baseCurrency ? 1 : paymentInvoice && nextCurrency === invoicePaymentCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
+                    setPaymentLines((current) => current.map((line) => ({
+                      ...line,
+                      amount: Number(convertBetweenCurrencies(line.amount, paymentCurrency, nextCurrency, paymentRate, nextRate).toFixed(2)),
+                    })));
+                    setPaymentCurrency(nextCurrency);
+                  }}
+                />
+                {paymentLines.map((line, index) => (
+                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_auto] sm:items-end">
+                      <div>
+                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
+                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '' } : item))} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                          {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({paymentCurrency})</p>
+                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} autoFocus={index === 0} />
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                    </div>
+                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
+                    {requiresPaymentReference(line.method) && <div className="mt-2">
+                      <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
+                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." />
+                    </div>}
+                  </div>
+                ))}
+                <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0 }])}>
+                  <Plus className="mr-2 size-4" /> Agregar pago mixto
+                </Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto a aplicar</p>
-                  <Input type="number" min="0.01" max={getInvoiceBalance(paymentInvoice)} step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} autoFocus />
-                  <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatInvoiceAmount(getInvoiceBalance(paymentInvoice), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                <div className="rounded-xl border border-border/50 bg-background/60 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado</p>
+                  <p className="mt-1 text-lg font-black text-foreground">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentTotal)}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Equivale a {formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                 </div>
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
-                  <select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value; setPaymentMethod(nextMethod); setPaymentAccountId(requiresManualPaymentAccount(nextMethod) ? paymentAccountId : ''); setPaymentBankAccountId(isBankPaymentMethod(nextMethod) ? paymentBankAccountId : ''); }} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                  </select>
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo que quedará como deuda</p>
+                  <p className="mt-1 text-lg font-black text-primary">{formatInvoiceAmount(paymentRemainingInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                 </div>
               </div>
-              {requiresManualPaymentAccount(paymentMethod) && <AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" />}
-              {isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Banco global de destino" />}
-              <div>
-                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia {paymentMethod === 'TRANSFER' ? '*' : '(opcional)'}</p>
-                <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Transferencia, voucher, cheque..." />
-              </div>
+              {paymentRemainingInInvoiceCurrency > 0.01 && (
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del saldo pendiente *</p>
+                  <Input type="date" value={paymentDueDate} onChange={(event) => setPaymentDueDate(event.target.value)} />
+                  <p className="mt-1 text-[10px] text-muted-foreground">El sistema notificará un día antes del vencimiento.</p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) || (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AuditHistoryModal
-        isOpen={!!auditInvoiceId}
-        onClose={() => setAuditInvoiceId(null)}
-        entity="INVOICE"
-        entityId={auditInvoiceId || ''}
-        title="Historial de la Factura"
-      />
     </div>
   );
 }

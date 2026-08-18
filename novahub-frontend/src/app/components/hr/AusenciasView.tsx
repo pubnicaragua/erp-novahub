@@ -17,6 +17,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
+import { HRCreateViewShell } from './HRCreateViewShell';
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   VACATION: 'Vacaciones',
@@ -214,7 +215,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-tour="hr-leaves-title">
+      <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-4', showNewForm && 'hidden')} data-tour="hr-leaves-title">
         <StatCard
           label="Pendientes"
           value={pendingRequests.length}
@@ -287,8 +288,8 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-leaves-actions">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className={cn('flex flex-wrap items-center justify-between gap-3', showNewForm && 'hidden')} data-tour="hr-leaves-actions">
+        <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -311,18 +312,25 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             </button>
           ))}
         </div>
-        {canPerform('HR_LEAVES', 'create') && (
-          <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Plus className="size-4 mr-2" />
-            {showNewForm ? 'Cancelar' : 'Nueva Solicitud'}
-          </Button>
-        )}
-        <HRViewTutorial label="Cómo gestionar ausencias" targetPrefix="hr-leaves" copy={{ data: { title: 'Solicitudes de ausencia', description: 'Consulta empleados, tipos, fechas, días, razones y estados de cada solicitud.' }, actions: { description: 'Crea una solicitud nueva o aprueba y rechaza las solicitudes según tus permisos.' } }} />
+        <div className="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+          {canPerform('HR_LEAVES', 'create') && (
+            <Button onClick={() => setShowNewForm(!showNewForm)} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+              <Plus className="size-4" />
+              {showNewForm ? 'Cancelar' : 'Nueva Solicitud'}
+            </Button>
+          )}
+          <HRViewTutorial label="Cómo gestionar ausencias" targetPrefix="hr-leaves" copy={{ data: { title: 'Solicitudes de ausencia', description: 'Consulta empleados, tipos, fechas, días, razones y estados de cada solicitud.' }, actions: { description: 'Crea una solicitud nueva o aprueba y rechaza las solicitudes según tus permisos.' } }} />
+        </div>
       </div>
 
       {/* New Request Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-leave-form-shell">
+        <HRCreateViewShell
+          title="Nueva solicitud de ausencia"
+          description="Selecciona el empleado, el tipo de ausencia y el período para enviar la solicitud a revisión."
+          onBack={() => setShowNewForm(false)}
+        >
+        <div className="space-y-1" data-tour="hr-leave-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-leave-form-title">
             <h3 className="text-lg font-semibold text-primary">Nueva Solicitud de Ausencia</h3>
             <HRViewTutorial label="Cómo crear solicitud de ausencia" targetPrefix="hr-leave-form" copy={{ data: { description: 'Selecciona empleado, tipo de ausencia, fechas, días y razón.' }, actions: { description: 'Guarda la solicitud para que pueda ser revisada y aprobada.' } }} />
@@ -432,10 +440,11 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
             </Button>
           </div>
         </div>
+        </HRCreateViewShell>
       )}
 
       {/* Leave Requests Table */}
-      <div className="border rounded-lg overflow-hidden flex flex-col" data-tour="hr-leaves-data">
+      <div className={cn('border rounded-lg overflow-hidden flex flex-col', showNewForm && 'hidden')} data-tour="hr-leaves-data">
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full min-w-[900px]">
             <thead className="bg-muted/50">
@@ -570,10 +579,10 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
 
               {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete')) && (
                 <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
-                  {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[11px] h-8">
+                  {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-700 hover:bg-green-800 text-white rounded-xl text-[11px] h-8">
                     <Check className="size-3 mr-1" /> Aprobar
                   </Button>}
-                  {canPerform('HR_LEAVES', 'delete') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[11px] h-8">
+                  {canPerform('HR_LEAVES', 'delete') && <Button size="sm" onClick={() => handleReject(request.id)} className="flex-1 bg-red-700 hover:bg-red-800 text-white rounded-xl text-[11px] h-8">
                     <X className="size-3 mr-1" /> Rechazar
                   </Button>}
                 </div>

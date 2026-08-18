@@ -784,7 +784,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                          <Button 
                            variant="ghost" 
                            size="icon" 
-                           className="size-6 text-red-500 hover:text-white hover:bg-red-500"
+                           className="size-6 text-red-500 hover:text-white hover:bg-red-700"
                            onClick={() => handleRemoveFromList(product.id)}
                          >
                            <Trash2 className="size-3" />

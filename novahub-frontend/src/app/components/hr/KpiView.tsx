@@ -365,7 +365,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               />
             </div>
             {canPerform('HR_PERFORMANCE', 'create') && (
-              <Button onClick={() => { resetDefForm(); setShowDefForm(true); }} className="gap-2 rounded-xl font-bold">
+              <Button onClick={() => { resetDefForm(); setShowDefForm(true); }} className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
                 <Plus className="size-4" /> Nueva Definición
               </Button>
             )}
@@ -505,7 +505,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
               />
             </div>
             {canPerform('HR_PERFORMANCE', 'create') && (
-              <Button onClick={() => { resetResultForm(); setShowResultForm(true); }} className="gap-2 rounded-xl font-bold">
+              <Button onClick={() => { resetResultForm(); setShowResultForm(true); }} className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
                 <Plus className="size-4" /> Nuevo Resultado
               </Button>
             )}

@@ -183,8 +183,8 @@ html[data-theme-transition="active"]::view-transition-new(root) {
 
   select option:checked,
   select option:hover {
-    color: var(--accent-foreground);
-    background-color: var(--accent);
+    color: var(--primary-foreground);
+    background-color: var(--primary);
   }
 
   .dark select,

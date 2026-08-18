@@ -42,6 +42,13 @@ export const hrService = {
   updatePayrollStatus: (id: string, status: string) => api.patch(`/hr/payroll/${id}/status`, { status }),
   deletePayroll: (id: string) => api.delete(`/hr/payroll/${id}`),
 
+  // ===== SOLICITUDES DE PAGO RR. HH. / CONTABILIDAD =====
+  getPaymentRequests: (filters?: any, signal?: AbortSignal) => api.get('/hr/payment-requests', withSignal(filters, signal)),
+  createPaymentRequest: (data: any) => api.post('/hr/payment-requests', data),
+  approvePaymentRequest: (id: string) => api.post(`/hr/payment-requests/${id}/approve`, {}),
+  rejectPaymentRequest: (id: string, reason?: string) => api.post(`/hr/payment-requests/${id}/reject`, { reason }),
+  payPaymentRequest: (id: string, payments: any[], currency?: string) => api.post(`/hr/payment-requests/${id}/pay`, { payments, ...(currency ? { currency } : {}) }),
+
   // ===== ATTENDANCE =====
   clockIn: (data: any) => api.post('/hr/attendance/clock-in', data),
   clockOut: (data: any) => api.post('/hr/attendance/clock-out', data),

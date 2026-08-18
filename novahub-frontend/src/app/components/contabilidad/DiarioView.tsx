@@ -425,7 +425,7 @@ export function DiarioView() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 text-white hover:text-white"
+            className="size-7 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
             onClick={(e) => { e.stopPropagation(); handleVoid(journal); }}
             title="Anular"
           >

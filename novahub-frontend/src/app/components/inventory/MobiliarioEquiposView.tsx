@@ -551,7 +551,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               e.target.value = '';
             }}
           />
-          <Button size="sm" onClick={openCreate} className="h-9 gap-1.5">
+          <Button size="sm" onClick={openCreate} className="h-10 gap-1.5 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
             <Plus className="size-4" /> Nuevo activo
           </Button>
         </div>

@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
-  Plus, Trash2, Search, Filter, Download,
+  Plus, Trash2, Search, Filter, Download, Eye,
   CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
@@ -53,6 +53,7 @@ interface FinanceTableViewProps {
   canDelete?: boolean;
   targetItemId?: string | null;
   onClearTargetItem?: () => void;
+  detailsRenderer?: (item: any) => React.ReactNode;
 }
 
 export function FinanceTableView({
@@ -69,6 +70,7 @@ export function FinanceTableView({
   canDelete = true,
   targetItemId,
   onClearTargetItem,
+  detailsRenderer,
 }: FinanceTableViewProps) {
   const { displayCurrency, formatConvertedAmount } = useCurrency();
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
@@ -86,6 +88,7 @@ export function FinanceTableView({
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryTargetItem, setCategoryTargetItem] = useState<{ id: string; key: string } | null>(null);
+  const [detailItem, setDetailItem] = useState<any | null>(null);
 
   useEffect(() => {
     if (!targetItemId) return;
@@ -600,6 +603,17 @@ export function FinanceTableView({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(detailItem)} onOpenChange={(open) => !open && setDetailItem(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Eye className="size-5 text-primary" /> Desglose del registro</DialogTitle>
+            <DialogDescription>{detailItem?.description || 'Detalle de los movimientos agrupados'}</DialogDescription>
+          </DialogHeader>
+          {detailItem && detailsRenderer?.(detailItem)}
+          <DialogFooter><Button variant="outline" onClick={() => setDetailItem(null)}>Cerrar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
@@ -652,6 +666,9 @@ export function FinanceTableView({
                   ))}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {detailsRenderer && item.groupedItems?.length > 1 && (
+                        <button onClick={() => setDetailItem(item)} className="p-1.5 text-primary hover:bg-primary/10 rounded-md transition-colors" title="Ver desglose" aria-label="Ver desglose"><Eye className="size-3.5" /></button>
+                      )}
                       {canEdit && (
                         <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
                       )}
@@ -702,6 +719,9 @@ export function FinanceTableView({
                 </div>
                 
                 <div className="flex items-center gap-1.5 bg-background/50 backdrop-blur-sm p-1 rounded-xl border border-border/40 shadow-inner shrink-0 relative z-20">
+                  {detailsRenderer && item.groupedItems?.length > 1 && (
+                    <button onClick={(e) => { e.stopPropagation(); setDetailItem(item); }} className="p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors" title="Ver desglose" aria-label="Ver desglose"><Eye className="size-4" /></button>
+                  )}
                   {canEdit && (
                     <button 
                       onClick={(e) => { 

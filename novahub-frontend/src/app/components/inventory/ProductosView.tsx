@@ -2472,7 +2472,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-sky-600 hover:bg-sky-500 hover:text-white"
+                    className="size-8 text-sky-600 hover:bg-sky-700 hover:text-white"
                     title="Duplicar producto"
                     disabled={duplicatingId === product.id}
                     onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}
@@ -2483,7 +2483,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 {canPerform('INVENTORY_PRODUCTS', 'edit') && <Button
                   variant="ghost"
                   size="icon"
-                  className={`size-8 ${product.isActive === false ? 'text-emerald-600 hover:bg-emerald-500 hover:text-white' : 'text-amber-600 hover:bg-amber-500 hover:text-white'}`}
+                  className={`size-8 ${product.isActive === false ? 'text-emerald-600 hover:bg-emerald-700 hover:text-white' : 'text-amber-600 hover:bg-amber-800 hover:text-white'}`}
                   title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                   aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                   onClick={(e) => { e.stopPropagation(); handleToggleProductStatus(product); }}
@@ -2716,7 +2716,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                             className={`size-7 ${product.isActive === false ? 'text-emerald-600 hover:text-white hover:bg-emerald-500' : 'text-amber-600 hover:text-white hover:bg-amber-500'}`}
+                             className={`size-7 ${product.isActive === false ? 'text-emerald-600 hover:text-white hover:bg-emerald-700' : 'text-amber-600 hover:text-white hover:bg-amber-800'}`}
                              title={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                              aria-label={product.isActive === false ? 'Activar producto' : 'Inactivar producto'}
                              onClick={(e) => {

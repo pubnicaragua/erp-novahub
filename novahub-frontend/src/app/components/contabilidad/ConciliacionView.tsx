@@ -289,7 +289,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
                   Auto-Match
                 </Button>
                 <Button
-                  className="rounded-xl bg-emerald-600 shadow-xl shadow-emerald-500/20 text-white font-black uppercase text-[10px] tracking-widest px-6 hover:bg-emerald-700"
+                  className="rounded-xl bg-emerald-700 shadow-xl shadow-emerald-700/20 text-white font-black uppercase text-[10px] tracking-widest px-6 hover:bg-emerald-800"
                   onClick={handleComplete}
                   disabled={completeLoading}
                 >

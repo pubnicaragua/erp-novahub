@@ -6,7 +6,7 @@
 // ---- Shared / Base ----
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type DocumentStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
+export type PaymentStatus = 'pending' | 'partial' | 'credit' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'CREDIT' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
 export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
 
@@ -255,6 +255,15 @@ export interface Invoice {
   sourceType?: 'ESTIMATE' | 'SALES_ORDER' | 'CASH_SALE' | 'RECURRING' | 'DIRECT' | string;
   sourceLabel?: string | null;
   status: PaymentStatus;
+  creditNotes?: Array<{
+    id: string;
+    number: string;
+    status: string;
+    total: number;
+    amountPaid: number;
+    balance: number;
+    dueDate?: string | null;
+  }>;
   notes?: string;
   paymentMethod?: string;
   sellerEmployeeId?: string | null;
@@ -353,12 +362,16 @@ export interface PaymentReceived {
   accountId?: string;
   bankAccountId?: string;
   bankAccount?: { id: string; bankName: string; accountNumber: string; currency?: string };
-  method: PaymentMethod;
+  method: PaymentMethod | 'MIXED';
   reference?: string;
   notes?: string;
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
+  payments?: PaymentReceived[];
+  paymentLabel?: string;
+  paymentCount?: number;
+  isGroupedPayment?: boolean;
 }
 
 // ---- Sales Returns ----
@@ -425,6 +438,7 @@ export interface CreditNote {
   irTaxId?: string | null;
   irAmount?: number;
   invoiceId?: string;
+  invoice?: Pick<Invoice, 'id' | 'number' | 'status' | 'total' | 'balance' | 'currency'>;
   salesReturnId?: string;
   date: string;
   dueDate?: string | null;
@@ -758,12 +772,16 @@ export interface PaymentMade {
   baseAmount?: number;
   accountId?: string;
   bankAccountId?: string;
-  method: PaymentMethod;
+  method: PaymentMethod | 'MIXED';
   reference?: string;
   notes?: string;
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
+  payments?: PaymentMade[];
+  paymentLabel?: string;
+  paymentCount?: number;
+  isGroupedPayment?: boolean;
 }
 
 // ---- Supplier Credits ----

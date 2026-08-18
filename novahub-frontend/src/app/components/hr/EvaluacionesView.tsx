@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
+import { HRCreateViewShell } from './HRCreateViewShell';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -202,7 +203,7 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-tour="hr-reviews-title">
+      <div className={cn('grid grid-cols-1 md:grid-cols-4 gap-4', showNewForm && 'hidden')} data-tour="hr-reviews-title">
         <StatCard
           label="Calificación Promedio"
           value={avgRating.toFixed(1)}
@@ -243,8 +244,8 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-reviews-actions">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className={cn('flex flex-wrap items-center justify-between gap-3', showNewForm && 'hidden')} data-tour="hr-reviews-actions">
+        <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -285,18 +286,25 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
             sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]}
           />
         </div>
-        {canPerform('HR_PERFORMANCE', 'create') && (
-          <Button onClick={() => setShowNewForm(!showNewForm)} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            {showNewForm ? <RotateCcw className="size-4 mr-2" /> : <Plus className="size-4 mr-2" />}
-            {showNewForm ? 'Cancelar' : 'Nueva Evaluación'}
-          </Button>
-        )}
-        <HRViewTutorial label="Cómo gestionar evaluaciones" targetPrefix="hr-reviews" copy={{ data: { title: 'Evaluaciones de desempeño', description: 'Filtra por estado, empleado, evaluador y período para encontrar evaluaciones.' }, actions: { description: 'Crea una evaluación y administra su avance, comentarios y resultado.' } }} />
+        <div className="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+          {canPerform('HR_PERFORMANCE', 'create') && (
+            <Button onClick={() => setShowNewForm(!showNewForm)} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+              {showNewForm ? <RotateCcw className="size-4" /> : <Plus className="size-4" />}
+              {showNewForm ? 'Cancelar' : 'Nueva Evaluación'}
+            </Button>
+          )}
+          <HRViewTutorial label="Cómo gestionar evaluaciones" targetPrefix="hr-reviews" copy={{ data: { title: 'Evaluaciones de desempeño', description: 'Filtra por estado, empleado, evaluador y período para encontrar evaluaciones.' }, actions: { description: 'Crea una evaluación y administra su avance, comentarios y resultado.' } }} />
+        </div>
       </div>
 
       {/* New Review Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-review-form-shell">
+        <HRCreateViewShell
+          title="Nueva evaluación de desempeño"
+          description="Registra el período, las personas involucradas y los comentarios que documentan el desempeño del empleado."
+          onBack={() => setShowNewForm(false)}
+        >
+        <div className="space-y-1" data-tour="hr-review-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-review-form-title">
             <h3 className="text-lg font-semibold text-primary">Nueva Evaluación de Desempeño</h3>
             <HRViewTutorial label="Cómo crear evaluación de desempeño" targetPrefix="hr-review-form" stepKeys={['title', 'data', 'summary', 'actions']} copy={{ data: { description: 'Selecciona empleado, evaluador, período y calificación inicial.' }, summary: { title: 'Objetivos y comentarios', description: 'Documenta objetivos, logros, áreas de mejora y comentarios de la evaluación.' }, actions: { description: 'Guarda la evaluación cuando el período y los comentarios estén completos.' } }} />
@@ -445,10 +453,11 @@ export function EvaluacionesView({ reviews, employees, onRefresh }: any) {
             </Button>
           </div>
         </div>
+        </HRCreateViewShell>
       )}
 
       {/* Reviews List */}
-      <div className="grid grid-cols-1 gap-4" data-tour="hr-reviews-data">
+      <div className={cn('grid grid-cols-1 gap-4', showNewForm && 'hidden')} data-tour="hr-reviews-data">
         {filteredReviews.map((review: any) => {
           const draftText = editingPostComments[review.id];
           const isEditingPost = draftText !== undefined;

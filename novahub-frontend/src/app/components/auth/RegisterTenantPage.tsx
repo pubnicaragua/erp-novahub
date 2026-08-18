@@ -109,7 +109,7 @@ const PARENT_SUBMODULES: Record<string, string[]> = {
   ACTIVITIES: ['ACTIVITIES_TASKS', 'ACTIVITIES_EVENTS', 'ACTIVITIES_REMINDERS', 'ACTIVITIES_BITACORA', 'ACTIVITIES_LOGS', 'ACTIVITIES_CALENDAR', 'ACTIVITIES_MEETINGS'],
   CONFIGURATION: ['CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_ROLES', 'CONFIG_SECURITY', 'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_SUBSCRIPTION', 'CONFIG_TENANCY', 'CONFIG_PLATFORM', 'CONFIG_DOMAINS'],
   NOTIFICATIONS: ['NOTIFICATIONS_ALERTS', 'NOTIFICATIONS_MESSAGES', 'NOTIFICATIONS_PUSH'],
-  ACCOUNTING: ['ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_LEDGER', 'ACCOUNTING_TRIAL_BALANCE', 'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW', 'ACCOUNTING_EXCHANGE_DIFFERENCES', 'ACCOUNTING_EQUITY', 'ACCOUNTING_ASSETS', 'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL', 'ACCOUNTING_INVOICE_AUDIT', 'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_CONFIG'],
+  ACCOUNTING: ['ACCOUNTING_CHART', 'ACCOUNTING_JOURNAL', 'ACCOUNTING_HR_PAYMENT_REQUESTS', 'ACCOUNTING_LEDGER', 'ACCOUNTING_TRIAL_BALANCE', 'ACCOUNTING_PROFIT_LOSS', 'ACCOUNTING_BALANCE_SHEET', 'ACCOUNTING_CASH_FLOW', 'ACCOUNTING_EXCHANGE_DIFFERENCES', 'ACCOUNTING_EQUITY', 'ACCOUNTING_ASSETS', 'ACCOUNTING_RECONCILIATION', 'ACCOUNTING_PERIODS', 'ACCOUNTING_FISCAL', 'ACCOUNTING_INVOICE_AUDIT', 'ACCOUNTING_BUDGET', 'ACCOUNTING_EXPENSE_CATEGORIES', 'ACCOUNTING_CONFIG'],
   LEGAL: ['LEGAL_CASES', 'LEGAL_REMINDERS'],
   TOOLS: [],
   FINANCING: [],
@@ -212,6 +212,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   NOTIFICATIONS_PUSH: 'Notificaciones Push',
   ACCOUNTING_CHART: 'Plan de Cuentas',
   ACCOUNTING_JOURNAL: 'Libro Diario',
+  ACCOUNTING_HR_PAYMENT_REQUESTS: 'Solicitudes de pago RR. HH.',
   ACCOUNTING_LEDGER: 'Libro Mayor',
   ACCOUNTING_TRIAL_BALANCE: 'Balance de Comprobación',
   ACCOUNTING_PROFIT_LOSS: 'Estado de Resultados',
@@ -527,7 +528,7 @@ export function RegisterTenantPage() {
                 transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                 className={cn(
                   'size-7 rounded-full flex items-center justify-center text-[10px] font-black transition-colors',
-                  i === step ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' :
+                  i === step ? 'bg-emerald-700 text-white shadow-lg shadow-emerald-700/30' :
                   i < step ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground/50',
                 )}
               >
@@ -732,7 +733,7 @@ export function RegisterTenantPage() {
         </div>
       )}
       <Button type="submit" disabled={!acceptTerms || !isValid || Object.keys(errors).length > 0 || !waConfirmed}
-        className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 mt-2">
+        className="w-full h-12 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 mt-2">
         Siguiente <ArrowRight className="size-4" />
       </Button>
       {!waConfirmed && (
@@ -826,7 +827,7 @@ export function RegisterTenantPage() {
           <ArrowLeft className="size-4" /> Atrás
         </Button>
         <Button type="button" disabled={!canGoStep2} onClick={() => setStep(2)}
-          className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
+          className="h-12 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           Siguiente <ArrowRight className="size-4" />
         </Button>
       </div>
@@ -931,7 +932,7 @@ export function RegisterTenantPage() {
                   className="w-full p-4 text-left cursor-pointer flex flex-col gap-3 hover:bg-muted/20 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className={cn('size-7 rounded-lg flex items-center justify-center',
-                      active ? (recommended ? 'bg-emerald-500 text-white' : 'bg-primary text-white') : (recommended ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-primary/10 text-primary'))}>
+                      active ? (recommended ? 'bg-emerald-700 text-white' : 'bg-primary text-primary-foreground') : (recommended ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-primary/10 text-primary'))}>
                       {active ? <CheckCircle2 className="size-4" /> : <Package className="size-4" />}
                     </div>
                     <div className="flex items-center gap-2">
@@ -1030,7 +1031,7 @@ export function RegisterTenantPage() {
           <ArrowLeft className="size-4" /> Atrás
         </Button>
           <Button type="button" disabled={selectedModules.length === 0} onClick={() => setStep(3)}
-          className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
+          className="h-12 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           Siguiente <ArrowRight className="size-4" />
         </Button>
         </div>
@@ -1059,7 +1060,7 @@ export function RegisterTenantPage() {
           <ArrowLeft className="size-4" /> Atrás
         </Button>
         <Button type="button" disabled={submitting} onClick={handleFinalSubmit}
-          className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
+          className="h-12 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/40 flex-1">
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           Comenzar prueba gratis
         </Button>

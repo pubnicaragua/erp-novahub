@@ -1,12 +1,36 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { Checkbox } from './checkbox';
-import { ArrowDownAZ, ArrowUpAZ, Filter, X } from 'lucide-react';
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, Filter, X } from 'lucide-react';
 import { cn } from './utils';
 
 export type ColumnSort = 'asc' | 'desc' | null;
+export type ColumnSortType = 'text' | 'number' | 'date';
+
+const normalizeSortText = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+function inferSortType(label: string): ColumnSortType {
+  const normalizedLabel = normalizeSortText(label);
+
+  if (
+    /fecha|venc|periodo/.test(normalizedLabel)
+  ) {
+    return 'date';
+  }
+
+  if (
+    /total|saldo|monto|importe|precio|cantidad|stock|salario|costo|debito|credito|neto|subtotal|balance|disponible|limite|porcentaje|descuento|iva/.test(normalizedLabel)
+  ) {
+    return 'number';
+  }
+
+  return 'text';
+}
 
 export interface ColumnFilterMenuProps {
   label: string;
@@ -16,14 +40,35 @@ export interface ColumnFilterMenuProps {
   sort?: ColumnSort;
   onSort?: (sort: ColumnSort) => void;
   sortOptions?: { value: ColumnSort; label: string; icon?: React.ReactNode }[];
+  /** Permite fijar la semántica cuando el nombre de la columna no es suficiente. */
+  sortType?: ColumnSortType;
+  /** Presentación mínima para encabezados de tabla: solo ordenamiento. */
+  compact?: boolean;
 }
 
-export function ColumnFilterMenu({ label, options = [], selected = [], onSelect, sort, onSort, sortOptions }: ColumnFilterMenuProps) {
+export function ColumnFilterMenu({ label, options = [], selected = [], onSelect, sort, onSort, sortOptions, sortType, compact = false }: ColumnFilterMenuProps) {
   const [open, setOpen] = useState(false);
-  const active = Boolean(sort) || selected.length > 0;
+  const [tableContext, setTableContext] = useState(false);
+  const isCompact = compact || tableContext;
+  const active = Boolean(sort) || (!isCompact && selected.length > 0);
+  const resolvedSortType = sortType || inferSortType(label);
+  const firstSort: Exclude<ColumnSort, null> = resolvedSortType === 'text' ? 'asc' : 'desc';
+  const secondSort: Exclude<ColumnSort, null> = firstSort === 'asc' ? 'desc' : 'asc';
   const defaultSortOptions: { value: ColumnSort; label: string; icon?: React.ReactNode }[] = [
-    { value: 'asc', label: 'A → Z / Menor a mayor', icon: <ArrowUpAZ className="size-3" /> },
-    { value: 'desc', label: 'Z → A / Mayor a menor', icon: <ArrowDownAZ className="size-3" /> },
+    ...(resolvedSortType === 'text'
+      ? [
+          { value: 'asc' as const, label: 'A → Z / Orden alfabético', icon: <ArrowUpAZ className="size-3" /> },
+          { value: 'desc' as const, label: 'Z → A / Orden alfabético inverso', icon: <ArrowDownAZ className="size-3" /> },
+        ]
+      : resolvedSortType === 'date'
+        ? [
+            { value: 'desc' as const, label: 'Más recientes', icon: <ArrowDownAZ className="size-3" /> },
+            { value: 'asc' as const, label: 'Más antiguas', icon: <ArrowUpAZ className="size-3" /> },
+          ]
+        : [
+            { value: 'desc' as const, label: 'Mayor a menor', icon: <ArrowDownAZ className="size-3" /> },
+            { value: 'asc' as const, label: 'Menor a mayor', icon: <ArrowUpAZ className="size-3" /> },
+          ]),
   ];
   const effectiveSortOptions = sortOptions || defaultSortOptions;
 
@@ -32,24 +77,50 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
     onSelect(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
 
+  const toggleTableSort = () => {
+    if (!onSort) return;
+    onSort(!sort ? firstSort : sort === firstSort ? secondSort : null);
+  };
+
+  const triggerClassName = cn(
+    isCompact
+      ? "column-filter-menu-trigger inline-flex size-4 shrink-0 translate-y-px items-center justify-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+      : "column-filter-menu-trigger inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[10px] font-black uppercase tracking-wider transition-colors",
+    isCompact
+      ? active ? "text-primary" : "text-muted-foreground/70 hover:text-primary"
+      : active
+        ? "border-primary/40 bg-primary/10 text-primary"
+        : "text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+  );
+
+  const trigger = (
+    <button
+      type="button"
+      title={isCompact ? `Ordenar ${label}` : `Filtrar por ${label}`}
+      aria-label={isCompact ? `Ordenar ${label}` : `Filtrar por ${label}`}
+      aria-pressed={isCompact ? Boolean(sort) : active}
+      onClick={(e) => {
+        e.stopPropagation();
+        const isTableHeader = Boolean(e.currentTarget.closest('th,[role="columnheader"]'));
+        if (isCompact || isTableHeader) {
+          if (isTableHeader) setTableContext(true);
+          toggleTableSort();
+          return;
+        }
+        setOpen(!open);
+      }}
+      className={triggerClassName}
+    >
+      <ArrowUpDown className={cn("column-sort-icon size-3.5", !isCompact && "hidden")} />
+      <Filter className={cn("column-filter-icon size-3.5 shrink-0", isCompact && "hidden")} />
+      {!isCompact && <span className="column-filter-menu-label min-w-0 truncate">Filtrar {label}</span>}
+    </button>
+  );
+
   return (
-    <span className="inline-flex items-center">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            title={`Filtrar por ${label}`}
-            onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-            className={cn(
-              "inline-flex size-4 items-center justify-center rounded transition-colors",
-              active
-                ? "bg-primary/20 text-primary"
-                : "text-muted-foreground/40 hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <Filter className="size-3" />
-          </button>
-        </PopoverTrigger>
+    <span className="column-filter-menu inline-flex items-center">
+      {isCompact ? trigger : <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent align="start" side="bottom" className="w-64 p-2">
           <div className="flex items-center justify-between gap-2 border-b border-border/50 px-2 pb-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Filtros · {label}</p>
@@ -116,7 +187,7 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
             </div>
           )}
         </PopoverContent>
-      </Popover>
+      </Popover>}
     </span>
   );
 }

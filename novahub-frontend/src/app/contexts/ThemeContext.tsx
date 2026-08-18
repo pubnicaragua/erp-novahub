@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
+import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
 
 export interface BrandColors {
   primary: string;
@@ -97,12 +98,18 @@ function readStoredTheme(tenantId: string): ThemeConfig {
     const saved = localStorage.getItem(themeStorageKey(tenantId));
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<ThemeConfig>;
+      const colors = { ...defaultColors, ...(parsed.colors || {}) };
       if (parsed.tenantName === 'Solcom ERP') return createDefaultTheme(tenantId);
       return {
         ...createDefaultTheme(tenantId),
         ...parsed,
         tenantId,
-        colors: { ...defaultColors, ...(parsed.colors || {}) },
+        colors: {
+          ...colors,
+          primaryForeground: defaultColors.primaryForeground,
+          accentForeground: ensureReadableForeground(colors.accent, colors.accentForeground),
+          sidebarForeground: ensureReadableForeground(colors.sidebar, colors.sidebarForeground),
+        },
       };
     }
   } catch { }
@@ -133,6 +140,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
       root.style.setProperty(cssVarName, value);
     });
+    root.style.setProperty('--sidebar-accent-foreground', getReadableForeground(themeConfig.colors.sidebarAccent));
 
     // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
     if (themeConfig.tenantId === activeTenantId) {
@@ -197,7 +205,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const updateTheme = (colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({
       ...prev,
-      colors: { ...prev.colors, ...colors },
+      colors: (() => {
+        const nextColors = { ...prev.colors, ...colors };
+        return {
+          ...nextColors,
+          primaryForeground: defaultColors.primaryForeground,
+          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
+        };
+      })(),
     }));
   };
 

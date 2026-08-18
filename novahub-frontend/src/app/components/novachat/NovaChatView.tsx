@@ -366,7 +366,7 @@ export function NovaChatView() {
                 <Button
                   onClick={() => void handleSend()}
                   disabled={!newMessage.trim() || sending}
-                  className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white font-bold gap-2 rounded-xl px-5"
+                  className="shrink-0 bg-orange-700 hover:bg-orange-800 text-white font-bold gap-2 rounded-xl px-5"
                 >
                   {sending ? <Loader2 className="size-4 animate-spin" /> : <>Enviar <Send className="size-3.5" /></>}
                 </Button>

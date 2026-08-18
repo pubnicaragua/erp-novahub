@@ -47,7 +47,7 @@ export function DevIdentitySwitcher() {
                   />
                   <button
                     onClick={() => customId && switchIdentity(customId)}
-                    className="flex size-8 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+                    className="flex size-8 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
                   >
                     <RefreshCcw className="size-4" />
                   </button>

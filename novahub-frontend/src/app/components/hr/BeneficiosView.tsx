@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { HandHeart, Plus, Save, X, Trash2, Users, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
+import { HandHeart, Plus, Save, X, Trash2, Users, DollarSign, CheckCircle, Building2, Search, ChevronDown, ChevronUp, Edit2, Send } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -38,15 +38,7 @@ const BENEFIT_TYPE_LABELS: Record<string, string> = {
   TRANSPORTATION: 'Transporte', FOOD: 'Alimentación', GYM: 'Gimnasio', OTHER: 'Otro',
 };
 
-const PAYMENT_METHODS = [
-  { value: 'CASH', label: 'Efectivo / Caja' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'CHECK', label: 'Cheque' },
-  { value: 'OTHER', label: 'Otro medio' },
-];
-
-const EMPTY_FORM = { name: '', description: '', type: 'OTHER', provider: '', cost: '', currency: 'NIO', paymentSource: 'CASH', isActive: true, employeeIds: [] as string[] };
+const EMPTY_FORM = { name: '', description: '', type: 'OTHER', provider: '', cost: '', currency: 'NIO', isActive: true, employeeIds: [] as string[] };
 
 type BenefitFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
@@ -106,6 +98,16 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar beneficio');
     } finally {
       setPendingDeleteId(null);
+    }
+  };
+
+  const handleRequestPayment = async (benefit: any) => {
+    try {
+      await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
+      toast.success('Solicitud de pago enviada a Contabilidad');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo solicitar el pago');
     }
   };
 
@@ -206,7 +208,7 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-benefits-actions">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -233,12 +235,14 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
             onSort={(sort) => colFilters.setSort('state', sort)}
           />
         </div>
-        {canPerform('HR_BENEFITS', 'create') && (
-          <Button onClick={openNew} className="rounded-xl gap-2 font-bold bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Plus className="size-4" /> Nuevo Beneficio
-          </Button>
-        )}
-        <HRViewTutorial label="Cómo gestionar beneficios" targetPrefix="hr-benefits" copy={{ data: { title: 'Beneficios y asignaciones', description: 'Filtra beneficios por tipo y estado, revisa costos mensuales y consulta los empleados asignados.' }, actions: { description: 'Crea, edita o elimina beneficios según tus permisos.' } }} />
+        <div className="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+          {canPerform('HR_BENEFITS', 'create') && (
+            <Button onClick={openNew} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+              <Plus className="size-4" /> Nuevo Beneficio
+            </Button>
+          )}
+          <HRViewTutorial label="Cómo gestionar beneficios" targetPrefix="hr-benefits" copy={{ data: { title: 'Beneficios y asignaciones', description: 'Filtra beneficios por tipo y estado, revisa costos mensuales y consulta los empleados asignados.' }, actions: { description: 'Crea, edita o elimina beneficios según tus permisos.' } }} />
+        </div>
       </div>
 
       {/* Benefits Grid */}
@@ -314,6 +318,14 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
                       </div>
                     </div>
                   )}
+
+                  {Number(benefit.cost || 0) > 0 && assignedCount > 0 && benefit.paymentStatus !== 'PAID' && (
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {benefit.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : benefit.paymentStatus === 'APPROVED' ? 'Aprobado' : 'Pendiente'}</span>
+                      {(!benefit.paymentStatus || benefit.paymentStatus === 'PENDING') && canPerform('HR_BENEFITS', 'edit') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(benefit)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
+                    </div>
+                  )}
+                  {Number(benefit.cost || 0) > 0 && benefit.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle className="size-3.5" /> Pago contabilizado</div>}
                 </CardContent>
               </Card>
             </motion.div>
@@ -370,17 +382,6 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
               >
                 <option value="NIO">Córdobas (NIO)</option>
                 <option value="USD">Dólares (USD)</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Medio de pago</Label>
-              <select
-                value={form.paymentSource || 'CASH'}
-                onChange={e => setForm({ ...form, paymentSource: e.target.value })}
-                disabled={isCreating}
-                className="w-full h-10 px-3 rounded-xl border border-input bg-background text-sm font-medium"
-              >
-                {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
               </select>
             </div>
             <div className="space-y-1">

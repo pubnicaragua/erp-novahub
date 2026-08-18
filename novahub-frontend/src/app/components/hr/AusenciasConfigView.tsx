@@ -18,6 +18,7 @@ import type { AbsenceType } from '../../types';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
+import { HRCreateViewShell } from './HRCreateViewShell';
 
 const SALARY_BASE_LABELS: Record<string, string> = {
   MONTHLY: 'Mensual',
@@ -189,7 +190,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4" data-tour="hr-absence-types-title">
+      <div className={cn('flex flex-col sm:flex-row sm:items-start md:items-center justify-between gap-4', showForm && 'hidden')} data-tour="hr-absence-types-title">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Settings2 className="size-6 text-primary" />
@@ -201,7 +202,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
         </div>
         <div className="flex items-center gap-2">
           {canPerform('HR_LEAVES', 'create') && (
-            <Button onClick={() => { resetForm(); setShowForm(!showForm); }} className="gap-2 rounded-xl font-bold" variant={showForm ? 'outline' : 'default'}>
+            <Button onClick={() => { resetForm(); setShowForm(!showForm); }} className={showForm ? 'h-10 gap-2 rounded-xl' : 'h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90'} variant={showForm ? 'outline' : 'default'}>
               {showForm ? <X className="size-4" /> : <Plus className="size-4" />}
               {showForm ? 'Cancelar' : 'Nuevo Tipo'}
             </Button>
@@ -211,7 +212,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-absence-types-data">
+      <div className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4', showForm && 'hidden')} data-tour="hr-absence-types-data">
         <StatCard label="Tipos configurados" value={totalTypes} icon={Layers} tone="primary" sub="Reglas de ausencia activas e inactivas" active={filter === 'ALL'} onClick={() => setFilter('ALL')} />
         <StatCard label="Activos" value={activeTypes} icon={ShieldCheck} tone="green" sub="Disponibles en nuevas solicitudes" active={filter === 'ACTIVE'} onClick={() => setFilter('ACTIVE')} />
         <StatCard label="Inactivos" value={inactiveTypes} icon={ShieldOff} tone="red" sub="Deshabilitados de la selección" active={filter === 'INACTIVE'} onClick={() => setFilter('INACTIVE')} />
@@ -219,7 +220,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={cn('flex flex-wrap items-center gap-2', showForm && 'hidden')}>
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -248,6 +249,11 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
       </div>
 
       {showForm && (
+        <HRCreateViewShell
+          title={editingId ? 'Editar tipo de ausencia' : 'Nuevo tipo de ausencia'}
+          description="Define las reglas que se aplicarán cuando el equipo registre una solicitud de ausencia."
+          onBack={resetForm}
+        >
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-primary/20 shadow-sm bg-gradient-to-br from-primary/5 to-transparent">
             <CardHeader className="border-b border-primary/10 bg-primary/5" data-tour="hr-absence-type-form-title">
@@ -339,9 +345,10 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
             </CardContent>
           </Card>
         </motion.div>
+        </HRCreateViewShell>
       )}
 
-      <div className="space-y-3" data-tour="hr-absence-types-actions">
+      <div className={cn('space-y-3', showForm && 'hidden')} data-tour="hr-absence-types-actions">
         {filteredTypes.length === 0 && (
           <div className="text-center py-12">
             <AlertTriangle className="size-12 mx-auto text-muted-foreground mb-4" />

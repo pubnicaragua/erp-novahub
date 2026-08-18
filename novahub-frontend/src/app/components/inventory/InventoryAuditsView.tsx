@@ -789,7 +789,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         </div>
         <div className="flex flex-wrap items-center gap-2" data-tour="inventory-audits-actions">
         <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, almacenes y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
-        <Button onClick={() => setIsCreating(true)} className="h-9 gap-2 rounded-xl bg-primary text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90">
+        <Button onClick={() => setIsCreating(true)} className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
           <Plus className="size-4" /> Nueva Auditoría
         </Button>
         </div>

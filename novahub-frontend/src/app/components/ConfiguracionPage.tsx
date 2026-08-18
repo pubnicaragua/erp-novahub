@@ -39,6 +39,7 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, type PermissionMatrixAction } from '../utils/permissions';
 import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
+import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -191,6 +192,7 @@ export const SUBMODULES_FOR_PERMS = [
   // Contabilidad
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_HR_PAYMENT_REQUESTS', label: 'Solicitudes de pago RR. HH.', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_BALANCE_SHEET', label: 'Balance General', parent: 'ACCOUNTING' },
@@ -301,17 +303,14 @@ const colorPresets: ColorPreset[] = [
 ];
 
 function generateThemeFromColor(hex: string, sidebarHex: string, accentHex: string): BrandColors {
-  // Always use white foreground on primary for readability on colored buttons
   const fgColor = '#ffffff';
-  const [sr, sg, sb] = hexToRgb(sidebarHex);
-  const sBrightness = (sr * 299 + sg * 587 + sb * 114) / 1000;
-  const sFgColor = sBrightness > 0.5 ? '#1a1a1a' : '#f5f5f5';
+  const sFgColor = getReadableForeground(sidebarHex);
 
   return {
     primary: hexToOklch(hex),
     primaryForeground: hexToOklch(fgColor),
     accent: hexToOklch(accentHex),
-    accentForeground: hexToOklch('#f5f5f5'),
+    accentForeground: hexToOklch(getReadableForeground(accentHex)),
     sidebar: hexToOklch(sidebarHex),
     sidebarForeground: hexToOklch(sFgColor),
     sidebarPrimary: hexToOklch(hex),
@@ -742,7 +741,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
     // Always use white text on primary buttons
     setPrimaryFgHex('#ffffff');
-    setSidebarFgHex('#f5f5f5');
+    setSidebarFgHex(getReadableForeground(preset.sidebar));
     setActivePreset(preset.name);
   }, []);
 
@@ -750,8 +749,11 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (!canEditBranding) return;
     try {
       const colors = generateThemeFromColor(primaryHex, sidebarHex, accentHex);
-      colors.primaryForeground = hexToOklch(primaryFgHex);
-      colors.sidebarForeground = hexToOklch(sidebarFgHex);
+      const safeSidebarFgHex = ensureReadableForeground(sidebarHex, sidebarFgHex);
+      setPrimaryFgHex('#ffffff');
+      setSidebarFgHex(safeSidebarFgHex);
+      colors.primaryForeground = hexToOklch('#ffffff');
+      colors.sidebarForeground = hexToOklch(safeSidebarFgHex);
 
       updateTheme(colors);
 
@@ -777,8 +779,8 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setPrimaryHex('#10b981');
     setSidebarHex('#0c1a12');
     setAccentHex('#064e3b');
-    setPrimaryFgHex('#ffffff');
-    setSidebarFgHex('#f5f5f5');
+  setPrimaryFgHex('#ffffff');
+    setSidebarFgHex(getReadableForeground('#0c1a12'));
     setActivePreset('Emerald Default');
     toast.info('Tema restaurado al predeterminado');
   };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, FileDown
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -27,6 +27,8 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { formatDateEs } from '../../utils/dateFormat';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -98,6 +100,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [detailRecurring, setDetailRecurring] = useState<RecurringInvoice | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -249,6 +252,31 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
+  const buildRecurringPanel = (row: RecurringInvoice): SalesDocumentPanelData => ({
+    id: row.id,
+    number: `REC-${row.id.slice(0, 8)}`,
+    title: 'Factura recurrente',
+    customerName: row.customer?.name || customers.find((customer) => customer.id === row.customerId)?.name || 'Varios',
+    status: String(row.status || ''),
+    totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
+    summaryDetails: [
+      { label: 'Moneda', value: row.currency || 'NIO' },
+      { label: 'Frecuencia', value: String(row.frequency || '').toLowerCase() || 'No definida' },
+    ],
+    metadata: [
+      { label: 'Inicio', value: formatDateEs(row.startDate) },
+      { label: 'Próxima factura', value: formatDateEs(row.nextInvoiceDate) },
+      ...(row.endDate ? [{ label: 'Finaliza', value: formatDateEs(row.endDate) }] : []),
+    ],
+    lines: (row.items || []).map((item) => ({
+      id: item.id,
+      description: item.description || item.serviceName || 'Artículo sin descripción',
+      quantity: Number(item.quantity || 0),
+      unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
+      totalLabel: formatConvertedAmount(Number(item.total || 0), row.currency, row.exchangeRate),
+    })),
+  });
+
   const recalcTotals = (items: any[], mode = pricingMode, rates = localRates) => {
     const normalizedItems = items.map((item: any) => {
       const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
@@ -369,7 +397,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             "text-xs font-black font-mono text-primary group-hover:underline",
             canPerform('SALES_RECURRING', 'edit') ? "cursor-pointer" : "cursor-default"
           )} 
-          onClick={() => canPerform('SALES_RECURRING', 'edit') && setEditingId(row.id)}
+          onClick={() => setDetailRecurring(row)}
         >
           Factura #{row.id.slice(0, 8)}
         </span>
@@ -424,7 +452,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <SalesViewTutorial view="recurring" context="form" />
             {canPerform('SALES_RECURRING', 'edit') && (
               <>
-                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
@@ -660,11 +688,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         <EditableDataTable data={filtered}
           pagination={pagination}
           onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.delete(id as string); } toast.success('Eliminados', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
-          columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setEditingId(row.id)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                {canPerform('SALES_RECURRING', 'edit') && (
                  (row.status||'').toUpperCase() === 'ACTIVE' ? (
                    <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
@@ -672,8 +700,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                    <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors"><Play className="size-4" /></Button>
                  )
                )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-               <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
+               <Button title="Ver factura recurrente completa" aria-label="Ver factura recurrente completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
                {canPerform('SALES_RECURRING', 'delete') && (
                  <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
@@ -681,6 +708,19 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           )}
         />
       </div>
+      <SalesDocumentDetailSheet
+        key={detailRecurring?.id || 'recurring-detail'}
+        document={detailRecurring ? buildRecurringPanel(detailRecurring) : null}
+        entity="RECURRING_INVOICE"
+        open={Boolean(detailRecurring)}
+        onClose={() => setDetailRecurring(null)}
+        onOpenDocument={() => {
+          if (!detailRecurring) return;
+          setDetailRecurring(null);
+          setEditingId(detailRecurring.id);
+        }}
+        onDownloadPdf={() => { if (detailRecurring) void handleExportPDF(detailRecurring); }}
+      />
       <ConfirmDialog
               open={pendingDeleteId !== null}
               onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}

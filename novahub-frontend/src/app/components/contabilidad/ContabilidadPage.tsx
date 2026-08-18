@@ -5,6 +5,7 @@ import {
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
   Database, GitBranch, ChevronDown, X, Settings2,
   ArrowLeftRight, ClipboardCheck,
+  Inbox,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '../ui/badge';
@@ -31,6 +32,7 @@ import { DiferenciasCambiariasView } from './DiferenciasCambiariasView';
 import { InvoiceAuditView } from './InvoiceAuditView';
 import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
+import { SolicitudesPagoRRHHView } from './SolicitudesPagoRRHHView';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
@@ -50,11 +52,13 @@ const SECTIONS = [
   { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: ClipboardCheck },
   { id: 'presupuestos', label: 'Presupuestos', icon: Wallet },
   { id: 'categorias-gastos', label: 'Categorías Gastos', icon: Tag },
+  { id: 'solicitudes-pago', label: 'Solicitudes de pago RR. HH.', icon: Inbox },
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
 
 const SECTION_PERMISSIONS: Record<string, string> = {
   'plan-cuentas': 'ACCOUNTING_CHART',
+  'solicitudes-pago': 'ACCOUNTING_HR_PAYMENT_REQUESTS',
   diario: 'ACCOUNTING_JOURNAL',
   'libro-mayor': 'ACCOUNTING_LEDGER',
   'balance-comprobacion': 'ACCOUNTING_TRIAL_BALANCE',
@@ -311,7 +315,13 @@ interface ContabilidadPageProps {
 
 export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ContabilidadPageProps) {
   const { canPerform } = useAuth();
-  const visibleSections = SECTIONS.filter(section => canPerform(SECTION_PERMISSIONS[section.id], 'view'));
+  const visibleSections = SECTIONS.filter(section => {
+    const permission = SECTION_PERMISSIONS[section.id];
+    if (section.id === 'solicitudes-pago') {
+      return canPerform(permission, 'view') || canPerform('ACCOUNTING_JOURNAL', 'view');
+    }
+    return canPerform(permission, 'view');
+  });
   const fallbackSection = visibleSections[0]?.id || 'plan-cuentas';
   const normalizedInitialSection = activeSubModule === 'balance-general' ? 'balance-general-contable' : activeSubModule;
   const [activeSection, setActiveSection] = useState(normalizedInitialSection || 'plan-cuentas');
@@ -417,6 +427,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   transition={{ duration: 0.2 }}
                 >
                   {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} />}
+                  {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
                   {activeSection === 'diario' && <DiarioView />}
                   {activeSection === 'libro-mayor' && <LibroMayorView />}
                   {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}

@@ -213,6 +213,7 @@ const menuItems: MenuItem[] = [
       { id: 'auditoria-facturas', label: 'Auditoría de Facturas', icon: <ClipboardCheck className="size-4" /> },
       { id: 'presupuestos', label: 'Presupuestos', icon: <Wallet className="size-4" /> },
       { id: 'categorias-gastos', label: 'Categorías Gastos', icon: <Tags className="size-4" /> },
+      { id: 'solicitudes-pago', label: 'Solicitudes de pago RR. HH.', icon: <ClipboardCheck className="size-4" /> },
       { id: 'configuracion', label: 'Configuración', icon: <Settings2 className="size-4" /> },
     ]
   },
@@ -527,7 +528,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
             </div>
             <button
               onClick={onClose}
-              className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
+              className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground lg:hidden"
               aria-label="Cerrar menú"
             >
               <X className="size-5" />
@@ -572,7 +573,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                               onClick={() => handleMenuClick(item)}
                               className={cn(
                                 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
-                                'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                                'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                 isActive && !item.submenu
                                   ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
@@ -595,7 +596,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                           onClick={() => handleMenuClick(item)}
                           className={cn(
                             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
-                            'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                            'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                             isActive && !item.submenu
                               ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
@@ -640,7 +641,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                   onClick={() => handleSubmenuClick(item.id as Module, subItem.id)}
                                   className={cn(
                                     'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150',
-                                    'hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                     activeModule === item.id && activeSubModule === subItem.id
                                       ? 'bg-primary text-primary-foreground font-medium shadow-sm'

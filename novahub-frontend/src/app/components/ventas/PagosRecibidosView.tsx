@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { CurrencySelector } from '../ui/CurrencySelector';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
@@ -24,7 +25,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresManualPaymentAccount } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel } from '../../utils/paymentMethods';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -51,8 +52,56 @@ const methodOptions = [
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
 
+function groupReceivedPayments(
+  rows: PaymentReceived[],
+  baseCurrency: string,
+  globalRate: number,
+  toBaseAmount: (amount: number, currency?: string, exchangeRate?: number) => number,
+) {
+  const groups = new Map<string, PaymentReceived[]>();
+  rows.forEach((row) => {
+    const key = row.invoiceId ? `invoice:${row.invoiceId}` : row.creditNoteId ? `credit:${row.creditNoteId}` : `payment:${row.id}`;
+    groups.set(key, [...(groups.get(key) || []), row]);
+  });
+
+  return [...groups.values()].map((children) => {
+    const ordered = [...children].sort((a, b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+    const active = ordered.filter((row) => row.isActive !== false);
+    const effective = active.length ? active : ordered;
+    const first = effective[0] || ordered[0];
+    const currencies = new Set(effective.map((row) => row.currency));
+    const baseAmount = Number(effective.reduce((sum, row) => sum + (row.baseAmount !== undefined && row.baseAmount !== null
+      ? Number(row.baseAmount)
+      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(2));
+    const sameCurrency = currencies.size <= 1;
+    const amount = sameCurrency
+      ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2))
+      : baseAmount;
+    const methods = new Set(effective.map((row) => String(row.method || '').toUpperCase()));
+    const isMixed = methods.size > 1 || effective.some((row) => /pago mixto/i.test(String(row.notes || '')));
+    const invoiceStatus = String(first.invoice?.status || first.creditNote?.status || '').toUpperCase();
+    const hasPartialSettlement = children.length > 1 || ['PARTIAL', 'OVERDUE'].includes(invoiceStatus);
+    const paymentLabel = isMixed
+      ? hasPartialSettlement && invoiceStatus === 'PAID' ? 'Pago mixto · liquidado' : hasPartialSettlement ? 'Pago mixto · parcial' : 'Pago mixto'
+      : hasPartialSettlement && invoiceStatus === 'PAID' ? 'Pago parcial · liquidado' : hasPartialSettlement ? 'Pago parcial' : 'Pago único';
+
+    return {
+      ...first,
+      amount,
+      currency: sameCurrency ? first.currency : baseCurrency as any,
+      exchangeRate: sameCurrency ? Number(first.exchangeRate || 1) : 1,
+      baseAmount,
+      method: isMixed ? 'MIXED' : first.method,
+      payments: ordered,
+      paymentLabel,
+      paymentCount: children.length,
+      isGroupedPayment: isMixed || children.length > 1,
+    } as PaymentReceived;
+  });
+}
+
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
@@ -62,13 +111,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
+  const groupedPayments = useMemo(
+    () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
+    [data, baseCurrency, globalRate, toBaseAmount],
+  );
+
   useEffect(() => {
     if (!highlightedAlertId) return;
     const timeout = window.setTimeout(() => setHighlightedAlertId(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
 
-  const filtered = data.filter(p =>
+  const filtered = groupedPayments.filter(p =>
     (invoiceFilter === 'ALL' || Boolean(p.invoice?.number || p.creditNote?.number)) &&
     (p.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -119,8 +173,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
     if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
+    if (requiresPaymentReference(localDoc.method) && !String(localDoc.reference || '').trim()) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
     if (requiresManualPaymentAccount(localDoc.method) && !localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
-    if (isBankPaymentMethod(localDoc.method) && !localDoc.bankAccountId) { toast.error('Selecciona el banco global donde se recibió el pago'); return; }
+    if (isBankPaymentMethod(localDoc.method, true) && !localDoc.bankAccountId) { toast.error('Selecciona el banco global donde se recibió el pago'); return; }
     const saveToastId = toast.loading('Registrando pago...');
     try {
       await paymentsService.create({
@@ -133,7 +188,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         exchangeRate: localDoc.exchangeRate || globalRate,
         method: localDoc.method,
         accountId: requiresManualPaymentAccount(localDoc.method) ? localDoc.accountId : undefined,
-        bankAccountId: isBankPaymentMethod(localDoc.method) ? localDoc.bankAccountId : undefined,
+        bankAccountId: isBankPaymentMethod(localDoc.method, true) ? localDoc.bankAccountId : undefined,
         reference: localDoc.reference || undefined,
         notes: localDoc.notes || undefined,
       } as any);
@@ -196,23 +251,23 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         </span>)
     },
     {
-      key: 'method', header: 'Método', width: '120px', editable: canPerform('SALES_PAYMENTS', 'edit'), type: 'select', options: methodOptions,
-      render: (val) => {
-        const methodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque' };
-        return <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{methodMap[(val || '').toUpperCase()] || val}</Badge>;
+      key: 'method', header: 'Método', width: '160px',
+      render: (val, row) => {
+        const method = paymentMethodLabel(String(val || '').toUpperCase());
+        return <div className="flex min-w-0 flex-col items-start gap-1"><Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none bg-blue-500/10 text-blue-500">{method}</Badge><span className="text-[9px] font-bold text-muted-foreground">{row.paymentLabel || 'Pago único'}{row.paymentCount && row.paymentCount > 1 ? ` · ${row.paymentCount} movimientos` : ''}</span></div>;
       }
     },
   ];
 
-  const rawMainMethod = data.length > 0
-    ? Object.entries(data.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
+  const rawMainMethod = groupedPayments.length > 0
+    ? Object.entries(groupedPayments.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
       .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
     : 'N/A';
   
   const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', 'N/A': 'N/A' };
   const mainMethod = mainMethodMap[rawMainMethod] || rawMainMethod;
 
-  const totalCollectedInDisplayCurrency = data.reduce(
+  const totalCollectedInDisplayCurrency = groupedPayments.reduce(
     (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
       ? Number(payment.baseAmount)
       : toBaseAmount(payment.amount || 0, payment.currency, payment.exchangeRate || globalRate)),
@@ -234,7 +289,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={requiresPaymentReference(localDoc.method) && !String(localDoc.reference || '').trim()}>
               Confirmar Pago
             </Button>
             )}
@@ -262,7 +317,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   }))}
                     value={localDoc.invoiceId} onChange={(val) => {
                       const inv = invoices.find(i => i.id === val);
-                      setLocalDoc({ ...localDoc, invoiceId: val, creditNoteId: '', amount: inv ? Number(inv.balance || 0) : localDoc.amount });
+                    setLocalDoc({ ...localDoc, invoiceId: val, creditNoteId: '', amount: inv ? Number(convertBetweenCurrencies(Number(inv.balance || 0), inv.currency, localDoc.currency, inv.exchangeRate, localDoc.exchangeRate || globalRate).toFixed(2)) : localDoc.amount });
                     }} placeholder="Sin factura (anticipo)" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Crédito a liquidar (Opcional)</p>
                   <Combobox options={credits.filter((credit) => credit.customerId === localDoc.customerId && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
@@ -271,12 +326,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   }))}
                     value={localDoc.creditNoteId} onChange={(val) => {
                       const credit = credits.find((item) => item.id === val);
-                      setLocalDoc({ ...localDoc, creditNoteId: val, invoiceId: '', amount: credit ? Number(credit.balance ?? credit.total ?? 0) : localDoc.amount, currency: credit?.currency || localDoc.currency, exchangeRate: credit?.exchangeRate || localDoc.exchangeRate });
+                      setLocalDoc({ ...localDoc, creditNoteId: val, invoiceId: '', amount: credit ? Number(convertBetweenCurrencies(Number(credit.balance ?? credit.total ?? 0), credit.currency, localDoc.currency, credit.exchangeRate, localDoc.exchangeRate || globalRate).toFixed(2)) : localDoc.amount });
                     }} placeholder="Sin crédito" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc.date} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
-                  <select value={localDoc.method} onChange={(e) => { const nextMethod = e.target.value; setLocalDoc({ ...localDoc, method: nextMethod, accountId: requiresManualPaymentAccount(nextMethod) ? localDoc.accountId : '', bankAccountId: isBankPaymentMethod(nextMethod) ? localDoc.bankAccountId : '' }); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                  <select value={localDoc.method} onChange={(e) => { const nextMethod = e.target.value; setLocalDoc({ ...localDoc, method: nextMethod, accountId: requiresManualPaymentAccount(nextMethod) ? localDoc.accountId : '', bankAccountId: isBankPaymentMethod(nextMethod, true) ? localDoc.bankAccountId : '', reference: requiresPaymentReference(nextMethod) ? localDoc.reference : '' }); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                     {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select></div>
 
@@ -287,10 +342,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   label="Cuenta del pago"
                 />}
 
-                {['CARD', 'TRANSFER'].includes(String(localDoc.method).toUpperCase()) && <BankAccountSelect value={localDoc.bankAccountId} onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })} label="Banco global de destino" />}
+                {isBankPaymentMethod(localDoc.method, true) && <BankAccountSelect value={localDoc.bankAccountId} onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })} label="Banco global de destino" />}
 
-                <div><p className="text-[10px] text-muted-foreground mb-1">Referencia Bancaria</p>
-                  <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>
+                {requiresPaymentReference(localDoc.method) && <div><p className="text-[10px] text-muted-foreground mb-1">Referencia *</p>
+                  <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>}
               </div>
             </CardContent>
           </Card>
@@ -299,6 +354,21 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto</p>
               <div className="space-y-4">
+                <CurrencySelector
+                  value={localDoc.currency}
+                  baseCurrency={baseCurrency}
+                  exchangeRate={globalRate}
+                  label="Moneda recibida"
+                  onChange={(currency) => {
+                    const nextRate = currency === baseCurrency ? 1 : globalRate;
+                    setLocalDoc({
+                      ...localDoc,
+                      amount: Number(convertBetweenCurrencies(Number(localDoc.amount || 0), localDoc.currency, currency, localDoc.exchangeRate || globalRate, nextRate).toFixed(2)),
+                      currency,
+                      exchangeRate: nextRate,
+                    });
+                  }}
+                />
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-2">Monto del Pago</p>
                   <div className="flex items-center gap-2">
@@ -329,8 +399,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Recaudado (${displayCurrency})`} value={formatConvertedAmount(totalCollectedInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="Pagos" value={data.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
-        <SalesKpiCard title="Con documento" value={data.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
+        <SalesKpiCard title="Pagos" value={groupedPayments.length} icon={CheckCircle2} color="text-blue-500" bg="bg-blue-500/10" />
+        <SalesKpiCard title="Con documento" value={groupedPayments.filter(p => p.invoice?.number || p.creditNote?.number).length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={invoiceFilter === 'WITH_INVOICE'} onClick={() => setInvoiceFilter(invoiceFilter === 'WITH_INVOICE' ? 'ALL' : 'WITH_INVOICE')} />
         <SalesKpiCard title="Método Principal" value={mainMethod} icon={Wallet} color="text-purple-500" bg="bg-purple-500/10" />
       </div>
       <div className="flex flex-col gap-4">
@@ -383,14 +453,39 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency, detailPayment.exchangeRate)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   <Badge className="border-none bg-emerald-500/10 text-emerald-600">Registrado</Badge>
+                  <Badge variant="outline" className="border-primary/20 text-primary">{detailPayment.paymentLabel || 'Pago único'}</Badge>
                   <span>{detailPayment.currency || baseCurrency}</span>
                 </div>
               </div>
 
+              {detailPayment.payments && detailPayment.payments.length > 1 && (
+                <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Desglose del registro</p>
+                    <span className="text-[10px] font-black text-primary">{detailPayment.payments.length} movimientos</span>
+                  </div>
+                  <div className="space-y-2">
+                    {detailPayment.payments.map((child) => (
+                      <div key={child.id} className="rounded-xl border border-border/50 bg-background/70 p-3">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="font-black">{paymentMethodLabel(String(child.method || '').toUpperCase())}</span>
+                          <span className="font-black tabular-nums text-emerald-600">{formatConvertedAmount(Number(child.amount || 0), child.currency, child.exchangeRate)}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                          <span>{child.number}</span>
+                          <span>Referencia: {child.reference || 'Sin referencia'}</span>
+                          {child.bankAccount?.bankName && <span>{child.bankAccount.bankName}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 break-words text-sm font-bold">{detailPayment.customer?.name || 'Cliente'}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateEs(detailPayment.date, true) || '—'}</p></div>
-                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{methodOptions.find((method) => method.value === String(detailPayment.method || '').toUpperCase())?.label || detailPayment.method || '—'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{paymentMethodLabel(String(detailPayment.method || '').toUpperCase())}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || detailPayment.reference || 'Anticipo'}</p></div>
               </div>
 

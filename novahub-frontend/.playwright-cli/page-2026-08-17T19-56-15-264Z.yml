@@ -1,0 +1,1577 @@
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: NovaHub
+                - generic: SOLCONT
+            - button
+          - generic:
+            - navigation:
+              - generic: General
+              - generic:
+                - button:
+                  - generic: Dashboard
+              - generic:
+                - button:
+                  - generic: Financiamiento PYME
+              - generic: Operaciones
+              - generic:
+                - button:
+                  - generic: Ventas
+                - generic:
+                  - generic:
+                    - button:
+                      - generic: Clientes
+                    - button:
+                      - generic: Cotizaciones
+                    - button:
+                      - generic: Órdenes de venta
+                    - button:
+                      - generic: Facturas
+                    - button:
+                      - generic: Facturas recurrentes
+                    - button:
+                      - generic: Pagos recibidos
+                    - button:
+                      - generic: Notas de crédito
+                    - button:
+                      - generic: Créditos
+                    - button:
+                      - generic: Listas de precios
+                    - button:
+                      - generic: Facturación por caja
+                    - button:
+                      - generic: Control de Caja
+              - generic:
+                - button:
+                  - generic: Compras
+              - generic:
+                - button:
+                  - generic: Inventario de Mercancías
+              - generic: Administración
+              - generic:
+                - button:
+                  - generic: Finanzas
+              - generic:
+                - button:
+                  - generic: Contabilidad
+              - generic:
+                - button:
+                  - generic: Reportes
+              - generic:
+                - button:
+                  - generic: Recursos Humanos
+              - generic: Herramientas
+              - generic:
+                - button:
+                  - generic: Actividades
+              - generic:
+                - button:
+                  - generic: Tickets y Soporte
+              - generic: Ayuda
+              - generic:
+                - button:
+                  - generic: Centro de capacitación
+              - generic:
+                - button:
+                  - generic: Soporte técnico
+              - generic:
+                - button:
+                  - generic: Asesoría legal
+              - generic:
+                - button:
+                  - generic: Nova Suite
+              - generic:
+                - button:
+                  - generic: Nova Cloud
+              - generic:
+                - button:
+                  - generic: Notificaciones
+              - generic: Sistema
+              - generic:
+                - button:
+                  - generic: Mi Empresa
+              - generic:
+                - button:
+                  - generic: Configuración
+          - generic:
+            - generic:
+              - generic: J
+              - generic:
+                - paragraph: Jair Narvaez
+                - generic:
+                  - paragraph: Administrador
+      - generic:
+        - generic:
+          - banner:
+            - button
+            - generic:
+              - generic:
+                - generic: SOLCONT
+                - generic: Administrador
+              - generic:
+                - searchbox
+            - generic:
+              - button:
+                - generic: Caja
+              - button:
+                - generic: "5"
+              - button:
+                - generic: JN
+        - main:
+          - generic:
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=1]:
+                        - text: Ventas
+                        - generic: "& CRM"
+                      - generic: 18 clientes · 74 facturas
+                  - generic:
+                    - combobox
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic: Indicador
+                            - generic:
+                              - generic:
+                                - paragraph: Facturado Total (NIO)
+                                - paragraph: C$ 188,020.26
+                        - button:
+                          - generic:
+                            - generic: Filtro
+                            - generic:
+                              - generic:
+                                - paragraph: Por Cobrar (NIO)
+                                - paragraph: C$ 3,056.16
+                        - button:
+                          - generic:
+                            - generic: Filtro
+                            - generic:
+                              - generic:
+                                - paragraph: Vencidas
+                                - paragraph: "2"
+                        - button:
+                          - generic:
+                            - generic: Filtro
+                            - generic:
+                              - generic:
+                                - paragraph: Cobrado (NIO)
+                                - paragraph: C$ 189,276.18
+                      - generic:
+                        - generic:
+                          - generic:
+                            - heading [level=2]: Control de Facturación
+                            - paragraph: Gestión de recaudos masivos sin fricción.
+                          - generic:
+                            - button: Cómo facturar
+                            - combobox
+                            - generic:
+                              - generic:
+                                - generic: Desde
+                                - textbox
+                              - generic:
+                                - generic: Hasta
+                                - textbox
+                            - generic:
+                              - textbox:
+                                - /placeholder: Buscar factura...
+                            - button
+                            - button: Nueva Factura
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Desplazamiento horizontal
+                                  - generic:
+                                    - button [disabled]
+                                    - button [disabled]
+                                - generic:
+                                  - generic:
+                                    - table:
+                                      - rowgroup:
+                                        - row:
+                                          - columnheader:
+                                            - checkbox
+                                          - columnheader: Nº Factura
+                                          - columnheader:
+                                            - text: Cliente
+                                            - generic:
+                                              - button
+                                          - columnheader:
+                                            - text: Fecha Emisión
+                                            - generic:
+                                              - button
+                                          - columnheader:
+                                            - text: Vencimiento
+                                            - generic:
+                                              - button
+                                          - columnheader:
+                                            - text: Total Neto
+                                            - generic:
+                                              - button
+                                          - columnheader:
+                                            - text: Saldo pendiente
+                                            - generic:
+                                              - button
+                                          - columnheader: Forma de Pago
+                                          - columnheader: Estado
+                                          - columnheader: Acciones
+                                      - rowgroup:
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-135
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 17/08/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 150.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: A Crédito
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2279] [cursor=pointer]:
+                                            - generic [ref=f8e524]:
+                                              - button [ref=f8e2280]
+                                              - button [ref=f8e2281]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-134
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 17/08/2026
+                                          - cell:
+                                            - generic: 01/09/2026
+                                          - cell:
+                                            - generic: C$ 150.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2282] [cursor=pointer]:
+                                            - generic [ref=f8e558]:
+                                              - button [ref=f8e2283]
+                                              - button [ref=f8e2284]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-133
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 17/08/2026
+                                          - cell:
+                                            - generic: 16/09/2026
+                                          - cell:
+                                            - generic: C$ 150.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2285] [cursor=pointer]:
+                                            - generic [ref=f8e592]:
+                                              - button [ref=f8e2286]
+                                              - button [ref=f8e2287]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-132
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 17/08/2026
+                                          - cell:
+                                            - generic: 16/09/2026
+                                          - cell:
+                                            - generic: C$ 200.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2288] [cursor=pointer]:
+                                            - generic [ref=f8e626]:
+                                              - button [ref=f8e2289]
+                                              - button [ref=f8e2290]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-013
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 15/08/2026
+                                          - cell:
+                                            - generic: 15/08/2026
+                                          - cell:
+                                            - generic: C$ 18,733.53
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2291] [cursor=pointer]:
+                                            - generic [ref=f8e661]:
+                                              - button [ref=f8e2292]
+                                              - button [ref=f8e2293]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-653873
+                                          - cell:
+                                            - generic: Casa Pellas
+                                          - cell:
+                                            - generic: 14/08/2026
+                                          - cell:
+                                            - generic: 13/09/2026
+                                          - cell:
+                                            - generic: C$ 785.34
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Borrador
+                                          - cell [ref=f8e2294] [cursor=pointer]:
+                                            - generic [ref=f8e695]:
+                                              - button [ref=f8e2295]
+                                              - button [ref=f8e2296]
+                                              - button [ref=f8e2297]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-614977
+                                          - cell:
+                                            - generic: Casa Pellas
+                                          - cell:
+                                            - generic: 14/08/2026
+                                          - cell:
+                                            - generic: 13/09/2026
+                                          - cell:
+                                            - generic: C$ 818.46
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Borrador
+                                          - cell [ref=f8e2298] [cursor=pointer]:
+                                            - generic [ref=f8e730]:
+                                              - button [ref=f8e2299]
+                                              - button [ref=f8e2300]
+                                              - button [ref=f8e2301]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00067-3212
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 14/08/2026
+                                          - cell:
+                                            - generic: 14/08/2026
+                                          - cell:
+                                            - generic: C$ 986.37
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2302] [cursor=pointer]:
+                                            - generic [ref=f8e766]:
+                                              - button [ref=f8e2303]
+                                              - button [ref=f8e2304]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-414088
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2305] [cursor=pointer]:
+                                            - generic [ref=f8e800]:
+                                              - button [ref=f8e2306]
+                                              - button [ref=f8e2307]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-102249
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2308] [cursor=pointer]:
+                                            - generic [ref=f8e834]:
+                                              - button [ref=f8e2309]
+                                              - button [ref=f8e2310]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-078672
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Vencida
+                                          - cell [ref=f8e2311] [cursor=pointer]:
+                                            - generic [ref=f8e868]:
+                                              - button [ref=f8e2312]
+                                              - button [ref=f8e2313]
+                                              - button [ref=f8e2314]
+                                              - button [ref=f8e2315]
+                                              - button [ref=f8e2316]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-070746
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2317] [cursor=pointer]:
+                                            - generic [ref=f8e905]:
+                                              - button [ref=f8e2318]
+                                              - button [ref=f8e2319]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-049478
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: C$ 172.50
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Vencida
+                                          - cell [ref=f8e2320] [cursor=pointer]:
+                                            - generic [ref=f8e939]:
+                                              - button [ref=f8e2321]
+                                              - button [ref=f8e2322]
+                                              - button [ref=f8e2323]
+                                              - button [ref=f8e2324]
+                                              - button [ref=f8e2325]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-107139
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 11/09/2026
+                                          - cell:
+                                            - generic: C$ 7,932.25
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: Contado
+                                                - generic: Transferencia
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2326] [cursor=pointer]:
+                                            - generic [ref=f8e978]:
+                                              - button [ref=f8e2327]
+                                              - button [ref=f8e2328]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00060-4735
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 18,154.19
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2329] [cursor=pointer]:
+                                            - generic [ref=f8e1013]:
+                                              - button [ref=f8e2330]
+                                              - button [ref=f8e2331]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00059-7877
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: 12/08/2026
+                                          - cell:
+                                            - generic: C$ 16,900.87
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2332] [cursor=pointer]:
+                                            - generic [ref=f8e1048]:
+                                              - button [ref=f8e2333]
+                                              - button [ref=f8e2334]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-743348
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 11/08/2026
+                                          - cell:
+                                            - generic: 10/09/2026
+                                          - cell:
+                                            - generic: C$ 111.42
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2335] [cursor=pointer]:
+                                            - generic [ref=f8e1083]:
+                                              - button [ref=f8e2336]
+                                              - button [ref=f8e2337]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00057-0934
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 07/08/2026
+                                          - cell:
+                                            - generic: 07/08/2026
+                                          - cell:
+                                            - generic: C$ 10,493.75
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2338] [cursor=pointer]:
+                                            - generic [ref=f8e1118]:
+                                              - button [ref=f8e2339]
+                                              - button [ref=f8e2340]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00056-1488
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: C$ 503.70
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2341] [cursor=pointer]:
+                                            - generic [ref=f8e1153]:
+                                              - button [ref=f8e2342]
+                                              - button [ref=f8e2343]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00055-4269
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: C$ 8,185.13
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2344] [cursor=pointer]:
+                                            - generic [ref=f8e1188]:
+                                              - button [ref=f8e2345]
+                                              - button [ref=f8e2346]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00054-1607
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: C$ 10,493.75
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2347] [cursor=pointer]:
+                                            - generic [ref=f8e1223]:
+                                              - button [ref=f8e2348]
+                                              - button [ref=f8e2349]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00053-9410
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: C$ 10,493.75
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2350] [cursor=pointer]:
+                                            - generic [ref=f8e1258]:
+                                              - button [ref=f8e2351]
+                                              - button [ref=f8e2352]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-442411
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 05/09/2026
+                                          - cell:
+                                            - generic: C$ 938.22
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2353] [cursor=pointer]:
+                                            - generic [ref=f8e1293]:
+                                              - button [ref=f8e2354]
+                                              - button [ref=f8e2355]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-535484
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: CASTON
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 05/09/2026
+                                          - cell:
+                                            - generic: C$ 1,951.92
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2356] [cursor=pointer]:
+                                            - generic [ref=f8e1328]:
+                                              - button [ref=f8e2357]
+                                              - button [ref=f8e2358]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00050-2073
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: C$ 19,665.24
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2359] [cursor=pointer]:
+                                            - generic [ref=f8e1363]:
+                                              - button [ref=f8e2360]
+                                              - button [ref=f8e2361]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-675139
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Cliente Test
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 05/09/2026
+                                          - cell:
+                                            - generic: C$ 1,826.63
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2362] [cursor=pointer]:
+                                            - generic [ref=f8e1398]:
+                                              - button [ref=f8e2363]
+                                              - button [ref=f8e2364]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-242985
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 06/08/2026
+                                          - cell:
+                                            - generic: 05/09/2026
+                                          - cell:
+                                            - generic: C$ 633.66
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2365] [cursor=pointer]:
+                                            - generic [ref=f8e1433]:
+                                              - button [ref=f8e2366]
+                                              - button [ref=f8e2367]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-489698
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 04/08/2026
+                                          - cell:
+                                            - generic: 03/09/2026
+                                          - cell:
+                                            - generic: C$ 340.03
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2368] [cursor=pointer]:
+                                            - generic [ref=f8e1468]:
+                                              - button [ref=f8e2369]
+                                              - button [ref=f8e2370]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-547102
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 04/08/2026
+                                          - cell:
+                                            - generic: 03/09/2026
+                                          - cell:
+                                            - generic: C$ 42.24
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Borrador
+                                          - cell [ref=f8e2371] [cursor=pointer]:
+                                            - generic [ref=f8e1502]:
+                                              - button [ref=f8e2372]
+                                              - button [ref=f8e2373]
+                                              - button [ref=f8e2374]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-571541
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 04/08/2026
+                                          - cell:
+                                            - generic: 03/09/2026
+                                          - cell:
+                                            - generic: C$ 624.58
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2375] [cursor=pointer]:
+                                            - generic [ref=f8e1538]:
+                                              - button [ref=f8e2376]
+                                              - button [ref=f8e2377]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00044-9542
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 31/07/2026
+                                          - cell:
+                                            - generic: 31/07/2026
+                                          - cell:
+                                            - generic: C$ 10,493.75
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2378] [cursor=pointer]:
+                                            - generic [ref=f8e1573]:
+                                              - button [ref=f8e2379]
+                                              - button [ref=f8e2380]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-507698
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 29/07/2026
+                                          - cell:
+                                            - generic: 28/08/2026
+                                          - cell:
+                                            - generic: C$ 5,689.65
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2381] [cursor=pointer]:
+                                            - generic [ref=f8e1608]:
+                                              - button [ref=f8e2382]
+                                              - button [ref=f8e2383]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-167514
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 1,131.53
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2384] [cursor=pointer]:
+                                            - generic [ref=f8e1643]:
+                                              - button [ref=f8e2385]
+                                              - button [ref=f8e2386]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-843326
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 1,131.53
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2387] [cursor=pointer]:
+                                            - generic [ref=f8e1678]:
+                                              - button [ref=f8e2388]
+                                              - button [ref=f8e2389]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-672131
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Alex Medel
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pendiente
+                                          - cell [ref=f8e2390] [cursor=pointer]:
+                                            - generic [ref=f8e1713]:
+                                              - button [ref=f8e2391]
+                                              - button [ref=f8e2392]
+                                              - button [ref=f8e2393]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-590505
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Grupo Q (Imperial, Cervecería)
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 1,131.53
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2394] [cursor=pointer]:
+                                            - generic [ref=f8e1749]:
+                                              - button [ref=f8e2395]
+                                              - button [ref=f8e2396]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-885650
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Claro Nicaragua
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 1,131.53
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2397] [cursor=pointer]:
+                                            - generic [ref=f8e1784]:
+                                              - button [ref=f8e2398]
+                                              - button [ref=f8e2399]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-044415
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Claro Nicaragua
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 1,392.40
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2400] [cursor=pointer]:
+                                            - generic [ref=f8e1819]:
+                                              - button [ref=f8e2401]
+                                              - button [ref=f8e2402]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-760617
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Supermercados La Colonia
+                                          - cell:
+                                            - generic: 28/07/2026
+                                          - cell:
+                                            - generic: 27/08/2026
+                                          - cell:
+                                            - generic: C$ 844.88
+                                          - cell:
+                                            - generic: C$ 844.88
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pendiente
+                                          - cell [ref=f8e2403] [cursor=pointer]:
+                                            - generic [ref=f8e1854]:
+                                              - button [ref=f8e2404]
+                                              - button [ref=f8e2405]
+                                              - button [ref=f8e2406]
+                                              - button [ref=f8e2407]
+                                              - button [ref=f8e2408]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-264654
+                                                - generic: Desde Cotización
+                                          - cell:
+                                            - generic: Nuevo Cliente
+                                          - cell:
+                                            - generic: 27/07/2026
+                                          - cell:
+                                            - generic: 26/08/2026
+                                          - cell:
+                                            - generic: C$ 1,697.32
+                                          - cell:
+                                            - generic: C$ 1,697.32
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pendiente
+                                          - cell [ref=f8e2409] [cursor=pointer]:
+                                            - generic [ref=f8e1892]:
+                                              - button [ref=f8e2410]
+                                              - button [ref=f8e2411]
+                                              - button [ref=f8e2412]
+                                              - button [ref=f8e2413]
+                                              - button [ref=f8e2414]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic: FAC-945524
+                                          - cell:
+                                            - generic: Test1
+                                          - cell:
+                                            - generic: 27/07/2026
+                                          - cell:
+                                            - generic: 26/08/2026
+                                          - cell:
+                                            - generic: C$ 84.48
+                                          - cell:
+                                            - generic: C$ 84.48
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pendiente
+                                          - cell [ref=f8e2415] [cursor=pointer]:
+                                            - generic [ref=f8e1929]:
+                                              - button [ref=f8e2416]
+                                              - button [ref=f8e2417]
+                                              - button [ref=f8e2418]
+                                              - button [ref=f8e2419]
+                                              - button [ref=f8e2420]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FAC-882948
+                                                - generic: Desde Orden de Venta
+                                          - cell:
+                                            - generic: Test1
+                                          - cell:
+                                            - generic: 27/07/2026
+                                          - cell:
+                                            - generic: 26/08/2026
+                                          - cell:
+                                            - generic: C$ 84.48
+                                          - cell:
+                                            - generic: C$ 84.48
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pendiente
+                                          - cell [ref=f8e2421] [cursor=pointer]:
+                                            - generic [ref=f8e1967]:
+                                              - button [ref=f8e2422]
+                                              - button [ref=f8e2423]
+                                              - button [ref=f8e2424]
+                                              - button [ref=f8e2425]
+                                              - button [ref=f8e2426]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00032-8962
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 25/07/2026
+                                          - cell:
+                                            - generic: 25/07/2026
+                                          - cell:
+                                            - generic: C$ 10,493.75
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2427] [cursor=pointer]:
+                                            - generic [ref=f8e2005]:
+                                              - button [ref=f8e2428]
+                                              - button [ref=f8e2429]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00031-8874
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 503.70
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Anulada
+                                          - cell [ref=f8e2430] [cursor=pointer]:
+                                            - generic [ref=f8e2040]:
+                                              - button [ref=f8e2431]
+                                              - button [ref=f8e2432]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00030-7932
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Claro Nicaragua
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 502.55
+                                          - cell:
+                                            - generic: C$ 63.89
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2433] [cursor=pointer]:
+                                            - generic [ref=f8e2075]:
+                                              - button [ref=f8e2434]
+                                              - button [ref=f8e2435]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00029-8768
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 438.66
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2436] [cursor=pointer]:
+                                            - generic [ref=f8e2110]:
+                                              - button [ref=f8e2437]
+                                              - button [ref=f8e2438]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00028-5333
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Varios
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 438.66
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2439] [cursor=pointer]:
+                                            - generic [ref=f8e2145]:
+                                              - button [ref=f8e2440]
+                                              - button [ref=f8e2441]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00027-4258
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 438.66
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2442] [cursor=pointer]:
+                                            - generic [ref=f8e2180]:
+                                              - button [ref=f8e2443]
+                                              - button [ref=f8e2444]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00026-9556
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Claro Nicaragua
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 9,138.69
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2445] [cursor=pointer]:
+                                            - generic [ref=f8e2215]:
+                                              - button [ref=f8e2446]
+                                              - button [ref=f8e2447]
+                                        - row:
+                                          - cell:
+                                            - checkbox
+                                          - cell:
+                                            - generic:
+                                              - generic:
+                                                - generic: FC-2026-00025-2275
+                                                - generic: Desde Facturación por Caja
+                                          - cell:
+                                            - generic: Banco de América Central (BAC)
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: 24/07/2026
+                                          - cell:
+                                            - generic: C$ 9,125.00
+                                          - cell:
+                                            - generic: C$ 0.00
+                                          - cell:
+                                            - generic: —
+                                          - cell:
+                                            - generic: Pagada
+                                          - cell [ref=f8e2448] [cursor=pointer]:
+                                            - generic [ref=f8e2250]:
+                                              - button [ref=f8e2449]
+                                              - button [ref=f8e2450]
+                              - generic:
+                                - generic:
+                                  - generic: Mostrar
+                                  - combobox
+                                  - generic: por página
+                                  - generic: 1-50 de 74
+                                - generic:
+                                  - button [disabled]
+                                  - button [disabled]
+                                  - generic: Pág. 1 / 2
+                                  - button
+                                  - button
+      - region "Notifications alt+T"
+      - button
+    - region "Notifications alt+T"
+  - dialog [ref=f8e2452]:
+    - generic [ref=f8e2453]:
+      - heading "Registrar pago de factura" [level=2] [ref=f8e2454]
+      - paragraph [ref=f8e2457]: El método pertenece al cobro, igual que en Créditos y Facturación por Caja. Puedes registrar un pago parcial y completar el saldo después.
+    - generic [ref=f8e2458]:
+      - generic [ref=f8e2460]:
+        - generic [ref=f8e2461]:
+          - paragraph [ref=f8e2462]: FAC-078672 · Alex Medel
+          - paragraph [ref=f8e2463]: "Saldo: C$ 172.50"
+        - generic [ref=f8e2464]: Pendiente
+      - generic [ref=f8e2465]:
+        - generic [ref=f8e2466]:
+          - paragraph [ref=f8e2467]: Formas de pago
+          - generic [ref=f8e2468]: Mixto permitido
+        - generic [ref=f8e2469]:
+          - generic [ref=f8e2470]: Moneda recibida
+          - combobox [ref=f8e2471]:
+            - option "Córdoba (NIO)" [selected]
+            - option "Dólar (USD)"
+          - paragraph [ref=f8e2472]: "Tasa global aplicada: 1.0000 · moneda base"
+        - generic [ref=f8e2473]:
+          - generic [ref=f8e2474]:
+            - generic [ref=f8e2475]:
+              - paragraph [ref=f8e2476]: Método
+              - combobox [ref=f8e2477]:
+                - option "Efectivo" [selected]
+                - option "Tarjeta"
+                - option "Transferencia"
+                - option "Cheque"
+            - generic [ref=f8e2478]:
+              - paragraph [ref=f8e2479]: Monto (NIO)
+              - spinbutton [active] [ref=f8e2480]: "172.5"
+            - button "Eliminar forma de pago" [disabled]
+          - generic [ref=f8e2481]:
+            - paragraph [ref=f8e2482]: Referencia (opcional)
+            - textbox "Transferencia, voucher, cheque..." [ref=f8e2483]
+        - button "Agregar pago mixto" [ref=f8e2484]
+      - generic [ref=f8e2485]:
+        - generic [ref=f8e2486]:
+          - paragraph [ref=f8e2487]: Total aplicado
+          - paragraph [ref=f8e2488]: C$ 172.50
+          - paragraph [ref=f8e2489]: Equivale a C$ 172.50
+        - generic [ref=f8e2490]:
+          - paragraph [ref=f8e2491]: Saldo que quedará como deuda
+          - paragraph [ref=f8e2492]: C$ 0.00
+    - generic [ref=f8e2493]:
+      - button "Cancelar" [ref=f8e2494]
+      - button "Confirmar pago" [ref=f8e2495]
+    - button "Close" [ref=f8e2496]

@@ -201,7 +201,7 @@ export function ConfigNominaView() {
             {hasExisting ? '✓ Configuración Activa' : 'Sin configuración'}
           </Badge>
           {canPerform('HR_PAYROLL', 'edit') && (
-            <Button onClick={handleSave} disabled={saving} className="gap-2 rounded-xl font-bold">
+            <Button onClick={handleSave} disabled={saving} className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
               {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
               {saving ? 'Guardando...' : 'Guardar Configuración'}
             </Button>

@@ -462,7 +462,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               </Button>
               <Button 
                 size="sm" 
-                className="min-w-0 flex-1 rounded-xl bg-gradient-to-br from-primary to-primary/80 px-4 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:flex-none"
+                className="h-10 min-w-0 flex-1 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 sm:flex-none"
                 onClick={() => setIsCreating(true)}
                 disabled={isCreating}
                 data-tour="stock-new-btn"
@@ -825,7 +825,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-rose-500 hover:bg-rose-500 hover:text-white"
+                    className="size-8 text-rose-500 hover:bg-rose-700 hover:text-white"
                     onClick={() => removeAllocationRow(item.id)}
                     disabled={allocations.length <= 1}
                   >

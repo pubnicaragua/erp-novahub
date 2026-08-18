@@ -200,7 +200,7 @@ export function RecursosHumanosPageNew() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className="flex items-center justify-between p-4 rounded-lg border border-border/40 hover:bg-accent/50 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     <div className="size-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold text-sm">

@@ -70,7 +70,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               <button
                 key={mod.id}
                 onClick={() => { setSelected(mod); setOpen(false) }}
-                className={`w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-accent ${selected.id === mod.id ? 'font-bold text-primary' : 'text-foreground'}`}
+          className={`w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-muted/70 ${selected.id === mod.id ? 'font-bold text-primary' : 'text-foreground'}`}
               >
                 {mod.label}
               </button>

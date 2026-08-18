@@ -109,6 +109,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Contabilidad: únicamente las entradas presentes en el sidebar.
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_HR_PAYMENT_REQUESTS', label: 'Solicitudes de pago RR. HH.', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_LEDGER', label: 'Libro Mayor', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de comprobación', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
@@ -216,6 +217,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'reportes-rrhh': ['REPORTS_HR'],
 
   'plan-cuentas': ['ACCOUNTING_CHART'],
+  'solicitudes-pago': ['ACCOUNTING_HR_PAYMENT_REQUESTS', 'ACCOUNTING_JOURNAL'],
   diario: ['ACCOUNTING_JOURNAL'],
   'libro-mayor': ['ACCOUNTING_LEDGER'],
   'balance-comprobacion': ['ACCOUNTING_TRIAL_BALANCE'],

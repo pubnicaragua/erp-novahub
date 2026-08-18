@@ -6,6 +6,7 @@ import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { toast } from 'sonner';
+import { requiresPaymentReference } from '../../../utils/paymentMethods';
 
 interface MovimientoManualModalProps {
   open: boolean;
@@ -34,6 +35,10 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
   const handleSubmit = async () => {
     if (!description.trim()) {
       toast.error('Debe ingresar una descripción');
+      return;
+    }
+    if (requiresPaymentReference(paymentMethod) && !reference.trim()) {
+      toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
       return;
     }
     const nio = parseFloat(amountNIO) || 0;
@@ -102,7 +107,7 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
 
           <div className="space-y-2">
             <Label>Forma de Pago</Label>
-            <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+            <Select value={paymentMethod} onValueChange={(v: any) => { setPaymentMethod(v); if (!requiresPaymentReference(v)) setReference(''); }}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -120,10 +125,10 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de proveedor, Fondo extra..." />
           </div>
 
-          <div className="space-y-2">
-            <Label>Referencia (Opcional)</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="# Recibo, Factura..." />
-          </div>
+          {requiresPaymentReference(paymentMethod) && <div className="space-y-2">
+            <Label>Referencia *</Label>
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Transferencia, cheque o voucher..." required />
+          </div>}
 
         </div>
         <DialogFooter>

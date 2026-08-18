@@ -440,9 +440,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       >
         <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
         <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground sm:min-w-0">
-          <span className="flex shrink-0 items-center gap-1.5 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary/80">
-            <Package className="size-3" /> Inventario de Mercancías
-          </span>
           {INVENTORY_SECTIONS.map((section) => {
             const hasRequired = section.requiredModules && section.requiredModules.some(mod => user?.enabledModules?.includes(mod));
             // La suscripción al módulo padre (INVENTORY) habilita todas sus

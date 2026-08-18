@@ -7,6 +7,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CHECK: 'Cheque',
   CREDIT: 'Crédito',
   OTHER: 'Otro',
+  MIXED: 'Pago mixto',
 };
 
 export function paymentMethodLabel(method?: string | null): string {
@@ -25,13 +26,18 @@ export function translatePaymentMethodText(value: unknown): string {
   );
 }
 
-export function isBankPaymentMethod(method?: string | null): boolean {
-  return BANK_PAYMENT_METHODS.has(String(method || '').toUpperCase());
+export function isBankPaymentMethod(method?: string | null, includeCheck = false): boolean {
+  const normalized = String(method || '').toUpperCase();
+  return BANK_PAYMENT_METHODS.has(normalized) || (includeCheck && normalized === 'CHECK');
+}
+
+export function requiresPaymentReference(method?: string | null): boolean {
+  return ['TRANSFER', 'CARD', 'CHECK'].includes(String(method || '').toUpperCase());
 }
 
 /**
- * Efectivo y cheque usan la cuenta configurada en Contabilidad. Tarjeta y
- * transferencia se resuelven mediante el banco global seleccionado.
+ * Efectivo usa la cuenta configurada en Contabilidad. Tarjeta, transferencia
+ * y, en ventas/compras/RR. HH., cheque se resuelven mediante el banco global.
  */
 export function requiresManualPaymentAccount(method?: string | null): boolean {
   const normalized = String(method || '').toUpperCase();

@@ -131,7 +131,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </label>
               </div>
 
-              <Button type="submit" className="w-full h-11 gap-2 bg-emerald-600 hover:bg-emerald-500 text-white" disabled={loading}>
+              <Button type="submit" className="w-full h-11 gap-2 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={loading}>
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
                 {loading ? 'Ingresando...' : 'Iniciar Sesión'}
               </Button>

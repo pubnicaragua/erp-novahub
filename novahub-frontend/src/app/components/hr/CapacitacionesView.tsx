@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { GraduationCap, Plus, Calendar, CheckCircle2, PlayCircle, Users, ChevronDown, ChevronUp, Search, XCircle, UserPlus } from 'lucide-react';
+import { GraduationCap, Plus, Calendar, CheckCircle2, PlayCircle, Users, ChevronDown, ChevronUp, Search, XCircle, UserPlus, Send } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -15,6 +15,7 @@ import { cn } from '../ui/utils';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
+import { HRCreateViewShell } from './HRCreateViewShell';
 import { formatDateEs } from '../../utils/dateFormat';
 
 const TRAINING_STATUS_LABELS: Record<string, string> = {
@@ -37,14 +38,6 @@ const ENROLLMENT_STATUS_LABELS: Record<string, string> = {
   COMPLETED: 'Completado',
 };
 
-const PAYMENT_METHODS = [
-  { value: 'CASH', label: 'Efectivo / Caja' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'CHECK', label: 'Cheque' },
-  { value: 'OTHER', label: 'Otro medio' },
-];
-
 const PAGE_SIZE_OPTIONS = [6, 9, 12, 18, 24];
 
 export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
@@ -63,7 +56,6 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     capacity: 20,
     cost: 0,
     currency: displayCurrency,
-    paymentSource: 'CASH',
     employeeIds: [] as string[],
   });
 
@@ -108,7 +100,6 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
         capacity: 20,
         cost: 0,
         currency: displayCurrency,
-        paymentSource: 'CASH',
         employeeIds: [],
       });
       onRefresh();
@@ -117,6 +108,16 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     } finally {
       createInFlightRef.current = false;
       setIsCreating(false);
+    }
+  };
+
+  const handleRequestPayment = async (training: any) => {
+    try {
+      await hrService.createPaymentRequest({ requestType: 'TRAINING', sourceId: training.id });
+      toast.success('Solicitud de pago enviada a Contabilidad');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo solicitar el pago');
     }
   };
 
@@ -225,7 +226,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="hr-training-title">
+      <div className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4', showNewForm && 'hidden')} data-tour="hr-training-title">
         <StatCard
           label="Programadas"
           value={scheduledTrainings}
@@ -265,8 +266,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3" data-tour="hr-training-actions">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className={cn('flex flex-wrap items-center justify-between gap-3', showNewForm && 'hidden')} data-tour="hr-training-actions">
+        <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -299,21 +300,28 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             sortOptions={[{ value: 'desc', label: 'Más próximas' }, { value: 'asc', label: 'Más lejanas' }]}
           />
         </div>
-        {canPerform('HR_TRAINING', 'create') && (
-          <Button onClick={() => {
-            if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
-            setShowNewForm(!showNewForm);
-          }} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-            <Plus className="size-4 mr-2" />
-            Nueva Capacitación
-          </Button>
-        )}
-        <HRViewTutorial label="Cómo gestionar capacitaciones" targetPrefix="hr-training" copy={{ data: { description: 'Filtra las capacitaciones por estado, instructor y fecha.' }, actions: { description: 'Crea una capacitación o administra sus inscripciones y estados.' } }} />
+        <div className="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+          {canPerform('HR_TRAINING', 'create') && (
+            <Button onClick={() => {
+              if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
+              setShowNewForm(!showNewForm);
+            }} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+              <Plus className="size-4" />
+              Nueva Capacitación
+            </Button>
+          )}
+          <HRViewTutorial label="Cómo gestionar capacitaciones" targetPrefix="hr-training" copy={{ data: { description: 'Filtra las capacitaciones por estado, instructor y fecha.' }, actions: { description: 'Crea una capacitación o administra sus inscripciones y estados.' } }} />
+        </div>
       </div>
 
       {/* New Training Form */}
       {showNewForm && (
-        <div className="border border-primary/40 rounded-lg p-6 bg-primary/5" data-tour="hr-training-form-shell">
+        <HRCreateViewShell
+          title="Nueva capacitación"
+          description="Programa la capacitación, define su costo y selecciona las personas que participarán."
+          onBack={() => setShowNewForm(false)}
+        >
+        <div className="space-y-1" data-tour="hr-training-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-training-form-title">
             <h3 className="text-lg font-semibold text-primary">Nueva Capacitación</h3>
             <HRViewTutorial label="Cómo crear capacitación" targetPrefix="hr-training-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Completa título, descripción, instructor, fechas, capacidad, costo y modalidad.' }, items: { title: 'Empleados participantes', description: 'Selecciona los empleados que participarán sin superar la capacidad definida.' }, actions: { description: 'Guarda la capacitación para comenzar a gestionar sus participantes.' } }} />
@@ -408,17 +416,6 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                 <option value="USD">Dólares (USD)</option>
               </select>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Medio de pago</label>
-              <select
-                value={newTraining.paymentSource}
-                onChange={(e) => setNewTraining({ ...newTraining, paymentSource: e.target.value })}
-                disabled={isCreating}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm font-medium"
-              >
-                {PAYMENT_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
-              </select>
-            </div>
             <div className="md:col-span-2" data-tour="hr-training-form-items">
               <label className="text-sm font-medium mb-1 block">Empleados Participantes ({newTraining.employeeIds.length}/{newTraining.capacity})</label>
               <div className="border border-border/50 rounded-xl p-3 max-h-40 overflow-y-auto bg-background">
@@ -459,10 +456,11 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             </Button>
           </div>
         </div>
+        </HRCreateViewShell>
       )}
 
       {/* Trainings Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="hr-training-data">
+      <div className={cn('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4', showNewForm && 'hidden')} data-tour="hr-training-data">
         {paginatedTrainings.map((training: any) => {
           const enrolledCount = training.enrollments?.length || 0;
           const completedCount = training.enrollments?.filter((e: any) => e.status === 'COMPLETED').length || 0;
@@ -530,6 +528,14 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                   </div>
                 </div>
               )}
+
+              {Number(training.cost || 0) > 0 && training.paymentStatus !== 'PAID' && canPerform('HR_TRAINING', 'edit') && (
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pago: {training.paymentStatus === 'REQUESTED' ? 'Solicitud enviada' : training.paymentStatus === 'APPROVED' ? 'Aprobada' : 'Pendiente'}</span>
+                  {(!training.paymentStatus || training.paymentStatus === 'PENDING') && <Button size="sm" variant="outline" className="h-7 rounded-lg text-[10px] font-bold" onClick={() => handleRequestPayment(training)}><Send className="mr-1.5 size-3" /> Solicitar pago</Button>}
+                </div>
+              )}
+              {Number(training.cost || 0) > 0 && training.paymentStatus === 'PAID' && <div className="mt-3 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600"><CheckCircle2 className="size-3.5" /> Pago contabilizado</div>}
 
               {canPerform('HR_TRAINING', 'edit') && training.status !== 'COMPLETED' && training.status !== 'CANCELLED' && (
                 <div className="flex items-center gap-2 pt-3 mt-3 border-t border-border/40">

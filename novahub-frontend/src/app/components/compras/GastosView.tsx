@@ -33,6 +33,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
+import { requiresPaymentReference } from '../../utils/paymentMethods';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -51,6 +52,7 @@ const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia',
   CHECK: 'Cheque',
   CARD: 'Tarjeta',
+  MIXED: 'Pago mixto',
   BANK: 'Banco',
 };
 const paymentSourceLabel = (value?: string | null) => PAYMENT_SOURCE_LABELS[String(value || '').toUpperCase()] || value || '-';
@@ -475,11 +477,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const openPaymentDialog = (row: Expense) => {
     setPaymentExpense(row);
     setPaymentMethod('CASH');
-    setPaymentReference(row.reference || row.number || '');
+    setPaymentReference('');
   };
 
   const handlePayment = async () => {
     if (!paymentExpense) return;
+    if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) {
+      toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+      return;
+    }
     const paymentToastId = toast.loading(`Marcando ${paymentExpense.number} como pagado...`);
     try {
       setPaymentLoading(true);
@@ -590,7 +596,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="expenses" context="form" />
              {!isNew && canPerform('PURCHASES_EXPENSES', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
                 </Button>
@@ -1036,20 +1042,20 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
-                    <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as typeof paymentMethod)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                    <select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value as typeof paymentMethod; setPaymentMethod(nextMethod); if (!requiresPaymentReference(nextMethod)) setPaymentReference(''); }} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                       {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</p>
+                  {requiresPaymentReference(paymentMethod) && <div>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                     <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." className="h-10 text-xs" />
-                  </div>
+                  </div>}
                 </div>
               </div>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setPaymentExpense(null)} disabled={paymentLoading}>Cancelar</Button>
-              <Button onClick={() => void handlePayment()} disabled={paymentLoading} className="bg-primary font-black uppercase tracking-widest">
+              <Button onClick={() => void handlePayment()} disabled={paymentLoading || (requiresPaymentReference(paymentMethod) && !paymentReference.trim())} className="bg-primary font-black uppercase tracking-widest">
                 {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
               </Button>
             </DialogFooter>

@@ -910,8 +910,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             <option value="cards">Tarjetas</option>
           </select>
           {canPerform('HR_EMPLOYEES', 'create') && (
-            <Button size="sm" onClick={openCreateEmployeeModal} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="empleados-add">
-              <Plus className="size-4 mr-2" />
+            <Button size="sm" onClick={openCreateEmployeeModal} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90" data-tour="empleados-add">
+              <Plus className="size-4" />
               Agregar Empleado
             </Button>
           )}

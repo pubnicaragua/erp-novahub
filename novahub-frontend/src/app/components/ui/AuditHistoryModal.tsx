@@ -14,6 +14,7 @@ interface AuditHistoryModalProps {
   entity: string;
   entityId: string;
   title?: string;
+  presentation?: 'dialog' | 'inline';
 }
 
 const actionColors: Record<string, string> = {
@@ -182,7 +183,7 @@ const detailValueLabels: Record<string, string> = {
   BULK_IMPORT: 'Importación masiva',
 };
 
-export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios' }: AuditHistoryModalProps) {
+export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios', presentation = 'dialog' }: AuditHistoryModalProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -190,7 +191,8 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     try {
       setLoading(true);
       const res = await api.get<any[]>(`/audit/entity/${entity}/${entityId}`);
-      setLogs(Array.isArray(res) ? res : []);
+      const nextLogs = Array.isArray(res) ? res : [];
+      setLogs([...nextLogs].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()));
     } catch (e: any) {
       console.error('Error fetching audit logs:', e);
     } finally {
@@ -234,6 +236,77 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
 
+  const historyBody = (
+    <div className="mt-4">
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border/50 rounded-2xl bg-muted/10">
+          <History className="size-8 mx-auto text-muted-foreground/20 mb-3" />
+          <p className="text-xs font-bold text-muted-foreground">No hay registros de auditoría para este elemento.</p>
+        </div>
+      ) : (
+        <ScrollArea className="h-[400px] pr-4">
+          <div className="space-y-4">
+            {logs.map((log) => {
+              const detailsObj = parseDetails(log.details);
+              return (
+                <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">
+                  <div className="absolute left-[-5px] top-0 size-2.5 rounded-full bg-primary ring-4 ring-background" />
+                  <div className="-mt-1.5 p-4 rounded-2xl bg-card border border-border/40 shadow-sm relative overflow-hidden group">
+                    <div className="relative z-10 flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Badge variant="outline" className={cn(
+                          "text-[9px] font-black uppercase tracking-widest border",
+                          actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
+                        )}>
+                          {actionLabels[log.action] || log.action}
+                        </Badge>
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                          <Calendar className="size-3" />
+                          {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm", { locale: es })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                          <UserIcon className="size-3.5 text-muted-foreground" />
+                          {log.user ? log.user.name : 'Sistema automático'}
+                        </div>
+                        {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
+                      </div>
+                      {detailsObj && (
+                        <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">
+                          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                            <Info className="size-3" /> Detalles:
+                          </div>
+                          <div className="text-xs font-mono text-muted-foreground">
+                            {typeof detailsObj === 'object' ? (
+                              <ul className="list-disc list-inside space-y-1">
+                                {Object.entries(detailsObj).map(([key, value]) => (
+                                  <li key={key}>
+                                    <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : <p>{detailsObj}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+
+  if (presentation === 'inline') return historyBody;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px] border-border/50 bg-background/95 backdrop-blur-xl">
@@ -247,80 +320,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
           </p>
         </DialogHeader>
 
-        <div className="mt-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-border/50 rounded-2xl bg-muted/10">
-              <History className="size-8 mx-auto text-muted-foreground/20 mb-3" />
-              <p className="text-xs font-bold text-muted-foreground">No hay registros de auditoría para este elemento.</p>
-            </div>
-          ) : (
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-4">
-                {logs.map((log) => {
-                  const detailsObj = parseDetails(log.details);
-                  return (
-                    <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">
-                      <div className="absolute left-[-5px] top-0 size-2.5 rounded-full bg-primary ring-4 ring-background" />
-                      
-                      <div className="-mt-1.5 p-4 rounded-2xl bg-card border border-border/40 shadow-sm relative overflow-hidden group">
-                        <div className="relative z-10 flex flex-col gap-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <Badge variant="outline" className={cn(
-                              "text-[9px] font-black uppercase tracking-widest border",
-                              actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
-                            )}>
-                              {actionLabels[log.action] || log.action}
-                            </Badge>
-                            
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                              <Calendar className="size-3" />
-                              {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm", { locale: es })}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                              <UserIcon className="size-3.5 text-muted-foreground" />
-                              {log.user ? log.user.name : 'Sistema automático'}
-                            </div>
-                            {log.user?.email && (
-                              <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>
-                            )}
-                          </div>
-
-                          {detailsObj && (
-                            <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">
-                              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                                <Info className="size-3" /> Detalles:
-                              </div>
-                              <div className="text-xs font-mono text-muted-foreground">
-                                {typeof detailsObj === 'object' ? (
-                                  <ul className="list-disc list-inside space-y-1">
-                                    {Object.entries(detailsObj).map(([key, value]) => (
-                                        <li key={key}>
-                                          <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p>{detailsObj}</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          )}
-        </div>
+        {historyBody}
       </DialogContent>
     </Dialog>
   );

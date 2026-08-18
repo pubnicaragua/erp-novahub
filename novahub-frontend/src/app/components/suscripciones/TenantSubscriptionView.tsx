@@ -1131,7 +1131,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsChangePasswordDialogOpen(false)} disabled={updatingPassword}>Cancelar</Button>
-            <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-10">
+            <Button onClick={handleAdminChangePassword} disabled={updatingPassword || !!getPasswordError(newPasswordForUser)} className="bg-orange-700 hover:bg-orange-800 text-white font-bold h-10">
               {updatingPassword ? 'Guardando...' : 'Actualizar Contraseña'}
             </Button>
           </DialogFooter>

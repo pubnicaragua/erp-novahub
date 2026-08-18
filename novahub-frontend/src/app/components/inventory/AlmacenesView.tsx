@@ -535,7 +535,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
 
           {canCreateWarehouse && <Button 
             size="sm" 
-            className="order-2 h-10 min-w-0 w-full rounded-xl bg-gradient-to-br from-primary to-primary/80 px-3 text-xs font-black uppercase tracking-widest text-primary-foreground shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl sm:order-none sm:w-auto" 
+            className="order-2 h-10 min-w-0 w-full rounded-xl border border-primary/20 bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 sm:order-none sm:w-auto" 
             onClick={handleAddNewRow}
             data-tour="almacenes-add-btn"
           >
@@ -642,7 +642,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                         {canDeactivateWarehouse && <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="size-7 text-red-600 hover:text-white hover:bg-red-500"
+                          className="size-7 text-red-600 hover:text-white hover:bg-red-700"
                           onClick={() => handleDeleteWarehouse(wh.id)}
                         >
                           <Trash2 className="size-3.5" />

@@ -33,6 +33,7 @@ interface CurrencyContextType {
   formatCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => string;
   convertAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   convertCurrentAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => number;
+  convertBetweenCurrencies: (amount: number, sourceCurrency: MonetarySourceCurrency, targetCurrency: MonetarySourceCurrency, sourceExchangeRate?: number, targetExchangeRate?: number) => number;
   toBaseAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => number;
   toCurrentBaseAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency) => number;
   formatConvertedAmount: (amount: number, sourceCurrency?: MonetarySourceCurrency, sourceExchangeRate?: number) => string;
@@ -212,6 +213,27 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return from === 'USD' ? safeAmount * rate : safeAmount / rate;
   };
 
+  const convertBetweenCurrencies = (
+    amount: number,
+    sourceCurrency?: MonetarySourceCurrency,
+    targetCurrency?: MonetarySourceCurrency,
+    sourceExchangeRate?: number,
+    targetExchangeRate?: number,
+  ): number => {
+    const parsedAmount = Number(amount);
+    const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+    const source = normalizeCurrency(sourceCurrency);
+    const target = normalizeCurrency(targetCurrency);
+    if (source === target) return safeAmount;
+
+    const baseAmount = toBaseAmount(safeAmount, source, sourceExchangeRate);
+    if (target === baseCurrency) return baseAmount;
+
+    const targetRate = resolveRate(target, targetExchangeRate);
+    const baseRate = baseCurrency === 'USD' ? 1 / targetRate : targetRate;
+    return baseRate > 0 ? baseAmount / baseRate : baseAmount;
+  };
+
   const formatHistoricalAmount = (
     amount: number,
     sourceCurrency?: MonetarySourceCurrency,
@@ -277,6 +299,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
         formatCurrentAmount,
         convertAmount,
         convertCurrentAmount,
+        convertBetweenCurrencies,
         toBaseAmount,
         toCurrentBaseAmount,
         formatConvertedAmount,

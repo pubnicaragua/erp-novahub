@@ -219,7 +219,7 @@ export function DashboardHRView({ employees, departments, leaveRequests, reviews
               <div className="space-y-2">
                 {topPerformers.map((emp: any, i: number) => (
                   <div key={i} className="flex items-center gap-3 p-2 rounded-xl hover:bg-muted/20 transition-colors">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-slate-400' : i === 2 ? 'bg-orange-600' : 'bg-muted-foreground/30'}`}>
+                    <div className={`size-6 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${i === 0 ? 'bg-yellow-700' : i === 1 ? 'bg-slate-500' : i === 2 ? 'bg-orange-700' : 'bg-muted-foreground/30'}`}>
                       {i + 1}
                     </div>
                     <div className="size-9 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white text-xs font-black flex-shrink-0">

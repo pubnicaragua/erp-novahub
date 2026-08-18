@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { 
-  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck, FileDown
+  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -26,6 +26,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -158,6 +159,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [detailReturn, setDetailReturn] = useState<SalesReturn | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -282,6 +284,32 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
 
+  const buildReturnPanel = (row: SalesReturn): SalesDocumentPanelData => ({
+    id: row.id,
+    number: row.number,
+    title: 'Nota de crédito',
+    customerName: row.customer?.name || customers.find((customer) => customer.id === row.customerId)?.name || 'Cliente',
+    status: String(row.status || ''),
+    sourceLabel: row.invoice?.number ? `Factura origen: ${row.invoice.number}` : undefined,
+    totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
+    summaryDetails: [
+      { label: 'Tipo', value: isReturnPartial(row) ? 'Parcial' : 'Total' },
+      { label: 'Moneda', value: row.currency || 'NIO' },
+    ],
+    metadata: [
+      { label: 'Fecha', value: formatDateEs(row.date) },
+      { label: 'Factura origen', value: row.invoice?.number || 'No disponible' },
+    ],
+    lines: (row.items || []).map((item) => ({
+      id: item.id,
+      description: item.description,
+      quantity: Number(item.quantity || 0),
+      unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
+      totalLabel: formatConvertedAmount(Number(item.total || 0), row.currency, row.exchangeRate),
+    })),
+    reason: row.reason,
+  });
+
   const handleApprove = async (id: string) => {
     const approveToastId = toast.loading('Aprobando nota de crédito...');
     try {
@@ -313,7 +341,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             "text-xs font-black font-mono text-primary",
             canPerform('SALES_RETURNS', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
           )} 
-          onClick={() => canPerform('SALES_RETURNS', 'edit') && startEdit(row.id)}
+          onClick={() => setDetailReturn(row)}
         >
           {val}
         </span>
@@ -356,11 +384,11 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <SalesViewTutorial view="returns" context="form" />
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
-                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { await salesReturnsService.delete(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
-                {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Nota</Button>}
-                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'approve') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar Saldo</Button>}
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'approve') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar Saldo</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   {isCreating ? 'Registrar Nota' : 'Guardar Cambios'}
                 </Button>
@@ -494,19 +522,18 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         <EditableDataTable data={filteredData}
           pagination={pagination}
           onBulkDelete={async (ids) => { const deleteToastId = toast.loading(`Eliminando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.delete(id as string); } toast.success('Eliminadas', { id: deleteToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar', { id: deleteToastId }); } }}
-          columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => startEdit(row.id)} isLoading={loading} actionsWidth="w-36" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailReturn(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'PENDING' && (
                  <Button title="Aprobar Nota de Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
                {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'APPROVED' && (
                  <Button title="Aplicar saldo y actualizar inventario" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleProcess(row.id)}><CheckCircle2 className="size-4" /></Button>
                )}
-               <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
-                <Button title="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => startEdit(row.id)}><Eye className="size-4" /></Button>
+                <Button title="Ver nota de crédito completa" aria-label="Ver nota de crédito completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailReturn(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
                {canPerform('SALES_RETURNS', 'delete') && (
                  <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>
                )}
@@ -514,6 +541,20 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           )}
         />
       </div>
+
+      <SalesDocumentDetailSheet
+        key={detailReturn?.id || 'return-detail'}
+        document={detailReturn ? buildReturnPanel(detailReturn) : null}
+        entity="SALES_RETURN"
+        open={Boolean(detailReturn)}
+        onClose={() => setDetailReturn(null)}
+        onOpenDocument={() => {
+          if (!detailReturn) return;
+          setDetailReturn(null);
+          startEdit(detailReturn.id);
+        }}
+        onDownloadPdf={() => { if (detailReturn) void handleExportPDF(detailReturn); }}
+      />
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

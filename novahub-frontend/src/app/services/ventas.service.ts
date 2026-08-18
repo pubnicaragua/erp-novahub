@@ -46,8 +46,12 @@ export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
   getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
+  accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
+    api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; cogsAccount?: any; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
   create: (data: Partial<Invoice>, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
+  sendToCredit: (id: string, data: { dueDate?: string }, idempotencyKey?: string) =>
+    api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<Invoice, 'id' | 'number' | 'status'> }>(`/sales/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
@@ -70,6 +74,8 @@ export const paymentsService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getById: (id: string) => api.get<PaymentReceived>(`/sales/payments/${id}`),
   create: (data: Partial<PaymentReceived>, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
+  createMixed: (data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; bankAccountId?: string; reference?: string; notes?: string }> }, idempotencyKey?: string) =>
+    api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>('/sales/payments/mixed', data, idempotencyKey),
   update: (id: string, data: Partial<PaymentReceived>) => api.patch<PaymentReceived>(`/sales/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PaymentReceived, 'id' | 'number'> }>(`/sales/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),

@@ -65,6 +65,7 @@ export const recurringSupplierInvoicesService = {
 export const paymentsMadeService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', { params: filters as any, signal }),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
+  createMixed: (data: Partial<PaymentMade> & { payments: Array<Partial<PaymentMade>> }) => api.post<PaymentMade>('/purchases/payments/mixed', data),
   update: (id: string, data: Partial<PaymentMade>) => api.patch<PaymentMade>(`/purchases/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PaymentMade, 'id' | 'number' | 'isActive'> }>(`/purchases/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),

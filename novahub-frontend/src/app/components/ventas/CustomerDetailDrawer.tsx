@@ -319,7 +319,7 @@ export function CustomerDetailDrawer({
     .filter((inv) => String(inv.status || '').toUpperCase() === 'PAID')
     .reduce((sum, inv) => sum + toBaseValue(inv.total, inv.currency, inv.exchangeRate), 0);
   const creditOutstanding = invoices
-    .filter((inv) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
+    .filter((inv) => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
     .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
   const creditUsagePct = creditLimit > 0 ? Math.min(100, (balance / creditLimit) * 100) : 0;
 

@@ -26,6 +26,7 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface Props {
   data: SupplierInvoice[];
@@ -83,6 +84,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     formatCurrentAmount,
     convertAmount,
     convertCurrentAmount,
+    convertBetweenCurrencies,
   } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-supplier-invoices-layout', 'table', 24 * 365);
@@ -467,7 +469,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                </Button>
              )}
                 {!isNew && canPerform('PURCHASES_INVOICES', 'delete') && (
-                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
                     <Ban className="mr-2 size-3.5" /> Anular
                   </Button>
@@ -544,18 +546,29 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Pendiente'}</Badge></div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
-                    value={localDoc.currency || 'NIO'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                  >
-                    <option value="NIO">NIO (Cordobas)</option>
-                    <option value="USD">USD (Dolares)</option>
-                  </select>
-                </div>
+                <CurrencySelector
+                  value={localDoc.currency || baseCurrency}
+                  baseCurrency={baseCurrency}
+                  exchangeRate={globalRate}
+                  label="Moneda"
+                  disabled={isNew ? !canPerform('PURCHASES_INVOICES', 'create') : !canPerform('PURCHASES_INVOICES', 'edit')}
+                  onChange={(nextCurrency) => {
+                    const sourceCurrency = localDoc.currency || baseCurrency;
+                    const sourceRate = Number(localDoc.exchangeRate || (sourceCurrency === baseCurrency ? 1 : globalRate));
+                    const nextRate = nextCurrency === baseCurrency ? 1 : globalRate;
+                    const convert = (value: any) => Number(convertBetweenCurrencies(Number(value || 0), sourceCurrency, nextCurrency, sourceRate, nextRate).toFixed(2));
+                    const nextItems = (localDoc.items || []).map((item: any) => ({
+                      ...item,
+                      unitPrice: convert(item.unitPrice),
+                      taxBase: convert(item.taxBase),
+                      taxAmount: convert(item.taxAmount),
+                      withholdingBase: convert(item.withholdingBase),
+                      total: convert(item.total),
+                    }));
+                    const totals = calculateTotals(nextItems);
+                    setLocalDoc({ ...localDoc, ...totals, items: nextItems, currency: nextCurrency, exchangeRate: nextRate });
+                  }}
+                />
               </div>
             </CardContent>
           </Card>
@@ -573,7 +586,11 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   <span className="font-bold tabular-nums text-rose-500">{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.taxAmount||0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Retenciones</span>
+                  <span className="text-muted-foreground">Total bruto</span>
+                  <span className="font-bold tabular-nums">{localDoc.currency === 'USD' ? '$' : 'C$'} {(Number(localDoc.subtotal||0) + Number(localDoc.taxAmount||0)).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">IR retenido</span>
                   <span className="font-bold tabular-nums text-amber-500">-{localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.withholdingTotal||0).toLocaleString()}</span>
                 </div>
                 <div className="border-t pt-3 border-border/50">
@@ -584,7 +601,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
-                  <span className="font-black uppercase text-xs tracking-widest">Total</span>
+                  <span className="font-black uppercase text-xs tracking-widest">Neto a pagar</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
                      {localDoc.currency === 'USD' ? '$' : 'C$'} {Number(localDoc.total||0).toLocaleString()}
                      {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ $ {(Number(localDoc.total||0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}</span>}
@@ -596,7 +613,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
                     <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Contabilización al pagar</p>
                   </div>
                   <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                    Una factura pendiente o parcial no genera asiento. Al liquidarla se registra un asiento único con inventario/gasto e IVA acreditable en Debe, y el medio de pago más IR/retenciones en Haber.
+                    El total bruto es subtotal + IVA. El IR no se suma al efectivo: se retiene al proveedor y queda como obligación fiscal. Al liquidarla, el asiento queda Debe bruto = Haber pago neto + IR retenido.
                   </p>
                   <p className="mt-1 text-[9px] font-semibold text-primary">Las cuentas y los medios de pago se configuran en Contabilidad → Configuración → Compras.</p>
                 </div>

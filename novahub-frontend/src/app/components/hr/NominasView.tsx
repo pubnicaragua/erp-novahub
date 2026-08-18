@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
@@ -110,10 +110,10 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const handleMarkAsPaid = async (id: string) => {
+  const handleRequestPayment = async (id: string) => {
     try {
-      await hrService.updatePayrollStatus(id, 'PAID');
-      toast.success('Nómina marcada como pagada');
+      await hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: id });
+      toast.success('Solicitud de pago enviada a Contabilidad');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estado');
@@ -134,17 +134,17 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     }
   };
 
-  const handleMarkAllAsPaid = async () => {
-    const pendingPayrolls = filteredPayrolls.filter((p: any) => p.status === 'PENDING');
+  const handleRequestAllPayments = async () => {
+    const pendingPayrolls = filteredPayrolls.filter((p: any) => p.status === 'PENDING' && String(p.paymentStatus || 'PENDING') === 'PENDING');
     if (pendingPayrolls.length === 0) {
       toast.info('No hay nóminas pendientes');
       return;
     }
     try {
       await Promise.all(
-        pendingPayrolls.map((p: any) => hrService.updatePayrollStatus(p.id, 'PAID'))
+        pendingPayrolls.map((p: any) => hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: p.id }))
       );
-      toast.success(`${pendingPayrolls.length} nóminas marcadas como pagadas`);
+      toast.success(`${pendingPayrolls.length} solicitudes enviadas a Contabilidad`);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar estados');
@@ -186,7 +186,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
   const totalGross = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'grossPay', 'grossPayBase'), 0);
   const totalNet = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'netPay', 'netPayBase'), 0);
   const totalCostoEmpresa = filteredPayrolls.reduce((sum: number, p: any) => sum + payrollBase(p, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), 0);
-  const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING').length;
+  const pendingCount = filteredPayrolls.filter((p: any) => p.status === 'PENDING' && String(p.paymentStatus || 'PENDING') === 'PENDING').length;
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const isOverdue = (p: any) => p.status === 'PENDING' && new Date(p.periodEnd) < new Date();
@@ -276,9 +276,9 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             Descargar PDF
           </Button>
           {pendingCount > 0 && canPerform('HR_PAYROLL', 'approve') && (
-            <Button size="sm" onClick={handleMarkAllAsPaid} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
-              <CheckCircle className="size-4 mr-2" />
-              Pagar Todas ({pendingCount})
+            <Button size="sm" onClick={handleRequestAllPayments} className="bg-primary hover:bg-primary/90 !text-primary-foreground">
+              <Send className="size-4 mr-2" />
+              Solicitar pagos ({pendingCount})
             </Button>
           )}
           <div className="flex items-center gap-2 mx-2">
@@ -364,17 +364,19 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                       <div className="flex items-center justify-end gap-1">
                         {payroll.status === 'PENDING' && (
                           <>
-                            {canPerform('HR_PAYROLL', 'approve') && (
+                            {String(payroll.paymentStatus || 'PENDING') === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(payroll.id); }}
+                                onClick={(e) => { e.stopPropagation(); handleRequestPayment(payroll.id); }}
                                 className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
                               >
-                                <CheckCircle className="size-3.5 mr-1" />
-                                Pagar
+                                <Send className="size-3.5 mr-1" />
+                                Solicitar pago
                               </Button>
                             )}
+                            {String(payroll.paymentStatus || 'PENDING') === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-amber-600">Solicitud enviada</span>}
+                            {String(payroll.paymentStatus || 'PENDING') === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-sky-600">Aprobada en Contabilidad</span>}
                             {canPerform('HR_PAYROLL', 'delete') && (
                               <Button
                                 size="sm"
@@ -493,11 +495,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                   </Button>
                   {payroll.status === 'PENDING' && (
                     <>
-                      {canPerform('HR_PAYROLL', 'approve') && (
-                        <Button size="sm" onClick={() => handleMarkAsPaid(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
-                          <CheckCircle className="size-3 mr-1" /> Pagar
+                      {String(payroll.paymentStatus || 'PENDING') === 'PENDING' && canPerform('HR_PAYROLL', 'approve') && (
+                        <Button size="sm" onClick={() => handleRequestPayment(payroll.id)} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] h-8">
+                          <Send className="size-3 mr-1" /> Solicitar pago
                         </Button>
                       )}
+                      {String(payroll.paymentStatus || 'PENDING') !== 'PENDING' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-amber-600">Solicitud {String(payroll.paymentStatus).toLowerCase()}</span>}
                       {canPerform('HR_PAYROLL', 'delete') && (
                         <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
                           <Trash2 className="size-3.5" />

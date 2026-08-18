@@ -333,7 +333,7 @@ export function SuscripcionesPageFinal() {
           <TabsTrigger value="requests">
             Solicitudes ({requests.length})
             {pendingRequests.length > 0 && (
-              <Badge className="ml-2 bg-orange-500 text-white">{pendingRequests.length}</Badge>
+              <Badge className="ml-2 bg-orange-700 text-white">{pendingRequests.length}</Badge>
             )}
           </TabsTrigger>
         </TabsList>

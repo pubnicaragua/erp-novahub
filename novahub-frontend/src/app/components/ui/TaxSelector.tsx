@@ -38,7 +38,7 @@ export function TaxTypeSelect({ value, onChange, type, disabled }: TaxSelectorPr
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="flex h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-foreground/65 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-foreground/65 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
     >
       {type === 'TAX' && <option value="">Seleccionar IVA</option>}
       {type === 'WITHHOLDING' && <option value="NONE">Sin retención</option>}

@@ -303,11 +303,12 @@ export function PurchaseOrderPreviewDialog({
                 </section>
               )}
 
-              <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm min-[480px]:grid-cols-2 sm:grid-cols-4" data-tour="purchase-order-detail-summary">
+              <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm min-[480px]:grid-cols-2 sm:grid-cols-5" data-tour="purchase-order-detail-summary">
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Subtotal</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.subtotal)}</p></div>
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">IVA</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.taxAmount)}</p></div>
-                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Retención</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.withholdingTotal)}</p></div>
-                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Total</span><p className="mt-1 font-mono text-lg font-black text-primary">{currencyPrefix} {formatAmount(order.total)}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Total bruto</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(Number(order.subtotal || 0) + Number(order.taxAmount || 0))}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">IR retenido</span><p className="mt-1 font-mono font-bold text-amber-600">-{currencyPrefix} {formatAmount(order.withholdingTotal)}</p></div>
+                <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Neto a pagar</span><p className="mt-1 font-mono text-lg font-black text-primary">{currencyPrefix} {formatAmount(order.total)}</p></div>
               </div>
 
               {order.notes && <p className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm text-muted-foreground">Notas: {order.notes}</p>}

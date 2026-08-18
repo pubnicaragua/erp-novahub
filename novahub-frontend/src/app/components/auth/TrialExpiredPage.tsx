@@ -82,7 +82,7 @@ export function TrialExpiredPage({ onClose, onLogout }: TrialExpiredPageProps) {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <Button size="lg" className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/30"
+                <Button size="lg" className="flex-1 h-12 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold uppercase tracking-widest gap-2 shadow-lg shadow-emerald-900/30"
                   onClick={() => window.open('https://wa.me/50588241003?text=Hola%20termin%C3%A9%20mi%20trial%20de%20NovaHub%20y%20quiero%20contratar', '_blank')}>
                   Contratar plan <ArrowUpRight className="size-4" />
                 </Button>

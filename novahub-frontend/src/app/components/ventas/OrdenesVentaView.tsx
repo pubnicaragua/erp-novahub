@@ -22,7 +22,6 @@ import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { FileDown } from 'lucide-react';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
@@ -33,6 +32,7 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -79,6 +79,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<SalesOrder | null>(null);
+  const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([
@@ -241,6 +242,49 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     window.open(`https://wa.me/${phoneWithCode}?text=${encodeURIComponent(message)}`, '_blank');
     toast.success('¡Se abrió WhatsApp con la orden de venta preparada!', { id: preparingToastId });
   };
+
+  const handleExportPDF = async (order: SalesOrder) => {
+    const pdfToastId = toast.loading('Generando PDF de la orden de venta...');
+    try {
+      await generateEstimatePDF({
+        estimate: { ...order, customer: customers.find((customer) => customer.id === order.customerId) || order.customer },
+        tenantName: user?.tenantName || 'Empresa',
+        formatAmount,
+        tenantLogo: themeConfig?.logo,
+        documentType: 'order',
+      });
+      toast.success('PDF descargado', { id: pdfToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+    }
+  };
+
+  const buildOrderPanel = (order: SalesOrder): SalesDocumentPanelData => ({
+    id: order.id,
+    number: order.number,
+    title: 'Orden de venta',
+    customerName: order.customer?.name || customers.find((customer) => customer.id === order.customerId)?.name || 'Varios',
+    status: String(order.status || ''),
+    sourceLabel: order.estimateId ? 'Desde cotización' : undefined,
+    totalLabel: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate),
+    summaryDetails: [
+      { label: 'Moneda', value: order.currency || 'NIO' },
+      { label: 'Líneas', value: String(order.items?.length || 0) },
+    ],
+    metadata: [
+      { label: 'Fecha', value: formatDateEs(order.date) },
+      { label: 'Entrega estimada', value: order.expectedDelivery ? formatDateEs(order.expectedDelivery) : 'No definida' },
+      ...(order.invoiceNumber ? [{ label: 'Factura relacionada', value: order.invoiceNumber }] : []),
+    ],
+    lines: (order.items || []).map((item) => ({
+      id: item.id,
+      description: item.description,
+      quantity: Number(item.quantity || 0),
+      unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate),
+      totalLabel: formatConvertedAmount(Number(item.total || 0), order.currency, order.exchangeRate),
+    })),
+    notes: order.notes,
+  });
 
   // NOTE: intentionally NOT listening to data changes here.
   // Resetting localDoc on every server refresh would re-mount SalesLinePriceListSelect
@@ -463,7 +507,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               "text-xs font-black font-mono text-primary",
               canPerform('SALES_ORDERS', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
             )} 
-            onClick={() => canPerform('SALES_ORDERS', 'edit') && setEditingId(row.id)}
+            onClick={() => setDetailOrder(row)}
           >
             {val}
           </span>
@@ -610,7 +654,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             <SalesViewTutorial view="orders" context="form" />
             {canPerform('SALES_ORDERS', 'edit') && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => void handleSaveOrder('DRAFT')}>
                   Guardar Borrador
                 </Button>
@@ -1176,11 +1220,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           columns={visibleColumns}
           layoutMode={layoutMode}
           onRowUpdate={handleUpdate}
-          onRowClick={(row) => setEditingId(row.id)}
+          onRowClick={(row) => setDetailOrder(row)}
           highlightedRowId={highlightedAlertId}
           isLoading={loading}
            actions={(row) => (
-             <div className="flex min-w-max items-center justify-end gap-2 pr-1">
+             <div className="flex min-w-max items-center justify-end gap-2 pr-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <WhatsAppActionButton
                   phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                   documentLabel="orden de venta"
@@ -1205,8 +1249,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <PackageCheck className="size-4" />
                   </Button>
                 )}
-                <Button type="button" title="Ver detalle" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setEditingId(row.id)}><Eye className="size-4 text-muted-foreground" /></Button>
-                <Button type="button" title="Exportar PDF" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={async () => { try { toast.promise(generateEstimatePDF({ estimate: row, tenantName: user?.tenantName || 'Empresa', formatAmount, tenantLogo: themeConfig?.logo, documentType: 'order' }), { loading: 'Generando PDF...', success: 'PDF generado exitosamente', error: 'Error al generar PDF' }); } catch (e: any) { console.error(e) } }}><FileDown className="size-4 text-muted-foreground" /></Button>
+                <Button type="button" title="Ver orden completa" aria-label="Ver orden completa" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setDetailOrder(null); setEditingId(row.id); }}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') &&
                   !['CANCELLED', 'DELIVERED'].includes(String(row.status || '').toUpperCase()) &&
                   !row.invoiceId && !row.invoiceNumber && (
@@ -1228,9 +1271,23 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   </Button>
                 )}
              </div>
-           )}
+         )}
          />
        </div>
+
+      <SalesDocumentDetailSheet
+        key={detailOrder?.id || 'order-detail'}
+        document={detailOrder ? buildOrderPanel(detailOrder) : null}
+        entity="SALES_ORDER"
+        open={Boolean(detailOrder)}
+        onClose={() => setDetailOrder(null)}
+        onOpenDocument={() => {
+          if (!detailOrder) return;
+          setDetailOrder(null);
+          setEditingId(detailOrder.id);
+        }}
+        onDownloadPdf={() => { if (detailOrder) void handleExportPDF(detailOrder); }}
+      />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">

@@ -1,0 +1,29 @@
+- generic [ref=f8e2]:
+  - generic [ref=f8e6]:
+    - generic [ref=f8e7]:
+      - heading "NovaHub" [level=1] [ref=f8e16]
+      - paragraph [ref=f8e17]: Enterprise Resource Planning
+    - generic [ref=f8e18]:
+      - generic [ref=f8e19]:
+        - generic [ref=f8e20]: Correo electrónico
+        - textbox "Correo electrónico" [ref=f8e21]:
+          - /placeholder: tu@empresa.com
+      - generic [ref=f8e22]:
+        - generic [ref=f8e23]:
+          - generic [ref=f8e24]: Contraseña
+          - button "¿Olvidaste tu contraseña?" [ref=f8e25]
+        - generic [ref=f8e26]:
+          - textbox "Contraseña" [ref=f8e27]:
+            - /placeholder: Ingresa tu contraseña
+          - button [ref=f8e28]
+      - generic [ref=f8e32]:
+        - checkbox "Mantener sesión iniciada" [ref=f8e33]
+        - checkbox
+        - generic [ref=f8e34] [cursor=pointer]: Mantener sesión iniciada
+      - button "Iniciar Sesión" [ref=f8e35]
+    - paragraph [ref=f8e36]: NovaHub ERP v1.0.0 © 2026
+    - paragraph [ref=f8e37]:
+      - text: ¿No tenés cuenta?
+      - link "Probalo gratis" [ref=f8e38] [cursor=pointer]:
+        - /url: /register
+  - region "Notifications alt+T"

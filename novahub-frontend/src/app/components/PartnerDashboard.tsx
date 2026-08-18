@@ -98,7 +98,7 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
               {tenants.slice(0, 4).map(tenant => (
                 <div key={tenant.id} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/50 hover:bg-muted/30 transition-all group">
                   <div className="flex items-center gap-4">
-                    <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center font-black text-primary border border-primary/20 group-hover:bg-primary group-hover:text-white transition-all">
+                    <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center font-black text-primary border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-all">
                       {tenant.name.charAt(0)}
                     </div>
                     <div>
@@ -153,7 +153,7 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
                   </div>
                   <Badge className={cn(
                     "text-[8px] font-black uppercase px-2 py-0.5 border-none shadow-none",
-                    req.status === 'PENDING' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+                    req.status === 'PENDING' ? 'bg-amber-700 text-white' : 'bg-emerald-700 text-white'
                   )}>
                     {req.status === 'PENDING' ? 'Espera' : 'Listo'}
                   </Badge>

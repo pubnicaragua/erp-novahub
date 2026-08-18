@@ -90,7 +90,6 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Cuando la factura queda pagada, se registra el cobro según su forma de pago y banco global',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita el efectivo recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
@@ -99,7 +98,6 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Venta POS pagada en el momento → banco hijo o medio de cobro + Ingresos + IVA',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'debit', description: 'Se debita la cuenta POS configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
@@ -115,7 +113,6 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'otherWithholdingPayable', label: 'Otras retenciones por pagar', side: 'credit', description: 'Se acreditan retenciones fiscales distintas de IR e IVA', defaultCode: '2130', defaultName: 'Otras Retenciones por Pagar', defaultType: 'LIABILITY' },
       { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita cuando la factura pagada sale de caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
     ],
   },
   {
@@ -185,20 +182,18 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'hrTraining', label: 'Formación y Capacitaciones', icon: Users,
-    description: 'Gasto pagado de formación → gasto + medio de pago propio de esta subvista',
+    description: 'Gasto pagado de formación → gasto + efectivo o banco global',
     fields: [
       { key: 'expense', label: 'Gasto de Formación', side: 'debit', description: 'Se debita el costo pagado de la capacitación', defaultCode: '5600', defaultName: 'Formación y capacitación', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Formación', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Formación', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
     ],
   },
   {
     id: 'hrBenefit', label: 'Beneficios de Empleados', icon: Users,
-    description: 'Gasto pagado de beneficios → gasto + medio de pago propio de esta subvista',
+    description: 'Gasto pagado de beneficios → gasto + efectivo o banco global',
     fields: [
       { key: 'expense', label: 'Gasto de Beneficios', side: 'debit', description: 'Se debita el costo pagado de los beneficios', defaultCode: '5700', defaultName: 'Beneficios de empleados', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita el efectivo pagado en Beneficios', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta propia de cheques para Beneficios', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
     ],
   },
   {
@@ -375,7 +370,11 @@ function getAccountOptionStateForType(
 }
 
 function getAccountOptionState(account: AccountInfo, field: ModuleField, moduleId?: string) {
-  return getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key))
+  const state = getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key))
+  if (!state.disabled && field.key === 'ivaPayable' && !isSalesVatPayableAccount(account)) {
+    return { disabled: true, label: 'No corresponde a IVA por pagar', className: 'text-red-500' }
+  }
+  return state
 }
 
 const normalizeText = (value: string) => String(value || '')
@@ -384,6 +383,17 @@ const normalizeText = (value: string) => String(value || '')
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ')
   .trim()
+
+function isSalesVatPayableAccount(account: Pick<AccountInfo, 'name'>) {
+  const name = normalizeText(account.name)
+  const tokens = new Set(name.split(/\s+/).filter(Boolean))
+  const identifiesVat = tokens.has('iva') || name.includes('valor agregado')
+  const isWithholding = name.includes('retencion')
+    || name.includes('retenido')
+    || name.includes('renta')
+    || tokens.has('ir')
+  return identifiesVat && !isWithholding
+}
 
 // Palabras clave por rol funcional (espejo del backend) para recomendar
 // cuentas por nombre cuando el código semilla no existe en el plan.
@@ -986,7 +996,11 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const modConfigStatus = (mod: (typeof allModuleDefs)[number]) => {
     const mapping = accountMappings[mod.id] || {}
     const total = mod.fields.length
-    const defined = mod.fields.filter(f => mapping[f.key] && accountsByCode.get(mapping[f.key])).length
+    const defined = mod.fields.filter(f => {
+      const account = accountsByCode.get(mapping[f.key])
+      return Boolean(mapping[f.key] && account)
+        && (f.key !== 'ivaPayable' || isSalesVatPayableAccount(account!))
+    }).length
     const pct = total === 0 ? 100 : Math.round((defined / total) * 100)
     return { total, defined, pct, complete: total > 0 && defined >= total }
   }

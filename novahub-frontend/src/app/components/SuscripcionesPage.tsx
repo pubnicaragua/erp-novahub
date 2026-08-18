@@ -773,7 +773,7 @@ export function SuscripcionesPage() {
                     <Input 
                       type="file" 
                       accept="image/*"
-                      className="bg-muted/10 border-border/50 h-11 rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-emerald-500 file:text-white hover:file:bg-emerald-600"
+                      className="bg-muted/10 border-border/50 h-11 rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-emerald-700 file:text-white hover:file:bg-emerald-800"
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -909,8 +909,8 @@ export function SuscripcionesPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setFilterTrial('ALL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'ALL' ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Todos</button>
-            <button onClick={() => setFilterTrial('TRIAL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'TRIAL' ? 'bg-amber-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Trial</button>
-            <button onClick={() => setFilterTrial('ACTIVE')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'ACTIVE' ? 'bg-emerald-500 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Activas</button>
+                    <button onClick={() => setFilterTrial('TRIAL')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'TRIAL' ? 'bg-amber-700 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Trial</button>
+                    <button onClick={() => setFilterTrial('ACTIVE')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterTrial === 'ACTIVE' ? 'bg-emerald-700 text-white' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>Activas</button>
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -1126,7 +1126,7 @@ export function SuscripcionesPage() {
                     <div className="flex items-center gap-2">
                        {user?.isPlatformAdmin && req.status === 'PENDING' && (
                         <>
-                          <Button variant="outline" size="sm" onClick={() => handleReject(req.id)} className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-500 hover:text-white uppercase text-[10px] font-black px-4">Rechazar</Button>
+                          <Button variant="outline" size="sm" onClick={() => handleReject(req.id)} className="bg-rose-500/10 text-rose-500 border-rose-500/20 hover:bg-rose-700 hover:text-white uppercase text-[10px] font-black px-4">Rechazar</Button>
                           <Button size="sm" onClick={() => handleApprove(req.id)} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 uppercase text-[10px] font-black px-4">Aprobar</Button>
                         </>
                        )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { cloneElement, isValidElement, useState, useEffect, useRef, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -478,7 +478,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   className="h-12 whitespace-nowrap align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
                 >
                   {col.header}
-                  {col.headerExtra}
+                  {isValidElement(col.headerExtra)
+                    ? cloneElement(col.headerExtra as React.ReactElement<{ compact?: boolean }>, { compact: true })
+                    : col.headerExtra}
                 </TableHead>
               ))}
               <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>

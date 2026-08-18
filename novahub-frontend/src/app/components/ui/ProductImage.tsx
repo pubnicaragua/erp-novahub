@@ -165,7 +165,7 @@ export function ProductImagePicker({
         <button
           type="button"
           onClick={onRemove}
-          className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full border border-border bg-background text-rose-500 shadow-md transition-transform hover:scale-110 hover:bg-rose-500 hover:text-white"
+          className="absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full border border-border bg-background text-rose-500 shadow-md transition-transform hover:scale-110 hover:bg-rose-700 hover:text-white"
           aria-label="Quitar foto"
           title="Quitar foto"
         >

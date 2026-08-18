@@ -2,6 +2,40 @@
 @import './tailwind.css';
 @import './theme.css';
 
+/* `--input` is transparent in the light theme. Keep legacy/raw controls
+   visibly bordered so every module follows the same form pattern. */
+input.border-input,
+textarea.border-input,
+select.border-input {
+  border-color: var(--border);
+}
+
+/* En una cabecera de tabla el texto de la columna ya da el contexto. */
+th .column-filter-menu-trigger,
+[role="columnheader"] .column-filter-menu-trigger {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+th .column-filter-menu-label,
+[role="columnheader"] .column-filter-menu-label {
+  display: none;
+}
+
+th .column-filter-menu .column-sort-icon,
+[role="columnheader"] .column-filter-menu .column-sort-icon {
+  display: inline-block;
+}
+
+th .column-filter-menu .column-filter-icon,
+[role="columnheader"] .column-filter-menu .column-filter-icon {
+  display: none;
+}
+
+
 /*
  * Readability baseline for every ERP module.
  * Low-opacity muted utilities remain part of the visual hierarchy, but no

@@ -124,7 +124,7 @@ export function Combobox({
                   <div className="flex flex-col">
                     <span>{option.label}</span>
                     {option.description && (
-                      <span className="text-[9px] text-foreground/70">{option.description}</span>
+                      <span className="text-[9px] text-foreground/70 group-data-[selected=true]:!text-primary-foreground/80">{option.description}</span>
                     )}
                   </div>
                 </CommandItem>

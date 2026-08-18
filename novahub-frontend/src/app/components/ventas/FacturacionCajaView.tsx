@@ -46,6 +46,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
@@ -130,7 +131,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
   const customerName = invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
   const customerPhone = invoice.customer?.phone;
-  const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : 'Transferencia';
+  const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'CHECK' ? 'Cheque' : 'Transferencia';
   const paymentRows = payments.map((payment) => `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${money(Number(payment.amount || 0))}</span></div>`).join('');
   const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
@@ -925,12 +926,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
-    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
-      toast.error('La transferencia requiere una referencia');
+    if (payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) {
+      toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque');
       return;
     }
-    if (payments.some((payment) => ['CARD', 'TRANSFER'].includes(payment.method) && !payment.bankAccountId)) {
-      toast.error('Selecciona el banco global para cada pago con tarjeta o transferencia');
+    if (payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada pago con tarjeta, transferencia o cheque');
       return;
     }
     submittingRef.current = true;
@@ -1684,7 +1685,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <div className="mt-2 space-y-1 text-sm">
                   {createdPaymentLines.map((payment, index) => (
                     <div key={`${payment.method}-${index}`} className="flex justify-between gap-3">
-                      <span>{payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : 'Transferencia'}</span>
+                      <span>{payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : payment.method === 'CHECK' ? 'Cheque' : 'Transferencia'}</span>
                       <span className="font-mono font-bold">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(payment.amount)}</span>
                     </div>
                   ))}
@@ -1784,7 +1785,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, bankAccountId: ['CARD', 'TRANSFER'].includes(value) ? item.bankAccountId : undefined } : item))}>
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -1801,7 +1802,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
                         {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {['CARD', 'TRANSFER'].includes(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
+                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
                       </div>
                     ))}
                   </div>
@@ -1809,7 +1810,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 </>
               );
             })()}
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
+            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
+
           </div>
         </div>
       )}

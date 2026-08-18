@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download, FileDown } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -23,9 +23,11 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { CurrencySelector } from '../ui/CurrencySelector';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
 
 interface Props {
   data: PaymentMade[];
@@ -42,15 +44,55 @@ interface Props {
 }
 
 const methodOpts = [
-  { label: 'Transferencia',   value: 'TRANSFER' },
   { label: 'Efectivo',        value: 'CASH' },
-  { label: 'Cheque',          value: 'CHECK' },
   { label: 'Tarjeta',         value: 'CARD' },
+  { label: 'Transferencia',   value: 'TRANSFER' },
+  { label: 'Cheque',          value: 'CHECK' },
 ];
+
+type PurchasePaymentMethod = 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD';
+type PurchasePaymentLine = {
+  method: PurchasePaymentMethod;
+  amount: number;
+  bankAccountId?: string;
+  reference?: string;
+};
+
+function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate: number, toBaseAmount: (amount: number, currency?: string, exchangeRate?: number) => number) {
+  const groups = new Map<string, PaymentMade[]>();
+  rows.forEach((row) => {
+    const key = row.supplierInvoiceId ? `invoice:${row.supplierInvoiceId}` : `payment:${row.id}`;
+    groups.set(key, [...(groups.get(key) || []), row]);
+  });
+  return [...groups.values()].map((children) => {
+    const ordered = [...children].sort((a, b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+    const active = ordered.filter((row) => row.isActive !== false);
+    const effective = active.length ? active : ordered;
+    const first = effective[0] || ordered[0];
+    const currencies = new Set(effective.map((row) => row.currency));
+    const baseAmount = Number(effective.reduce((sum, row) => sum + (row.baseAmount !== undefined && row.baseAmount !== null
+      ? Number(row.baseAmount)
+      : toBaseAmount(Number(row.amount || 0), row.currency, Number(row.exchangeRate || globalRate))), 0).toFixed(2));
+    const sameCurrency = currencies.size <= 1;
+    const isMixed = effective.length > 1 && (new Set(effective.map((row) => String(row.method || '').toUpperCase())).size > 1 || effective.some((row) => /pago mixto/i.test(String(row.notes || ''))));
+    return {
+      ...first,
+      amount: sameCurrency ? Number(effective.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2)) : baseAmount,
+      currency: sameCurrency ? first.currency : baseCurrency as any,
+      exchangeRate: sameCurrency ? Number(first.exchangeRate || 1) : 1,
+      baseAmount,
+      method: isMixed ? 'MIXED' : first.method,
+      payments: ordered,
+      paymentLabel: isMixed ? 'Pago mixto' : ordered.length > 1 ? 'Pago parcial' : 'Pago único',
+      paymentCount: ordered.length,
+      isGroupedPayment: isMixed || ordered.length > 1,
+    } as PaymentMade;
+  });
+}
 
 export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices = [], supplierCatalog = [], draftPaymentFromInvoice, onDraftConsumed, pagination, onSearchChange, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, toBaseAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
   const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
@@ -61,10 +103,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingCancelGroup, setPendingCancelGroup] = useState<PaymentMade | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [isMixed, setIsMixed] = useState(false);
+  const [paymentLines, setPaymentLines] = useState<PurchasePaymentLine[]>([{ method: 'CASH', amount: 0 }]);
+  const [detailPayment, setDetailPayment] = useState<PaymentMade | null>(null);
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
+  const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
 
   useEffect(() => {
     if (!targetId || !data.some((payment) => payment.id === targetId)) return;
@@ -76,11 +121,11 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   }, [targetId, data, onClearTargetId]);
 
   const normalizeMethod = (method?: string): 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' => {
-    const normalized = String(method || 'TRANSFER').toUpperCase();
+    const normalized = String(method || 'CASH').toUpperCase();
     if (['CASH', 'TRANSFER', 'CHECK', 'CARD'].includes(normalized)) {
       return normalized as 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD';
     }
-    return 'TRANSFER';
+    return 'CASH';
   };
 
   useEffect(() => {
@@ -101,10 +146,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   useEffect(() => {
     if (editingId) {
-      setIsMixed(false);
       setPaymentEvidenceFiles([]);
       if (editingId === 'NEW') {
          const prefilled = draftPaymentFromInvoice || {};
+         const prefilledMethod = normalizeMethod(prefilled.method as any);
          setLocalDoc({
            supplierId: prefilled.supplierId || '',
            supplierInvoiceId: prefilled.supplierInvoiceId || '',
@@ -112,24 +157,43 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             amount: Number(prefilled.amount || 0),
             currency: (prefilled.currency as any) || displayCurrency,
             exchangeRate: prefilled.exchangeRate || globalRate,
-            method: normalizeMethod(prefilled.method as any),
+            method: prefilledMethod,
             bankAccountId: prefilled.bankAccountId || '',
-            reference: prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`,
+            reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`) : '',
             notes: prefilled.notes || '',
            });
+         setPaymentLines([{
+           method: prefilledMethod,
+           amount: Number(prefilled.amount || 0),
+           bankAccountId: prefilled.bankAccountId || undefined,
+           reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || '') : '',
+         }]);
          if (draftPaymentFromInvoice && onDraftConsumed) onDraftConsumed();
        } else {
           const found = data.find(x => x.id === editingId);
           setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+          const existingLines = Array.isArray((found as any)?.payments) && (found as any).payments.length > 0
+            ? (found as any).payments
+            : found ? [found] : [];
+          setPaymentLines(existingLines.map((payment: any) => ({
+            method: normalizeMethod(payment.method as any),
+            amount: Number(payment.amount || 0),
+            bankAccountId: payment.bankAccountId || undefined,
+            reference: requiresPaymentReference(payment.method) ? (payment.reference || '') : '',
+          })));
        }
     } else {
       setLocalDoc(null);
+      setPaymentLines([{ method: 'CASH', amount: 0 }]);
       setPaymentEvidenceFiles([]);
     }
   }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const getMethodLabel = (method?: string) => methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
+  const getMethodLabel = (method?: string) => {
+    if (String(method || '').toUpperCase() === 'MIXED') return 'Pago mixto';
+    return methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
+  };
   const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
     number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
     id: payment.id,
@@ -138,14 +202,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     currency: payment.currency,
     exchangeRate: payment.exchangeRate,
     category: 'PAGO_PROVEEDOR',
-    description: payment.notes || `Pago a proveedor ${supplierName || '-'}`,
+    description: payment.notes || `${payment.paymentLabel || 'Pago único'} a proveedor ${supplierName || '-'}`,
     paidTo: supplierName || '-',
     paymentSource: getMethodLabel(payment.method),
     reference: payment.reference || '-',
     status: 'PAID',
   });
 
-  const filtered = data.filter((payment) => {
+  const filtered = groupedPayments.filter((payment) => {
     if (!normalizedSearchTerm) return true;
     const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
     const haystack = [
@@ -198,8 +262,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-emerald-500" />
       ) },
-    { key: 'method',    header: 'Método',     width: '120px', editable: canPerform('PURCHASES_PAYMENTS', 'edit'), type: 'select', options: methodOpts,
-      render: (val) => { const o = methodOpts.find(x => x.value === normalizeMethod(String(val || ''))); return <Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{o?.label||val||'-'}</Badge>; } },
+    { key: 'method',    header: 'Método',     width: '160px',
+      render: (val, row) => <div className="flex min-w-0 flex-col items-start gap-1"><Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{String(val || '').toUpperCase() === 'MIXED' ? 'Pago mixto' : paymentMethodLabel(String(val || '').toUpperCase())}</Badge><span className="text-[9px] font-bold text-muted-foreground">{row.paymentLabel || 'Pago único'}{row.paymentCount && row.paymentCount > 1 ? ` · ${row.paymentCount} movimientos` : ''}</span></div> },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
@@ -236,9 +300,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
 
   const handleSaveDoc = async () => {
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');
-    if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
-    if (!String(localDoc.reference || '').trim()) return toast.error('Ingrese el número de referencia del pago');
-    if (isBankPaymentMethod(localDoc.method) && !localDoc.bankAccountId) return toast.error('Seleccione el banco global del pago');
+    const effectiveLines = paymentLines
+      .map((line) => ({
+        ...line,
+        method: normalizeMethod(line.method),
+        amount: Number(line.amount || 0),
+        reference: String(line.reference || '').trim(),
+      }))
+      .filter((line) => line.amount > 0);
+    if (!effectiveLines.length) return toast.error('El monto debe ser mayor a 0');
+    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) {
+      return toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+    }
+    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) {
+      return toast.error('Seleccione el banco de cada pago con tarjeta, transferencia o cheque');
+    }
     if (!isSupplierActive(localDoc.supplierId)) return toast.error('No se pueden registrar pagos a proveedores inactivos');
     if (paymentEvidenceFiles.length > 0 && !localDoc.supplierInvoiceId) {
       return toast.error('Seleccione una factura de proveedor para asociar las evidencias del pago');
@@ -254,27 +330,41 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando pago a proveedor...' : 'Guardando pago a proveedor...');
     try {
+      const currency = String(localDoc.currency || displayCurrency).toUpperCase();
+      const exchangeRate = currency === baseCurrency ? 1 : Number(localDoc.exchangeRate || globalRate);
+      const amount = Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
+      const isMixedPayment = effectiveLines.length > 1;
+      const firstLine = effectiveLines[0];
       const payload = {
         ...localDoc,
-        method: normalizeMethod(localDoc.method as any),
-        bankAccountId: isBankPaymentMethod(localDoc.method) ? localDoc.bankAccountId : undefined,
+        method: firstLine.method,
+        amount,
+        currency,
+        exchangeRate,
+        baseAmount: Number(toBaseAmount(amount, currency, exchangeRate).toFixed(2)),
+        bankAccountId: !isMixedPayment && isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
+        reference: !isMixedPayment && requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
       } as any;
-      if (isMixed) {
-        const nioAmount = Number((localDoc as any).amountNio || 0);
-        const usdAmount = Number((localDoc as any).amountUsd || 0);
-        const rate = localDoc.exchangeRate || globalRate;
-        payload.amount = nioAmount + (usdAmount * rate);
-        payload.currency = 'NIO';
-        payload.baseAmount = toBaseAmount(payload.amount, 'NIO', rate);
-        payload.notes = [(localDoc.notes || ''), `Pago mixto: C$${nioAmount.toFixed(2)} + $${usdAmount.toFixed(2)} (TC ${rate})`].filter(Boolean).join(' | ');
-        delete payload.amountNio;
-        delete payload.amountUsd;
-      }
       let savedPayment: PaymentMade;
       if (editingId === 'NEW') {
-        savedPayment = await paymentsService.create(payload);
+        savedPayment = isMixedPayment
+          ? await paymentsService.createMixed({
+            ...payload,
+            payments: effectiveLines.map((line) => ({
+              method: line.method,
+              amount: line.amount,
+              currency,
+              exchangeRate,
+              bankAccountId: line.bankAccountId,
+              reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+              notes: payload.notes,
+            })),
+          })
+          : await paymentsService.create(payload);
       } else {
-        delete payload.reference;
+        if ((localDoc as any).payments?.length > 1) {
+          throw new Error('Los pagos mixtos se consultan desde su desglose; anule el paquete y registre uno nuevo para modificarlo.');
+        }
         savedPayment = await paymentsService.update(editingId!, payload);
       }
 
@@ -336,13 +426,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 </Button>
               )}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                 <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
                   <Ban className="mr-2 size-3.5" /> Anular
                 </Button>
              )}
             {((isNew && canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve')) || (!isNew && canPerform('PURCHASES_PAYMENTS', 'edit'))) && (
-              <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+              <Button onClick={handleSaveDoc} disabled={paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 Guardar Pago
               </Button>
             )}
@@ -375,13 +465,16 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
                           const b = currentBills.find(x => x.id === val);
+                          const nextCurrency = (b?.currency as any) || localDoc.currency || displayCurrency;
+                          const nextAmount = Number(b ? (b.balance ?? b.total) : (localDoc.amount || 0));
                           setLocalDoc({
                             ...localDoc,
                             supplierInvoiceId: val,
-                            amount: b ? (b.balance ?? b.total) : localDoc.amount,
-                            currency: (b?.currency as any) || localDoc.currency || displayCurrency,
+                            amount: nextAmount,
+                            currency: nextCurrency,
                             exchangeRate: b?.exchangeRate || localDoc.exchangeRate || globalRate,
                           });
+                          setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: nextAmount } : line));
                       }}
                       placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
                       emptyMessage="No hay facturas abiertas para este proveedor."
@@ -397,47 +490,75 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       className="h-8 text-xs" 
                     />
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
-                    <select 
+                  <div className="col-span-2 rounded-2xl border border-border/60 bg-muted/10 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">Un pago mixto se registra como un solo paquete con su desglose interno.</p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                    </div>
+                    <CurrencySelector
+                      value={localDoc.currency || displayCurrency}
+                      baseCurrency={baseCurrency}
+                      exchangeRate={globalRate}
+                      label="Moneda entregada"
                       disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      value={normalizeMethod(localDoc.method as any)} 
-                      onChange={(e) => {
-                        const nextMethod = e.target.value as any;
+                      onChange={(newCurrency) => {
+                        const previousCurrency = localDoc.currency || displayCurrency;
+                        const previousRate = Number(localDoc.exchangeRate || globalRate);
+                        const nextRate = newCurrency === baseCurrency ? 1 : globalRate;
+                        setPaymentLines((current) => current.map((line) => ({
+                          ...line,
+                          amount: Number(convertBetweenCurrencies(line.amount, previousCurrency, newCurrency, previousRate, nextRate).toFixed(2)),
+                        })));
                         setLocalDoc({
                           ...localDoc,
-                          method: nextMethod,
-                          bankAccountId: isBankPaymentMethod(nextMethod) ? localDoc.bankAccountId : '',
+                          amount: Number(convertBetweenCurrencies(Number(localDoc.amount || 0), previousCurrency, newCurrency, previousRate, nextRate).toFixed(2)),
+                          currency: newCurrency,
+                          exchangeRate: nextRate,
                         });
                       }}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
-                    >
-                      {methodOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  {isBankPaymentMethod(localDoc.method) ? (
-                    <div className="col-span-2">
-                      <BankAccountSelect
-                        value={localDoc.bankAccountId}
-                        onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })}
-                        label="Banco global del egreso"
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground">El asiento contable utilizará la cuenta hija vinculada a este banco.</p>
-                    </div>
-                  ) : (
-                    <div className="col-span-2 rounded-lg border border-primary/15 bg-primary/[0.03] px-3 py-2 text-[10px] text-muted-foreground">
-                      La cuenta contable del egreso se toma de la configuración de Contabilidad para este método.
-                    </div>
-                  )}
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Referencia / Transferencia #</p>
-                    <Input 
-                      disabled={!isNew}
-                      value={localDoc.reference || ''} 
-                      onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} 
-                      className="h-8 text-xs font-mono" 
-                      placeholder="Ej. TRANSF-001" 
                     />
+                    <div className="mt-3 space-y-3">
+                      {paymentLines.map((line, index) => (
+                        <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
+                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_auto] sm:items-end">
+                            <div>
+                              <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
+                              <select
+                                disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                                value={normalizeMethod(line.method)}
+                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as PurchasePaymentMethod, bankAccountId: undefined, reference: '' } : item))}
+                                className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                              >
+                                {methodOpts.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({localDoc.currency || displayCurrency})</p>
+                              <Input
+                                disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={line.amount || ''}
+                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))}
+                              />
+                            </div>
+                            <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                          </div>
+                          {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
+                          {requiresPaymentReference(line.method) && <div className="mt-2">
+                            <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
+                            <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." />
+                          </div>}
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0 }])}>
+                        <Plus className="mr-2 size-4" /> Agregar pago mixto
+                      </Button>
+                    </div>
                   </div>
                   <div className="col-span-2 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                     <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -475,111 +596,25 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <Card className="rounded-2xl border-border/50" data-tour="purchases-form-summary">
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto Pagado</p>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={isMixed} onChange={(e) => setIsMixed(e.target.checked)}
-                    className="rounded border-border/50 accent-primary"
-                    disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')} />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Pago Mixto NIO+USD</span>
-                </label>
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen del pago</p>
+                <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/5 text-emerald-600">{paymentLines.length > 1 ? 'Pago mixto' : 'Pago único'}</Badge>
               </div>
-              <div className="space-y-4">
-                {isMixed ? (
-                  <>
-                    <div className="flex items-end gap-3 border-b border-border/50 pb-4">
-                      <div className="flex-1">
-                        <p className="text-[10px] text-muted-foreground mb-1">Monto en NIO (C$)</p>
-                        <Input
-                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                          type="number" min="0"
-                          value={(localDoc as any).amountNio ?? ''}
-                          onChange={(e) => setLocalDoc({ ...localDoc, ...({ amountNio: Number(e.target.value) } as any) })}
-                          className="h-10 text-xl font-black tabular-nums text-right" placeholder="0.00" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[10px] text-muted-foreground mb-1">Monto en USD ($)</p>
-                        <Input
-                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                          type="number" min="0"
-                          value={(localDoc as any).amountUsd ?? ''}
-                          onChange={(e) => setLocalDoc({ ...localDoc, ...({ amountUsd: Number(e.target.value) } as any) })}
-                          className="h-10 text-xl font-black tabular-nums text-right" placeholder="0.00" />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="font-black uppercase text-xs tracking-widest">Tasa de Cambio</span>
-                      <Input
-                        disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                        type="number" min="0" step="0.01"
-                        value={localDoc.exchangeRate || globalRate}
-                        onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
-                        className="h-8 text-xs font-bold text-right w-28 tabular-nums" />
-                    </div>
-                    <div className="flex justify-between items-center text-base pt-2 border-t border-border/50">
-                      <span className="font-black uppercase text-xs tracking-widest">Total en C$</span>
-                      <span className="font-black text-lg text-primary tabular-nums">
-                        C$ {(Number((localDoc as any).amountNio || 0) + Number((localDoc as any).amountUsd || 0) * (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted-foreground">Total en USD</span>
-                      <span className="font-bold tabular-nums">
-                        $ {(Number((localDoc as any).amountUsd || 0) + Number((localDoc as any).amountNio || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, {maximumFractionDigits:2})}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                      <div className="w-1/3">
-                        <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                        <select
-                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                          value={localDoc.currency || displayCurrency}
-                          onChange={(e) => {
-                            const newCurrency = e.target.value;
-                            const rate = localDoc.exchangeRate || globalRate;
-                            setLocalDoc({
-                              ...localDoc,
-                              currency: newCurrency as any,
-                              exchangeRate: newCurrency === 'NIO' ? 1 : rate,
-                            });
-                          }}
-                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                          <option value="NIO">C$ (NIO)</option>
-                          <option value="USD">$ (USD)</option>
-                        </select>
-                      </div>
-                      <div className="w-1/4">
-                        <p className="text-[10px] text-muted-foreground mb-1">T.C.</p>
-                        <Input
-                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit') || localDoc.currency === 'NIO'}
-                          type="number" min="0" step="0.01"
-                          value={localDoc.exchangeRate || globalRate}
-                          onChange={(e) => setLocalDoc({ ...localDoc, exchangeRate: Number(e.target.value) })}
-                          className="h-8 text-xs font-bold text-right tabular-nums" />
-                      </div>
-                      <div className="w-1/3 flex flex-col items-end">
-                        <p className="text-[10px] text-muted-foreground mb-1">Monto</p>
-                        <Input
-                          disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                          type="number" min="0"
-                          value={localDoc.amount || ''}
-                          onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })}
-                          className="h-10 text-xl font-black text-emerald-500 text-right w-full tabular-nums"
-                          placeholder="0.00" />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-base pt-2">
-                      <span className="font-black uppercase text-xs tracking-widest">Base Estimada</span>
-                      <span className="font-black text-muted-foreground tabular-nums text-right">
-                        {localDoc.currency === 'USD'
-                          ? `C$ ${(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate)).toLocaleString()}`
-                          : `$ ${(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
-                      </span>
-                    </div>
-                  </>
-                )}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                  <span className="font-black uppercase text-xs tracking-widest">Total entregado</span>
+                  <span className="font-black text-xl text-emerald-500 tabular-nums">
+                    {localDoc.currency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Equivalente base</span>
+                  <span className="font-bold tabular-nums">
+                    {baseCurrency === 'USD' ? '$' : 'C$'} {toBaseAmount(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0), localDoc.currency || displayCurrency, Number(localDoc.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-primary/15 bg-primary/[0.03] p-3 text-[10px] text-muted-foreground">
+                  Cada método conserva su banco y referencia dentro del mismo pago. Efectivo no solicita referencia; tarjeta, transferencia y cheque sí.
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -591,13 +626,13 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const paidTotalInDisplayCurrency = data.reduce(
+  const paidTotalInDisplayCurrency = groupedPayments.reduce(
     (acc, payment) => acc + toDisplayAmount(Number(payment.amount ?? payment.baseAmount ?? 0), payment.currency, payment.exchangeRate),
     0,
   );
 
   const kpis = [
-    { title: 'Transacciones',   value: data.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
+    { title: 'Transacciones',   value: groupedPayments.length,                   icon: Hash,         color: 'text-blue-500',   bg: 'bg-blue-500/10'    },
     {
       title: `Pagos Realizados (${displayCurrency}${valuationModeSuffix})`,
       value: formatCurrentAmount(paidTotalInDisplayCurrency, displayCurrency),
@@ -605,7 +640,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       color: 'text-rose-500',
       bg: 'bg-rose-500/10',
     },
-    { title: 'Conciliados',     value: data.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { title: 'Conciliados',     value: groupedPayments.length,                   icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   ];
 
   return (
@@ -631,11 +666,18 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await paymentsService.cancel(id as string, 'Anulación masiva');
+              const paymentIds = new Set<string>();
+              ids.forEach((id) => {
+                const grouped = filteredData.find((payment) => payment.id === String(id));
+                const details = grouped?.payments?.length ? grouped.payments : [{ id: String(id) } as PaymentMade];
+                details.forEach((payment) => {
+                  if (payment.id && !String(payment.id).startsWith('new-')) paymentIds.add(String(payment.id));
+                });
+              });
+              for (const paymentId of paymentIds) {
+                await paymentsService.cancel(paymentId, 'Anulación masiva');
               }
-              toast.success('Pagos anulados', { id: cancelToastId });
+              toast.success(`${paymentIds.size} pago${paymentIds.size === 1 ? '' : 's'} anulado${paymentIds.size === 1 ? '' : 's'}`, { id: cancelToastId });
               onRefresh();
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
@@ -666,18 +708,57 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                >
                  <FileDown className="size-4" />
                </Button>
-                <Button title={canPerform('PURCHASES_PAYMENTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>{canPerform('PURCHASES_PAYMENTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
+                <Button title={row.isGroupedPayment ? 'Ver desglose del pago' : (canPerform('PURCHASES_PAYMENTS', 'edit') ? 'Editar' : 'Ver')} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => row.isGroupedPayment ? setDetailPayment(row) : setEditingId(row.id)}>{row.isGroupedPayment || !canPerform('PURCHASES_PAYMENTS', 'edit') ? <Eye className="size-4" /> : <Pencil className="size-4" />}</Button>
                <PurchaseAuditButton entity="PAYMENT_MADE" entityId={row.id} title="Auditoria del Pago" />
                {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Anular pago" aria-label="Anular pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
+                <Button title="Anular pago" aria-label="Anular pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setPendingCancelGroup(row); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
         />
       </div>
+      <Dialog open={detailPayment !== null} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+              <Eye className="size-5 text-primary" /> Detalle del pago
+            </DialogTitle>
+            <DialogDescription>
+              El pago mixto se muestra como un solo registro y conserva aquí el detalle de cada forma de pago.
+            </DialogDescription>
+          </DialogHeader>
+          {detailPayment && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{detailPayment.number || detailPayment.reference || detailPayment.id}</p>
+                <p className="mt-1 text-2xl font-black text-primary">{detailPayment.paymentLabel || 'Pago único'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{detailPayment.supplier?.name || 'Proveedor'} · {detailPayment.supplierInvoiceId ? (bills.find((bill) => bill.id === detailPayment.supplierInvoiceId)?.number || 'Factura asociada') : 'Sin factura asociada'}</p>
+              </div>
+              <div className="space-y-2">
+                {(detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => (
+                  <div key={payment.id || index} className="rounded-xl border border-border/60 bg-background/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{getMethodLabel(payment.method)}</p>
+                        <p className="mt-1 text-sm font-black">{payment.currency === 'USD' ? '$' : 'C$'} {Number(payment.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[9px] uppercase">{payment.currency || baseCurrency}</Badge>
+                    </div>
+                    {payment.bankAccountId && <p className="mt-2 text-[10px] text-muted-foreground">Banco: {payment.bankAccountId}</p>}
+                    {payment.reference && <p className="mt-1 text-[10px] font-mono text-muted-foreground">Referencia: {payment.reference}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDetailPayment(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingCancelGroup(null); setCancelReason(''); } }}
         title="¿Anular pago?"
         description="El pago quedará anulado y se revertirá el saldo del proveedor y la factura asociada. Esta acción no se puede deshacer."
         confirmLabel="Anular Pago"
@@ -689,8 +770,12 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           const cancelToastId = toast.loading('Anulando pago a proveedor...');
           try {
             setCancelLoading(true);
-            await paymentsService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Pago anulado', { id: cancelToastId });
+            const details = pendingCancelGroup?.payments?.length ? pendingCancelGroup.payments : [{ id: pendingCancelId } as PaymentMade];
+            const paymentIds = [...new Set(details.map((payment) => String(payment.id)).filter((id) => id && !id.startsWith('new-')))]
+            for (const paymentId of paymentIds) {
+              await paymentsService.cancel(paymentId, cancelReason.trim());
+            }
+            toast.success(paymentIds.length > 1 ? 'Paquete de pagos anulado' : 'Pago anulado', { id: cancelToastId });
             setEditingId(null);
             onRefresh();
           } catch (e: any) {
@@ -698,6 +783,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);
+            setPendingCancelGroup(null);
             setCancelReason('');
           }
         }}

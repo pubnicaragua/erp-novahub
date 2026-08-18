@@ -23,8 +23,6 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
-import { BankAccountSelect } from '../ui/BankAccountSelect';
-import { isBankPaymentMethod } from '../../utils/paymentMethods';
 import * as XLSX from 'xlsx';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
@@ -52,13 +50,6 @@ const statusOpts = [
   { label: 'Anulado',   value: 'voided',  color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-const PAYMENT_METHOD_OPTIONS = [
-  { label: 'Efectivo', value: 'CASH' },
-  { label: 'Transferencia', value: 'TRANSFER' },
-  { label: 'Cheque', value: 'CHECK' },
-  { label: 'Tarjeta', value: 'CARD' },
-];
-
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform } = useAuth();
   const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
@@ -75,8 +66,6 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
   const [issueLoading, setIssueLoading] = useState(false);
   const [applyTarget, setApplyTarget] = useState<SupplierCredit | null>(null);
-  const [applyMethod, setApplyMethod] = useState<string>('CASH');
-  const [applyBankAccountId, setApplyBankAccountId] = useState('');
   const [applyLoading, setApplyLoading] = useState(false);
   const [itemTypeFilter, setItemTypeFilter] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const [importOpen, setImportOpen] = useState(false);
@@ -311,17 +300,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     setApplyLoading(true);
     const toastId = toast.loading('Aplicando crédito de proveedor...');
     try {
-      if (isBankPaymentMethod(applyMethod) && !applyBankAccountId) {
-        throw new Error('Selecciona el banco global del egreso.');
-      }
-      await vendorCreditsService.apply(applyTarget.id, {
-        paymentMethod: applyMethod,
-        bankAccountId: isBankPaymentMethod(applyMethod) ? applyBankAccountId : undefined,
-      });
+      await vendorCreditsService.apply(applyTarget.id, {});
       toast.success('Crédito aplicado correctamente', { id: toastId });
       setApplyTarget(null);
-      setApplyMethod('CASH');
-      setApplyBankAccountId('');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo aplicar el crédito', { id: toastId });
@@ -463,7 +444,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div className="flex items-center gap-3 flex-wrap" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="credits" context="form" />
              {!isNew && canPerform('PURCHASES_RETURNS', 'delete') && !isLocked && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingVoidId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
                 </Button>
@@ -882,7 +863,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor · Emitir para reservar el monto, Aplicar para liquidarlo</p></div>
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Saldos a favor · Emitir para reservar el monto, Aplicar contra cuentas por pagar</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos de proveedor" />
@@ -903,7 +884,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 </Button>
               )}
               {canPerform('PURCHASES_RETURNS', 'approve') && status === 'ISSUED' && (
-                <Button title="Aplicar crédito (genera asiento contable y pago)" aria-label="Aplicar crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => { setApplyTarget(row); setApplyMethod('CASH'); }}>
+                <Button title="Aplicar crédito contra cuentas por pagar" aria-label="Aplicar crédito contra cuentas por pagar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => setApplyTarget(row)}>
                   <CheckCircle2 className="size-4" />
                 </Button>
               )}
@@ -938,7 +919,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <DialogHeader data-tour="purchases-credit-modal-title">
             <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="size-5 text-emerald-500" /> Aplicar crédito {applyTarget?.number}</DialogTitle>
             <DialogDescription>
-              Al aplicar la nota de crédito se generará el asiento contable correspondiente y se registrará la liquidación como un pago al proveedor. Esta acción no se puede deshacer.
+              Al aplicar la nota de crédito se generará un único asiento contable y se reducirá la cuenta por pagar. No representa una salida de efectivo ni crea un gasto financiero. Esta acción no se puede deshacer.
             </DialogDescription>
             <PurchaseViewTutorial view="credits" context="form" labelOverride="Cómo aplicar crédito" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchases-credit-modal" />
           </DialogHeader>
@@ -948,25 +929,9 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div className="flex justify-between"><span className="text-muted-foreground">Proveedor</span><b>{applyTarget.supplier?.name || '-'}</b></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Monto</span><b className="text-emerald-600"><CurrencyValuationAmount amount={Number(applyTarget.total || 0)} sourceCurrency={resolveSourceCurrency((applyTarget as any)?.currency)} sourceExchangeRate={(applyTarget as any)?.exchangeRate} /></b></div>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground mb-1">Método de pago</p>
-                <select
-                  value={applyMethod}
-                  onChange={(e) => setApplyMethod(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                >
-                  {PAYMENT_METHOD_OPTIONS.map(method => (
-                    <option key={method.value} value={method.value}>{method.label}</option>
-                  ))}
-                </select>
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs leading-relaxed text-muted-foreground">
+                El saldo se aplicará contra la factura de proveedor vinculada y quedará trazado en el mismo asiento contable. No se registrará pago, movimiento bancario ni gasto en Finanzas porque no hay salida de efectivo.
               </div>
-              {isBankPaymentMethod(applyMethod) && (
-                <BankAccountSelect
-                  value={applyBankAccountId}
-                  onChange={setApplyBankAccountId}
-                  label="Banco global del egreso"
-                />
-              )}
             </div>
           )}
           <DialogFooter data-tour="purchases-credit-modal-actions">

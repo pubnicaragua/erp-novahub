@@ -194,7 +194,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] min-w-0 space-y-6 p-4 pb-20 sm:p-6 md:p-10">
+    <div className="hr-module mx-auto w-full max-w-[1700px] min-w-0 space-y-6 overflow-x-hidden p-4 pb-20 sm:p-6 md:p-10">
       {/* Header matching Suscripciones style */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}

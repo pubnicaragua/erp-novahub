@@ -27,7 +27,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
-import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { CurrencyValuationAmount, CurrencyValuationBanner } from './ui/CurrencyValuation';
 import { cn } from './ui/utils';
 
 interface FinanzasPageProps {
@@ -63,11 +63,68 @@ function sortByRecentRegistration(items: any[]): any[] {
   });
 }
 
+function extractSalesDocumentNumber(income: any): string | null {
+  const text = `${income?.description || ''} ${income?.notes || ''}`;
+  const match = text.match(/\b(?:FAC|NC)-[A-Z0-9-]+\b/i);
+  return match?.[0]?.toUpperCase() || null;
+}
+
+function groupSalesIncomePayments(
+  rows: any[],
+  baseCurrency: string,
+  globalRate: number,
+  toBaseAmount: (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) => number,
+) {
+  const groups = new Map<string, any[]>();
+
+  rows.forEach((row) => {
+    const source = String(row?.source || '').trim().toLowerCase();
+    const documentNumber = extractSalesDocumentNumber(row);
+    const isSalesPayment = ['ventas - pagos', 'ventas - caja'].includes(source);
+    const key = isSalesPayment && documentNumber ? `sales:${documentNumber}` : `income:${row.id}`;
+    groups.set(key, [...(groups.get(key) || []), row]);
+  });
+
+  return [...groups.values()].map((children) => {
+    const ordered = [...children].sort((left, right) => new Date(left?.createdAt || left?.date || 0).getTime() - new Date(right?.createdAt || right?.date || 0).getTime());
+    if (ordered.length === 1) return ordered[0];
+
+    const first = ordered[0];
+    const documentNumber = extractSalesDocumentNumber(first) || 'documento';
+    const currencies = new Set(ordered.map((row) => String(row?.currency || baseCurrency).toUpperCase()));
+    const baseAmount = Number(ordered.reduce((sum, row) => sum + (
+      row?.baseAmount !== undefined && row?.baseAmount !== null
+        ? Number(row.baseAmount)
+        : toBaseAmount(Number(row?.amount || 0), row?.currency, Number(row?.exchangeRate || globalRate))
+    ), 0).toFixed(2));
+    const sameCurrency = currencies.size <= 1;
+    const isMixed = ordered.some((row) => /cobro mixto|pago mixto/i.test(String(row?.description || '')))
+      || (String(first?.source || '').toLowerCase() === 'ventas - caja' && new Set(ordered.map((row) => String(row?.description || '').match(/\(([^)]+)\)/)?.[1] || '')).size > 1);
+    const label = isMixed ? 'Pago mixto' : 'Pagos agrupados';
+
+    return {
+      ...first,
+      id: `income-group:${documentNumber}`,
+      number: first.number,
+      amount: sameCurrency ? Number(ordered.reduce((sum, row) => sum + Number(row?.amount || 0), 0).toFixed(2)) : baseAmount,
+      currency: sameCurrency ? first.currency : baseCurrency,
+      exchangeRate: sameCurrency ? Number(first.exchangeRate || 1) : 1,
+      baseAmount,
+      description: `${label} · ${documentNumber}`,
+      notes: `${label} · ${ordered.length} movimientos. Usa "Ver desglose" para consultar cada ingreso.`,
+      isGroupedIncome: true,
+      groupedItems: ordered,
+      paymentLabel: label,
+      paymentCount: ordered.length,
+    };
+  });
+}
+
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
-  const { displayCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency();
+  const { displayCurrency, baseCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount, toBaseAmount } = useCurrency();
 
   const hasAccess = (moduleId: string) => {
     if (!user?.enabledModules) return true;
@@ -205,6 +262,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const fRecurringExpenses = filterByDate(filterByBranch(recurringExpenses)).filter((r: any) => Number(r.amount) > 0);
   const fRecurringIncomes = filterByDate(filterByBranch(recurringIncomes)).filter((r: any) => Number(r.amount) > 0);
   const fAccounts = filterByDate(filterByBranch(accounts));
+  const groupedIncomeRows = groupSalesIncomePayments(fIncomes, baseCurrency, globalRate, toBaseAmount);
 
   const normalizeItemResponse = (response: any) => {
     if (response && typeof response === 'object' && 'data' in response && response.data) {
@@ -291,6 +349,23 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { key: 'amount', label: 'Monto', type: 'currency' as const, editable: true },
     { key: 'notes', label: 'Notas', type: 'text' as const, editable: true },
   ];
+
+  const renderIncomeDetails = (item: any) => (
+    <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+      {(item.groupedItems || []).map((child: any) => (
+        <div key={child.id} className="rounded-xl border border-border/60 bg-muted/20 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-xs font-black text-primary">{child.number || 'Ingreso'}</p>
+              <p className="mt-1 text-xs font-semibold text-foreground">{child.description || 'Ingreso automático'}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">{child.createdAt || child.date ? new Date(child.createdAt || child.date).toLocaleString('es-NI') : 'Sin fecha'}{child.notes ? ` · ${child.notes}` : ''}</p>
+            </div>
+            <CurrencyValuationAmount amount={Number(child.amount || 0)} sourceCurrency={child.currency} sourceExchangeRate={child.exchangeRate} className="shrink-0 font-black text-emerald-600" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const EXPENSE_COLUMNS = [
     { key: 'number', label: 'No. Gasto', type: 'text' as const, editable: false },
@@ -518,7 +593,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                   <FinanceTableView 
                     title="Ingresos"
                     subtitle="Datos consolidados de ingresos. Los registros automáticos (Ventas) son solo lectura."
-                    data={fIncomes.map((i: any) => ({ ...i, isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source) }))}
+                    data={groupedIncomeRows.map((i: any) => ({ ...i, isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source) }))}
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
                     onAdd={handleAddIncome}
@@ -527,6 +602,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     canCreate={false}
                     canEdit={canPerform('FINANCIAL_INCOMES', 'edit')}
                     canDelete={false}
+                    detailsRenderer={renderIncomeDetails}
                     targetItemId={targetFinanceId?.tab === 'ingresos' ? targetFinanceId.id : null}
                     onClearTargetItem={() => setTargetFinanceId(null)}
                   />

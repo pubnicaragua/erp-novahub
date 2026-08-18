@@ -328,7 +328,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange, isSideb
                     {form.evidenceFiles.map((file, i) => (
                       <div key={i} className="relative group">
                         <img src={URL.createObjectURL(file)} alt={`Ev ${i+1}`} className="h-24 w-24 rounded-xl object-cover border border-border/50" />
-                        <button onClick={() => removeFile(i)} className="absolute -top-2 -right-2 size-6 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X className="size-3" /></button>
+                        <button onClick={() => removeFile(i)} className="absolute -top-2 -right-2 size-6 rounded-full bg-rose-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X className="size-3" /></button>
                       </div>
                     ))}
                     {form.evidenceFiles.length < 2 && (

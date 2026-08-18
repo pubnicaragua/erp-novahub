@@ -182,7 +182,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="recurring-expenses" context="form" />
              {!isNew && canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
-                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => setPendingDeleteId(editingId)}>
                   <Ban className="size-3 mr-2" /> Anular
                 </Button>

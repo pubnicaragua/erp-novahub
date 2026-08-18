@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, FileDown, Eye, Trash2, Ban, ChevronLeft
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -32,6 +32,7 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -69,6 +70,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
+  const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -278,6 +280,46 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   };
 
+  const handleExportPDF = async (estimate: Estimate) => {
+    const pdfToastId = toast.loading('Generando PDF de la cotización...');
+    try {
+      await generateEstimatePDF({
+        estimate: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
+        tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+        tenantLogo: themeConfig?.logo,
+        formatAmount: formatConvertedAmount,
+      });
+      toast.success('PDF descargado', { id: pdfToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+    }
+  };
+
+  const buildEstimatePanel = (estimate: Estimate): SalesDocumentPanelData => ({
+    id: estimate.id,
+    number: estimate.number,
+    title: 'Cotización',
+    customerName: estimate.customer?.name || customers.find((customer) => customer.id === estimate.customerId)?.name || 'Varios',
+    status: String(estimate.status || ''),
+    totalLabel: formatConvertedAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate),
+    summaryDetails: [
+      { label: 'Moneda', value: estimate.currency || 'NIO' },
+      { label: 'Líneas', value: String(estimate.items?.length || 0) },
+    ],
+    metadata: [
+      { label: 'Fecha de emisión', value: formatDateEs(estimate.date) },
+      { label: 'Vigencia', value: formatDateEs(estimate.expiryDate) },
+    ],
+    lines: (estimate.items || []).map((item) => ({
+      id: item.id,
+      description: item.description,
+      quantity: Number(item.quantity || 0),
+      unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate),
+      totalLabel: formatConvertedAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate),
+    })),
+    notes: estimate.notes,
+  });
+
   const handleAddEstimate = async () => {
     const createToastId = toast.loading('Creando estimación...');
     try {
@@ -375,7 +417,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             "text-xs font-black font-mono text-primary",
             canPerform('SALES_QUOTES', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
           )}
-          onClick={() => canPerform('SALES_QUOTES', 'edit') && setEditingId(row.id)}
+          onClick={() => setDetailEstimate(row)}
         >
           {val}
         </span>
@@ -456,13 +498,13 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="quotes" context="form" />
             {localDoc?.customerId && (
-              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
+              <Button variant="outline" onClick={() => void handleWhatsApp()} className="rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
             {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED', 'REJECTED'].includes(String(localDoc?.status || '').toUpperCase()) && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 font-black uppercase text-[10px] tracking-widest px-6"
+                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => void handleSaveEstimate('DRAFT')}>
                   Guardar Borrador
                 </Button>
@@ -850,14 +892,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           pagination={pagination}
           columns={columns}
           onRowUpdate={handleUpdate}
-          onRowClick={(row) => setEditingId(row.id)}
+          onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}
           actionsWidth="w-56"
           fitContent
           layoutMode={layoutMode}
           showHorizontalControls
           actions={(row) => (
-            <>
+            <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <WhatsAppActionButton
                 phone={resolveCustomerPhone(row.customerId, row.customer, customers)}
                 documentLabel="cotización"
@@ -877,25 +919,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   <ArrowRightCircle className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
-              <Button type="button" variant="ghost" title="Descargar PDF" size="icon" className={cn('relative z-20', actionButtonClass)} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => {
-                e.stopPropagation();
-                void (async () => {
-                  try {
-                    await generateEstimatePDF({
-                      estimate: {...row, customer: customers.find(c => c.id === row.customerId) || row.customer},
-                      tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
-                      tenantLogo: themeConfig?.logo,
-                      formatAmount: formatConvertedAmount
-                    });
-                    toast.success('PDF descargado');
-                  } catch (error: any) {
-                    toast.error(error?.message || 'No se pudo descargar el PDF');
-                  }
-                })();
-              }}>
-                <FileDown className={actionIconClass} />
-              </Button>
-              <Button variant="ghost" size="icon" className={actionButtonClass} onClick={(e) => { e.stopPropagation(); setEditingId(row.id); }}>
+              <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
                 <Eye className={actionIconClass} />
               </Button>
               {canPerform('SALES_QUOTES', 'edit') && !['CANCELLED', 'APPROVED'].includes(String(row.status).toUpperCase()) && (
@@ -903,10 +927,24 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   <Ban className={actionIconClass} />
                 </Button>
               )}
-            </>
+            </div>
           )}
         />
       </div>
+
+      <SalesDocumentDetailSheet
+        key={detailEstimate?.id || 'estimate-detail'}
+        document={detailEstimate ? buildEstimatePanel(detailEstimate) : null}
+        entity="ESTIMATE"
+        open={Boolean(detailEstimate)}
+        onClose={() => setDetailEstimate(null)}
+        onOpenDocument={() => {
+          if (!detailEstimate) return;
+          setDetailEstimate(null);
+          setEditingId(detailEstimate.id);
+        }}
+        onDownloadPdf={() => { if (detailEstimate) void handleExportPDF(detailEstimate); }}
+      />
 
       <ConfirmDialog
         open={pendingCancelId !== null}
