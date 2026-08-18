@@ -60,115 +60,226 @@ function formatPrice(usd: number, currency: 'USD' | 'NIO') {
 function downloadContract() {
   import('jspdf').then(({ jsPDF }) => {
     const doc = new jsPDF({ unit: 'mm', format: 'letter' });
-  const w = doc.internal.pageSize.getWidth();
-  const mg = 22;
-  let y = 0;
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 25;
+    const mr = 25;
+    const cw = pw - ml - mr;
+    let y = 0;
 
-  doc.setFillColor(30, 30, 30);
-  doc.rect(0, 0, w, 32, 'F');
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text('NOVAHUB', mg, 20);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(180, 180, 180);
-  doc.text('ERP INTELIGENTE PARA NEGOCIOS', mg + 55, 20);
-  doc.text(`Fecha: ${new Date().toLocaleDateString('es-NI', { year: 'numeric', month: 'long', day: 'numeric' })}`, w - mg, 20, { align: 'right' });
+    const addPage = () => { doc.addPage(); y = 25; };
+    const checkPage = (needed: number) => { if (y + needed > ph - 30) addPage(); };
 
-  y = 46;
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 30, 30);
-  doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', w / 2, y, { align: 'center' });
-  y += 7;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text('NOVAHUB ERP - Modelo SaaS', w / 2, y, { align: 'center' });
-  y += 10;
-  doc.setDrawColor(200, 200, 200);
-  doc.line(mg, y, w - mg, y);
-  y += 10;
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 30, 30);
-  doc.text('PARTES CONTRATANTES', mg, y);
-  y += 8;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(60, 60, 60);
-  doc.text('EL PROVEEDOR: NOVAHUB - Empresa de tecnologia y software.', mg, y);
-  y += 10;
-
-  const field = (label: string) => {
+    // ─── PAGE 1: HEADER ───
+    doc.setFillColor(25, 25, 25);
+    doc.rect(0, 0, pw, 40, 'F');
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text('NOVAHUB', ml, 24);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(label + ':', mg + 2, y);
-    doc.setDrawColor(180, 180, 180);
-    doc.line(mg + 42, y + 0.5, mg + 120, y + 0.5);
-    y += 8;
-  };
-  field('Razon Social / Nombre');
-  field('RUC / Cedula');
-  field('Representante Legal');
-  field('Correo Electronico');
-  field('Direccion');
-  field('Telefono');
-  y += 4;
+    doc.setTextColor(160, 160, 160);
+    doc.text('SOLUCIONES EMPRESARIALES INTEGRADAS', ml + 72, 24);
 
-  const section = (num: string, title: string, text: string) => {
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Managua, Nicaragua`, pw - mr, 18, { align: 'right' });
+    doc.text(`${new Date().toLocaleDateString('es-NI', { year: 'numeric', month: 'long', day: 'numeric' })}`, pw - mr, 24, { align: 'right' });
+
+    // Accent line
+    doc.setFillColor(225, 29, 72);
+    doc.rect(0, 40, pw, 2, 'F');
+
+    y = 58;
+
+    // Title block
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(25, 25, 25);
+    doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', pw / 2, y, { align: 'center' });
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Modelo Software como Servicio (SaaS)', pw / 2, y, { align: 'center' });
+    y += 12;
+
+    // Divider
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(ml, y, pw - mr, y);
+    y += 12;
+
+    // ─── PARTIES ───
+    const sectionTitle = (num: string, title: string) => {
+      checkPage(20);
+      doc.setFillColor(245, 245, 245);
+      doc.roundedRect(ml, y - 4, cw, 9, 1, 1, 'F');
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(25, 25, 25);
+      doc.text(`${num}. ${title.toUpperCase()}`, ml + 4, y + 2.5);
+      y += 12;
+    };
+
+    const bodyText = (text: string, indent = 0) => {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      const lines = doc.splitTextToSize(text, cw - indent * 4);
+      for (const line of lines) {
+        checkPage(6);
+        doc.text(line, ml + indent, y);
+        y += 4.5;
+      }
+      y += 2;
+    };
+
+    const fieldLine = (label: string) => {
+      checkPage(8);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      doc.text(label, ml + 2, y + 1);
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.2);
+      doc.line(ml + 55, y + 1.5, pw - mr - 2, y + 1.5);
+      y += 9;
+    };
+
+    sectionTitle('I', 'Partes Contratantes');
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(50, 50, 50);
+    doc.text('EL PROVEEDOR:', ml + 2, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.text('NovaHub — Empresa de tecnologia y software.', ml + 6, y);
+    y += 9;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('EL CLIENTE:', ml + 2, y);
+    y += 7;
+
+    fieldLine('Razon Social / Nombre:  ____________________________________________');
+    fieldLine('RUC / Cedula:  ____________________________________________');
+    fieldLine('Representante Legal:  ____________________________________________');
+    fieldLine('Correo Electronico:  ____________________________________________');
+    fieldLine('Direccion:  ____________________________________________');
+    fieldLine('Telefono:  ____________________________________________');
+    y += 4;
+
+    // ─── SECTIONS ───
+    sectionTitle('II', 'Objeto del Contrato');
+    bodyText('EL PROVEEDOR otorga a EL CLIENTE una licencia de uso del software NOVAHUB ERP, bajo el modelo de pago por uso a plazo de doce (12) meses. EL CLIENTE podra utilizar el software para todas sus operaciones comerciales internas incluyendo, pero no limitado a: inventario, ventas, compras, contabilidad, recursos humanos, reportes y demas modulos incluidos en el plan contratado.');
+
+    sectionTitle('III', 'Duracion');
+    bodyText('Este contrato tiene una duracion de DOCE (12) meses a partir de la fecha de activacion del servicio. La renovacion es automatica por periodos iguales salvo que cualquiera de las partes notifique por escrito su intencion de no renovar con al menos treinta (30) dias de antelacion al vencimiento del periodo vigente.');
+
+    sectionTitle('IV', 'Licencia de Uso');
+    bodyText('EL CLIENTE adquiere el derecho de uso del software NOVAHUB ERP para sus operaciones comerciales internas. Esta licencia es intransferible, no exclusiva y esta vinculada exclusivamente a la empresa contratante. EL CLIENTE no podra: (a) revender, arrendar o ceder la licencia a terceros; (b) descompilar, modificar o crear trabajos derivados del software; (c) eliminar o alterar avisos de propiedad intelectual.');
+
+    sectionTitle('V', 'Precio y Forma de Pago');
+    bodyText('Los precios aplicables son los siguientes:', 0);
+    y += 1;
+
+    const pricingItems = [
+      ['Paquete Base (10 modulos, 5 usuarios)', 'USD $600.00 / anio'],
+      ['Modulo Contabilidad (adicional)', 'USD $100.00 / mes'],
+      ['Modulo Recursos Humanos (adicional)', 'USD $85.00 / mes'],
+      ['Usuario adicional', 'USD $5.00 / mes'],
+      ['Implementacion y configuracion', 'USD $200.00 (pago unico)'],
+      ['Dominio + Hosting + 5 correos', 'USD $100.00 / anio'],
+    ];
+    for (const [desc, price] of pricingItems) {
+      checkPage(8);
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(`• ${desc}`, ml + 6, y);
+      doc.setFont('helvetica', 'bold');
+      doc.text(price, pw - mr - 2, y, { align: 'right' });
+      y += 5.5;
+    }
+    y += 2;
+    bodyText('El pago total anual se realizara por adelantado via transferencia bancaria o tarjeta de credito/debito. Los pagos mensuales de modulos adicionales se facturaran el primer dia de cada mes.');
+
+    sectionTitle('VI', 'Implementacion');
+    bodyText('EL PROVEEDOR se compromete a realizar la implementacion completa del ERP, incluyendo: (a) configuracion inicial del sistema con datos de la empresa; (b) carga de datos iniciales (clientes, proveedores, productos, inventario); (c) configuracion de modulos seleccionados; (d) capacitacion basica al personal designado por EL CLIENTE. La implementacion tiene una duracion estimada de quince (15) dias habiles a partir de la confirmacion del pago.');
+
+    sectionTitle('VII', 'Confidencialidad y Proteccion de Datos');
+    bodyText('EL PROVEEDOR se compromete a: (a) mantener estricta confidencialidad sobre toda la informacion de EL CLIENTE; (b) almacenar datos unicamente en servidores privados de Amazon Web Services (AWS) con cifrado AES-256 en reposo y TLS 1.3 en transito; (c) realizar copias de seguridad automaticas cada siete (7) dias con retencion de treinta (30) dias; (d) no compartir, vender ni divulgar datos de EL CLIENTE a terceros bajo ninguna circunstancia; (e) garantizar confidencialidad absoluta bajo responsabilidad contractual y legal. Los datos de cada cliente estan fisicamente aislados (multi-tenant architecture).');
+
+    sectionTitle('VIII', 'Soporte Tecnico');
+    bodyText('Incluido en el plan: soporte tecnico via ticket y correo electronico durante horario laboral de lunes a viernes de 8:00 AM a 5:00 PM (hora de Nicaragua). El soporte cubre incidencias tecnicas, consultas de uso y orientacion en la configuracion del sistema. No incluye desarrollo personalizado ni integraciones con sistemas de terceros.');
+
+    sectionTitle('IX', 'Propiedad Intelectual');
+    bodyText('El software NOVAHUB ERP, su codigo fuente, documentacion, disenos, interfaces y todos los derechos de propiedad intelectual pertenecen exclusivamente a EL PROVEEDOR. EL CLIENTE no adquiere ningun derecho de propiedad sobre el software, unicamente una licencia de uso limitada y revocable conforme a los terminos de este contrato.');
+
+    sectionTitle('X', 'Terminacion');
+    bodyText('Cualquiera de las partes podra dar por terminado este contrato mediante notificacion por escrito con treinta (30) dias de antelacion. En caso de terminacion, EL PROVEEDOR proporcionara a EL CLIENTE un archivo exportado de todos sus datos en formato estandar (CSV o JSON) dentro de los quince (15) dias siguientes a la notificacion. El uso del software cesara inmediatamente al vencimiento del periodo de notificacion.');
+
+    sectionTitle('XI', 'Ley Aplicable y Jurisdiccion');
+    bodyText('Este contrato se rige e interpreta conforme a las leyes de la Republica de Nicaragua. Cualquier controversia derivada de este contrato sera resuelta en los tribunales competentes de Managua, Nicaragua, renunciando expresamente a cualquier otro fuero que pudiera corresponderles.');
+
+    // ─── SIGNATURES ───
+    checkPage(60);
+    y += 6;
+    doc.setDrawColor(220, 220, 220);
+    doc.line(ml, y, pw - mr, y);
+    y += 14;
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 30, 30);
-    doc.text(`${num}. ${title}`, mg, y);
-    y += 6;
-    doc.setFontSize(8.5);
+    doc.setTextColor(25, 25, 25);
+    doc.text('FIRMAS', pw / 2, y, { align: 'center' });
+    y += 16;
+
+    // Left signature
+    doc.setDrawColor(80, 80, 80);
+    doc.setLineWidth(0.4);
+    doc.line(ml, y, ml + 80, y);
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(50, 50, 50);
+    doc.text('EL PROVEEDOR', ml + 40, y, { align: 'center' });
+    y += 4;
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    const lines = doc.splitTextToSize(text, w - mg * 2);
-    doc.text(lines, mg, y);
-    y += lines.length * 4 + 4;
-  };
+    doc.setTextColor(100, 100, 100);
+    doc.text('NovaHub', ml + 40, y, { align: 'center' });
+    y += 5;
+    doc.text('Fecha: _______________', ml + 40, y, { align: 'center' });
 
-  section('1', 'OBJETO', 'EL PROVEEDOR otorga a EL CLIENTE una licencia de uso del software NOVAHUB ERP, bajo el modelo de pago por uso a plazo de doce (12) meses.');
-  section('2', 'DURACION', 'Este contrato tiene una duracion de DOCE (12) meses a partir de la fecha de activacion. La renovacion es automatica salvo notificacion con 30 dias de antelacion por escrito.');
-  section('3', 'LICENCIA DE USO', 'EL CLIENTE adquiere el derecho de uso del software NOVAHUB ERP para sus operaciones comerciales internas. La licencia es intransferible y esta vinculada a la empresa contratante.');
+    // Right signature
+    const rx = pw - mr - 80;
+    y -= 14;
+    doc.line(rx, y, rx + 80, y);
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(50, 50, 50);
+    doc.text('EL CLIENTE', rx + 40, y, { align: 'center' });
+    y += 4;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Nombre: ___________________', rx + 40, y, { align: 'center' });
+    y += 5;
+    doc.text('Fecha: _______________', rx + 40, y, { align: 'center' });
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 30, 30);
-  doc.text('4. PRECIO Y FORMA DE PAGO', mg, y);
-  y += 6;
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(60, 60, 60);
-  ['Paquete Base (10 modulos, 5 usuarios): USD $600.00 / anio', 'Modulo Contabilidad (adicional): USD $100.00 / mes', 'Modulo Recursos Humanos (adicional): USD $85.00 / mes', 'Usuario adicional: USD $5.00 / mes', 'Implementacion y configuracion: USD $200.00 (pago unico)', 'Dominio + Hosting + 5 correos electronicos: USD $100.00 / anio', '', 'El pago total anual se realizara por adelantado via transferencia bancaria o tarjeta.'].forEach(line => { if (line) doc.text(line, mg + 2, y); y += 4; });
-  y += 2;
+    // ─── FOOTER ───
+    const footerY = ph - 15;
+    doc.setDrawColor(225, 29, 72);
+    doc.setLineWidth(0.5);
+    doc.line(ml, footerY, pw - mr, footerY);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150, 150, 150);
+    doc.text('NovaHub — Soluciones Empresariales Integradas — www.novahub.com.ni', pw / 2, footerY + 5, { align: 'center' });
+    doc.text('Este documento es un ejemplo del contrato de licencia. Los terminos finales seran confirmados al momento de la firma.', pw / 2, footerY + 9, { align: 'center' });
 
-  section('5', 'IMPLEMENTACION', 'EL PROVEEDOR realizara la configuracion completa del ERP: carga de datos iniciales, configuracion de modulos seleccionados, y capacitacion basica al personal designado.');
-  section('6', 'CONFIDENCIALIDAD Y PROTECCION DE DATOS', 'EL PROVEEDOR se compromete a: mantener estricta confidencialidad sobre toda la informacion de EL CLIENTE; almacenar datos unicamente en servidores privados de AWS; realizar copias de seguridad automaticas cada 7 dias; no compartir ni divulgar datos a terceros; garantizar confidencialidad absoluta bajo responsabilidad contractual.');
-  section('7', 'SOPORTE TECNICO', 'Incluido en el plan: soporte tecnico via ticket y correo electronico durante horario laboral (8AM-5PM).');
-  section('8', 'PROPIEDAD INTELECTUAL', 'El software, su codigo fuente y todos los derechos de propiedad intelectual pertenecen exclusivamente a EL PROVEEDOR.');
-  section('9', 'TERMINACION', 'Cualquiera de las partes puede dar por terminado este contrato con 30 dias de notificacion por escrito.');
-  section('10', 'LEY APLICABLE', 'Este contrato se rige por las leyes de la Republica de Nicaragua.');
-
-  y += 6;
-  doc.setDrawColor(200, 200, 200);
-  doc.line(mg, y, w - mg, y);
-  y += 12;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Firma del Proveedor: _________________________', mg, y);
-  doc.text('Firma del Cliente: _________________________', w / 2 + 10, y);
-  y += 10;
-  doc.text('NOVAHUB', mg, y);
-  doc.text('Nombre: _________________________', w / 2 + 10, y);
-  y += 6;
-  doc.text('Fecha: _________________________', mg, y);
-  doc.text('Fecha: _________________________', w / 2 + 10, y);
-
-  doc.save('Contrato_Licencia_NOVAHUB_ERP.pdf');
+    doc.save('Contrato_Licencia_NOVAHUB_ERP.pdf');
   });
 }
 
