@@ -54,7 +54,7 @@ type PaymentRequest = {
   payments?: any[];
 };
 
-type PaymentLine = { method: string; amount: string; bankAccountId?: string; reference?: string };
+type PaymentLine = { method: string; amount: string; currency: 'NIO' | 'USD'; exchangeRate: number; bankAccountId?: string; reference?: string };
 
 const statusMeta: Record<string, { label: string; className: string; icon: typeof Clock3 }> = {
   PENDING: { label: 'Pendiente de aprobación', className: 'bg-amber-500/10 text-amber-600 border-amber-500/20', icon: Clock3 },
@@ -113,13 +113,21 @@ export function SolicitudesPagoRRHHView() {
   const [search, setSearch] = useState('');
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
-  const [paymentCurrency, setPaymentCurrency] = useState<'NIO' | 'USD'>('NIO');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const knownRequestIdsRef = useRef<Set<string> | null>(null);
   const canApproveRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'approve') || canPerform('ACCOUNTING_JOURNAL', 'approve');
   const canRejectRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'reject') || canPerform('ACCOUNTING_JOURNAL', 'reject');
   const canPayRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'pay') || canPerform('ACCOUNTING_JOURNAL', 'pay');
+  const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(exchangeRate || 1);
+  const paymentLine = (method: string, amount = '0', currency: 'NIO' | 'USD' = displayCurrency): PaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+    reference: '',
+  });
 
   const query = useQuery({
     queryKey: ['hr-payment-requests', statusFilter, typeFilter],
@@ -186,28 +194,21 @@ export function SolicitudesPagoRRHHView() {
     const sourceCurrency = request.currency === 'USD' ? 'USD' : 'NIO';
     const sourceRate = Number(request.exchangeRate || 1);
     const requestBase = Number(request.baseAmount || toBaseAmount(Number(request.amount || 0), sourceCurrency, sourceRate));
-    const nextRate = nextCurrency === baseCurrency
-      ? 1
-      : nextCurrency === sourceCurrency && sourceRate > 0
-        ? sourceRate
-        : exchangeRate;
+    const nextRate = paymentLineRate(nextCurrency);
     const initialAmount = convertBetweenCurrencies(requestBase, baseCurrency, nextCurrency, 1, nextRate);
 
     setPaymentRequest(request);
-    setPaymentCurrency(nextCurrency);
-    setPaymentLines([{ method: 'TRANSFER', amount: formatPaymentInput(initialAmount.toFixed(2)), bankAccountId: '', reference: '' }]);
+    setPaymentLines([{ ...paymentLine('TRANSFER', formatPaymentInput(initialAmount.toFixed(2)), nextCurrency), bankAccountId: '' }]);
   };
 
-  const paymentTotal = paymentLines.reduce((sum, line) => sum + parsePaymentAmount(line.amount), 0);
+  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
+    parsePaymentAmount(line.amount),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || exchangeRate),
+  ), 0);
   const requestAmount = Number(paymentRequest?.amount || 0);
   const requestCurrency = paymentRequest?.currency === 'USD' ? 'USD' : 'NIO';
   const requestRate = Number(paymentRequest?.exchangeRate || 1);
-  const paymentRate = paymentCurrency === baseCurrency
-    ? 1
-    : paymentCurrency === requestCurrency && requestRate > 0
-      ? requestRate
-      : exchangeRate;
-  const paymentTotalBase = toBaseAmount(paymentTotal, paymentCurrency, paymentRate);
   const requestTotalBase = Number(paymentRequest?.baseAmount || toBaseAmount(requestAmount, requestCurrency, requestRate));
   const balanced = Math.abs(paymentTotalBase - requestTotalBase) <= 0.01;
   const remainingBase = Math.max(requestTotalBase - paymentTotalBase, 0);
@@ -332,25 +333,11 @@ export function SolicitudesPagoRRHHView() {
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Split className="size-5 text-primary" /> Registrar pago mixto</DialogTitle><DialogDescription>{paymentRequest ? `${sourceLabel(paymentRequest)} · Total ${formatConvertedAmount(requestAmount, paymentRequest.currency as any, Number(paymentRequest.exchangeRate || 1))}` : ''}</DialogDescription></DialogHeader>
           <div className="space-y-3 py-2">
                <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs text-muted-foreground">Distribuye el total entre efectivo, transferencia, tarjeta o cheque. Los montos se registran en la moneda elegida y se convierten con la tasa global; la suma contable debe cerrar exactamente.</div>
-            <CurrencySelector
-              value={paymentCurrency}
-              baseCurrency={baseCurrency}
-              exchangeRate={exchangeRate}
-              label="Moneda del pago"
-              onChange={(nextCurrency) => {
-                const nextRate = nextCurrency === baseCurrency ? 1 : nextCurrency === requestCurrency ? requestRate : exchangeRate;
-                setPaymentLines((current) => current.map((line) => ({
-                  ...line,
-                  amount: formatPaymentInput(convertBetweenCurrencies(parsePaymentAmount(line.amount), paymentCurrency, nextCurrency, paymentRate, nextRate).toFixed(2)),
-                })));
-                setPaymentCurrency(nextCurrency);
-              }}
-            />
-            {paymentLines.map((line, index) => <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 p-3"><div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, method: value, bankAccountId: '', reference: '' } : item))}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent>{methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({paymentCurrency})</p><Input type="text" inputMode="decimal" min="0" step="0.01" value={line.amount} onChange={(event) => { const raw = event.target.value.replace(/,/g, ''); if (!/^\d*(\.\d{0,2})?$/.test(raw)) return; setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: formatPaymentInput(raw) } : item)); }} onBlur={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: parsePaymentAmount(event.target.value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') } : item))} className="h-9 rounded-lg text-xs tabular-nums" /></div><Button variant="ghost" size="icon" className="size-9 text-rose-500" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, i) => i !== index))} aria-label="Eliminar medio de pago"><Trash2 className="size-4" /></Button></div>{isBankMethod(line.method) && <BankAccountSelect value={line.bankAccountId} onChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, bankAccountId: value } : item))} label="Cuenta bancaria global" className="mt-3" />}{requiresPaymentReference(line.method) && <div className="mt-3"><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}</div>)}
-            <Button variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setPaymentLines((current) => [...current, { method: 'CASH', amount: '0', reference: '' }])}><Plus className="mr-2 size-4" /> Agregar otro medio</Button>
+            {paymentLines.map((line, index) => <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 p-3"><div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, method: value, bankAccountId: '', reference: '' } : item))}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent>{methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div><CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={exchangeRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, i) => { if (i !== index) return item; const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || exchangeRate); const nextRate = paymentLineRate(nextCurrency); return { ...item, amount: formatPaymentInput(convertBetweenCurrencies(parsePaymentAmount(item.amount), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" step="0.01" value={line.amount} onChange={(event) => { const raw = event.target.value.replace(/,/g, ''); if (!/^\d*(\.\d{0,2})?$/.test(raw)) return; setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: formatPaymentInput(raw) } : item)); }} onBlur={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: parsePaymentAmount(event.target.value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') } : item))} className="h-9 rounded-lg text-xs tabular-nums" /></div><Button variant="ghost" size="icon" className="size-9 text-rose-500" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, i) => i !== index))} aria-label="Eliminar medio de pago"><Trash2 className="size-4" /></Button></div>{isBankMethod(line.method) && <BankAccountSelect value={line.bankAccountId} onChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, bankAccountId: value } : item))} label="Cuenta bancaria global" className="mt-3" />}{requiresPaymentReference(line.method) && <div className="mt-3"><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}</div>)}
+            <Button variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar otro medio</Button>
             <div className={cn('rounded-xl border px-4 py-3', balanced ? 'border-primary/20 bg-primary/5' : 'border-amber-500/20 bg-amber-500/5')}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto a pagar</p><p className="mt-1 text-base font-black tabular-nums">{formatNativeAmount(paymentTotal, paymentCurrency)}</p></div>
+                <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto aplicado (base)</p><p className="mt-1 text-base font-black tabular-nums">{formatNativeAmount(paymentTotalBase, baseCurrency)}</p></div>
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{excessBase > 0.01 ? 'Excedente' : 'Restante'}</p><p className={cn('mt-1 text-base font-black tabular-nums', balanced ? 'text-primary' : 'text-amber-600')}>{formatNativeAmount(excessBase > 0.01 ? excessBase : remainingBase, baseCurrency)}</p></div>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">Total contable requerido: <span className="font-bold text-foreground">{formatNativeAmount(requestTotalBase, baseCurrency)}</span></p>

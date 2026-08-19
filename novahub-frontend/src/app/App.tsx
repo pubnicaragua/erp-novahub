@@ -45,6 +45,8 @@ const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoVi
 const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
 const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
 const QaConsoleView = lazy(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })));
+const ManagerPage = lazy(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })));
+const EnterpriseGroupsAdminView = lazy(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })));
 
 function PageLoader() {
   return (
@@ -246,7 +248,7 @@ function DashboardLayout() {
       case 'transferencias': return <TransferenciasPage />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
-      case 'suscripciones': return <SuscripcionesPage />;
+      case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage />;
       case 'centro-capacitacion': return <TrainingHubView />;
@@ -415,7 +417,9 @@ function AppContent() {
           }}
         />
       )}
-      <DashboardLayout />
+      {user?.role === 'manager' && !user.isPlatformAdmin ? (
+        <Suspense fallback={<PageLoader />}><ManagerPage /></Suspense>
+      ) : <DashboardLayout />}
       <SessionMonitor />
       <Toaster position="top-right" />
     </>

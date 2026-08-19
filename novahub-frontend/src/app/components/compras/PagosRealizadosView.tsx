@@ -57,6 +57,8 @@ type PurchasePaymentMethod = 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD';
 type PurchasePaymentLine = {
   method: PurchasePaymentMethod;
   amount: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
   bankAccountId?: string;
   reference?: string;
 };
@@ -109,10 +111,18 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   const [pendingCancelGroup, setPendingCancelGroup] = useState<PaymentMade | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [paymentLines, setPaymentLines] = useState<PurchasePaymentLine[]>([{ method: 'CASH', amount: 0 }]);
+  const [paymentLines, setPaymentLines] = useState<PurchasePaymentLine[]>([{ method: 'CASH', amount: 0, currency: displayCurrency, exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate }]);
   const [detailPayment, setDetailPayment] = useState<PaymentMade | null>(null);
   const [paymentEvidenceFiles, setPaymentEvidenceFiles] = useState<File[]>([]);
   const groupedPayments = useMemo(() => groupMadePayments(data, baseCurrency, globalRate, toBaseAmount), [data, baseCurrency, globalRate, toBaseAmount]);
+
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
+  const paymentLine = (method: PurchasePaymentMethod, amount = 0, currency: 'NIO' | 'USD' = displayCurrency): PurchasePaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+  });
 
   useEffect(() => {
     if (!targetId || !data.some((payment) => payment.id === targetId)) return;
@@ -153,13 +163,22 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       if (editingId === 'NEW') {
          const prefilled = draftPaymentFromInvoice || {};
          const prefilledMethod = normalizeMethod(prefilled.method as any);
+         const prefilledCurrency = String(prefilled.currency || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+         const initialCurrency = displayCurrency;
+         const initialAmount = Number(convertBetweenCurrencies(
+           Number(prefilled.amount || 0),
+           prefilledCurrency,
+           initialCurrency,
+           Number(prefilled.exchangeRate || 1),
+           paymentLineRate(initialCurrency),
+         ).toFixed(2));
          setLocalDoc({
            supplierId: prefilled.supplierId || '',
            supplierInvoiceId: prefilled.supplierInvoiceId || '',
             date: prefilled.date || new Date().toISOString(),
             amount: Number(prefilled.amount || 0),
-            currency: (prefilled.currency as any) || displayCurrency,
-            exchangeRate: prefilled.exchangeRate || globalRate,
+            currency: initialCurrency,
+            exchangeRate: paymentLineRate(initialCurrency),
             method: prefilledMethod,
             bankAccountId: prefilled.bankAccountId || '',
             reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || `PAG-${Date.now().toString().slice(-5)}`) : '',
@@ -167,7 +186,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
            });
          setPaymentLines([{
            method: prefilledMethod,
-           amount: Number(prefilled.amount || 0),
+           amount: initialAmount,
+           currency: initialCurrency,
+           exchangeRate: paymentLineRate(initialCurrency),
            bankAccountId: prefilled.bankAccountId || undefined,
            reference: requiresPaymentReference(prefilledMethod) ? (prefilled.reference || '') : '',
          }]);
@@ -181,13 +202,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           setPaymentLines(existingLines.map((payment: any) => ({
             method: normalizeMethod(payment.method as any),
             amount: Number(payment.amount || 0),
+            currency: String(payment.currency || found?.currency || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO',
+            exchangeRate: Number(payment.exchangeRate || globalRate),
             bankAccountId: payment.bankAccountId || undefined,
             reference: requiresPaymentReference(payment.method) ? (payment.reference || '') : '',
           })));
        }
     } else {
       setLocalDoc(null);
-      setPaymentLines([{ method: 'CASH', amount: 0 }]);
+      setPaymentLines([paymentLine('CASH')]);
       setPaymentEvidenceFiles([]);
     }
   }, [editingId, data, draftPaymentFromInvoice, onDraftConsumed]);
@@ -365,18 +388,24 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando pago a proveedor...' : 'Guardando pago a proveedor...');
     try {
-      const currency = String(localDoc.currency || displayCurrency).toUpperCase();
-      const exchangeRate = currency === baseCurrency ? 1 : Number(localDoc.exchangeRate || globalRate);
+      const firstLine = effectiveLines[0];
+      const lineCurrency = (value: unknown) => String(value || displayCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
+      const currency = lineCurrency(firstLine.currency);
+      const exchangeRate = currency === baseCurrency ? 1 : Number(firstLine.exchangeRate || globalRate);
       const amount = Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
       const isMixedPayment = effectiveLines.length > 1;
-      const firstLine = effectiveLines[0];
+      const baseAmount = Number(effectiveLines.reduce((sum, line) => sum + toBaseAmount(
+        line.amount,
+        lineCurrency(line.currency),
+        lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+      ), 0).toFixed(2));
       const payload = {
         ...localDoc,
         method: firstLine.method,
         amount,
         currency,
         exchangeRate,
-        baseAmount: Number(toBaseAmount(amount, currency, exchangeRate).toFixed(2)),
+        baseAmount,
         bankAccountId: !isMixedPayment && isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
         reference: !isMixedPayment && requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
       } as any;
@@ -388,8 +417,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             payments: effectiveLines.map((line) => ({
               method: line.method,
               amount: line.amount,
-              currency,
-              exchangeRate,
+              currency: lineCurrency(line.currency),
+              exchangeRate: lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+              baseAmount: Number(toBaseAmount(line.amount, lineCurrency(line.currency), lineCurrency(line.currency) === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)).toFixed(2)),
               bankAccountId: line.bankAccountId,
               reference: requiresPaymentReference(line.method) ? line.reference : undefined,
               notes: payload.notes,
@@ -500,16 +530,22 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       value={localDoc.supplierInvoiceId || ''}
                       onChange={(val) => {
                           const b = currentBills.find(x => x.id === val);
-                          const nextCurrency = (b?.currency as any) || localDoc.currency || displayCurrency;
+                          const nextCurrency = displayCurrency;
                           const nextAmount = Number(b ? (b.balance ?? b.total) : (localDoc.amount || 0));
+                          const nextAmountInPaymentCurrency = b
+                            ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, nextCurrency, Number(b.exchangeRate || 1), paymentLineRate(nextCurrency)).toFixed(2))
+                            : Number(convertBetweenCurrencies(nextAmount, localDoc.currency || displayCurrency, nextCurrency, Number(localDoc.exchangeRate || globalRate), paymentLineRate(nextCurrency)).toFixed(2));
                           setLocalDoc({
                             ...localDoc,
                             supplierInvoiceId: val,
-                            amount: nextAmount,
+                            amount: nextAmountInPaymentCurrency,
                             currency: nextCurrency,
-                            exchangeRate: b?.exchangeRate || localDoc.exchangeRate || globalRate,
+                            exchangeRate: paymentLineRate(nextCurrency),
                           });
-                          setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: nextAmount } : line));
+                          setPaymentLines((current) => current.map((line, index) => index === 0 ? {
+                            ...line,
+                            amount: b ? Number(convertBetweenCurrencies(nextAmount, b.currency || baseCurrency, line.currency, Number(b.exchangeRate || 1), Number(line.exchangeRate || paymentLineRate(line.currency))).toFixed(2)) : nextAmountInPaymentCurrency,
+                          } : line));
                       }}
                       placeholder={localDoc.supplierId ? "Seleccionar factura abierta" : "Primero seleccione un proveedor"}
                       emptyMessage="No hay facturas abiertas para este proveedor."
@@ -533,32 +569,10 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       </div>
                       <Badge variant="outline" className="shrink-0 border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
                     </div>
-                    <CurrencySelector
-                      value={localDoc.currency || displayCurrency}
-                      baseCurrency={baseCurrency}
-                      exchangeRate={globalRate}
-                      label="Moneda entregada"
-                      disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
-                      onChange={(newCurrency) => {
-                        const previousCurrency = localDoc.currency || displayCurrency;
-                        const previousRate = Number(localDoc.exchangeRate || globalRate);
-                        const nextRate = newCurrency === baseCurrency ? 1 : globalRate;
-                        setPaymentLines((current) => current.map((line) => ({
-                          ...line,
-                          amount: Number(convertBetweenCurrencies(line.amount, previousCurrency, newCurrency, previousRate, nextRate).toFixed(2)),
-                        })));
-                        setLocalDoc({
-                          ...localDoc,
-                          amount: Number(convertBetweenCurrencies(Number(localDoc.amount || 0), previousCurrency, newCurrency, previousRate, nextRate).toFixed(2)),
-                          currency: newCurrency,
-                          exchangeRate: nextRate,
-                        });
-                      }}
-                    />
                     <div className="mt-3 space-y-3">
                       {paymentLines.map((line, index) => (
                         <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_auto] sm:items-end">
+                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
                             <div>
                               <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
                               <select
@@ -570,8 +584,26 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                                 {methodOpts.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                               </select>
                             </div>
+                            <CurrencySelector
+                              value={line.currency}
+                              baseCurrency={baseCurrency}
+                              exchangeRate={globalRate}
+                              label="Moneda"
+                              disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
+                              onChange={(newCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                                if (itemIndex !== index) return item;
+                                const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                                const nextRate = paymentLineRate(newCurrency);
+                                return {
+                                  ...item,
+                                  amount: Number(convertBetweenCurrencies(item.amount, item.currency, newCurrency, previousRate, nextRate).toFixed(2)),
+                                  currency: newCurrency,
+                                  exchangeRate: nextRate,
+                                };
+                              }))}
+                            />
                             <div>
-                              <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({localDoc.currency || displayCurrency})</p>
+                              <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
                               <Input
                                 disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
                                 type="number"
@@ -590,7 +622,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                           </div>}
                         </div>
                       ))}
-                      <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0 }])}>
+                      <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CARD')])}>
                         <Plus className="mr-2 size-4" /> Agregar pago mixto
                       </Button>
                     </div>
@@ -638,13 +670,21 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                 <div className="flex items-center justify-between border-b border-border/50 pb-3">
                   <span className="font-black uppercase text-xs tracking-widest">Total entregado</span>
                   <span className="font-black text-xl text-emerald-500 tabular-nums">
-                    {localDoc.currency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {baseCurrency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + toBaseAmount(
+                      Number(line.amount || 0),
+                      line.currency,
+                      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+                    ), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Equivalente base</span>
                   <span className="font-bold tabular-nums">
-                    {baseCurrency === 'USD' ? '$' : 'C$'} {toBaseAmount(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0), localDoc.currency || displayCurrency, Number(localDoc.exchangeRate || globalRate)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {baseCurrency === 'USD' ? '$' : 'C$'} {paymentLines.reduce((sum, line) => sum + toBaseAmount(
+                      Number(line.amount || 0),
+                      line.currency,
+                      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+                    ), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.03] p-3 text-[10px] text-muted-foreground">

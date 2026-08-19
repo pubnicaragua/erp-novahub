@@ -30,6 +30,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { CurrencySelector } from '../ui/CurrencySelector';
 import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
 import { PrintButton } from '../ui/PrintButton';
 import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
@@ -180,6 +181,8 @@ const RECEIPT_PAYMENT_METHODS = [
 type ReceiptPaymentLine = {
   method: PaymentMethod;
   amount: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
   bankAccountId?: string;
   reference?: string;
 };
@@ -203,7 +206,8 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
 }
 
 function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { draft: ReceiptPaymentDraft | null; onClose: () => void; onSaved: () => void; onRegisterInvoice: (payload: { draft: ReceiptPaymentDraft; number: string; date: string; dueDate: string; files: File[] }) => Promise<any> }) {
-  const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([{ method: 'TRANSFER', amount: 0 }]);
+  const { displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount, formatConvertedAmount } = useCurrency();
+  const [paymentLines, setPaymentLines] = useState<ReceiptPaymentLine[]>([]);
   const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [invoiceId, setInvoiceId] = useState('');
@@ -214,10 +218,21 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
   const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
+
   useEffect(() => {
     if (!draft) return;
     const draftMethod = (draft.reference ? 'TRANSFER' : 'CASH') as PaymentMethod;
-    setPaymentLines([{ method: draftMethod, amount: Number(draft.amount || 0), reference: draft.reference || '' }]);
+    const initialCurrency = displayCurrency === 'USD' ? 'USD' : 'NIO';
+    const initialRate = paymentLineRate(initialCurrency);
+    const initialAmount = Number(convertBetweenCurrencies(
+      Number(draft.amount || 0),
+      draft.currency,
+      initialCurrency,
+      Number(draft.exchangeRate || globalRate || 1),
+      initialRate,
+    ).toFixed(2));
+    setPaymentLines([{ method: draftMethod, amount: initialAmount, currency: initialCurrency, exchangeRate: initialRate, reference: draft.reference || '' }]);
     setNotes(draft.notes || '');
     setFiles([]);
     setInvoiceId(draft.supplierInvoiceId || '');
@@ -225,7 +240,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
     setInvoiceDate(draft.invoiceDate || new Date().toISOString().slice(0, 10));
     setInvoiceDueDate(draft.invoiceDueDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
     setInvoiceFiles([]);
-  }, [draft]);
+  }, [draft, displayCurrency, globalRate]);
 
   const handleRegisterInvoice = async () => {
     if (!draft) return;
@@ -263,8 +278,13 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
       return toast.error('Selecciona el banco de cada pago con tarjeta, transferencia o cheque.');
     }
     if (files.length === 0) return toast.error('Adjunte al menos una evidencia del pago.');
-    const paymentAmount = Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
-    if (paymentAmount > Number(draft.amount || 0) + 0.01) return toast.error('El monto no puede superar el saldo pendiente.');
+    const paymentBaseAmount = Number(effectiveLines.reduce((sum, line) => sum + toBaseAmount(
+      line.amount,
+      line.currency,
+      line.currency === baseCurrency ? 1 : line.exchangeRate,
+    ), 0).toFixed(2));
+    const draftBaseAmount = Number(toBaseAmount(Number(draft.amount || 0), draft.currency, Number(draft.exchangeRate || globalRate || 1)).toFixed(2));
+    if (paymentBaseAmount > draftBaseAmount + 0.01) return toast.error('El monto convertido no puede superar el saldo pendiente.');
     setSaving(true);
     const saveToastId = toast.loading('Registrando pago y generando la integración contable...');
     try {
@@ -272,9 +292,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         supplierId: draft.supplierId,
         supplierInvoiceId: resolvedInvoiceId,
         date: new Date().toISOString(),
-        amount: paymentAmount,
-        currency: draft.currency,
-        exchangeRate: draft.exchangeRate,
+        amount: effectiveLines[0].amount,
+        currency: effectiveLines[0].currency,
+        exchangeRate: effectiveLines[0].exchangeRate,
         method: effectiveLines[0].method,
         bankAccountId: effectiveLines.length === 1 && isBankPaymentMethod(effectiveLines[0].method, true) ? effectiveLines[0].bankAccountId : undefined,
         reference: effectiveLines.length === 1 && requiresPaymentReference(effectiveLines[0].method) ? effectiveLines[0].reference : undefined,
@@ -286,8 +306,8 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
           payments: effectiveLines.map((line) => ({
             method: line.method,
             amount: line.amount,
-            currency: draft.currency,
-            exchangeRate: draft.exchangeRate,
+            currency: line.currency,
+            exchangeRate: line.exchangeRate,
             bankAccountId: line.bankAccountId,
             reference: requiresPaymentReference(line.method) ? line.reference : undefined,
             notes: payload.notes,
@@ -365,18 +385,24 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                   <div className="space-y-3">
                     {paymentLines.map((line, index) => (
                       <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_auto] sm:items-end">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
                           <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as PaymentMethod, bankAccountId: undefined, reference: '' } : item))} disabled={saving} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({getReceiptCurrencyMeta(draft.currency).code})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
+                          <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={saving} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                            if (itemIndex !== index) return item;
+                            const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                            const nextRate = paymentLineRate(nextCurrency);
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                          }))} />
+                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} disabled={saving} className="h-10 font-black tabular-nums" /></div>
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                         </div>
                         {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco del pago" />}
                         {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." className="h-10 font-mono" /></div>}
                       </div>
                     ))}
-                    <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0 }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
+                    <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0, currency: displayCurrency === 'USD' ? 'USD' : 'NIO', exchangeRate: paymentLineRate(displayCurrency === 'USD' ? 'USD' : 'NIO') }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado</span><span className="font-black text-primary">{formatReceiptAmount(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0), draft.currency)}</span></div>
+                  <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)} · Efectivo no requiere referencia.</p>
                 </div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
@@ -387,7 +413,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
         )}
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
-          {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
+          {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

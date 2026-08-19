@@ -17,7 +17,6 @@ import type { CreditNote, Customer, Product, SalesPaginationControls } from '../
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -67,6 +66,16 @@ const methodOptions = [
   { label: 'Cheque', value: 'CHECK' },
 ];
 
+type CreditPaymentLine = {
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'CHECK';
+  amount: string;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
+  accountId?: string;
+  bankAccountId?: string;
+  reference?: string;
+};
+
 const isoDate = (value: unknown) => {
   if (!value) return '';
   const text = String(value);
@@ -98,14 +107,30 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const [detailCredit, setDetailCredit] = useState<CreditNote | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [paymentCredit, setPaymentCredit] = useState<CreditNote | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentCurrency, setPaymentCurrency] = useState<'NIO' | 'USD'>('NIO');
-  const [paymentMethod, setPaymentMethod] = useState('TRANSFER');
-  const [paymentAccountId, setPaymentAccountId] = useState('');
-  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
+  const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentReference, setPaymentReference] = useState('');
   const [referenceNow] = useState(() => Date.now());
+
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
+  const paymentLine = (method: CreditPaymentLine['method'], amount = '', currency: 'NIO' | 'USD' = displayCurrency): CreditPaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+    reference: '',
+  });
+  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
+    Number(String(line.amount || '').replace(/,/g, '') || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  ), 0);
+  const paymentCreditBalanceBase = paymentCredit
+    ? toBaseAmount(
+      Number(paymentCredit.balance ?? Number(paymentCredit.total || 0) - Number(paymentCredit.amountPaid || 0)),
+      paymentCredit.currency === 'USD' ? 'USD' : 'NIO',
+      Number(paymentCredit.exchangeRate || globalRate || 1),
+    )
+    : 0;
 
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
@@ -282,28 +307,52 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
   const openPayment = (credit: CreditNote) => {
     setPaymentCredit(credit);
-    setPaymentCurrency(credit.currency === 'USD' ? 'USD' : 'NIO');
-    setPaymentAmount(String(Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0))));
-    setPaymentMethod('TRANSFER');
-    setPaymentAccountId('');
-    setPaymentBankAccountId('');
-    setPaymentReference(credit.number);
+    const nextCurrency = displayCurrency === 'USD' ? 'USD' : 'NIO';
+    const nextRate = paymentLineRate(nextCurrency);
+    const creditCurrency = credit.currency === 'USD' ? 'USD' : 'NIO';
+    const creditBalance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
+    const initialAmount = convertBetweenCurrencies(creditBalance, creditCurrency, nextCurrency, Number(credit.exchangeRate || globalRate || 1), nextRate);
+    setPaymentLines([{ ...paymentLine('TRANSFER', initialAmount.toFixed(2), nextCurrency), reference: credit.number }]);
   };
 
   const handlePayment = async () => {
     if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
     if (!paymentCredit) return;
-    const amount = Number(paymentAmount);
-    if (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) return void toast.error('Selecciona la cuenta que recibió el pago');
-    if (!Number.isFinite(amount) || amount <= 0) return void toast.error('El monto debe ser mayor que cero');
-    if (isBankPaymentMethod(paymentMethod, true) && !paymentBankAccountId) return void toast.error('Selecciona el banco global donde se recibió el pago');
-    if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) return void toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+    const effectiveLines = paymentLines
+      .map((line) => ({ ...line, amount: String(line.amount || '').replace(/,/g, ''), reference: String(line.reference || '').trim() }))
+      .filter((line) => Number(line.amount) > 0);
+    if (!effectiveLines.length) return void toast.error('Agrega al menos un medio de pago con monto mayor que cero');
+    if (effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) return void toast.error('Selecciona la cuenta contable para cada medio de pago');
+    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) return void toast.error('Selecciona el banco global para cada medio de pago bancario');
+    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) return void toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
+    const creditCurrency = paymentCredit.currency === 'USD' ? 'USD' : 'NIO';
+    const creditBalance = Number(paymentCredit.balance ?? Number(paymentCredit.total || 0) - Number(paymentCredit.amountPaid || 0));
+    const creditBalanceBase = toBaseAmount(creditBalance, creditCurrency, Number(paymentCredit.exchangeRate || globalRate || 1));
+    if (paymentTotalBase > creditBalanceBase + 0.01) return void toast.error('El pago supera el saldo disponible del crédito');
     const paymentToastId = toast.loading('Registrando pago del crédito...');
     try {
       setPaymentLoading(true);
-      await creditNotesService.apply(paymentCredit.id, { amount, currency: paymentCurrency, paymentMethod, accountId: requiresManualPaymentAccount(paymentMethod) ? paymentAccountId : undefined, bankAccountId: isBankPaymentMethod(paymentMethod, true) ? paymentBankAccountId : undefined, reference: paymentReference || undefined });
+      const firstLine = effectiveLines[0];
+      await creditNotesService.apply(paymentCredit.id, {
+        amount: Number(firstLine.amount),
+        currency: firstLine.currency,
+        paymentMethod: firstLine.method,
+        accountId: requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
+        bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
+        reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
+        payments: effectiveLines.map((line) => ({
+          method: line.method,
+          amount: Number(line.amount),
+          currency: line.currency,
+          exchangeRate: line.exchangeRate,
+          accountId: requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
+          bankAccountId: isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
+          reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+        })),
+      });
       toast.success('Pago registrado y enviado a Pagos Recibidos', { id: paymentToastId });
       setPaymentCredit(null);
+      setPaymentLines([]);
       onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar el pago', { id: paymentToastId });
@@ -625,7 +674,61 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Eliminar crédito?" description="Solo deben eliminarse créditos que aún no hayan sido emitidos." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Eliminando crédito...'); try { setDeleteLoading(true); await creditNotesService.delete(pendingDeleteId); toast.success('Crédito eliminado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
 
-      <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}><DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl"><DialogHeader><DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle><DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription></DialogHeader>{paymentCredit && <div className="space-y-4"><div className="rounded-2xl border border-primary/20 bg-primary/5 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentCredit.number} · {customerName(paymentCredit)}</p><p className="mt-1 text-2xl font-black text-primary">Saldo: {formatConvertedAmount(Number(paymentCredit.balance ?? paymentCredit.total ?? 0), paymentCredit.currency, paymentCredit.exchangeRate)}</p></div><Badge className="bg-primary/10 text-primary">{statusFor(paymentCredit.status)?.label}</Badge></div></div><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({paymentCurrency})</p><Input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></div><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value; setPaymentMethod(nextMethod); setPaymentAccountId(requiresManualPaymentAccount(nextMethod) ? paymentAccountId : ''); setPaymentBankAccountId(isBankPaymentMethod(nextMethod, true) ? paymentBankAccountId : ''); if (!requiresPaymentReference(nextMethod)) setPaymentReference(''); }} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div></div><CurrencySelector value={paymentCurrency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda recibida" onChange={(nextCurrency) => { const creditCurrency = paymentCredit.currency === 'USD' ? 'USD' : 'NIO'; const creditRate = creditCurrency === baseCurrency ? 1 : Number(paymentCredit.exchangeRate || globalRate); const currentRate = paymentCurrency === baseCurrency ? 1 : paymentCurrency === creditCurrency ? creditRate : globalRate; const nextRate = nextCurrency === baseCurrency ? 1 : nextCurrency === creditCurrency ? creditRate : globalRate; setPaymentAmount(convertBetweenCurrencies(Number(paymentAmount || 0), paymentCurrency, nextCurrency, currentRate, nextRate).toFixed(2)); setPaymentCurrency(nextCurrency); }} />{requiresManualPaymentAccount(paymentMethod) && <AccountingAccountSelect value={paymentAccountId} onChange={setPaymentAccountId} assetOnly label="Cuenta que recibió el pago" />}{isBankPaymentMethod(paymentMethod, true) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Banco global de destino" />}{requiresPaymentReference(paymentMethod) && <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Número de recibo, transferencia..." /></div>}</div>}<DialogFooter><Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button><Button onClick={handlePayment} disabled={paymentLoading || (requiresManualPaymentAccount(paymentMethod) && !paymentAccountId) || (isBankPaymentMethod(paymentMethod, true) && !paymentBankAccountId) || (requiresPaymentReference(paymentMethod) && !paymentReference.trim())} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle>
+            <DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription>
+          </DialogHeader>
+          {paymentCredit && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentCredit.number} · {customerName(paymentCredit)}</p>
+                    <p className="mt-1 text-2xl font-black text-primary">Saldo: {formatConvertedAmount(Number(paymentCredit.balance ?? paymentCredit.total ?? 0), paymentCredit.currency, paymentCredit.exchangeRate)}</p>
+                  </div>
+                  <Badge className="bg-primary/10 text-primary">{statusFor(paymentCredit.status)?.label}</Badge>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-muted/10 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Cada medio conserva su moneda, banco y referencia dentro del mismo pago.</p>
+                  </div>
+                  <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">Mixto permitido</Badge>
+                </div>
+                <div className="space-y-3">
+                  {paymentLines.map((line, index) => (
+                    <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as CreditPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '' } : item))} disabled={paymentLoading} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
+                        <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={paymentLoading} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                          if (itemIndex !== index) return item;
+                          const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                          const nextRate = paymentLineRate(nextCurrency);
+                          return { ...item, amount: convertBetweenCurrencies(Number(String(item.amount || '').replace(/,/g, '') || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2), currency: nextCurrency, exchangeRate: nextRate };
+                        }))} />
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: event.target.value } : item))} disabled={paymentLoading} className="h-9 text-xs tabular-nums" /></div>
+                        <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || paymentLoading} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                      </div>
+                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" className="mt-2" />}
+                      {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." disabled={paymentLoading} className="h-9 text-xs" /></div>}
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH', '', displayCurrency === 'USD' ? 'USD' : 'NIO')])} disabled={paymentLoading}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button>
+            <Button onClick={handlePayment} disabled={paymentLoading || !paymentLines.some((line) => Number(String(line.amount || '').replace(/,/g, '')) > 0) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || Math.abs(paymentTotalBase - paymentCreditBalanceBase) > 0.01} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

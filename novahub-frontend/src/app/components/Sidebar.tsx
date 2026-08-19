@@ -323,7 +323,7 @@ const platformMenuItems: MenuItem[] = [
   },
   {
     id: 'suscripciones',
-    label: 'Gestión de empresas',
+    label: 'Grupos empresariales',
     icon: <Building2 className="size-5" />,
   },
   {

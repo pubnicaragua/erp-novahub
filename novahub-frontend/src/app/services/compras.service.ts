@@ -62,10 +62,26 @@ export const recurringSupplierInvoicesService = {
 };
 
 // ✅ CORRECTED: was /payments-made (404) → now /purchases/payments
+type PurchasePaymentLineInput = {
+  method?: PaymentMade['method'];
+  amount: number;
+  currency?: PaymentMade['currency'];
+  exchangeRate?: number;
+  baseAmount?: number;
+  accountId?: string;
+  bankAccountId?: string;
+  reference?: string;
+  notes?: string;
+};
+
+type PurchaseMixedPaymentInput = Omit<Partial<PaymentMade>, 'payments'> & {
+  payments: PurchasePaymentLineInput[];
+};
+
 export const paymentsMadeService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentMade>>('/purchases/payments', { params: filters as any, signal }),
   create: (data: Partial<PaymentMade>) => api.post<PaymentMade>('/purchases/payments', data),
-  createMixed: (data: Partial<PaymentMade> & { payments: Array<Partial<PaymentMade>> }) => api.post<PaymentMade>('/purchases/payments/mixed', data),
+  createMixed: (data: PurchaseMixedPaymentInput) => api.post<PaymentMade>('/purchases/payments/mixed', data),
   update: (id: string, data: Partial<PaymentMade>) => api.patch<PaymentMade>(`/purchases/payments/${id}`, data),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<PaymentMade, 'id' | 'number' | 'isActive'> }>(`/purchases/payments/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),

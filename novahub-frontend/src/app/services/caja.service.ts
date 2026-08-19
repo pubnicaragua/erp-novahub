@@ -174,6 +174,8 @@ export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK';
 export interface PosPaymentLine {
   method: PosPaymentMethod;
   amount: number;
+  currency?: 'NIO' | 'USD';
+  exchangeRate?: number;
   reference?: string;
   bankAccountId?: string;
 }

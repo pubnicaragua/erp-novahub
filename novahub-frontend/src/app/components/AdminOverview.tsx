@@ -17,6 +17,7 @@ import { useTenantQuery } from '../hooks/useTenantQuery';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
 } from 'recharts';
+import { EnterpriseGroupsAdminView } from './admin/EnterpriseGroupsAdminView';
 
 export function AdminOverview() {
   const { data: overview, isLoading: loading } = useTenantQuery(
@@ -78,6 +79,8 @@ export function AdminOverview() {
           </motion.div>
         ))}
       </div>
+
+      <EnterpriseGroupsAdminView />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Growth Chart */}

@@ -83,6 +83,8 @@ const paymentMethodOptions = [
 type InvoicePaymentLine = {
   method: string;
   amount: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
   bankAccountId?: string;
   reference?: string;
 };
@@ -125,6 +127,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     convertAmount,
     convertCurrentAmount,
     convertBetweenCurrencies,
+    toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
@@ -165,7 +168,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
-  const [paymentCurrency, setPaymentCurrency] = useState<'NIO' | 'USD'>('NIO');
   const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
@@ -174,6 +176,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
+
+  const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
+  const paymentLine = (method: string, amount = 0, currency: 'NIO' | 'USD' = displayCurrency): InvoicePaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+  });
 
   const accountingPreflightSignature = isCreating || editingId
     ? JSON.stringify({
@@ -400,8 +411,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     // backend lo crea y liquida en una sola transacción al confirmar.
     setPaymentInvoice(invoiceStatus === 'DRAFT' ? ({ ...invoice, status: 'PENDING' } as Invoice) : invoice);
     const invoiceCurrency = String(invoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
-    setPaymentCurrency(invoiceCurrency);
-    setPaymentLines([{ method: 'CASH', amount: Number(amount.toFixed(2)) }]);
+    const initialCurrency = displayCurrency;
+    const initialAmount = Number(convertBetweenCurrencies(
+      amount,
+      invoiceCurrency,
+      initialCurrency,
+      Number(invoice.exchangeRate || 1),
+      paymentLineRate(initialCurrency),
+    ).toFixed(2));
+    setPaymentLines([paymentLine('CASH', initialAmount, initialCurrency)]);
     setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
     setPaymentDialogOpen(true);
   };
@@ -479,13 +497,17 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (!paymentInvoice) return;
     const maxAmount = getInvoiceBalance(paymentInvoice);
     const amount = Number(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
+    const paymentBaseAmount = Number(paymentLines.reduce((sum, line) => sum + toBaseAmount(
+      Number(line.amount || 0),
+      line.currency,
+      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+    ), 0).toFixed(2));
     const invoiceCurrency = String(paymentInvoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
-    const paymentRate = paymentCurrency === baseCurrency ? 1 : paymentCurrency === invoiceCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
     const amountAppliedToInvoice = Number(convertBetweenCurrencies(
-      amount,
-      paymentCurrency,
-      paymentInvoice.currency,
-      paymentRate,
+      paymentBaseAmount,
+      baseCurrency,
+      invoiceCurrency,
+      1,
       paymentInvoice.exchangeRate,
     ).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -518,7 +540,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         await handleSaveInvoice('PAYMENT', {
           payments: paymentLines,
           currency: paymentCurrency,
-          exchangeRate: paymentRate,
+          exchangeRate: paymentLineRate(paymentCurrency),
           dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
         });
       } finally {
@@ -545,7 +567,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         date: new Date().toISOString(),
         amount,
         currency: paymentCurrency,
-        exchangeRate: paymentRate,
+        exchangeRate: paymentLineRate(paymentCurrency),
         method: paymentLines[0]?.method || 'CASH',
         payments: paymentLines,
         dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
@@ -758,12 +780,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   };
 
-  const paymentTotal = paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
-  const invoicePaymentCurrency = paymentInvoice && String(paymentInvoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
-  const paymentRate = paymentCurrency === baseCurrency ? 1 : paymentInvoice && paymentCurrency === invoicePaymentCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
+  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
+    Number(line.amount || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  ), 0);
+  const paymentInvoiceCurrency = paymentInvoice && String(paymentInvoice.currency || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
   const paymentTotalInInvoiceCurrency = paymentInvoice
-    ? convertBetweenCurrencies(paymentTotal, paymentCurrency, paymentInvoice.currency, paymentRate, paymentInvoice.exchangeRate)
-    : paymentTotal;
+    ? convertBetweenCurrencies(paymentTotalBase, baseCurrency, paymentInvoiceCurrency, 1, paymentInvoice.exchangeRate)
+    : paymentTotalBase;
   const paymentRemainingInInvoiceCurrency = paymentInvoice
     ? Math.max(0, getInvoiceBalance(paymentInvoice) - paymentTotalInInvoiceCurrency)
     : 0;
@@ -1800,31 +1825,34 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
                   <span className="text-[10px] font-black text-primary">Mixto permitido</span>
                 </div>
-                <CurrencySelector
-                  value={paymentCurrency}
-                  baseCurrency={baseCurrency}
-                  exchangeRate={globalRate}
-                  label="Moneda recibida"
-                  onChange={(nextCurrency) => {
-                    const nextRate = nextCurrency === baseCurrency ? 1 : paymentInvoice && nextCurrency === invoicePaymentCurrency ? Number(paymentInvoice.exchangeRate || globalRate) : globalRate;
-                    setPaymentLines((current) => current.map((line) => ({
-                      ...line,
-                      amount: Number(convertBetweenCurrencies(line.amount, paymentCurrency, nextCurrency, paymentRate, nextRate).toFixed(2)),
-                    })));
-                    setPaymentCurrency(nextCurrency);
-                  }}
-                />
                 {paymentLines.map((line, index) => (
                   <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_auto] sm:items-end">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
                       <div>
                         <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
                         <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '' } : item))} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                           {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                         </select>
                       </div>
+                      <CurrencySelector
+                        value={line.currency}
+                        baseCurrency={baseCurrency}
+                        exchangeRate={globalRate}
+                        label="Moneda"
+                        onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                          if (itemIndex !== index) return item;
+                          const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                          const nextRate = paymentLineRate(nextCurrency);
+                          return {
+                            ...item,
+                            amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(2)),
+                            currency: nextCurrency,
+                            exchangeRate: nextRate,
+                          };
+                        }))}
+                      />
                       <div>
-                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({paymentCurrency})</p>
+                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
                         <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} autoFocus={index === 0} />
                       </div>
                       <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
@@ -1836,14 +1864,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </div>}
                   </div>
                 ))}
-                <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0 }])}>
+                <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CARD')])}>
                   <Plus className="mr-2 size-4" /> Agregar pago mixto
                 </Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border/50 bg-background/60 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado</p>
-                  <p className="mt-1 text-lg font-black text-foreground">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentTotal)}</p>
+                  <p className="mt-1 text-lg font-black text-foreground">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentTotalBase)}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Cada línea conserva su moneda y tasa global.</p>
                   <p className="mt-1 text-[10px] text-muted-foreground">Equivale a {formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                 </div>
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">

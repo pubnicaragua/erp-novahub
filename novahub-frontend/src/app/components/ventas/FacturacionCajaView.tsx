@@ -52,6 +52,7 @@ import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/payme
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -138,7 +139,11 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const customerName = invoice.customer?.name || invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
   const customerPhone = invoice.customer?.phone;
   const paymentLabel = (method: PosPaymentLine['method']) => method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'CHECK' ? 'Cheque' : 'Transferencia';
-  const paymentRows = payments.map((payment) => `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${money(Number(payment.amount || 0))}</span></div>`).join('');
+  const paymentRows = payments.map((payment) => {
+    const paymentCurrency = payment.currency || currency;
+    const paymentSymbol = paymentCurrency === 'USD' ? '$' : 'C$';
+    return `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${paymentSymbol} ${formatSalesAmount(Number(payment.amount || 0))}</span></div>`;
+  }).join('');
   const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
@@ -337,7 +342,7 @@ interface FacturacionCajaViewProps {
 }
 
 export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: FacturacionCajaViewProps) {
-  const { formatConvertedAmount: formatCurrency } = useCurrency();
+  const { formatConvertedAmount: formatCurrency, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canPayPos = canPerform('RETAIL_POS', 'pay');
   const canPrintPos = canPerform('RETAIL_POS', 'print');
@@ -373,15 +378,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [catalogView, setCatalogView] = useState<CatalogViewMode>(getInitialCatalogView);
   const [showAvailabilityAction, setShowAvailabilityAction] = useState<boolean>(getInitialShowAvailability);
   const [showPayment, setShowPayment] = useState(false);
-  const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('NIO');
+  const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>(displayCurrency);
   const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
-  const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0 }]);
+  const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0, currency: displayCurrency, exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate }]);
   const [createdInvoice, setCreatedInvoice] = useState<PosInvoice | null>(null);
   const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
   const [createdPaymentLines, setCreatedPaymentLines] = useState<PosPaymentLine[]>([]);
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
   const [companyName, setCompanyName] = useState('Empresa');
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
+
+  const paymentLineRate = (currency: PaymentCurrency) => currency === baseCurrency ? 1 : Number(globalRate || 1);
+  const paymentLine = (method: PosPaymentLine['method'], amount = 0, currency: PaymentCurrency = displayCurrency): PosPaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+  });
 
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
@@ -828,7 +841,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     if (selection.payNow) {
       setHoldCreateDto(dto);
       setAvailabilityOpen(false);
-      setPayments([{ method: 'CASH', amount: 0 }]);
+      setPayments([paymentLine('CASH', 0, 'NIO')]);
       setPaymentCurrency('NIO');
       setShowPayment(true);
       return;
@@ -981,8 +994,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         return;
       }
     }
-    setPayments([{ method: 'CASH', amount: 0 }]);
-    setPaymentCurrency('NIO');
+    setPayments([paymentLine('CASH')]);
+    setPaymentCurrency(displayCurrency);
     setCreatedInvoice(null);
     setCreatedTicketCart([...cart]);
     setCreatedPaymentLines([]);
@@ -1003,9 +1016,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.error(missingPriceMessage);
       return;
     }
-    const totalInPaymentCurrency = paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total;
-    const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    if (received + 0.005 < totalInPaymentCurrency) {
+    const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);
+    const totalBase = toBaseAmount(summary.total, paymentCurrency, documentRate);
+    const receivedBase = payments.reduce((sum, payment) => sum + toBaseAmount(
+      Number(payment.amount || 0),
+      payment.currency || paymentCurrency,
+      (payment.currency || paymentCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
+    ), 0);
+    if (receivedBase + 0.005 < totalBase) {
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
@@ -1035,7 +1053,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         items: buildInvoiceItems(cart),
         includeTax,
         currency: paymentCurrency,
-        exchangeRate: Number(activeSession.exchangeRateUSD),
+        exchangeRate: documentRate,
         payments,
         ...(confirmedDuplicate && duplicateMatches.length > 0
           ? { duplicateConfirmation: { candidateIds: duplicateMatches.map((match) => match.id) } }
@@ -1769,7 +1787,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   {createdPaymentLines.map((payment, index) => (
                     <div key={`${payment.method}-${index}`} className="flex justify-between gap-3">
                       <span>{payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : payment.method === 'CHECK' ? 'Cheque' : 'Transferencia'}</span>
-                      <span className="font-mono font-bold">{paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(payment.amount)}</span>
+                      <span className="font-mono font-bold">{(payment.currency || paymentCurrency) === 'USD' ? '$' : 'C$'} {formatSalesAmount(payment.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -1779,8 +1797,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <p className="mt-2 text-2xl font-black text-primary">{formatCurrency(Number(createdInvoice.total))}</p>
                 {Number(createdInvoice.discountAmount) > 0 && <p className="mt-1 text-[11px] text-rose-600">Descuento: - {formatCurrency(Number(createdInvoice.discountAmount))}</p>}
                 <p className="mt-1 text-[11px] text-muted-foreground">IVA: {formatCurrency(Number(createdInvoice.taxAmount))}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Recibido: {paymentCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))}</p>
-                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * (paymentCurrency === 'USD' ? createdExchangeRate : 1) - Number(createdInvoice.total)))}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Recibido (base): C$ {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || paymentCurrency) === 'USD' ? createdExchangeRate : 1), 0))}</p>
+                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || paymentCurrency) === 'USD' ? createdExchangeRate : 1), 0) - Number(createdInvoice.total) * (paymentCurrency === 'USD' ? createdExchangeRate : 1)))}</p>
               </div>
             </div>
 
@@ -1813,7 +1831,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             </div>
 
             {(() => {
-              const isHoldPayment = holdCreateDto !== null;
               const holdTotal = holdCreateDto
                 ? calculateInvoiceSummary(
                   holdCreateDto.items.map((item) => ({
@@ -1832,49 +1849,43 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   holdCreateDto.pricingMode,
                 ).total
                 : null;
-              const totalToPay = holdTotal !== null ? holdTotal : (paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total);
-              const totalPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-              const changeLocal = Math.max(0, totalPaid - (holdTotal !== null ? holdTotal : (paymentCurrency === 'USD' ? summary.total / Number(activeSession.exchangeRateUSD) : summary.total)));
+              const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);
+              const totalToPayBase = holdTotal !== null
+                ? toBaseAmount(holdTotal, 'NIO', 1)
+                : toBaseAmount(summary.total, paymentCurrency, documentRate);
+              const totalPaidBase = payments.reduce((sum, item) => sum + toBaseAmount(
+                Number(item.amount || 0),
+                item.currency || paymentCurrency,
+                (item.currency || paymentCurrency) === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1),
+              ), 0);
+              const changeLocal = Math.max(0, totalPaidBase - totalToPayBase);
 
               return (
                 <>
                   <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl bg-primary/10 p-3">
                       <span className="text-xs text-primary font-bold">Total a cobrar</span>
-                      <div className="text-xl font-black text-primary">{isHoldPayment ? 'C$' : (paymentCurrency === 'USD' ? '$' : 'C$')} {formatSalesAmount(totalToPay)}</div>
+                      <div className="text-xl font-black text-primary">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalToPayBase)}</div>
                     </div>
                     <div className="rounded-xl bg-muted/40 p-3 border border-border/50">
                       <span className="text-xs text-muted-foreground">Total pagado</span>
-                      <div className="text-xl font-black">{isHoldPayment ? 'C$' : (paymentCurrency === 'USD' ? '$' : 'C$')} {formatSalesAmount(totalPaid)}</div>
+                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(totalPaidBase)}</div>
                     </div>
                     <div className={cn("rounded-xl p-3 border", changeLocal > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted/20 border-border/30 text-muted-foreground")}>
                       <span className="text-xs font-bold">Cambio a entregar</span>
-                      <div className="text-xl font-black">C$ {formatSalesAmount(changeLocal)}</div>
+                      <div className="text-xl font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(changeLocal)}</div>
                     </div>
                   </div>
 
-                  <div className="mb-4 space-y-2">
-                    <Label>Moneda de pago</Label>
-                    {isHoldPayment ? (
-                      <div className="flex h-10 items-center rounded-xl border border-border/50 bg-muted/20 px-3 text-sm font-bold">
-                        Córdobas (NIO)
-                        <span className="ml-2 text-[10px] font-normal text-muted-foreground">Las ventas suspendidas se cobran en córdobas.</span>
-                      </div>
-                    ) : (
-                      <Select value={paymentCurrency} onValueChange={(value: PaymentCurrency) => setPaymentCurrency(value)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
-                          <SelectItem value="USD">Dólares (USD)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+                  <div className="mb-4 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs font-bold">
+                    Moneda de la factura: {paymentCurrency === 'USD' ? 'Dólares (USD)' : 'Córdobas (NIO)'}
+                    <span className="ml-2 text-[10px] font-normal text-muted-foreground">Cada medio puede recibirse en una moneda distinta con la tasa global.</span>
                   </div>
 
                   <div className="space-y-3">
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
-                        <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] gap-2">
                           <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -1884,7 +1895,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                               <SelectItem value="CHECK">Cheque</SelectItem>
                             </SelectContent>
                           </Select>
-                          <Input type="number" min="0" step="0.01" placeholder="Monto" value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
+                          <CurrencySelector value={payment.currency || paymentCurrency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPayments(current => current.map((item, itemIndex) => {
+                            if (itemIndex !== index) return item;
+                            const previousCurrency = item.currency || paymentCurrency;
+                            const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1);
+                            const nextRate = paymentLineRate(nextCurrency);
+                            return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                          }))} />
+                          <Input type="number" min="0" step="0.01" placeholder={`Monto (${payment.currency || paymentCurrency})`} value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
@@ -1896,7 +1914,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </div>
                     ))}
                   </div>
-                  <Button variant="outline" className="mt-3 w-full" onClick={() => setPayments(current => [...current, { method: 'CARD', amount: 0 }])}>+ Agregar pago mixto</Button>
+                  <Button variant="outline" className="mt-3 w-full" onClick={() => setPayments(current => [...current, paymentLine('CARD')])}>+ Agregar pago mixto</Button>
                 </>
               );
             })()}

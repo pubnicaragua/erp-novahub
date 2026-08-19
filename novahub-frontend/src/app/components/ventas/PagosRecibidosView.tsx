@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
-  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown
+  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -13,13 +13,11 @@ import { toast } from 'sonner';
 import type { PaymentReceived, Customer, Invoice, CreditNote, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
-import { AccountingAccountSelect } from '../ui/AccountingAccountSelect';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
-import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { PrintButton } from '../ui/PrintButton';
@@ -54,6 +52,16 @@ const methodOptions = [
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
 ];
+
+type ReceivedPaymentLine = {
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'CHECK';
+  amount: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate: number;
+  accountId?: string;
+  bankAccountId?: string;
+  reference?: string;
+};
 
 function groupReceivedPayments(
   rows: PaymentReceived[],
@@ -111,8 +119,23 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const [paymentLines, setPaymentLines] = useState<ReceivedPaymentLine[]>([]);
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+
+  const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
+  const paymentLine = (method: ReceivedPaymentLine['method'], amount = 0, currency: 'NIO' | 'USD' = displayCurrency): ReceivedPaymentLine => ({
+    method,
+    amount,
+    currency,
+    exchangeRate: paymentLineRate(currency),
+    reference: '',
+  });
+  const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
+    Number(line.amount || 0),
+    line.currency,
+    line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+  ), 0);
 
   const groupedPayments = useMemo(
     () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
@@ -153,16 +176,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   };
 
   const startNew = () => {
+    const initialLine = paymentLine('TRANSFER');
     setIsCreating(true);
+    setPaymentLines([initialLine]);
     setLocalDoc({
       customerId: '',
       invoiceId: '',
       creditNoteId: '',
       date: new Date().toISOString().split('T')[0],
       amount: 0,
-      currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
-      exchangeRate: globalRate,
-      method: 'TRANSFER',
+      currency: initialLine.currency,
+      exchangeRate: initialLine.exchangeRate,
+      method: initialLine.method,
       accountId: '',
       bankAccountId: '',
       reference: '',
@@ -175,28 +200,62 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     if (isCreating && (!canPerform('SALES_PAYMENTS', 'create') || !canPerform('SALES_PAYMENTS', 'approve'))) return;
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
-    if (Number(localDoc.amount) <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
-    if (requiresPaymentReference(localDoc.method) && !String(localDoc.reference || '').trim()) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
-    if (requiresManualPaymentAccount(localDoc.method) && !localDoc.accountId) { toast.error('Selecciona la cuenta contable que recibirá el pago'); return; }
-    if (isBankPaymentMethod(localDoc.method, true) && !localDoc.bankAccountId) { toast.error('Selecciona el banco global donde se recibió el pago'); return; }
+    const effectiveLines = paymentLines
+      .map((line) => ({ ...line, amount: Number(line.amount || 0), reference: String(line.reference || '').trim() }))
+      .filter((line) => line.amount > 0);
+    if (!effectiveLines.length) { toast.error('Agrega al menos un medio de pago con monto mayor a 0'); return; }
+    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
+    if (effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
+    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
+    const linkedDocument = localDoc.invoiceId
+      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
+      : localDoc.creditNoteId
+        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
+        : null;
+    if (linkedDocument) {
+      const documentBalanceBase = toBaseAmount(
+        Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
+        (linkedDocument as any).currency,
+        Number((linkedDocument as any).exchangeRate || globalRate),
+      );
+      if (paymentTotalBase > documentBalanceBase + 0.01) { toast.error('El pago supera el saldo pendiente del documento'); return; }
+    }
     const saveToastId = toast.loading('Registrando pago...');
     try {
-      await paymentsService.create({
+      const firstLine = effectiveLines[0];
+      const payload = {
         customerId: localDoc.customerId,
         invoiceId: localDoc.invoiceId || undefined,
         creditNoteId: localDoc.creditNoteId || undefined,
         date: new Date(localDoc.date).toISOString(),
-        amount: Number(localDoc.amount),
-        currency: localDoc.currency,
-        exchangeRate: localDoc.exchangeRate || globalRate,
-        method: localDoc.method,
-        accountId: requiresManualPaymentAccount(localDoc.method) ? localDoc.accountId : undefined,
-        bankAccountId: isBankPaymentMethod(localDoc.method, true) ? localDoc.bankAccountId : undefined,
-        reference: localDoc.reference || undefined,
+        amount: Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2)),
+        currency: firstLine.currency,
+        exchangeRate: firstLine.exchangeRate,
+        method: firstLine.method,
+        accountId: requiresManualPaymentAccount(firstLine.method) ? firstLine.accountId : undefined,
+        bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
+        reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
         notes: localDoc.notes || undefined,
-      } as any);
+      } as any;
+      if (effectiveLines.length > 1) {
+        await paymentsService.createMixed({
+          ...payload,
+          payments: effectiveLines.map((line) => ({
+            method: line.method,
+            amount: line.amount,
+            currency: line.currency,
+            exchangeRate: line.exchangeRate,
+            accountId: requiresManualPaymentAccount(line.method) ? line.accountId : undefined,
+            bankAccountId: isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
+            reference: requiresPaymentReference(line.method) ? line.reference : undefined,
+            notes: localDoc.notes || undefined,
+          })),
+        } as any);
+      } else {
+        await paymentsService.create(payload as any);
+      }
       toast.success('Pago registrado', { id: saveToastId });
-      setIsCreating(false); setLocalDoc(null); onRefresh();
+      setIsCreating(false); setLocalDoc(null); setPaymentLines([]); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
@@ -251,6 +310,37 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const customerInvoices = localDoc?.customerId
     ? invoices.filter(i => i.customerId === localDoc.customerId && ['PENDING', 'PARTIAL', 'OVERDUE'].includes((i.status || '').toUpperCase()))
     : [];
+
+  const setPaymentDocument = (kind: 'invoice' | 'creditNote', id: string) => {
+    const document = kind === 'invoice'
+      ? invoices.find((invoice) => invoice.id === id)
+      : credits.find((credit) => credit.id === id);
+    const currentLine = paymentLines[0] || paymentLine('TRANSFER');
+    const sourceAmount = document
+      ? Number((document as any).balance ?? (document as any).total ?? 0)
+      : 0;
+    const amount = document
+      ? Number(convertBetweenCurrencies(
+        sourceAmount,
+        (document as any).currency,
+        currentLine.currency,
+        Number((document as any).exchangeRate || globalRate),
+        currentLine.exchangeRate,
+      ).toFixed(2))
+      : 0;
+    const nextLines = paymentLines.length
+      ? paymentLines.map((line, index) => index === 0 ? { ...line, amount } : line)
+      : [{ ...currentLine, amount }];
+    setPaymentLines(nextLines);
+    setLocalDoc({
+      ...localDoc,
+      invoiceId: kind === 'invoice' ? id : '',
+      creditNoteId: kind === 'creditNote' ? id : '',
+      amount,
+      currency: currentLine.currency,
+      exchangeRate: currentLine.exchangeRate,
+    });
+  };
 
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'ID Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
@@ -325,7 +415,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={requiresPaymentReference(localDoc.method) && !String(localDoc.reference || '').trim()}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={!paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
               Confirmar Pago
             </Button>
             )}
@@ -343,7 +433,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc.customerId} 
-                    onChange={(val) => setLocalDoc({ ...localDoc, customerId: val, invoiceId: '', creditNoteId: '' })} 
+                    onChange={(val) => { setLocalDoc({ ...localDoc, customerId: val, invoiceId: '', creditNoteId: '', amount: 0 }); setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: 0 } : line)); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Factura (Opcional)</p>
@@ -351,37 +441,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                     label: `${i.number} — ${formatConvertedAmount(Number(i.balance || 0), i.currency, i.exchangeRate)} pend.`,
                     value: i.id,
                   }))}
-                    value={localDoc.invoiceId} onChange={(val) => {
-                      const inv = invoices.find(i => i.id === val);
-                    setLocalDoc({ ...localDoc, invoiceId: val, creditNoteId: '', amount: inv ? Number(convertBetweenCurrencies(Number(inv.balance || 0), inv.currency, localDoc.currency, inv.exchangeRate, localDoc.exchangeRate || globalRate).toFixed(2)) : localDoc.amount });
-                    }} placeholder="Sin factura (anticipo)" /></div>
+                    value={localDoc.invoiceId} onChange={(val) => setPaymentDocument('invoice', val)} placeholder="Sin factura (anticipo)" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Crédito a liquidar (Opcional)</p>
                   <Combobox options={credits.filter((credit) => credit.customerId === localDoc.customerId && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
                     label: `${credit.number} — ${formatConvertedAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate)} pend.`,
                     value: credit.id,
                   }))}
-                    value={localDoc.creditNoteId} onChange={(val) => {
-                      const credit = credits.find((item) => item.id === val);
-                      setLocalDoc({ ...localDoc, creditNoteId: val, invoiceId: '', amount: credit ? Number(convertBetweenCurrencies(Number(credit.balance ?? credit.total ?? 0), credit.currency, localDoc.currency, credit.exchangeRate, localDoc.exchangeRate || globalRate).toFixed(2)) : localDoc.amount });
-                    }} placeholder="Sin crédito" /></div>
+                    value={localDoc.creditNoteId} onChange={(val) => setPaymentDocument('creditNote', val)} placeholder="Sin crédito" /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc.date} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
-                <div><p className="text-[10px] text-muted-foreground mb-1">Método de Pago</p>
-                  <select value={localDoc.method} onChange={(e) => { const nextMethod = e.target.value; setLocalDoc({ ...localDoc, method: nextMethod, accountId: requiresManualPaymentAccount(nextMethod) ? localDoc.accountId : '', bankAccountId: isBankPaymentMethod(nextMethod, true) ? localDoc.bankAccountId : '', reference: requiresPaymentReference(nextMethod) ? localDoc.reference : '' }); }} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    {methodOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select></div>
-
-                {requiresManualPaymentAccount(localDoc.method) && <AccountingAccountSelect
-                  value={localDoc.accountId}
-                  onChange={(accountId) => setLocalDoc({ ...localDoc, accountId })}
-                  assetOnly
-                  label="Cuenta del pago"
-                />}
-
-                {isBankPaymentMethod(localDoc.method, true) && <BankAccountSelect value={localDoc.bankAccountId} onChange={(bankAccountId) => setLocalDoc({ ...localDoc, bankAccountId })} label="Banco global de destino" />}
-
-                {requiresPaymentReference(localDoc.method) && <div><p className="text-[10px] text-muted-foreground mb-1">Referencia *</p>
-                  <Input value={localDoc.reference} onChange={(e) => setLocalDoc({ ...localDoc, reference: e.target.value })} className="h-8 text-xs" placeholder="Nº transferencia, cheque..." /></div>}
+                <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3 text-xs text-muted-foreground sm:col-span-2">
+                  Selecciona una o varias formas de pago. Cada línea puede llevar su propia moneda, banco y referencia.
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -390,30 +461,30 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Monto</p>
               <div className="space-y-4">
-                <CurrencySelector
-                  value={localDoc.currency}
-                  baseCurrency={baseCurrency}
-                  exchangeRate={globalRate}
-                  label="Moneda recibida"
-                  onChange={(currency) => {
-                    const nextRate = currency === baseCurrency ? 1 : globalRate;
-                    setLocalDoc({
-                      ...localDoc,
-                      amount: Number(convertBetweenCurrencies(Number(localDoc.amount || 0), localDoc.currency, currency, localDoc.exchangeRate || globalRate, nextRate).toFixed(2)),
-                      currency,
-                      exchangeRate: nextRate,
-                    });
-                  }}
-                />
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2">Monto del Pago</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
-                    <Input type="number" min="0" step="0.01" value={localDoc.amount || ''} onChange={(e) => setLocalDoc({ ...localDoc, amount: Number(e.target.value) })}
-                      className="h-12 text-2xl font-black text-emerald-500 text-right" placeholder="0.00" />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
+                    <span className="text-[10px] font-black text-primary">Mixto permitido</span>
                   </div>
-                  {localDoc.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ C$ {formatSalesAmount(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate))}</p>}
-                  {localDoc.currency !== 'USD' && Number(localDoc.amount) > 0 && <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">≈ $ {formatSalesAmount(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate))}</p>}
+                  {paymentLines.map((line, index) => (
+                    <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '' } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
+                        <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                          if (itemIndex !== index) return item;
+                          const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                          const nextRate = paymentLineRate(nextCurrency);
+                          return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
+                        }))} />
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} className="h-9 text-xs tabular-nums" /></div>
+                        <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                      </div>
+                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" className="mt-2" />}
+                      {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
+                  <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Notas</p>
