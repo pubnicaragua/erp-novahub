@@ -1062,7 +1062,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
-    const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED', 'CREDIT'].includes(String(localDoc?.status || '').toUpperCase());
+    const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
     const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
     const accountingBlocked = hasInventoryLines && (accountingPreflightLoading || !accountingPreflight?.ready);
