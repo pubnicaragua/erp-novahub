@@ -5,6 +5,7 @@ import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
+import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
 import { LoginPage } from './components/LoginPage';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import LandingPage from './components/LandingPage';
@@ -74,6 +75,7 @@ const ErrorBoundaryFallback = () => (
 
 function DashboardLayout() {
   const { hasAccess, user } = useAuth();
+  const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   useIncomingNotificationAlert();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
@@ -273,6 +275,17 @@ function DashboardLayout() {
         onOverview={handleOverview}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {isImpersonating && branch && (
+          <div className="flex items-center justify-between gap-3 bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="shrink-0 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">Modo Supervisor</span>
+              <span className="truncate">Trabajando en <strong>{branch.name}</strong> como {manager?.name}</span>
+            </div>
+            <button onClick={exitBranch} className="shrink-0 rounded-lg bg-amber-500/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/25 transition-colors">
+              Volver al Panel
+            </button>
+          </div>
+        )}
         <Topbar
           onMenuClick={() => setSidebarOpen(true)}
           onNavigate={handleNavigate}
@@ -432,7 +445,9 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <CurrencyProvider>
-            <AppContent />
+            <ImpersonationProvider>
+              <AppContent />
+            </ImpersonationProvider>
           </CurrencyProvider>
         </ThemeProvider>
       </AuthProvider>

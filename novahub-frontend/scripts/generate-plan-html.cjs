@@ -1,0 +1,578 @@
+const fs = require('fs');
+const path = require('path');
+
+const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Plan Tecnico - Grupo Empresarial + Sucursales</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+@page{size:A4;margin:0}
+body{font-family:'Inter',sans-serif;font-size:11px;line-height:1.6;color:#1e293b;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cover{width:210mm;height:297mm;background:linear-gradient(135deg,#0f172a 0%,#1e293b 40%,#334155 100%);position:relative;page-break-after:always;display:flex;flex-direction:column;justify-content:center;padding:60px 70px}
+.cover::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6)}
+.cover::after{content:'';position:absolute;bottom:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6)}
+.cover-logo{font-size:42px;font-weight:800;color:#fff;letter-spacing:-1px;margin-bottom:6px}
+.cover-logo span{color:#60a5fa}
+.cover-subtitle{font-size:26px;font-weight:300;color:#94a3b8;margin-bottom:8px}
+.cover-title{font-size:18px;font-weight:500;color:#60a5fa;margin-bottom:30px}
+.cover-divider{width:180px;height:3px;background:#3b82f6;border-radius:2px;margin-bottom:40px}
+.cover-topics{list-style:none;margin-bottom:50px}
+.cover-topics li{color:#cbd5e1;font-size:13px;padding:6px 0 6px 20px;position:relative}
+.cover-topics li::before{content:'\\25B8';position:absolute;left:0;color:#3b82f6;font-weight:700}
+.cover-meta{position:absolute;bottom:40px;left:70px;color:#64748b;font-size:11px;line-height:1.8}
+.page{width:210mm;min-height:297mm;padding:50px 60px 60px 60px;page-break-after:always;position:relative}
+.page-footer{position:absolute;bottom:15px;left:60px;right:60px;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+h1{font-size:28px;font-weight:800;color:#1e2a3a;margin-bottom:4px;letter-spacing:-0.5px}
+h1::after{content:'';display:block;width:60px;height:3px;background:#3b82f6;border-radius:2px;margin-top:6px;margin-bottom:20px}
+h2{font-size:16px;font-weight:700;color:#1e2a3a;background:#f8fafc;border-left:4px solid #3b82f6;padding:10px 16px;margin:24px 0 14px 0;border-radius:0 6px 6px 0}
+h3{font-size:13px;font-weight:600;color:#334155;margin:18px 0 8px 0;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
+p{margin-bottom:10px;color:#475569}
+strong{color:#1e293b}
+table{width:100%;border-collapse:collapse;margin:12px 0 16px 0;font-size:10px}
+thead th{background:#1e2a3a;color:#fff;font-weight:600;text-align:left;padding:10px 14px;font-size:10px;letter-spacing:0.3px}
+thead th:first-child{border-radius:6px 0 0 0}
+thead th:last-child{border-radius:0 6px 0 0}
+tbody td{padding:9px 14px;border-bottom:1px solid #f1f5f9;color:#334155}
+tbody tr:nth-child(even){background:#f8fafc}
+code{font-family:'Consolas','JetBrains Mono',monospace;font-size:9.5px;background:#f1f5f9;color:#2563eb;padding:2px 6px;border-radius:4px;border:1px solid #e2e8f0}
+pre{background:#0f172a;color:#e2e8f0;padding:16px 20px;border-radius:8px;margin:12px 0 16px 0;font-family:'Consolas',monospace;font-size:10px;line-height:1.7;border-left:4px solid #3b82f6}
+pre code{background:none;color:inherit;padding:0;border:none;font-size:inherit}
+ul,ol{margin:8px 0 14px 24px;color:#475569}
+li{margin-bottom:5px;line-height:1.5}
+li::marker{color:#3b82f6;font-weight:700}
+.callout{padding:14px 18px;border-radius:8px;margin:14px 0;font-size:10.5px;line-height:1.6}
+.callout-info{background:#dbeafe;border-left:4px solid #3b82f6;color:#334155}
+.callout-success{background:#d1fae5;border-left:4px solid #059669;color:#334155}
+.callout-warning{background:#ffedd5;border-left:4px solid #ea580c;color:#334155}
+.callout-title{font-weight:700;margin-bottom:4px;font-size:11px}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:9px;font-weight:600;letter-spacing:0.3px}
+.badge-phase{background:#3b82f6;color:#fff}
+.badge-new{background:#059669;color:#fff}
+.badge-modify{background:#ea580c;color:#fff}
+.badge-backend{background:#7c3aed;color:#fff}
+.badge-frontend{background:#3b82f6;color:#fff}
+.toc-phase{font-weight:700;color:#3b82f6;font-size:13px;padding:10px 0 4px 0;border-bottom:1px solid #e2e8f0;margin-bottom:4px}
+.toc-list{list-style:none;margin:0;padding:0}
+.toc-item{padding:5px 0 5px 20px;color:#475569;font-size:11px}
+.toc-item span:first-child{font-weight:500;color:#334155}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+.col-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px}
+.col-card h4{font-size:11px;font-weight:600;color:#1e2a3a;margin-bottom:6px}
+.diagram{margin:20px 0;padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px}
+.diagram-row{display:flex;justify-content:center;gap:16px;margin-bottom:8px}
+.diagram-box{padding:12px 24px;border-radius:8px;text-align:center;font-weight:600;font-size:11px;min-width:140px}
+.diagram-box.platform{background:#1e2a3a;color:#fff}
+.diagram-box.group{background:#3b82f6;color:#fff}
+.diagram-box.branch{background:#059669;color:#fff;font-size:10px;padding:10px 16px;min-width:120px}
+.diagram-arrow{text-align:center;color:#3b82f6;font-size:18px;margin:4px 0}
+.diagram-hline{width:380px;height:2px;background:#3b82f6;margin:0 auto 8px auto}
+.diagram-branches{display:flex;justify-content:center;gap:20px;margin-top:8px}
+.diagram-legend{display:flex;gap:24px;justify-content:center;margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9px;color:#64748b}
+.diagram-legend-item{display:flex;align-items:center;gap:6px}
+.diagram-legend-color{width:14px;height:14px;border-radius:3px}
+.file-table td:first-child{font-family:'Consolas',monospace;font-size:9px;color:#2563eb}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-logo">NOVA<span>HUB</span> ERP</div>
+  <div class="cover-subtitle">Plan Tecnico</div>
+  <div class="cover-title">Grupo Empresarial + Sistema de Sucursales</div>
+  <div class="cover-divider"></div>
+  <ul class="cover-topics">
+    <li>Mejora de mensajes de error (HTTP 403)</li>
+    <li>Arquitectura de Grupo Empresarial multi-tenant</li>
+    <li>Sistema de sucursales con datos aislados</li>
+    <li>Transferencias inter-sucursal</li>
+    <li>Dashboard consolidado de solo lectura</li>
+    <li>Migracion SQL idempotente</li>
+  </ul>
+  <div class="cover-meta">
+    <div><strong>Fecha:</strong> 18 de Agosto de 2026</div>
+    <div><strong>Version:</strong> 1.0</div>
+    <div><strong>Stack:</strong> NestJS + Prisma 7.x + PostgreSQL | React + TypeScript</div>
+    <div><strong>Documento interno</strong> - NovaHub ERP</div>
+  </div>
+</div>
+
+<!-- INDICE -->
+<div class="page">
+  <h1>Indice</h1>
+  <div class="toc-phase">FASE 1 - Mejora de Mensajes de Error</div>
+  <ul class="toc-list">
+    <li class="toc-item">1.1 Labels de permisos faltantes</li>
+    <li class="toc-item">1.2 Labels de modulos faltantes</li>
+    <li class="toc-item">1.3 Corregir error path en GET query</li>
+    <li class="toc-item">1.4 Limpiar codigo muerto (Axios pattern)</li>
+  </ul>
+  <div class="toc-phase">FASE 2 - Arquitectura Grupo Empresarial / Sucursales</div>
+  <ul class="toc-list">
+    <li class="toc-item">2.1 Schema: Jerarquia padre-hijo en ClientTenant</li>
+    <li class="toc-item">2.2 Guard de acceso cruzado para managers</li>
+    <li class="toc-item">2.3 Endpoint de dashboard consolidado</li>
+    <li class="toc-item">2.4 Endpoint de listado de sucursales</li>
+    <li class="toc-item">2.5 Transferencias inter-sucursal</li>
+    <li class="toc-item">2.6 Vista Manager del Grupo Empresarial</li>
+    <li class="toc-item">2.7 Integracion en App.tsx</li>
+    <li class="toc-item">2.8 Flag isGroupAdmin en AuthContext</li>
+    <li class="toc-item">2.9 Sidebar para grupo empresarial</li>
+  </ul>
+  <div class="toc-phase">FASE 3 - Migracion y Deploy</div>
+  <ul class="toc-list">
+    <li class="toc-item">3.1 Migracion Prisma idempotente</li>
+    <li class="toc-item">3.2 Regenerar Prisma Client</li>
+    <li class="toc-item">3.3 Verificar TypeScript</li>
+    <li class="toc-item">3.4 Build frontend</li>
+  </ul>
+  <div class="toc-phase">ANEXOS</div>
+  <ul class="toc-list">
+    <li class="toc-item">Resumen de archivos a crear / modificar</li>
+    <li class="toc-item">Diagrama de arquitectura</li>
+  </ul>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 1</span></div>
+</div>
+
+<!-- FASE 1: ERROR MESSAGES -->
+<div class="page">
+  <h1>FASE 1 - Mejora de Mensajes de Error</h1>
+  <div class="callout callout-info">
+    <div class="callout-title">Problema actual</div>
+    Los errores de permisos (HTTP 403) llegan al frontend como <code>"Cannot POST /api/hr/payment-requests"</code> sin contexto util. El backend si envia mensajes claros en espanol, pero el frontend los pierde en ciertos caminos de la UI.
+  </div>
+
+  <h2>1.1 Labels de Permisos Faltantes</h2>
+  <p><strong>Archivo:</strong> <code>erp-novahub/novahub-frontend/src/app/services/api.ts</code></p>
+  <p>El mapa <code>PERMISSION_LABELS</code> solo cubre 6 acciones basicas. Se agregan las 24 acciones faltantes:</p>
+  <table>
+    <thead><tr><th>Accion</th><th>Label en Espanol</th><th>Uso principal</th></tr></thead>
+    <tbody>
+      <tr><td><code>submit</code></td><td>enviar</td><td>Solicitudes de pago, aprobaciones</td></tr>
+      <tr><td><code>reject</code></td><td>rechazar</td><td>Rechazo de solicitudes</td></tr>
+      <tr><td><code>pay</code></td><td>pagar</td><td>Registro de pagos</td></tr>
+      <tr><td><code>apply</code></td><td>aplicar</td><td>Aplicar creditos, descuentos</td></tr>
+      <tr><td><code>manage</code></td><td>gestionar</td><td>Gestion general de modulos</td></tr>
+      <tr><td><code>confirm</code></td><td>confirmar</td><td>Confirmacion de operaciones</td></tr>
+      <tr><td><code>process</code></td><td>procesar</td><td>Procesamiento de documentos</td></tr>
+      <tr><td><code>cancel</code></td><td>anular</td><td>Anulacion de facturas, notas</td></tr>
+      <tr><td><code>authorize</code></td><td>autorizar</td><td>Autorizacion de compras</td></tr>
+      <tr><td><code>reopen</code></td><td>reabrir</td><td>Reabrir periodos, documentos</td></tr>
+      <tr><td><code>close</code></td><td>cerrar</td><td>Cerrar periodos contables</td></tr>
+      <tr><td><code>duplicate</code></td><td>duplicar</td><td>Duplicar documentos</td></tr>
+      <tr><td><code>convert</code></td><td>convertir</td><td>Convertir cotizacion a factura</td></tr>
+      <tr><td><code>assign</code></td><td>asignar</td><td>Asignar empleados, tareas</td></tr>
+      <tr><td><code>download</code></td><td>descargar</td><td>Descarga de reportes</td></tr>
+      <tr><td><code>generate</code></td><td>generar</td><td>Generar reportes, asientos</td></tr>
+      <tr><td><code>send</code></td><td>enviar</td><td>Envio de emails, documentos</td></tr>
+      <tr><td><code>print</code></td><td>imprimir</td><td>Impresion de facturas</td></tr>
+      <tr><td><code>export</code></td><td>exportar</td><td>Exportacion CSV/Excel</td></tr>
+      <tr><td><code>import</code></td><td>importar</td><td>Importacion masiva</td></tr>
+      <tr><td><code>deactivate</code></td><td>desactivar</td><td>Desactivar registros</td></tr>
+      <tr><td><code>reverse</code></td><td>revertir</td><td>Revertir asientos contables</td></tr>
+      <tr><td><code>reconcile</code></td><td>conciliar</td><td>Conciliacion bancaria</td></tr>
+      <tr><td><code>any</code></td><td>realizar esta accion</td><td>Cualquier accion no listada</td></tr>
+    </tbody>
+  </table>
+
+  <h2>1.2 Labels de Modulos Faltantes</h2>
+  <p>El mapa <code>MODULE_LABELS</code> no incluye modulos de RRHH ni Contabilidad detallada:</p>
+  <table>
+    <thead><tr><th>Codigo</th><th>Label</th></tr></thead>
+    <tbody>
+      <tr><td><code>HR</code></td><td>Recursos Humanos</td></tr>
+      <tr><td><code>HR_PAYROLL</code></td><td>Nomina</td></tr>
+      <tr><td><code>HR_TRAINING</code></td><td>Capacitaciones</td></tr>
+      <tr><td><code>HR_BENEFITS</code></td><td>Beneficios</td></tr>
+      <tr><td><code>ACCOUNTING</code></td><td>Contabilidad</td></tr>
+      <tr><td><code>ACCOUNTING_JOURNAL</code></td><td>Asientos Contables</td></tr>
+      <tr><td><code>ACCOUNTING_HR_PAYMENT_REQUESTS</code></td><td>Solicitudes de Pago RRHH</td></tr>
+    </tbody>
+  </table>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 2</span></div>
+</div>
+
+<!-- FASE 1 continued -->
+<div class="page">
+  <h2>1.3 Corregir Error Path en GET Query</h2>
+  <p><strong>Archivo:</strong> <code>SolicitudesPagoRRHHView.tsx</code> (Linea 300)</p>
+  <p>El componente muestra un mensaje generico y descarta el error real de la API. Se cambia para mostrar el error especifico:</p>
+  <div class="two-col">
+    <div class="col-card">
+      <h4>Antes (error generico)</h4>
+      <pre><code>{query.isError &amp;&amp; (
+  &lt;div className="..."&gt;
+    No se pudieron cargar las solicitudes.
+    Revisa tu acceso a Contabilidad.
+  &lt;/div&gt;
+)}</code></pre>
+    </div>
+    <div class="col-card">
+      <h4>Despues (error real de la API)</h4>
+      <pre><code>{query.isError &amp;&amp; (
+  &lt;div className="..."&gt;
+    {query.error?.message ||
+     'No se pudieron cargar. Verifica permisos.'}
+  &lt;/div&gt;
+)}</code></pre>
+    </div>
+  </div>
+
+  <h2>1.4 Limpiar Codigo Muerto (Axios Pattern)</h2>
+  <p><strong>Archivo:</strong> <code>SolicitudesPagoRRHHView.tsx</code> (Linea 174)</p>
+  <p>El patron <code>error?.response?.data?.message</code> es de Axios pero la app usa <code>fetch</code>. Esa propiedad siempre es <code>undefined</code>. Se simplifica:</p>
+  <div class="two-col">
+    <div class="col-card">
+      <h4>Antes (dead code)</h4>
+      <pre><code>const message =
+  error?.response?.data?.message ||
+  error?.message ||
+  'No se pudo completar.';</code></pre>
+    </div>
+    <div class="col-card">
+      <h4>Despues (limpio)</h4>
+      <pre><code>const message =
+  error?.message ||
+  'No se pudo completar.';</code></pre>
+    </div>
+  </div>
+
+  <div class="callout callout-success">
+    <div class="callout-title">Resultado esperado</div>
+    Despues de esta fase, un usuario sin permisos vera: <em>"Acceso denegado. No tienes el permiso de enviar requerido para Recursos Humanos o Nomina o Capacitaciones o Beneficios."</em> en vez de <em>"Cannot POST /api/hr/payment-requests"</em>.
+  </div>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 3</span></div>
+</div>
+
+<!-- FASE 2: ARCHITECTURE -->
+<div class="page">
+  <h1>FASE 2 - Arquitectura Grupo Empresarial / Sucursales</h1>
+  <div class="callout callout-info">
+    <div class="callout-title">Decisiones de la reunion - 18 de Agosto 2026</div>
+    <strong>1.</strong> <strong>Grupo = Tenant padre:</strong> Un <code>ClientTenant</code> "padre" con multiples <code>ClientTenant</code> "hijos" (sucursales). El padre no factura, solo administra.<br>
+    <strong>2.</strong> <strong>Inventario por sucursal:</strong> Cada sucursal tiene sus productos y bodegas independientes.<br>
+    <strong>3.</strong> <strong>Manager solo lectura + reportes:</strong> El manager del grupo ve datos consolidados pero no opera directamente en las sucursales.<br>
+    <strong>4.</strong> <strong>Clientes separados:</strong> Cada sucursal tiene su propia base de clientes aislada.
+  </div>
+
+  <h2>2.1 Schema: Jerarquia Padre-Hijo en ClientTenant</h2>
+  <p><strong>Archivo:</strong> <code>BackendERPNH/prisma/schema.prisma</code></p>
+  <p>Se agrega campo <code>parentTenantId</code> al modelo <code>ClientTenant</code>:</p>
+  <table>
+    <thead><tr><th>Campo Nuevo</th><th>Tipo</th><th>Descripcion</th></tr></thead>
+    <tbody>
+      <tr><td><code>parentTenantId</code></td><td>String?</td><td>FK al tenant padre (Grupo Empresarial)</td></tr>
+      <tr><td><code>parentTenant</code></td><td>ClientTenant?</td><td>Relacion inverse al padre</td></tr>
+      <tr><td><code>children</code></td><td>ClientTenant[]</td><td>Relacion a tenants hijos (sucursales)</td></tr>
+    </tbody>
+  </table>
+  <p>Un <strong>Grupo Empresarial</strong> es un <code>ClientTenant</code> sin <code>parentTenantId</code> (es raiz). Una <strong>Sucursal</strong> es un <code>ClientTenant</code> con <code>parentTenantId</code> apuntando al grupo. El campo es nullable para compatibilidad con tenants existentes.</p>
+  <h3>Migracion SQL idempotente:</h3>
+  <pre><code>ALTER TABLE "ClientTenant"
+  ADD COLUMN IF NOT EXISTS "parentTenantId" UUID;
+
+ALTER TABLE "ClientTenant"
+  ADD CONSTRAINT IF NOT EXISTS
+  "ClientTenant_parentTenantId_fkey"
+  FOREIGN KEY ("parentTenantId")
+  REFERENCES "ClientTenant"("id")
+  ON DELETE SET NULL;</code></pre>
+
+  <h2>2.2 Guard de Acceso Cruzado para Managers</h2>
+  <p><strong>Archivo nuevo:</strong> <code>BackendERPNH/src/common/guards/tenant-scope.guard.ts</code></p>
+  <p>Guard/middleware que permite a usuarios del tenant padre acceder a datos de tenants hijos (solo lectura):</p>
+  <ul>
+    <li>Si el usuario es <code>SUPER_ADMIN</code> &rarr; acceso total (ya existe)</li>
+    <li>Si el usuario tiene <code>parentTenantId === null</code> (es grupo) &rarr; puede leer datos de sus children</li>
+    <li>Si el usuario es un tenant normal &rarr; solo su propio <code>clientTenantId</code> (ya existe)</li>
+  </ul>
+  <h3>Responsabilidades del guard:</h3>
+  <ul>
+    <li>Verificar que el usuario tenga role <code>admin</code> o <code>manager</code> en el tenant padre</li>
+    <li>Permitir queries con <code>?tenantId=xxx</code> donde <code>xxx</code> es un child del tenant padre</li>
+    <li>Bloquear escritura (solo <code>GET</code> permitido para datos cruzados)</li>
+    <li>Registrar auditoria de acceso cruzado</li>
+  </ul>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 4</span></div>
+</div>
+
+<!-- FASE 2 continued: Endpoints -->
+<div class="page">
+  <h2>2.3 Endpoint de Dashboard Consolidado</h2>
+  <p><strong>Endpoint:</strong> <code>GET /api/tenants/group-dashboard?period=month</code></p>
+  <p>Retorna KPIs agregados de todos los tenants hijos del grupo:</p>
+  <table>
+    <thead><tr><th>KPI</th><th>Descripcion</th><th>Calculo</th></tr></thead>
+    <tbody>
+      <tr><td>Total Ingresos</td><td>Suma de ingresos de todas las sucursales</td><td>SUM(income.amount) por tenant hijo</td></tr>
+      <tr><td>Total Gastos</td><td>Suma de gastos de todas las sucursales</td><td>SUM(expense.amount) por tenant hijo</td></tr>
+      <tr><td>Total Ordenes</td><td>Ordenes de venta del mes</td><td>COUNT(sale) por tenant hijo</td></tr>
+      <tr><td>Inventario Total</td><td>Unidades en stock globales</td><td>SUM(inventoryLevel.quantity)</td></tr>
+      <tr><td>Top Productos</td><td>Productos mas vendidos (agregados)</td><td>JOIN saleItem + product</td></tr>
+      <tr><td>Alertas Stock</td><td>Productos con stock bajo por sucursal</td><td>inventoryLevel WHERE quantity &lt; minStock</td></tr>
+      <tr><td>Ranking Sucursales</td><td>Sucursales ordenadas por facturacion</td><td>ORDER BY ingresos DESC</td></tr>
+    </tbody>
+  </table>
+  <h3>Metodo en tenants.service.ts:</h3>
+  <pre><code>async getGroupDashboard(parentTenantId: string, period: string) {
+  // 1. Buscar todos los ClientTenant donde parentTenantId = X
+  const children = await this.prisma.clientTenant.findMany({
+    where: { parentTenantId },
+    select: { id: true, name: true },
+  });
+
+  // 2. Para cada hijo, ejecutar la logica de getDashboard()
+  const results = await Promise.all(
+    children.map(child => this.getDashboard(child.id, period))
+  );
+
+  // 3. Agregar resultados en un dashboard consolidado
+  return {
+    kpis: this.aggregateKpis(results),
+    branches: results.map((r, i) => ({
+      tenantId: children[i].id,
+      name: children[i].name,
+      ...r.kpis,
+    })),
+    topProducts: this.mergeTopProducts(results),
+    alerts: this.mergeAlerts(results),
+  };
+}</code></pre>
+
+  <h2>2.4 Endpoint de Listado de Sucursales</h2>
+  <p><strong>Endpoint:</strong> <code>GET /api/tenants/group-branches</code></p>
+  <table>
+    <thead><tr><th>Campo</th><th>Tipo</th><th>Descripcion</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>String</td><td>ID del tenant hijo</td></tr>
+      <tr><td><code>name</code></td><td>String</td><td>Nombre de la sucursal</td></tr>
+      <tr><td><code>slug</code></td><td>String</td><td>Slug unico</td></tr>
+      <tr><td><code>isActive</code></td><td>Boolean</td><td>Estado de la sucursal</td></tr>
+      <tr><td><code>ingresosMes</code></td><td>Number</td><td>Ingresos del mes actual</td></tr>
+      <tr><td><code>ordenesCount</code></td><td>Number</td><td>Ordenes de venta del mes</td></tr>
+      <tr><td><code>stockBajo</code></td><td>Number</td><td>Productos con stock bajo</td></tr>
+      <tr><td><code>enabledModules</code></td><td>String[]</td><td>Modulos habilitados</td></tr>
+    </tbody>
+  </table>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 5</span></div>
+</div>
+
+<!-- FASE 2 continued: Transfers -->
+<div class="page">
+  <h2>2.5 Transferencias Inter-Sucursal</h2>
+  <p><strong>Archivo:</strong> <code>BackendERPNH/prisma/schema.prisma</code></p>
+  <p>Se extiende el modelo <code>Transfer</code> para soportar transferencias entre tenants:</p>
+  <table>
+    <thead><tr><th>Campo Nuevo</th><th>Tipo</th><th>Descripcion</th></tr></thead>
+    <tbody>
+      <tr><td><code>interTenantTransferId</code></td><td>String?</td><td>ID del transfer espejo en el otro tenant</td></tr>
+      <tr><td><code>sourceTenantId</code></td><td>String?</td><td>Tenant origen (transferencias inter-tenant)</td></tr>
+      <tr><td><code>destTenantId</code></td><td>String?</td><td>Tenant destino (transferencias inter-tenant)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Logica de transferencia inter-sucursal:</h3>
+  <div style="margin:12px 0">
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start">
+      <div style="width:28px;height:28px;background:#3b82f6;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">1</div>
+      <div><strong>Usuario en Sucursal A</strong> crea transferencia hacia Sucursal B</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start">
+      <div style="width:28px;height:28px;background:#3b82f6;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">2</div>
+      <div>Se crean <strong>DOS</strong> registros <code>Transfer</code>:<br>
+        - En Sucursal A: <code>fromId=warehouse_A</code>, status=COMPLETED, tipo OUT<br>
+        - En Sucursal B: <code>toId=warehouse_B</code>, status=PENDING, tipo IN<br>
+        - Ambos vinculados por <code>interTenantTransferId</code>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start">
+      <div style="width:28px;height:28px;background:#3b82f6;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">3</div>
+      <div><strong>Al completar</strong> la transferencia en Sucursal B:<br>
+        - Se decrementa stock en Sucursal A<br>
+        - Se incrementa stock en Sucursal B<br>
+        - Se generan asientos contables en ambas sucursales
+      </div>
+    </div>
+  </div>
+
+  <h3>Endpoint nuevo:</h3>
+  <pre><code>POST /inventory/transfers/inter-tenant
+
+Body:
+{
+  sourceTenantId: "tenant-A",
+  destTenantId: "tenant-B",
+  fromWarehouseId: "warehouse-A",
+  toWarehouseId: "warehouse-B",
+  items: [{ variantId: "...", quantity: 10 }],
+  notes: "Transferencia mensual"
+}</code></pre>
+
+  <h2>2.6 Vista Manager del Grupo Empresarial</h2>
+  <p><strong>Archivo nuevo:</strong> <code>GroupManagerDashboard.tsx</code></p>
+  <p>Componente principal que muestra:</p>
+  <ul>
+    <li><strong>Header:</strong> Nombre del grupo empresarial + selector de periodo</li>
+    <li><strong>KPIs consolidados:</strong> 4 tarjetas (Ingresos Totales, Gastos, Ordenes, Margen)</li>
+    <li><strong>Tabla de sucursales:</strong> Nombre, Ingresos, Ordenes, Stock Bajo, Estado</li>
+    <li><strong>Grafico de barras:</strong> Ingresos por sucursal</li>
+    <li><strong>Top productos agregados:</strong> Los mas vendidos en todo el grupo</li>
+    <li><strong>Alertas consolidadas:</strong> Productos sin stock, stock bajo por sucursal</li>
+    <li><strong>Detalle de sucursal:</strong> Al hacer clic, muestra dashboard individual (read-only)</li>
+  </ul>
+
+  <h2>2.7 Integracion en App.tsx</h2>
+  <pre><code>// En el modulo 'overview'
+if (user?.role === 'partner') {
+  return &lt;PartnerDashboard /&gt;;
+}
+if (user?.isGroupAdmin) {
+  return &lt;GroupManagerDashboard /&gt;;  // NUEVO
+}
+return &lt;OverviewDashboard /&gt;;</code></pre>
+
+  <h2>2.8 Flag isGroupAdmin en AuthContext</h2>
+  <pre><code>const isGroupAdmin =
+  !isPlatformAdmin &amp;&amp;
+  (userData as any).hasChildren === true;</code></pre>
+  <p>El backend debe retornar <code>hasChildren: true</code> en la respuesta de login cuando el tenant tiene hijos.</p>
+
+  <h2>2.9 Sidebar para Grupo Empresarial</h2>
+  <table>
+    <thead><tr><th>Menu Item</th><th>Modulo</th><th>Icono</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard Grupo</td><td>overview</td><td>LayoutDashboard</td></tr>
+      <tr><td>Sucursales</td><td>sucursales</td><td>Building2</td></tr>
+      <tr><td>Reportes Consolidados</td><td>reportes</td><td>BarChart3</td></tr>
+      <tr><td>Transferencias</td><td>inventario</td><td>ArrowLeftRight</td></tr>
+      <tr><td>Configuracion</td><td>configuracion</td><td>Settings</td></tr>
+    </tbody>
+  </table>
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 6</span></div>
+</div>
+
+<!-- FASE 3: MIGRATION -->
+<div class="page">
+  <h1>FASE 3 - Migracion y Deploy</h1>
+
+  <h2>3.1 Migracion Prisma Idempotente</h2>
+  <p>La migracion usa <code>IF NOT EXISTS</code> para ser idempotente y segura:</p>
+  <pre><code>-- Agregar parentTenantId
+ALTER TABLE "ClientTenant"
+  ADD COLUMN IF NOT EXISTS "parentTenantId" UUID;
+
+ALTER TABLE "ClientTenant"
+  ADD CONSTRAINT IF NOT EXISTS
+  "ClientTenant_parentTenantId_fkey"
+  FOREIGN KEY ("parentTenantId")
+  REFERENCES "ClientTenant"("id")
+  ON DELETE SET NULL;
+
+-- Agregar campos de transfer inter-tenant
+ALTER TABLE "Transfer"
+  ADD COLUMN IF NOT EXISTS "interTenantTransferId" TEXT;
+
+ALTER TABLE "Transfer"
+  ADD COLUMN IF NOT EXISTS "sourceTenantId" TEXT;
+
+ALTER TABLE "Transfer"
+  ADD COLUMN IF NOT EXISTS "destTenantId" TEXT;</code></pre>
+
+  <h2>3.2 Regenerar Prisma Client</h2>
+  <pre><code>npx prisma generate</code></pre>
+  <p>Esto regenera el Prisma Client con los nuevos campos del schema.</p>
+
+  <h2>3.3 Verificar TypeScript</h2>
+  <pre><code>npx tsc --noEmit</code></pre>
+  <p>Verificar que no hay errores nuevos (solo los pre-existentes en spec/seed).</p>
+
+  <h2>3.4 Build Frontend</h2>
+  <pre><code>cd erp-novahub/novahub-frontend &amp;&amp; npm run build</code></pre>
+  <p>Compilar el frontend con los nuevos componentes (GroupManagerDashboard, etc.).</p>
+
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 7</span></div>
+</div>
+
+<!-- ANEXOS: FILE SUMMARY -->
+<div class="page">
+  <h1>Anexos</h1>
+
+  <h2>Archivos a Modificar</h2>
+  <table class="file-table">
+    <thead><tr><th>Archivo</th><th>Fase</th><th>Accion</th></tr></thead>
+    <tbody>
+      <tr><td>api.ts (frontend)</td><td>1.1, 1.2</td><td>Agregar permission/module labels</td></tr>
+      <tr><td>SolicitudesPagoRRHHView.tsx</td><td>1.3, 1.4</td><td>Corregir error path + limpiar dead code</td></tr>
+      <tr><td>schema.prisma</td><td>2.1, 2.5</td><td>Agregar parentTenantId + campos Transfer</td></tr>
+      <tr><td>tenants.service.ts</td><td>2.3, 2.4</td><td>Metodos getGroupDashboard, getGroupBranches</td></tr>
+      <tr><td>tenants.controller.ts</td><td>2.3, 2.4</td><td>Endpoints group-dashboard, group-branches</td></tr>
+      <tr><td>inventory.service.ts</td><td>2.5</td><td>Metodo createInterTenantTransfer</td></tr>
+      <tr><td>inventory.controller.ts</td><td>2.5</td><td>Endpoint POST /transfers/inter-tenant</td></tr>
+      <tr><td>App.tsx</td><td>2.7</td><td>Routing para grupo empresarial</td></tr>
+      <tr><td>AuthContext.tsx</td><td>2.8</td><td>Flag isGroupAdmin</td></tr>
+      <tr><td>Sidebar.tsx</td><td>2.9</td><td>Menu para grupo empresarial</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Archivos Nuevos</h2>
+  <table class="file-table">
+    <thead><tr><th>Archivo</th><th>Fase</th><th>Descripcion</th></tr></thead>
+    <tbody>
+      <tr><td>tenant-scope.guard.ts</td><td>2.2</td><td>Guard de acceso cruzado para managers</td></tr>
+      <tr><td>GroupManagerDashboard.tsx</td><td>2.6</td><td>Vista manager del grupo empresarial</td></tr>
+      <tr><td>migracion SQL</td><td>3.1</td><td>Migracion idempotente DDL</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Diagrama de Arquitectura</h2>
+  <div class="diagram">
+    <div class="diagram-row">
+      <div class="diagram-box platform">NovaHub Platform</div>
+    </div>
+    <div class="diagram-arrow">&darr;</div>
+    <div class="diagram-row">
+      <div class="diagram-box group">Grupo Empresarial<br><small style="font-weight:300;font-size:9px">(Tenant Padre - admin/manager)</small></div>
+    </div>
+    <div class="diagram-arrow">&darr;</div>
+    <div class="diagram-hline"></div>
+    <div class="diagram-branches">
+      <div class="diagram-branch-group">
+        <div class="diagram-box branch">Sucursal Managua</div>
+        <div style="font-size:9px;color:#64748b;margin-top:4px">Bodegas | Clientes | Facturacion</div>
+      </div>
+      <div class="diagram-branch-group">
+        <div class="diagram-box branch">Sucursal Leon</div>
+        <div style="font-size:9px;color:#64748b;margin-top:4px">Bodegas | Clientes | Facturacion</div>
+      </div>
+      <div class="diagram-branch-group">
+        <div class="diagram-box branch">Sucursal Masaya</div>
+        <div style="font-size:9px;color:#64748b;margin-top:4px">Bodegas | Clientes | Facturacion</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:16px;padding:8px;background:#fee2e2;border-radius:8px;font-size:10px;color:#dc2626;font-weight:600">
+      Transferencias Inter-Sucursal (bidireccionales via interTenantTransferId)
+    </div>
+    <div class="diagram-legend">
+      <div class="diagram-legend-item"><div class="diagram-legend-color" style="background:#1e2a3a"></div>Tenant Padre (Grupo)</div>
+      <div class="diagram-legend-item"><div class="diagram-legend-color" style="background:#059669"></div>Tenant Hijo (Sucursal)</div>
+      <div class="diagram-legend-item"><div class="diagram-legend-color" style="background:#fee2e2;border:1px solid #dc2626"></div>Inter-Sucursal</div>
+    </div>
+  </div>
+
+  <div class="callout callout-warning">
+    <div class="callout-title">Nota importante</div>
+    El email del usuario tiene constraint <code>@unique</code> global en Prisma. Si se necesitan usuarios compartidos entre sucursales del mismo grupo, se debera eliminar este constraint y usar <code>@@unique([email, clientTenantId])</code> en su lugar. Esto es un cambio futuro si se requiere.
+  </div>
+
+  <div class="page-footer"><span>NovaHub ERP - Plan Tecnico</span><span>Pagina 8</span></div>
+</div>
+
+</body>
+</html>`;
+
+const outPath = path.join(__dirname, '..', 'scripts', 'plan-document.html');
+fs.writeFileSync(outPath, html, 'utf8');
+console.log('HTML generado:', outPath);

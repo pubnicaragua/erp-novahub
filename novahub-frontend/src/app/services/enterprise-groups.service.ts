@@ -12,6 +12,8 @@ export interface ManagerGroup {
 
 export interface ManagerOverview {
   group: ManagerGroup;
+  inventoryMode?: string;
+  inventoryScopeLabel?: string;
   filters: { branchId: string | null; branchIds: string[] };
   branches: Array<{ id: string; name: string; slug: string; logo?: string | null; industry: string; businessUnitId?: string | null; _count: { users: number; products: number; warehouses: number } }>;
   metrics: {
@@ -44,4 +46,17 @@ export const enterpriseGroupsService = {
   getManagers: (groupId: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/managers`, { signal }),
   assignManager: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/managers`, body),
   createWarehouse: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/warehouses`, body),
+  getBranchProducts: (groupId: string, branchId: string, search?: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/catalog/products`, { params: { branchId, ...(search ? { search } : {}) }, signal }),
+  listSharedCatalog: (groupId: string, branchId?: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/catalog/shared`, { params: branchId ? { branchId } : undefined, signal }),
+  shareCatalog: (groupId: string, body: { productIds: string[]; branchIds: string[]; prices?: Record<string, Record<string, number>> }) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/catalog/share`, body),
+  unshareCatalog: (groupId: string, body: { mirrorIds: string[] }) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/catalog/unshare`, body),
+  updateSharedPrice: (groupId: string, body: { mirrorId: string; price: number }) => api.idempotentPatch(`/enterprise-groups/manager/${groupId}/catalog/price`, body),
+  syncFromMaster: (groupId: string, body: { productId: string }) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/catalog/sync`, body),
+  getConsolidatedTrialBalance: (groupId: string, dateFrom?: string, dateTo?: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/consolidated/trial-balance`, { params: { dateFrom, dateTo }, signal }),
+  getConsolidatedProfitLoss: (groupId: string, dateFrom?: string, dateTo?: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/consolidated/profit-loss`, { params: { dateFrom, dateTo }, signal }),
+  getConsolidatedBalanceSheet: (groupId: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/consolidated/balance-sheet`, { signal }),
+  getConsolidatedCashFlow: (groupId: string, dateFrom?: string, dateTo?: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/consolidated/cash-flow`, { params: { dateFrom, dateTo }, signal }),
+  getConsolidatedBranchComparison: (groupId: string, dateFrom?: string, dateTo?: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/consolidated/branch-comparison`, { params: { dateFrom, dateTo }, signal }),
+  getTransfers: (groupId: string, branchId?: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/transfers`, { params: branchId ? { branchId } : undefined, signal }),
+  createInterTenantTransfer: (groupId: string, body: { sourceBranchId: string; destBranchId: string; fromWarehouseId: string; toWarehouseId: string; items: Array<{ productId: string; quantity: number; variantId?: string }> }) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/transfers`, body),
 };

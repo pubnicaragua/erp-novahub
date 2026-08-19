@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, Variants } from 'motion/react';
-import { safeSetItem } from '../services/safe-storage';
 import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle, ShieldAlert,
@@ -80,10 +79,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [cajaData, setCajaData] = useState<any>(null);
   const [prevData, setPrevData] = useState<any>(null);
   const [setupSummary, setSetupSummary] = useState<ImplementationSetupSummary | null>(null);
-  const [skipSetup, setSkipSetup] = useState(() => localStorage.getItem('erp-skip-setup') === 'true');
   const [dataLoadError, setDataLoadError] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showSetupView, setShowSetupView] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user } = useAuth();
 
@@ -124,10 +123,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   const loadDataRef = useRef<() => void>();
   const mountedRef = useRef(true);
-  const pollCountRef = useRef(0);
   const requestIdRef = useRef(0);
-  const setupSummaryRef = useRef<ImplementationSetupSummary | null>(null);
-  const setupPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cajaDataRef = useRef<any>(null);
   const dashboardControllerRef = useRef<AbortController | null>(null);
 
@@ -173,21 +169,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     setDataLoadError(false);
     setAccessDenied(false);
 
-    // La validación de implementación no debe bloquear la primera pintura del
-    // dashboard. Se ejecuta en paralelo y solo cambia la vista si realmente hay
-    // pasos pendientes.
-    const setupPromise = getImplementationSetupSummary(
-      setupSummaryRef.current === null || !setupSummaryRef.current.isComplete,
-      user?.enabledModules,
-    );
-    setupPromise.then((setup) => {
-      if (!isCurrentRequest()) return;
-      setupSummaryRef.current = setup;
-      setSetupSummary(setup);
-    }).catch(() => {
-      // El dashboard sigue siendo utilizable aunque falle la validación auxiliar.
-    });
-
     const effectivePeriod = period === 'custom' ? 'month' : period;
     const params = period === 'custom'
       ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
@@ -208,8 +189,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
     if (!isCurrentRequest()) return;
 
-    // Nunca reemplazar datos válidos por null durante un refresh transitorio.
-    // Así una latencia puntual no convierte el dashboard en una tarjeta vacía.
     if (current) {
       cajaDataRef.current = current;
       setCajaData(current);
@@ -220,7 +199,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     setLoading(false);
 
     if (previous) setPrevData(previous);
-  }, [period, dateFrom, dateTo, user?.enabledModules, valuationMode]);
+  }, [period, dateFrom, dateTo, valuationMode]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -248,34 +227,10 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       requestIdRef.current++;
       dashboardControllerRef.current?.abort();
       clearTimeout(focusTimer);
-      if (setupPollTimerRef.current) clearTimeout(setupPollTimerRef.current);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
   }, [loadData]);
-
-  useEffect(() => {
-    if (setupSummary && !setupSummary.isComplete && !skipSetup) {
-      pollCountRef.current = 0;
-      const fn = () => {
-        if (!mountedRef.current) return;
-        pollCountRef.current++;
-        const delay = Math.min(4000 * Math.pow(1.5, pollCountRef.current), 30000);
-        setupPollTimerRef.current = setTimeout(() => {
-          if (!mountedRef.current) return;
-          loadDataRef.current?.();
-          fn();
-        }, delay);
-      };
-      fn();
-    }
-    return () => {
-      if (setupPollTimerRef.current) {
-        clearTimeout(setupPollTimerRef.current);
-        setupPollTimerRef.current = null;
-      }
-    };
-  }, [setupSummary?.isComplete, skipSetup]);
 
   const handleExport = async () => {
     if (!cajaData) { toast.error('No hay datos para exportar'); return; }
@@ -473,30 +428,30 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   if (loading && !cajaData) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
-        <Loader2 className="size-8 animate-spin text-primary/40" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="size-8 animate-spin text-primary/40" />
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{LOADING_STEPS[Math.min(loadStep, LOADING_STEPS.length - 1)]}</p>
+        </div>
       </div>
     );
   }
 
-  if (setupSummary && !setupSummary.isComplete && !skipSetup) {
+  if (showSetupView && setupSummary && !setupSummary.isComplete) {
     return (
-      <ImplementationSetupDashboard
-        summary={setupSummary}
-        onNavigateToDashboard={() => {
-          setSkipSetup(true);
-          safeSetItem('erp-skip-setup', 'true');
-          onNavigateToDashboard?.();
-          loadData();
-        }}
-        onRefresh={async () => {
-          setLoading(true);
-          try {
-            setSetupSummary(await getImplementationSetupSummary(true, user?.enabledModules));
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
+      <div className="space-y-4 p-4 md:p-6">
+        <Button variant="ghost" size="sm" onClick={() => setShowSetupView(false)} className="rounded-xl gap-1.5 text-xs font-bold">
+          ← Volver al Dashboard
+        </Button>
+        <ImplementationSetupDashboard
+          summary={setupSummary}
+          onNavigateToDashboard={() => { setShowSetupView(false); }}
+          onRefresh={async () => {
+            try {
+              setSetupSummary(await getImplementationSetupSummary(true, user?.enabledModules));
+            } catch { /* silent */ }
+          }}
+        />
+      </div>
     );
   }
 
@@ -549,20 +504,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               </label>
             </div>
           )}
-          {setupSummary && !setupSummary.isComplete && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSkipSetup(false);
-                localStorage.removeItem('erp-skip-setup');
-              }}
-              className="rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-black uppercase text-[10px] tracking-widest gap-1.5"
-            >
-              <ClipboardCheck className="size-3.5" />
-              Ver Implementación
-            </Button>
-          )}
           <Button
             disabled={isExporting || loading}
             onClick={handleExport}
@@ -571,6 +512,23 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
           >
             {isExporting ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <FileDown className="size-3.5 mr-1.5" />}
             Exportar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setShowSetupView(true);
+              if (!setupSummary) {
+                try {
+                  const summary = await getImplementationSetupSummary(true, user?.enabledModules);
+                  setSetupSummary(summary);
+                } catch { /* silent - dashboard still works */ }
+              }
+            }}
+            className="rounded-xl border-dashed border-primary/30 bg-transparent hover:bg-primary/5 text-primary/80 font-black uppercase text-[10px] tracking-widest gap-1.5"
+          >
+            <ClipboardCheck className="size-3.5" />
+            Implementación
           </Button>
         </div>
       </div>
