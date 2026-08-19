@@ -9,6 +9,8 @@ interface CurrencySelectorProps {
   label?: string;
   disabled?: boolean;
   className?: string;
+  hideLabel?: boolean;
+  rateDecimals?: number;
 }
 
 /** Selector operativo: la tasa solo se consulta desde la configuración global. */
@@ -20,19 +22,21 @@ export function CurrencySelector({
   label = 'Moneda',
   disabled = false,
   className = '',
+  hideLabel = false,
+  rateDecimals = 4,
 }: CurrencySelectorProps) {
   const selected = String(value || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
   const base = String(baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
   const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 36.5;
   const rateText = selected === base
-    ? '1.0000 · moneda base'
+    ? `${(1).toFixed(rateDecimals)} · moneda base`
     : base === 'NIO'
-      ? `1 USD = ${safeRate.toFixed(4)} NIO`
-      : `1 NIO = ${(1 / safeRate).toFixed(6)} USD`;
+      ? `1 USD = ${safeRate.toFixed(rateDecimals)} NIO`
+      : `1 NIO = ${(1 / safeRate).toFixed(rateDecimals)} USD`;
 
   return (
     <div className={className}>
-      <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>
+      {!hideLabel && <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>}
       <select
         value={selected}
         disabled={disabled}
@@ -42,7 +46,7 @@ export function CurrencySelector({
         <option value="NIO">Córdoba (NIO)</option>
         <option value="USD">Dólar (USD)</option>
       </select>
-      <p className="mt-1 text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold text-foreground">{rateText}</span></p>
+      {!hideLabel && <p className="mt-1 text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold text-foreground">{rateText}</span></p>}
     </div>
   );
 }

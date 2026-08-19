@@ -48,7 +48,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { SalesIrSelector } from './SalesIrSelector';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
-import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
@@ -1886,7 +1886,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
+                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined, cardCommissionPercent: value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: value === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -1895,14 +1895,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                               <SelectItem value="CHECK">Cheque</SelectItem>
                             </SelectContent>
                           </Select>
-                          <CurrencySelector value={payment.currency || paymentCurrency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPayments(current => current.map((item, itemIndex) => {
+                          <CurrencySelector value={payment.currency || paymentCurrency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} onChange={(nextCurrency) => setPayments(current => current.map((item, itemIndex) => {
                             if (itemIndex !== index) return item;
                             const previousCurrency = item.currency || paymentCurrency;
                             const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate || activeSession.exchangeRateUSD || 1);
                             const nextRate = paymentLineRate(nextCurrency);
                             return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
                           }))} />
-                          <Input type="number" min="0" step="0.01" placeholder={`Monto (${payment.currency || paymentCurrency})`} value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} />
+                          <Input type="number" min="0" step="0.01" placeholder={`Monto (${payment.currency || paymentCurrency})`} value={payment.amount || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} />
                           <Button variant="ghost" disabled={payments.length === 1} onClick={() => setPayments(current => current.filter((_, itemIndex) => itemIndex !== index))}>✕</Button>
                         </div>
                         {payment.method === 'CARD' && <Input className="mt-2" placeholder="Voucher / referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
@@ -1910,7 +1910,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                           <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                         )}
                         {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
+                        {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                        {isCardPaymentMethod(payment.method) && payment.bankAccountId && Number(payment.cardCommissionPercent || 0) > 0 && (
+                          <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
+                            <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
+                            <span className="font-mono font-bold">{formatCommissionPercent(payment.cardCommissionPercent)}</span>
+                            <span className="text-muted-foreground">|</span>
+                            <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
+                            <span className="font-mono font-bold text-purple-600">{payment.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(payment.cardCommissionAmount || calculateCardCommission(Number(payment.amount || 0), Number(payment.cardCommissionPercent || 0))))}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -44,9 +44,11 @@ export interface ColumnFilterMenuProps {
   sortType?: ColumnSortType;
   /** Presentación mínima para encabezados de tabla: solo ordenamiento. */
   compact?: boolean;
+  /** Oculta el texto del trigger, mostrando solo el ícono. */
+  hideLabel?: boolean;
 }
 
-export function ColumnFilterMenu({ label, options = [], selected = [], onSelect, sort, onSort, sortOptions, sortType, compact = false }: ColumnFilterMenuProps) {
+export function ColumnFilterMenu({ label, options = [], selected = [], onSelect, sort, onSort, sortOptions, sortType, compact = false, hideLabel = false }: ColumnFilterMenuProps) {
   const [open, setOpen] = useState(false);
   const [tableContext, setTableContext] = useState(false);
   const isCompact = compact || tableContext;
@@ -85,7 +87,9 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
   const triggerClassName = cn(
     isCompact
       ? "column-filter-menu-trigger inline-flex size-4 shrink-0 translate-y-px items-center justify-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40"
-      : "column-filter-menu-trigger inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[10px] font-black uppercase tracking-wider transition-colors",
+      : hideLabel
+        ? "column-filter-menu-trigger inline-flex size-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground/70 transition-colors hover:bg-transparent hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+        : "column-filter-menu-trigger inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[10px] font-black uppercase tracking-wider transition-colors",
     isCompact
       ? active ? "text-primary" : "text-muted-foreground/70 hover:text-primary"
       : active
@@ -113,7 +117,7 @@ export function ColumnFilterMenu({ label, options = [], selected = [], onSelect,
     >
       <ArrowUpDown className={cn("column-sort-icon size-3.5", !isCompact && "hidden")} />
       <Filter className={cn("column-filter-icon size-3.5 shrink-0", isCompact && "hidden")} />
-      {!isCompact && <span className="column-filter-menu-label min-w-0 truncate">Filtrar {label}</span>}
+      {!isCompact && !hideLabel && <span className="column-filter-menu-label min-w-0 truncate">Filtrar {label}</span>}
     </button>
   );
 

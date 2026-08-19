@@ -119,15 +119,15 @@ export function InvoiceDetailSheet({
             </div>
           </section>
 
-          <section className="grid gap-2 sm:grid-cols-3">
-            <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onOpenInvoice(invoice)}>
-              <Eye className="size-4 text-primary" /> Ver factura completa
+          <section className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => onOpenInvoice(invoice)}>
+              <Eye className="size-4 shrink-0 text-primary" /> Ver factura completa
             </Button>
-            <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onDownloadPdf(invoice)}>
-              <Download className="size-4 text-primary" /> Descargar PDF
+            <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => onDownloadPdf(invoice)}>
+              <Download className="size-4 shrink-0 text-primary" /> Descargar PDF
             </Button>
-            <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onPrintInvoice?.(invoice)}>
-              <Printer className="size-4 text-primary" /> Imprimir
+            <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => onPrintInvoice?.(invoice)}>
+              <Printer className="size-4 shrink-0 text-primary" /> Imprimir
             </Button>
           </section>
 

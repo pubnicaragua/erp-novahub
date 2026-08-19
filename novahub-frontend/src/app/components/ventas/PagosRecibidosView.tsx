@@ -26,7 +26,7 @@ import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../.
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -61,6 +61,9 @@ type ReceivedPaymentLine = {
   accountId?: string;
   bankAccountId?: string;
   reference?: string;
+  cardCommissionPercent?: number;
+  cardCommissionAmount?: number;
+  cardCommissionAccountId?: string;
 };
 
 function groupReceivedPayments(
@@ -236,6 +239,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         bankAccountId: isBankPaymentMethod(firstLine.method, true) ? firstLine.bankAccountId : undefined,
         reference: requiresPaymentReference(firstLine.method) ? firstLine.reference : undefined,
         notes: localDoc.notes || undefined,
+        cardCommissionPercent: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionPercent || undefined : undefined,
+        cardCommissionAmount: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAmount || undefined : undefined,
+        cardCommissionAccountId: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAccountId || undefined : undefined,
       } as any;
       if (effectiveLines.length > 1) {
         await paymentsService.createMixed({
@@ -249,6 +255,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             bankAccountId: isBankPaymentMethod(line.method, true) ? line.bankAccountId : undefined,
             reference: requiresPaymentReference(line.method) ? line.reference : undefined,
             notes: localDoc.notes || undefined,
+            cardCommissionPercent: isCardPaymentMethod(line.method) ? line.cardCommissionPercent || undefined : undefined,
+            cardCommissionAmount: isCardPaymentMethod(line.method) ? line.cardCommissionAmount || undefined : undefined,
+            cardCommissionAccountId: isCardPaymentMethod(line.method) ? line.cardCommissionAccountId || undefined : undefined,
           })),
         } as any);
       } else {
@@ -469,17 +478,26 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '' } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                           const nextRate = paymentLineRate(nextCurrency);
                           return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate };
                         }))} />
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} className="h-9 text-xs tabular-nums" /></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} className="h-9 text-xs tabular-nums" /></div>
                         <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                       </div>
-                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" className="mt-2" />}
+                      {isBankPaymentMethod(line.method, true) && <BankAccountSelect value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" className="mt-2" />}
+                      {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
+                        <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
+                          <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
+                          <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
+                          <span className="text-muted-foreground">|</span>
+                          <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
+                          <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatConvertedAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))), baseCurrency)}</span>
+                        </div>
+                      )}
                       {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}
                     </div>
                   ))}

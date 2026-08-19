@@ -39,7 +39,7 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -87,6 +87,9 @@ type InvoicePaymentLine = {
   exchangeRate: number;
   bankAccountId?: string;
   reference?: string;
+  cardCommissionPercent?: number;
+  cardCommissionAmount?: number;
+  cardCommissionAccountId?: string;
 };
 
 type InvoiceSaveAction = 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
@@ -1792,7 +1795,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </Dialog>
 
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <CreditCard className="size-5 text-primary" /> Registrar pago de factura
@@ -1826,19 +1829,24 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <span className="text-[10px] font-black text-primary">Mixto permitido</span>
                 </div>
                 {paymentLines.map((line, index) => (
-                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                      <div>
+                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 min-w-0">
                         <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '' } : item))} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                           {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                         </select>
                       </div>
+                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)] sm:items-end">
                       <CurrencySelector
                         value={line.currency}
                         baseCurrency={baseCurrency}
                         exchangeRate={globalRate}
-                        label="Moneda"
+                        label=""
+                        hideLabel
+                        rateDecimals={2}
                         onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -1852,15 +1860,23 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }))}
                       />
                       <div>
-                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
-                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} autoFocus={index === 0} />
+                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
                       </div>
-                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                     </div>
-                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
+                    <p className="text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold">{line.currency === baseCurrency ? '1.00' : Number(line.exchangeRate || globalRate || 1).toFixed(2)}</span> · moneda base</p>
+                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                    {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
+                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
+                        <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
+                        <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
+                        <span className="text-muted-foreground">|</span>
+                        <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
+                        <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))))}</span>
+                      </div>
+                    )}
                     {requiresPaymentReference(line.method) && <div className="mt-2">
                       <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." />
+                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." className="h-9 text-xs" />
                     </div>}
                   </div>
                 ))}
