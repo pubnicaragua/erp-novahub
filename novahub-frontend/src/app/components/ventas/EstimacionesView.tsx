@@ -861,9 +861,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     <Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems.splice(idx, 1);
-                        const newSubtotal = newItems.reduce((acc, it) => acc + Number(it.total || 0), 0);
-                        const newTotal = newSubtotal + Number(localDoc.taxAmount || 0) - Number(localDoc.discountAmount || 0);
-                        setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, total: newTotal } as any);
+                        const recalculated = pricingMode === 'individual'
+                          ? recalcIndividualTotals(newItems)
+                          : recalcGlobalTotals(newItems, localRates.dRate, localRates.tRate, localRates.irRate);
+                        setLocalDoc({ ...localDoc, ...recalculated } as any);
                     }}>
                       <Trash2 className="size-3" />
                     </Button>
@@ -1037,4 +1038,3 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     </div>
   );
 }
-

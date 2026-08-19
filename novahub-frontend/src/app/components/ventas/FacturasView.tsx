@@ -37,6 +37,7 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -173,6 +174,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
   const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
+  const [cashRegisterId, setCashRegisterId] = useState('');
+  const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
+  const [cashLoading, setCashLoading] = useState(false);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
@@ -211,6 +216,45 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       .finally(() => { if (active) setAccountingPreflightLoading(false); });
     return () => { active = false; };
   }, [accountingPreflightSignature, localDoc?.items?.length]);
+
+  useEffect(() => {
+    if (!paymentDialogOpen || !paymentInvoice) return;
+    let active = true;
+    setCashLoading(true);
+    setCashSession(null);
+    cajaService.getRegisters()
+      .then((response: any) => {
+        if (!active) return;
+        const registers = (Array.isArray(response) ? response : response?.data || [])
+          .filter((register: CashRegister) => register.hasActiveSession);
+        setCashRegisters(registers);
+        setCashRegisterId((current) => registers.some((register: CashRegister) => register.id === current)
+          ? current
+          : registers.length === 1 ? registers[0].id : '');
+      })
+      .catch(() => {
+        if (active) {
+          setCashRegisters([]);
+          setCashRegisterId('');
+        }
+      })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [paymentDialogOpen, paymentInvoice?.id]);
+
+  useEffect(() => {
+    if (!paymentDialogOpen || !cashRegisterId) {
+      setCashSession(null);
+      return;
+    }
+    let active = true;
+    setCashLoading(true);
+    cajaService.getActiveSession(cashRegisterId)
+      .then((session) => { if (active) setCashSession(session?.status === 'OPEN' ? session : null); })
+      .catch(() => { if (active) setCashSession(null); })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [paymentDialogOpen, cashRegisterId]);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -424,6 +468,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     ).toFixed(2));
     setPaymentLines([paymentLine('CASH', initialAmount, initialCurrency)]);
     setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
+    setCashRegisterId('');
+    setCashSession(null);
     setPaymentDialogOpen(true);
   };
 
@@ -498,6 +544,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleInvoicePayment = async () => {
     if (!paymentInvoice) return;
+    const cashControlAlreadyLinked = Boolean(paymentInvoice.registerId || paymentInvoice.sessionId);
     const maxAmount = getInvoiceBalance(paymentInvoice);
     const amount = Number(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
     const paymentBaseAmount = Number(paymentLines.reduce((sum, line) => sum + toBaseAmount(
@@ -534,6 +581,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Selecciona la fecha en que se pagará el saldo restante');
       return;
     }
+    if (!cashControlAlreadyLinked && (!cashRegisterId || !cashSession)) {
+      toast.error('Selecciona una caja con sesión abierta para registrar el pago en Control de Caja');
+      return;
+    }
 
     const invoice = paymentInvoice;
     if (!invoice.id) {
@@ -545,6 +596,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           currency: paymentCurrency,
           exchangeRate: paymentLineRate(paymentCurrency),
           dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+          cashRegisterId,
+          cashSessionId: cashSession?.id,
         });
       } finally {
         setPaymentLoading(false);
@@ -574,6 +627,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         method: paymentLines[0]?.method || 'CASH',
         payments: paymentLines,
         dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+        cashRegisterId: cashControlAlreadyLinked ? undefined : cashRegisterId,
+        cashSessionId: cashControlAlreadyLinked ? undefined : cashSession?.id,
         notes: `Cobro registrado desde Facturas (${invoice.number})`,
       } as any);
 
@@ -629,7 +684,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'DRAFT',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
   ) => {
     if (!localDoc) return;
     const emitir = action !== 'DRAFT';
@@ -744,6 +799,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             payments: settlement?.payments || [],
             currency: settlement?.currency,
             dueDate: settlement?.dueDate,
+            cashRegisterId: settlement?.cashRegisterId,
+            cashSessionId: settlement?.cashSessionId,
           } : undefined,
           initialCreditDueDate: action === 'CREDIT' ? settlement?.dueDate : undefined,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
@@ -1064,7 +1121,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   );
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
-  if ((editingId || isCreating) && localDoc) {
+  if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
     const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
@@ -1122,7 +1179,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 )}
                 {canRegisterPayment && (
                   <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => openInvoicePayment(localDoc as Invoice)} disabled={accountingBlocked}>
+                    onClick={() => openInvoicePayment(localDoc as Invoice)}>
                     Registrar pago
                   </Button>
                 )}
@@ -1823,6 +1880,29 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </p>
                 )}
               </div>
+              {!paymentInvoice.registerId && !paymentInvoice.sessionId && (
+                <div className="space-y-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400">Control de Caja</p>
+                    {cashSession && <span className="text-[10px] font-black text-emerald-600">Sesión abierta</span>}
+                  </div>
+                  {cashRegisters.length > 0 ? (
+                    <Select value={cashRegisterId} onValueChange={setCashRegisterId} disabled={cashLoading || paymentLoading}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Selecciona la caja donde se recibió el pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cashRegisters.map((register) => (
+                          <SelectItem key={register.id} value={register.id}>{register.name} ({register.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-[10px] font-medium text-muted-foreground">No hay una caja abierta disponible. Apertura una sesión en Control de Caja para registrar este pago allí.</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">El efectivo afectará el esperado físico; tarjeta, transferencia y cheque quedarán visibles sin sumarse al efectivo.</p>
+                </div>
+              )}
               <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
@@ -1907,7 +1987,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || (!paymentInvoice?.registerId && !paymentInvoice?.sessionId && !cashSession) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>
@@ -1917,5 +1997,3 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     </div>
   );
 }
-
-
