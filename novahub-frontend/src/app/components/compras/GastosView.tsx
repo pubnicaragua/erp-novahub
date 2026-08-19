@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, X, Pencil
@@ -34,6 +34,9 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { requiresPaymentReference } from '../../utils/paymentMethods';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -72,7 +75,7 @@ const statusOpts = [
 ];
 
 export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
@@ -183,6 +186,38 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     amount: (row: Expense) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Gastos',
+      columns: [
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'category', label: 'Categoría', align: 'left' },
+        { key: 'description', label: 'Descripción', align: 'left' },
+        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        category: item.category || '',
+        description: item.description || '',
+        amount: Number(item.amount || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Gastos',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
     .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
 
@@ -870,6 +905,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
           <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
@@ -33,6 +33,9 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -294,6 +297,40 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
     }
   };
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Cotizaciones',
+      columns: [
+        { key: 'number', label: 'Nº Cotización', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((estimate) => ({
+        number: estimate.number,
+        customerName: customers.find((c) => c.id === estimate.customerId)?.name || estimate.customer?.name || 'Varios',
+        date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : '',
+        total: Number(estimate.total || 0),
+        status: estimate.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Cotizaciones',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+      logoUrl: themeConfig?.logo,
+    });
+  }, [filteredData, customers, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const buildEstimatePanel = (estimate: Estimate): SalesDocumentPanelData => ({
     id: estimate.id,
@@ -868,6 +905,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="quotes" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
@@ -944,6 +982,31 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           setEditingId(detailEstimate.id);
         }}
         onDownloadPdf={() => { if (detailEstimate) void handleExportPDF(detailEstimate); }}
+        onPrintDocument={() => {
+          if (!detailEstimate) return;
+          const document = buildEstimatePanel(detailEstimate);
+          const html = generateTableHtml({
+            title: document.title,
+            columns: [
+              { key: 'description', label: 'Descripción', align: 'left' },
+              { key: 'quantity', label: 'Cantidad', align: 'center' },
+              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
+              { key: 'totalLabel', label: 'Total', align: 'right' },
+            ],
+            rows: (document.lines || []).map((line) => ({
+              description: line.description || '',
+              quantity: Number(line.quantity || 0),
+              unitPriceLabel: line.unitPriceLabel || '',
+              totalLabel: line.totalLabel || '',
+            })),
+          });
+          printContent(html, {
+            title: `${document.title} ${document.number || ''}`,
+            paperSize: 'letter',
+            companyName: user?.tenantName || 'Empresa',
+            logoUrl: themeConfig?.logo,
+          });
+        }}
       />
 
       <ConfirmDialog

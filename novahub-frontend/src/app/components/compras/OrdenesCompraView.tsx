@@ -39,6 +39,9 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props {
   data: PurchaseOrder[];
@@ -1103,6 +1106,38 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     total: (row: PurchaseOrder) => Number(row.total || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Órdenes de Compra',
+      columns: [
+        { key: 'number', label: 'Nº', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number,
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Órdenes de Compra',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const distinctSuppliers = [...new Map(filtered.map((o) => [o.supplier?.name || '-', o.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.supplier?.name || '-') === label).length }));
 
@@ -2179,6 +2214,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

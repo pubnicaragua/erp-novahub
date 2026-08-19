@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
   FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
@@ -13,6 +13,9 @@ import { invoicesService, paymentsService } from '../../services/ventas.service'
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import type { Invoice, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
@@ -842,6 +845,42 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return convertCurrentAmount(amount, currency) - convertAmount(amount, currency, rate || globalRate);
   };
 
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Facturas',
+      columns: [
+        { key: 'number', label: 'Nº Factura', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'dueDate', label: 'Vencimiento', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((invoice) => ({
+        number: invoice.number,
+        customerName: invoice.customer?.name || 'Varios',
+        date: invoice.date ? new Date(invoice.date).toLocaleDateString('es-NI') : '',
+        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('es-NI') : '',
+        total: Number(invoice.total || 0),
+        status: invoice.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Facturas',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+      logoUrl: themeConfig?.logo,
+    });
+  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
+
 
 
   const columns: ColumnDef<Invoice>[] = [
@@ -1530,6 +1569,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
@@ -1625,6 +1665,29 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         onClose={() => setDetailInvoice(null)}
         onOpenInvoice={(invoice) => { setDetailInvoice(null); setEditingId(invoice.id); }}
         onDownloadPdf={(invoice) => { void handleDownloadInvoicePdf(invoice); }}
+        onPrintInvoice={(invoice) => {
+          const html = generateTableHtml({
+            title: 'Factura',
+            columns: [
+              { key: 'description', label: 'Descripción', align: 'left' },
+              { key: 'quantity', label: 'Cantidad', align: 'center' },
+              { key: 'unitPrice', label: 'Precio Unit.', align: 'right' },
+              { key: 'total', label: 'Total', align: 'right' },
+            ],
+            rows: (invoice.items || []).map((item) => ({
+              description: item.description || '',
+              quantity: Number(item.quantity || 0),
+              unitPrice: `C$ ${formatSalesAmount(Number(item.unitPrice || 0))}`,
+              total: `C$ ${formatSalesAmount(Number(item.total || 0))}`,
+            })),
+          });
+          printContent(html, {
+            title: `Factura ${invoice.number || ''}`,
+            paperSize: 'letter',
+            companyName: user?.tenantName || 'Empresa',
+            logoUrl: themeConfig?.logo,
+          });
+        }}
         getBalance={getInvoiceBalance}
         formatAmount={formatInvoiceAmount}
         formatDate={formatDateSafe}

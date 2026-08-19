@@ -1,0 +1,442 @@
+/* ============================================================
+   Print Styles – NovaHub ERP
+   Se aplican al imprimir (Ctrl+P / window.print).
+   Soporta: Carta, Legal, A4, Oficio, Rollo 58mm, Rollo 80mm.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   Configuración de página por tamaño de papel
+   ----------------------------------------------------------- */
+@page {
+  margin: 10mm;
+}
+
+@page letter {
+  size: letter portrait;
+  margin: 12mm;
+}
+
+@page legal {
+  size: legal portrait;
+  margin: 12mm;
+}
+
+@page A4 {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@page oficio {
+  size: 13in 8.5in portrait;
+  margin: 12mm;
+}
+
+/* Papel continuo / rollo – altura dinámica */
+@page roll-58 {
+  size: 58mm auto;
+  margin: 2mm;
+}
+
+@page roll-80 {
+  size: 80mm auto;
+  margin: 3mm;
+}
+
+/* -----------------------------------------------------------
+   Estilos de impresión
+   ----------------------------------------------------------- */
+@media print {
+  /* -----------------------------------------------------------
+     1. Ocultar UI de la app (sidebar, topbar, tabs, etc.)
+     ----------------------------------------------------------- */
+  aside,
+  header,
+  [data-slot="tabs-list"],
+  [data-slot="tabs-trigger"],
+  .pagination,
+  .pagination-controls,
+  .kpi-cards,
+  .alert-banner,
+  .floating-chat,
+  .breadcrumb,
+  [data-tour],
+  [role="toolbar"],
+  [role="menubar"],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Botones: ocultar todos excepto los marcados con print-keep */
+  button:not(.print-keep),
+  [role="tab"]:not(.print-keep),
+  a[role="tab"]:not(.print-keep) {
+    display: none !important;
+  }
+
+  /* Selects, inputs de búsqueda, filtros visuales */
+  select,
+  input[type="search"],
+  input[placeholder*="Buscar"],
+  [data-slot="combobox-trigger"] {
+    display: none !important;
+  }
+
+  /* -----------------------------------------------------------
+     2. Reset general
+     ----------------------------------------------------------- */
+  *, *::before, *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    border-color: #ccc !important;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10pt;
+    line-height: 1.35;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    overflow: visible !important;
+    width: 100% !important;
+    background: #fff !important;
+  }
+
+  /* El contenido principal debe ocupar todo el ancho */
+  main,
+  [class*="-module"] {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Quitar border-radius y sombras de tarjetas/cards */
+  [class*="rounded-2xl"],
+  [class*="rounded-xl"],
+  [class*="rounded-lg"],
+  [class*="shadow-"] {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* -----------------------------------------------------------
+     3. Contenedor del documento de impresión
+     ----------------------------------------------------------- */
+  .print-document {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* -----------------------------------------------------------
+     4. Encabezado del documento
+     ----------------------------------------------------------- */
+  .print-header {
+    text-align: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000;
+  }
+
+  .print-header .company-logo {
+    max-height: 45px;
+    margin-bottom: 5px;
+  }
+
+  .print-header h1 {
+    font-size: 14pt;
+    font-weight: 800;
+    margin: 0 0 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .print-header .company-info {
+    font-size: 7pt;
+    color: #444;
+    margin: 1px 0;
+  }
+
+  .print-header .subtitle {
+    font-size: 9pt;
+    color: #333;
+    margin: 5px 0 0;
+    font-weight: 600;
+  }
+
+  /* -----------------------------------------------------------
+     5. Info del documento (fecha, número, etc.)
+     ----------------------------------------------------------- */
+  .print-doc-info {
+    display: flex !important;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 8pt;
+  }
+
+  .print-doc-info .doc-number {
+    font-size: 11pt;
+    font-weight: 800;
+  }
+
+  .print-doc-info .doc-label {
+    font-size: 7pt;
+    text-transform: uppercase;
+    color: #666;
+  }
+
+  /* -----------------------------------------------------------
+     6. Secciones del documento
+     ----------------------------------------------------------- */
+  .print-section {
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  .print-section-title {
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #666;
+    margin: 0 0 3px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .print-field-row {
+    display: flex !important;
+    margin-bottom: 1px;
+    font-size: 8pt;
+  }
+
+  .print-field-label {
+    font-weight: 600;
+    min-width: 90px;
+    flex-shrink: 0;
+    color: #444;
+  }
+
+  .print-field-value {
+    flex: 1;
+    color: #000;
+  }
+
+  /* -----------------------------------------------------------
+     7. Tabla de productos/servicios
+     ----------------------------------------------------------- */
+  .print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 8px 0;
+    font-size: 8pt;
+  }
+
+  .print-table thead {
+    display: table-header-group !important;
+  }
+
+  .print-table tbody {
+    display: table-row-group !important;
+  }
+
+  .print-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-table th {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 7pt;
+    letter-spacing: 0.3px;
+    padding: 3px 5px;
+    border: 1px solid #ccc;
+    border-bottom: 1px solid #000;
+  }
+
+  .print-table td {
+    padding: 3px 5px;
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+
+  .print-table .text-right { text-align: right !important; }
+  .print-table .text-center { text-align: center !important; }
+  .print-table .font-bold { font-weight: 700; }
+  .print-table .text-xs { font-size: 6pt; }
+  .print-table .text-muted { color: #666 !important; }
+
+  /* -----------------------------------------------------------
+     8. Totales
+     ----------------------------------------------------------- */
+  .print-totals {
+    margin-top: 8px;
+    text-align: right !important;
+  }
+
+  .print-totals table {
+    margin-left: auto;
+    border-collapse: collapse;
+    font-size: 8pt;
+  }
+
+  .print-totals td {
+    padding: 2px 8px;
+  }
+
+  .print-totals .total-label {
+    text-align: right !important;
+    font-weight: 600;
+    padding-right: 10px;
+  }
+
+  .print-totals .total-value {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .print-totals .grand-total {
+    font-weight: 800;
+    font-size: 10pt;
+    border-top: 1px solid #000;
+    padding-top: 3px;
+  }
+
+  /* -----------------------------------------------------------
+     9. Notas, pie, legal
+     ----------------------------------------------------------- */
+  .print-notes {
+    margin-top: 8px;
+    padding: 5px;
+    border: 1px dashed #ccc;
+    font-size: 7pt;
+    font-style: italic;
+  }
+
+  .print-footer {
+    margin-top: 15px;
+    padding-top: 5px;
+    border-top: 1px solid #ccc;
+    font-size: 6pt;
+    color: #666 !important;
+    text-align: center;
+  }
+
+  .print-legal {
+    margin-top: 10px;
+    font-size: 6pt;
+    color: #666 !important;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* -----------------------------------------------------------
+     10. Badges
+     ----------------------------------------------------------- */
+  .print-badge {
+    display: inline-block;
+    padding: 0 4px;
+    border: 1px solid #999;
+    border-radius: 2px;
+    font-size: 6pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  /* -----------------------------------------------------------
+     11. Utilidades
+     ----------------------------------------------------------- */
+  .print-no-break {
+    page-break-inside: avoid !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+
+  /* -----------------------------------------------------------
+     12. Selects/combos de la app – ocultar en impresión
+     ----------------------------------------------------------- */
+  [role="combobox"],
+  [data-slot="select-trigger"],
+  [role="listbox"] {
+    display: none !important;
+  }
+
+  /* -----------------------------------------------------------
+     13. Diálogos/modales – ocultar
+     ----------------------------------------------------------- */
+  [role="dialog"],
+  [aria-modal="true"] {
+    display: none !important;
+  }
+
+  /* -----------------------------------------------------------
+     14. Estilos específicos para papel continuo (churro)
+     ----------------------------------------------------------- */
+  @page roll-58, roll-80 {
+    margin: 2mm;
+  }
+}
+
+/* -----------------------------------------------------------
+   Estilos para churro cuando se imprime en ventana separada
+   (useBrowserPrint genera su propio CSS inline, pero estos
+   sirven como fallback si se usa Ctrl+P directamente)
+   ----------------------------------------------------------- */
+@media print and (max-width: 85mm) {
+  body {
+    font-size: 9pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-header h1 {
+    font-size: 11pt !important;
+  }
+
+  .print-header .company-info {
+    font-size: 6pt !important;
+  }
+
+  .print-doc-info .doc-number {
+    font-size: 9pt !important;
+  }
+
+  .print-table {
+    font-size: 7pt !important;
+  }
+
+  .print-table th,
+  .print-table td {
+    padding: 2px 3px !important;
+    font-size: 7pt !important;
+  }
+
+  .print-totals {
+    font-size: 8pt !important;
+  }
+
+  .print-totals .grand-total {
+    font-size: 9pt !important;
+  }
+
+  .print-footer,
+  .print-legal {
+    font-size: 5pt !important;
+  }
+}

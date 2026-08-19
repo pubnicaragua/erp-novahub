@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { 
   FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
 } from 'lucide-react';
@@ -17,11 +17,15 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -152,6 +156,7 @@ const statusOptions = [
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-returns-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED'>('ALL');
@@ -283,6 +288,39 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       toast.success('PDF generado exitosamente', { id: pdfToastId });
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Notas de Crédito',
+      columns: [
+        { key: 'number', label: 'Nº Nota', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number,
+        customerName: item.customer?.name || 'Cliente',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Notas de Crédito',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName]);
 
   const buildReturnPanel = (row: SalesReturn): SalesDocumentPanelData => ({
     id: row.id,
@@ -508,6 +546,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Retornos totales o parciales, inventario y saldo a favor.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="returns" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de notas de crédito" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
@@ -554,6 +593,31 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           startEdit(detailReturn.id);
         }}
         onDownloadPdf={() => { if (detailReturn) void handleExportPDF(detailReturn); }}
+        onPrintDocument={() => {
+          if (!detailReturn) return;
+          const document = buildReturnPanel(detailReturn);
+          const html = generateTableHtml({
+            title: document.title,
+            columns: [
+              { key: 'description', label: 'Descripción', align: 'left' },
+              { key: 'quantity', label: 'Cantidad', align: 'center' },
+              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
+              { key: 'totalLabel', label: 'Total', align: 'right' },
+            ],
+            rows: (document.lines || []).map((line) => ({
+              description: line.description || '',
+              quantity: Number(line.quantity || 0),
+              unitPriceLabel: line.unitPriceLabel || '',
+              totalLabel: line.totalLabel || '',
+            })),
+          });
+          printContent(html, {
+            title: `${document.title} ${document.number || ''}`,
+            paperSize: 'letter',
+            companyName: user?.tenantName || 'Empresa',
+            logoUrl: themeConfig?.logo,
+          });
+        }}
       />
 
       <ConfirmDialog

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import {
   ClipboardList, Search, Eye, X, AlertTriangle,
@@ -28,6 +28,9 @@ import { generatePurchaseRequestPDF } from '../../utils/pdfGenerator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { EditableDataTable, type ColumnDef } from '../ui/EditableDataTable';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-muted/20 text-muted-foreground',
@@ -131,6 +134,37 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         || (r.management?.[0]?.supplier?.name?.toLowerCase().includes(s));
     });
   }, [data, search, statusFilter]);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Solicitudes de Compra',
+      columns: [
+        { key: 'number', label: 'Nº', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filtered.map((item) => ({
+        number: item.number,
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.management?.[0]?.total || 0),
+        status: normalizeRequestStatus(item.status),
+      })),
+      filters: {
+        'Búsqueda': search || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Solicitudes de Compra',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filtered, search, printContent, user?.tenantName]);
 
   const getActiveManagement = (pr: PurchaseRequest): PurchaseManagement | undefined =>
     pr.management?.[0];
@@ -430,6 +464,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
+        <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
         <PurchaseViewTutorial view="requests" />
         <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de solicitudes de compra" />
         </div>

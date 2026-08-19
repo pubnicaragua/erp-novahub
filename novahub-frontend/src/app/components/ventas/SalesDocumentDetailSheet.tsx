@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarDays, Download, Eye, FileText, History, UserRound } from 'lucide-react';
+import { CalendarDays, Download, Eye, FileText, History, Printer, UserRound } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -41,6 +41,7 @@ interface SalesDocumentDetailSheetProps {
   onClose: () => void;
   onOpenDocument: () => void;
   onDownloadPdf: () => void;
+  onPrintDocument?: () => void;
 }
 
 const statusLabels: Record<string, string> = {
@@ -94,6 +95,7 @@ export function SalesDocumentDetailSheet({
   onClose,
   onOpenDocument,
   onDownloadPdf,
+  onPrintDocument,
 }: SalesDocumentDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -143,12 +145,15 @@ export function SalesDocumentDetailSheet({
                 )}
               </section>
 
-              <section className="grid gap-2 sm:grid-cols-2">
+              <section className="grid gap-2 sm:grid-cols-3">
                 <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onOpenDocument}>
                   <Eye className="size-4 text-primary" /> Ver {document.title.toLowerCase()} completa
                 </Button>
                 <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onDownloadPdf}>
                   <Download className="size-4 text-primary" /> Descargar PDF
+                </Button>
+                <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onPrintDocument}>
+                  <Printer className="size-4 text-primary" /> Imprimir
                 </Button>
               </section>
 

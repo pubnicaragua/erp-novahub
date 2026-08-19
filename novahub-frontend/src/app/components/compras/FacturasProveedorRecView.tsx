@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Ban, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -20,6 +20,9 @@ import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -37,7 +40,7 @@ const statusOpts = [
 ];
 
 export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
@@ -81,6 +84,37 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     return ((r as any).description||'').toLowerCase().includes(searchTerm.toLowerCase()) ||
       ((r as any).supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Facturas Recurrentes',
+      columns: [
+        { key: 'description', label: 'Descripción', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'total', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'frequency', label: 'Frecuencia', align: 'center' },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filtered.map((item: any) => ({
+        description: item.description || '',
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        total: Number(item.total || item.amount || 0),
+        frequency: freqMap[(item.frequency || '').toLowerCase()] || item.frequency || '',
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Facturas Recurrentes',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filtered, searchTerm, printContent, user?.tenantName]);
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
     { key: 'description' as any, header: 'Descripción', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), 
@@ -413,6 +447,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Servicios y pagos automáticos</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes de proveedor" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (

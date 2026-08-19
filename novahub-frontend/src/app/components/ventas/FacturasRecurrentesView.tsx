@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { 
   RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -25,6 +26,9 @@ import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/sale
 import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -93,6 +97,7 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
 export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
@@ -251,6 +256,40 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       toast.success('PDF generado exitosamente', { id: pdfToastId });
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Facturas Recurrentes',
+      columns: [
+        { key: 'number', label: 'Referencia', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filtered.map((item) => ({
+        number: `REC-${item.id.slice(0, 8)}`,
+        customerName: item.customer?.name || 'Varios',
+        date: item.startDate ? new Date(item.startDate).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Facturas Recurrentes',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+      logoUrl: themeConfig?.logo,
+    });
+  }, [filtered, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const buildRecurringPanel = (row: RecurringInvoice): SalesDocumentPanelData => ({
     id: row.id,
@@ -674,6 +713,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="recurring" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
@@ -720,6 +760,31 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           setEditingId(detailRecurring.id);
         }}
         onDownloadPdf={() => { if (detailRecurring) void handleExportPDF(detailRecurring); }}
+        onPrintDocument={() => {
+          if (!detailRecurring) return;
+          const document = buildRecurringPanel(detailRecurring);
+          const html = generateTableHtml({
+            title: document.title,
+            columns: [
+              { key: 'description', label: 'Descripción', align: 'left' },
+              { key: 'quantity', label: 'Cantidad', align: 'center' },
+              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
+              { key: 'totalLabel', label: 'Total', align: 'right' },
+            ],
+            rows: (document.lines || []).map((line) => ({
+              description: line.description || '',
+              quantity: Number(line.quantity || 0),
+              unitPriceLabel: line.unitPriceLabel || '',
+              totalLabel: line.totalLabel || '',
+            })),
+          });
+          printContent(html, {
+            title: `${document.title} ${document.number || ''}`,
+            paperSize: 'letter',
+            companyName: user?.tenantName || 'Empresa',
+            logoUrl: themeConfig?.logo,
+          });
+        }}
       />
       <ConfirmDialog
               open={pendingDeleteId !== null}

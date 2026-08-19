@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown
 } from 'lucide-react';
@@ -22,6 +22,9 @@ import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -210,6 +213,39 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       toast.success('PDF generado exitosamente', { id: pdfToastId });
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
   };
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Pagos Recibidos',
+      columns: [
+        { key: 'number', label: 'ID Pago', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Monto', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number,
+        customerName: item.customer?.name || 'Cliente',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.amount || 0),
+        status: item.method || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Pagos Recibidos',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName]);
 
   // Invoices filtered by selected customer
   const customerInvoices = localDoc?.customerId
@@ -409,6 +445,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="payments" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos recibidos" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

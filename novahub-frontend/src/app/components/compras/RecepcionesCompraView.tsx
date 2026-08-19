@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
@@ -31,6 +31,9 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -392,7 +395,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
 }
 
 export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], orderCatalog = [], productCatalog = [], productCategories = [], pagination, onSearchChange, purchaseAlert, targetId, onClearTargetId }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -472,6 +475,38 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     status: (row: PurchaseReceipt) => String(row.status || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Recepciones de Compra',
+      columns: [
+        { key: 'number', label: 'Nº', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number,
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || item.purchaseOrder?.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Recepciones de Compra',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const distinctSuppliers = [...new Map(filtered.map((r) => [r.supplier?.name || '-', r.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.supplier?.name || '-') === label).length }));
   const statusOptionsForFilter = statusOpts.map((o) => ({ value: o.value, label: o.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === o.value).length }));
@@ -1270,6 +1305,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Inventario entregado por proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

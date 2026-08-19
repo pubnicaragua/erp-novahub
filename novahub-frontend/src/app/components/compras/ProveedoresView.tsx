@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Truck, Plus, Search, Eye, History, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -25,6 +25,9 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -45,7 +48,7 @@ const emptyDraft = () => ({
 const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
 
 export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ProveedoresViewProps) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
@@ -262,6 +265,40 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     balance: (row: Supplier) => Number(row.balance || 0),
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Proveedores',
+      columns: [
+        { key: 'code', label: 'Código', align: 'left' },
+        { key: 'name', label: 'Nombre', align: 'left' },
+        { key: 'contactName', label: 'Contacto', align: 'left' },
+        { key: 'phone', label: 'Teléfono', align: 'left' },
+        { key: 'balance', label: 'Saldo', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        code: item.code || '',
+        name: item.name || '',
+        contactName: item.contactName || '',
+        phone: item.phone || '',
+        balance: Number(item.balance || 0),
+        status: item.status || 'ACTIVE',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todos',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Proveedores',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const typeOptions = [
     { value: 'COMPANY', label: 'Empresa', count: filteredAndSorted.filter((s) => String(s.type || 'COMPANY').toUpperCase() === 'COMPANY').length },
     { value: 'INDIVIDUAL', label: 'Individual', count: filteredAndSorted.filter((s) => String(s.type || 'COMPANY').toUpperCase() !== 'COMPANY').length },
@@ -426,6 +463,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de proveedores" />
             <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
               <SelectTrigger className="h-10 w-full sm:w-44 rounded-xl text-[10px] font-black uppercase tracking-widest">

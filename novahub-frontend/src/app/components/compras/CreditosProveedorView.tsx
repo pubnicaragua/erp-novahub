@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BadgeDollarSign, Plus, Search, Eye, Pencil, TrendingUp, Hash, Ban, ChevronLeft, Send, CheckCircle2, Lock, FileText, Trash2, Boxes, Wrench, FileSpreadsheet, Upload, Download, Percent } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -24,6 +24,9 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import * as XLSX from 'xlsx';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -51,7 +54,7 @@ const statusOpts = [
 ];
 
 export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalog = [], supplierInvoices = [], productCatalog = [], pagination, onSearchChange }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-credits-layout', 'table', 24 * 365);
@@ -283,6 +286,38 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     status: (row: SupplierCredit) => String(row.status || '').toLowerCase(),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Créditos de Proveedor',
+      columns: [
+        { key: 'number', label: 'Nº', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number || '',
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Créditos de Proveedor',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const distinctSuppliers = [...new Map(filtered.map((c) => [c.supplier?.name || '-', c.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((c) => (c.supplier?.name || '-') === label).length }));
 
@@ -964,6 +999,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Administración de créditos y cuentas por pagar con proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos de proveedor" />
             {canPerform('PURCHASES_RETURNS', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>

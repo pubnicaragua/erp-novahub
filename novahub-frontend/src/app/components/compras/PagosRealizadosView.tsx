@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download, FileDown } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -28,6 +28,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props {
   data: PaymentMade[];
@@ -238,6 +241,38 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     amount: (row: PaymentMade) => Number(row.amount || 0),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Pagos Realizados',
+      columns: [
+        { key: 'reference', label: 'Referencia', align: 'left' },
+        { key: 'supplierName', label: 'Proveedor', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'method', label: 'Método', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        reference: item.reference || item.number || '',
+        supplierName: item.supplier?.name || 'Sin proveedor',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        amount: Number(item.amount || 0),
+        method: item.method || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Pagos Realizados',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+
   const distinctSuppliers = [...new Map(filtered.map((p) => [p.supplier?.name || '-', p.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.supplier?.name || '-') === label).length }));
 
@@ -655,6 +690,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (

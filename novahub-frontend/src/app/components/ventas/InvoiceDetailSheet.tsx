@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock3, Download, Eye, FileText, History, UserRound } from 'lucide-react';
+import { Clock3, Download, Eye, FileText, History, Printer, UserRound } from 'lucide-react';
 import type { Invoice } from '../../types';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -19,6 +19,7 @@ interface InvoiceDetailSheetProps {
   onClose: () => void;
   onOpenInvoice: (invoice: Invoice) => void;
   onDownloadPdf: (invoice: Invoice) => void;
+  onPrintInvoice?: (invoice: Invoice) => void;
   getBalance: (invoice: Invoice) => number;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
   formatDate: (date: string) => string;
@@ -58,6 +59,7 @@ export function InvoiceDetailSheet({
   onClose,
   onOpenInvoice,
   onDownloadPdf,
+  onPrintInvoice,
   getBalance,
   formatAmount,
   formatDate,
@@ -117,12 +119,15 @@ export function InvoiceDetailSheet({
             </div>
           </section>
 
-          <section className="grid gap-2 sm:grid-cols-2">
+          <section className="grid gap-2 sm:grid-cols-3">
             <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onOpenInvoice(invoice)}>
               <Eye className="size-4 text-primary" /> Ver factura completa
             </Button>
             <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onDownloadPdf(invoice)}>
               <Download className="size-4 text-primary" /> Descargar PDF
+            </Button>
+            <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={() => onPrintInvoice?.(invoice)}>
+              <Printer className="size-4 text-primary" /> Imprimir
             </Button>
           </section>
 

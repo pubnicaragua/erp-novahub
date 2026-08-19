@@ -1,6 +1,7 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import './print.css';
 
 /* `--input` is transparent in the light theme. Keep legacy/raw controls
    visibly bordered so every module follows the same form pattern. */

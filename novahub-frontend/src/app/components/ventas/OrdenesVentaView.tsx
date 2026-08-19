@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
   Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, PackageCheck, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
@@ -27,6 +27,9 @@ import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
@@ -338,6 +341,40 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const filteredData = colFilters.applyTo(statusOrdered, filterGetters);
   const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Órdenes de Venta',
+      columns: [
+        { key: 'number', label: 'Nº Orden', align: 'left' },
+        { key: 'customerName', label: 'Cliente', align: 'left' },
+        { key: 'date', label: 'Fecha', align: 'left' },
+        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filteredData.map((item) => ({
+        number: item.number,
+        customerName: item.customer?.name || 'Varios',
+        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
+        total: Number(item.total || 0),
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+        'Fecha desde': dateFrom || 'Sin filtro',
+        'Fecha hasta': dateTo || 'Sin filtro',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Órdenes de Venta',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+      logoUrl: themeConfig?.logo,
+    });
+  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
@@ -1167,6 +1204,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="orders" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatusFilter)}>
               <SelectTrigger className="h-10 w-44 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest"><SelectValue placeholder="Estado" /></SelectTrigger>
@@ -1287,6 +1325,31 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           setEditingId(detailOrder.id);
         }}
         onDownloadPdf={() => { if (detailOrder) void handleExportPDF(detailOrder); }}
+        onPrintDocument={() => {
+          if (!detailOrder) return;
+          const document = buildOrderPanel(detailOrder);
+          const html = generateTableHtml({
+            title: document.title,
+            columns: [
+              { key: 'description', label: 'Descripción', align: 'left' },
+              { key: 'quantity', label: 'Cantidad', align: 'center' },
+              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
+              { key: 'totalLabel', label: 'Total', align: 'right' },
+            ],
+            rows: (document.lines || []).map((line) => ({
+              description: line.description || '',
+              quantity: Number(line.quantity || 0),
+              unitPriceLabel: line.unitPriceLabel || '',
+              totalLabel: line.totalLabel || '',
+            })),
+          });
+          printContent(html, {
+            title: `${document.title} ${document.number || ''}`,
+            paperSize: 'letter',
+            companyName: user?.tenantName || 'Empresa',
+            logoUrl: themeConfig?.logo,
+          });
+        }}
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>

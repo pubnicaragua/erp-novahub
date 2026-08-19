@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -21,6 +21,9 @@ import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
+import { PrintButton } from '../ui/PrintButton';
+import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
+import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -38,7 +41,7 @@ const statusOpts = [
 ];
 
 export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
@@ -80,6 +83,37 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     if (statusFilter !== 'ALL' && status !== statusFilter) return false;
     return (e.description||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  const { printContent } = useBrowserPrint();
+
+  const handlePrint = useCallback((paperSize: PaperSize) => {
+    const html = generateTableHtml({
+      title: 'Gastos Recurrentes',
+      columns: [
+        { key: 'description', label: 'Descripción', align: 'left' },
+        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'frequency', label: 'Frecuencia', align: 'center' },
+        { key: 'startDate', label: 'Inicio', align: 'left' },
+        { key: 'status', label: 'Estado', align: 'center' },
+      ],
+      rows: filtered.map((item) => ({
+        description: item.description || '',
+        amount: Number(item.amount || 0),
+        frequency: freqMap[(item.frequency || '').toLowerCase()] || item.frequency || '',
+        startDate: item.startDate ? new Date(item.startDate).toLocaleDateString('es-NI') : '',
+        status: item.status || '',
+      })),
+      filters: {
+        'Búsqueda': searchTerm || 'Todas',
+      },
+    });
+
+    printContent(html, {
+      title: 'Reporte de Gastos Recurrentes',
+      paperSize,
+      companyName: user?.tenantName || 'Empresa',
+    });
+  }, [filtered, searchTerm, printContent, user?.tenantName]);
 
   const columns: ColumnDef<RecurringExpense>[] = [
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit') },
@@ -349,6 +383,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Compromisos fijos periódicos</p></div>
           <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-expenses" />
+            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (
