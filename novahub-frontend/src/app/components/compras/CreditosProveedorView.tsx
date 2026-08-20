@@ -1009,7 +1009,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           actions={(row) => {
             const status = String(row.status || '').toUpperCase();
             return (

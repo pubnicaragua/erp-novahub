@@ -997,7 +997,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         </div>
         <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailExpense ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} onRowClick={(row) => setSelectedExpenseDetail(row)}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'}...`);
             try {

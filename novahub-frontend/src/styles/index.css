@@ -68,6 +68,14 @@ th .column-filter-menu .column-filter-icon,
   color: color-mix(in oklch, var(--foreground) 80%, transparent) !important;
 }
 
+/* Sonner gives descriptions a fixed gray color by default. Keep the
+   existing neutral toast surface while strengthening the description color
+   so floating notifications remain readable in both themes. */
+.erp-toaster [data-sonner-toast][data-styled='true'] [data-description] {
+  color: color-mix(in oklch, currentColor 82%, transparent) !important;
+  opacity: 1 !important;
+}
+
 /* Sales module responsive guardrails. Keep layouts within the viewport and
    let dense data wrap instead of creating a second horizontal scrollbar. */
 .sales-module,

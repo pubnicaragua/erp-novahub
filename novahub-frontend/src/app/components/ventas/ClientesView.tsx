@@ -606,6 +606,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'balance', label: 'Saldo deudor' },
     { key: 'status', label: 'Estado' },
   ];
+  const layoutLabel = layoutMode === 'table' ? 'Lista' : 'Tarjetas';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -619,12 +620,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2" data-tour="sales-list-actions">
+        <div className="flex flex-col gap-3 py-2" data-tour="sales-list-actions">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
@@ -654,10 +655,15 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <select value={layoutMode} onChange={(e) => setLayoutMode(e.target.value as 'table' | 'cards')} aria-label="Elegir distribución" data-tour="customers-layout" className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary">
-              <option value="table">Lista</option>
-              <option value="cards">Tarjetas</option>
-            </select>
+            <span className="inline-grid shrink-0">
+              <span aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap rounded-xl px-3 pr-10 text-[10px] font-black uppercase tracking-widest">
+                {layoutLabel}
+              </span>
+              <select value={layoutMode} onChange={(e) => setLayoutMode(e.target.value as 'table' | 'cards')} aria-label="Elegir distribución" data-tour="customers-layout" className="col-start-1 row-start-1 h-10 w-full min-w-0 rounded-xl border border-border/50 bg-background/50 px-3 pr-10 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary">
+                <option value="table">Lista</option>
+                <option value="cards">Tarjetas</option>
+              </select>
+            </span>
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button
                 variant="outline"
@@ -927,4 +933,3 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     </div>
   );
 }
-

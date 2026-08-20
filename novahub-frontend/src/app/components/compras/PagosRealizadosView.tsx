@@ -738,7 +738,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
              )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedTargetId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -878,4 +878,3 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     </div>
   );
 }
-

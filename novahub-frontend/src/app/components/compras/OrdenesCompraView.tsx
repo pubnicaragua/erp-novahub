@@ -2224,7 +2224,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
             if (validIds.length === 0) return;

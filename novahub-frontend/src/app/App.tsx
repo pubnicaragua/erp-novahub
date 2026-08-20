@@ -12,7 +12,7 @@ import LandingPage from './components/LandingPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
 import { SessionClosedPage } from './components/auth/SessionClosedPage';
 import { SessionMonitor } from './components/auth/SessionMonitor';
-import { Sidebar } from './components/Sidebar';
+import { PLATFORM_SIDEBAR_MODULE_ORDER, SIDEBAR_MODULE_ORDER, Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
@@ -103,11 +103,12 @@ const ErrorBoundaryFallback = () => (
 
 
 function DashboardLayout() {
-  const { hasAccess, user } = useAuth();
+  const { hasAccess, sessionStartVersion, user } = useAuth();
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   useIncomingNotificationAlert();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
+    if (sessionStartVersion > 0) return 'overview';
     const urlModule = searchParams.get('m');
     if (urlModule) {
       if (urlModule === 'roles') return 'suscripciones';
@@ -120,6 +121,7 @@ function DashboardLayout() {
     return (storedModule as Module | 'overview') || 'overview';
   });
   const [activeSubModule, setActiveSubModule] = useState<string | undefined>(() => {
+    if (sessionStartVersion > 0) return undefined;
     const urlSubModule = searchParams.get('sm');
     if (urlSubModule) return urlSubModule === 'dashboard' ? 'productos' : urlSubModule;
     const storedSubModule = safeGetItem('erp-active-submodule');
@@ -142,8 +144,17 @@ function DashboardLayout() {
   // - Cambio de módulo desde la UI: hace push (historial), el botón "atrás" vuelve al módulo previo.
   // - Cambio de submodulo: solo reemplaza la entrada actual para no llenar el historial con tabs.
   const lastModuleRef = React.useRef<Module | 'overview'>(activeModule);
+  const skipInitialUrlNavigationRef = React.useRef(sessionStartVersion > 0);
 
   useEffect(() => {
+    // Al iniciar una sesión nueva, AuthContext ya limpió la URL. El objeto
+    // searchParams de este primer render puede todavía contener la ruta de la
+    // sesión anterior; no debemos restaurarla en el estado local.
+    if (skipInitialUrlNavigationRef.current) {
+      skipInitialUrlNavigationRef.current = false;
+      return;
+    }
+
     const urlModule = searchParams.get('m');
     const urlSubModule = searchParams.get('sm');
     if (!urlModule && !urlSubModule) return;
@@ -217,14 +228,12 @@ function DashboardLayout() {
     } else if (hasAccess(activeModule as Module)) {
       return activeModule;
     }
-    const preferredOrder: Module[] = [
-      'inventario', 'ventas', 'compras', 'finanzas', 'contabilidad', 'rh',
-      'clientes', 'proveedores', 'actividades', 'tickets',
-      'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
-      'documentos', 'notificaciones', 'transferencias',
-      'reportes', 'configuracion', 'suscripciones', 'schema',
-    ];
-    return preferredOrder.find(m => hasAccess(m)) ?? activeModule;
+    const preferredOrder = user?.isPlatformAdmin
+      ? PLATFORM_SIDEBAR_MODULE_ORDER
+      : SIDEBAR_MODULE_ORDER;
+    return preferredOrder.find((module) => (
+      module === 'overview' ? hasAccess('dashboard') : hasAccess(module)
+    )) ?? activeModule;
   })();
 
   useEffect(() => {

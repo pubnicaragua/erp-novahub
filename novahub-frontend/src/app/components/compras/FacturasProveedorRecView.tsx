@@ -455,7 +455,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
@@ -488,4 +488,3 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
     </div>
   );
 }
-

@@ -391,7 +391,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
@@ -433,4 +433,3 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     </div>
   );
 }
-
