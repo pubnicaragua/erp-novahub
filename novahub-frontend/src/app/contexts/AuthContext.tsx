@@ -73,6 +73,26 @@ const APPROVAL_COMPATIBLE_ACTIONS: PermissionAction[] = [
   'approve', 'authorize', 'reopen', 'close', 'confirm', 'process', 'pay', 'apply', 'reconcile', 'convert', 'send',
 ];
 
+/**
+ * Cada sesión nueva debe iniciar en el primer módulo accesible. La URL y el
+ * almacenamiento local solo representan navegación de la sesión anterior.
+ */
+function resetNavigationState() {
+  if (typeof window === 'undefined') return;
+
+  localStorage.removeItem('erp-active-module');
+  localStorage.removeItem('erp-active-submodule');
+
+  const url = new URL(window.location.href);
+  const hadNavigationParams = url.searchParams.has('m') || url.searchParams.has('sm');
+  if (!hadNavigationParams) return;
+
+  url.searchParams.delete('m');
+  url.searchParams.delete('sm');
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export interface User {
   id: string;
   name: string;
@@ -168,6 +188,8 @@ interface AuthContextType {
   logout: () => void;
   switchIdentity: (userId: string) => Promise<void>;
   refreshEnabledModules: () => Promise<void>;
+  /** Incrementa cada vez que una sesión autenticada debe iniciar navegación limpia. */
+  sessionStartVersion: number;
   isLoading: boolean;
   userBranches: BranchInfo[];
   selectedBranchId: string | null;
@@ -431,6 +453,7 @@ const createUserObject = (apiPayload: any): User => {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [sessionStartVersion, setSessionStartVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [userBranches, setUserBranches] = useState<BranchInfo[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
@@ -469,6 +492,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           const me = await api.get<any>('/auth/profile');
+          resetNavigationState();
+          setSessionStartVersion((version) => version + 1);
           setUser(createUserObject(me));
           fetchBranches();
         } catch {
@@ -482,6 +507,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
           storeAuthToken(response.access_token);
+          resetNavigationState();
+          setSessionStartVersion((version) => version + 1);
           setUser(createUserObject(response.user));
           fetchBranches();
         }
@@ -751,6 +778,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.post<{ access_token: string; user: any }>('/auth/login', { email, password });
 
+      resetNavigationState();
+      setSessionStartVersion((version) => version + 1);
       storeAuthToken(response.access_token);
       setUser(createUserObject(response.user));
       fetchBranches();
@@ -760,12 +789,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchBranches]);
 
   const setSession = useCallback((token: string, userData: any) => {
+    resetNavigationState();
+    setSessionStartVersion((version) => version + 1);
     storeAuthToken(token);
     setUser(createUserObject(userData));
     fetchBranches();
   }, [fetchBranches]);
 
   const logout = useCallback(() => {
+    resetNavigationState();
     setUser(null);
     localStorage.removeItem('nh-auth-token');
     localStorage.removeItem('erp-active-module');
@@ -802,7 +834,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.tenantId]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
       {isLoading ? (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4">

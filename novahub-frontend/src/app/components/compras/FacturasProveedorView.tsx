@@ -802,7 +802,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_INVOICES', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'} de proveedor...`);
             try {
@@ -874,4 +874,3 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
     </div>
   );
 }
-

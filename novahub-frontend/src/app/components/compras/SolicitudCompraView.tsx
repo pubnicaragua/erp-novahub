@@ -487,13 +487,13 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
 
       {loading ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">Cargando...</CardContent></Card>
-      ) : layoutMode === 'table' ? (
+      ) : layoutMode !== 'cards' ? (
         <EditableDataTable
           data={filtered}
           columns={columns}
           isLoading={loading}
           pagination={pagination}
-          layoutMode={layoutMode}
+          layoutMode="responsive"
           highlightedRowId={highlightedAlertId}
           actionsWidth="w-48"
           actions={(req) => {
