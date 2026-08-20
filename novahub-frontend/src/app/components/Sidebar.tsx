@@ -12,7 +12,6 @@ import {
   DollarSign,
   Users,
   Truck,
-  Activity,
   Headphones,
   FolderOpen,
   BellRing,
@@ -319,7 +318,7 @@ const platformMenuItems: MenuItem[] = [
   },
   {
     id: 'suscripciones',
-    label: 'Grupos empresariales',
+    label: 'Grupos y cotizaciones',
     icon: <Building2 className="size-5" />,
   },
   {

@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
 import { Activity, ListTodo, CalendarDays, Bell, Database } from 'lucide-react';
-import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TareasView } from './actividades/TareasView';
 import { EventosView } from './actividades/EventosView';
@@ -21,10 +18,11 @@ interface ActividadesPageProps {
   onSubModuleChange?: (sub: string) => void;
 }
 
-export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ActividadesPageProps) => {
+export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: ActividadesPageProps) => {
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState(() => activeSubModule || 'tareas');
+  const [internalActiveTab, setInternalActiveTab] = useState('tareas');
+  const activeTab = activeSubModule || internalActiveTab;
 
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
@@ -72,12 +70,6 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
   const loading = activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
 
-  useEffect(() => {
-    if (activeSubModule) {
-      setActiveTab(activeSubModule);
-    }
-  }, [activeSubModule]);
-
   const tabs = [
     { id: 'tareas', label: 'Tareas', icon: ListTodo, color: 'text-blue-500', module: 'ACTIVITIES_TASKS' },
     { id: 'eventos', label: 'Eventos', icon: CalendarDays, color: 'text-emerald-500', module: 'ACTIVITIES_EVENTS' },
@@ -108,10 +100,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
           <CurrencyValuationBanner className="mb-6" />
 
           <Tabs value={activeTab} className="w-full" onValueChange={(val) => {
-            setActiveTab(val);
+            setInternalActiveTab(val);
             if (onSubModuleChange) onSubModuleChange(val);
           }}>
-            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
             <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
               {tabs.map((tab) => {
                 const hasRequired = user?.enabledModules?.includes(tab.module);

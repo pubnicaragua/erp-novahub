@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Building2, GitBranch, HardDrive, Link2, Plus, Search, Users, Warehouse } from 'lucide-react';
+import { Building2, CalendarClock, Clock3, FileText, GitBranch, HardDrive, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -9,6 +10,8 @@ import { getBusinessTypeLabel } from '../../constants/businessTypes';
 import { GroupBranchSupportDialog } from './GroupBranchSupportDialog';
 import { GroupManagerSupportDialog } from './GroupManagerSupportDialog';
 import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
+import { TrialExtensionRequestsPanel } from '../suscripciones/TrialExtensionRequestsPanel';
+import { PlatformQuotesPanel } from './PlatformQuotesPanel';
 
 function formatStorage(value: unknown) {
   const bytes = Number(value || 0);
@@ -23,7 +26,9 @@ function formatStorage(value: unknown) {
 export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boolean }) {
   const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'groups' | 'legacy' | 'requests' | 'quotes'>('groups');
   const query = useTenantQuery(['platform-enterprise-groups'], (signal) => enterpriseGroupsService.getPlatformGroups(signal));
+  const legacyQuery = useTenantQuery(['platform-enterprise-groups-legacy-users'], (signal) => enterpriseGroupsService.getPlatformLegacyUsers(signal), { enabled: activeTab === 'legacy' });
   const data = query.data;
   const totalGroupUsers = (data?.groups || []).reduce((total: number, group: any) => total + Number(group.userCount || 0), 0);
   const filteredGroups = useMemo(() => {
@@ -39,6 +44,15 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
       return haystack.includes(term);
     });
   }, [data?.groups, searchTerm]);
+  const extendLegacyTrial = async (tenantId: string) => {
+    try {
+      await enterpriseGroupsService.extendPlatformLegacyTrial(tenantId, 7);
+      toast.success('Trial extendido 7 días');
+      await legacyQuery.refetch();
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo extender el trial');
+    }
+  };
   if (workspace) {
     const selectedGroup = workspace.groupId ? data?.groups?.find((group: any) => group.id === workspace.groupId) : undefined;
     return <EnterpriseGroupSetupView mode={workspace.mode} initialGroup={selectedGroup} onBack={() => setWorkspace(null)} onChanged={() => query.refetch()} />;
@@ -72,6 +86,20 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
         </div>
       </div>
 
+      <div className="flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/20 p-1" role="tablist" aria-label="Administración de grupos empresariales">
+        {([
+          ['groups', 'Grupos actuales', Building2],
+          ['legacy', 'Usuarios heredados', UserRound],
+          ['requests', 'Solicitudes de trial', Clock3],
+          ['quotes', 'Cotizaciones', FileText],
+        ] as const).map(([tab, label, Icon]) => (
+          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
+            <Icon className="size-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'groups' ? <>
       <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm">
         <CardContent className="space-y-6 p-6 sm:p-7">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -131,6 +159,13 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
           </CardContent>
         </Card>
       )}
+      </> : activeTab === 'legacy' ? (
+        <LegacyUsersPanel data={legacyQuery.data} loading={legacyQuery.isLoading} onExtend={extendLegacyTrial} />
+      ) : activeTab === 'requests' ? (
+        <TrialExtensionRequestsPanel />
+      ) : (
+        <PlatformQuotesPanel groups={data?.groups || []} />
+      )}
     </section>
   );
 
@@ -142,6 +177,26 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
         {content}
       </div>
     </div>
+  );
+}
+
+function LegacyUsersPanel({ data, loading, onExtend }: { data?: { cutoff: string; totalUsers: number; totalTenants: number; tenants: any[] }; loading: boolean; onExtend: (tenantId: string) => Promise<void> }) {
+  const [term, setTerm] = useState('');
+  const tenants = useMemo(() => {
+    const normalized = term.trim().toLocaleLowerCase();
+    return (data?.tenants || []).filter((tenant: any) => !normalized || [tenant.name, tenant.slug, tenant.enterpriseGroup?.name, ...(tenant.users || []).map((user: any) => `${user.name} ${user.email}`)].join(' ').toLocaleLowerCase().includes(normalized));
+  }, [data?.tenants, term]);
+  return (
+    <Card className="rounded-3xl border-border/60 shadow-sm">
+      <CardHeader className="gap-4 p-6 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><UserRound className="size-5 text-primary" /> Usuarios de configuración anterior</CardTitle><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Empresas y usuarios creados antes de la jerarquía de grupos. El trial se extiende a nivel de empresa para conservar el acceso de toda la sucursal.</p></div>
+        <div className="relative w-full sm:max-w-xs"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Buscar empresa o usuario…" className="h-10 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary" /></div>
+      </CardHeader>
+      <CardContent className="space-y-4 p-6 pt-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Badge variant="outline"><Users className="mr-1 size-3" /> {data?.totalUsers || 0} usuarios</Badge><Badge variant="outline"><Building2 className="mr-1 size-3" /> {data?.totalTenants || 0} empresas</Badge>{data?.cutoff && <span>Antes de {new Date(data.cutoff).toLocaleDateString('es-NI')}</span>}</div>
+        {loading ? <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-primary" /></div> : !tenants.length ? <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">No se encontraron usuarios heredados.</div> : <div className="grid gap-4 xl:grid-cols-2">{tenants.map((tenant: any) => <div key={tenant.id} className="rounded-2xl border border-border/60 bg-muted/[0.08] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-black">{tenant.name}</p><p className="text-xs text-muted-foreground">{tenant.enterpriseGroup?.name || 'Sin grupo visible'} · {tenant.slug}</p></div><Button size="sm" className="shrink-0 rounded-lg" onClick={() => onExtend(tenant.id)}><CalendarClock className="mr-1.5 size-4" /> +7 días</Button></div><div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant={tenant.isActive ? 'outline' : 'destructive'}>{tenant.isActive ? 'Activa' : 'Inactiva'}</Badge><span>Vence: {tenant.expiresAt ? new Date(tenant.expiresAt).toLocaleDateString('es-NI') : 'Sin fecha'}</span></div><div className="mt-3 space-y-2 border-t border-border/50 pt-3">{(tenant.users || []).map((user: any) => <div key={user.id} className="flex min-w-0 items-center justify-between gap-3 text-xs"><span className="truncate font-semibold">{user.name} <span className="font-normal text-muted-foreground">· {user.email}</span></span><span className="shrink-0 text-muted-foreground">{user.isActive ? 'Activo' : 'Inactivo'}</span></div>)}</div></div>)}</div>}
+      </CardContent>
+    </Card>
   );
 }
 

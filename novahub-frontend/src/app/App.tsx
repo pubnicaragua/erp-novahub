@@ -20,34 +20,60 @@ import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
 
-const OverviewDashboard = lazy(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })));
-const PartnerDashboard = lazy(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
-const InventarioPage = lazy(() => import('./components/InventarioPage').then(m => ({ default: m.InventarioPage })));
-const VentasPage = lazy(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })));
-const ComprasPage = lazy(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })));
-const FinanzasPage = lazy(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })));
-const RecursosHumanosPage = lazy(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })));
-const ClientesPage = lazy(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })));
-const ProveedoresPage = lazy(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
-const ActividadesPage = lazy(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })));
-const TicketsPage = lazy(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })));
-const DocumentosPage = lazy(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })));
-const NotificacionesPage = lazy(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })));
-const TransferenciasPage = lazy(() => import('./components/TransferenciasPage').then(m => ({ default: m.TransferenciasPage })));
-const ReportesPage = lazy(() => import('./components/ReportesPage').then(m => ({ default: m.ReportesPage })));
-const ConfiguracionPage = lazy(() => import('./components/ConfiguracionPage').then(m => ({ default: m.ConfiguracionPage })));
-const SuscripcionesPage = lazy(() => import('./components/SuscripcionesPage').then(m => ({ default: m.SuscripcionesPage })));
-const PrismaSchemaPage = lazy(() => import('./components/PrismaSchemaPage').then(m => ({ default: m.PrismaSchemaPage })));
-const FinanciamientoPymePage = lazy(() => import('./components/FinanciamientoPymePage').then(m => ({ default: m.FinanciamientoPymePage })));
-const AsesoriaLegalPage = lazy(() => import('./components/AsesoriaLegalPage').then(m => ({ default: m.AsesoriaLegalPage })));
-const NovaChatView = lazy(() => import('./components/novachat/NovaChatView').then(m => ({ default: m.NovaChatView })));
-const TrainingHubView = lazy(() => import('./components/help/TrainingHubView').then(m => ({ default: m.TrainingHubView })));
-const SoporteTecnicoView = lazy(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })));
-const SoporteTecnicoAdminView = lazy(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })));
-const ContabilidadPage = lazy(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })));
-const QaConsoleView = lazy(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })));
-const ManagerPage = lazy(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })));
-const EnterpriseGroupsAdminView = lazy(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })));
+function recoverFromChunk(moduleName: string) {
+  const now = Date.now();
+  try {
+    const key = `novahub:chunk-recovery:${moduleName}`;
+    const previous = Number(sessionStorage.getItem(key) || 0);
+    if (previous && now - previous <= 60_000) return;
+    sessionStorage.setItem(key, String(now));
+  } catch {
+    // Private browsing or a disabled storage API must not prevent recovery.
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('__asset_recovery', `${moduleName}-${now}`);
+  window.location.replace(url.toString());
+}
+
+function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
+  return lazy(async () => {
+    try {
+      return await loader();
+    } catch (error) {
+      recoverFromChunk(moduleName);
+      throw error;
+    }
+  });
+}
+
+const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
+const PartnerDashboard = lazyWithChunkRecovery(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })), 'partner');
+const InventarioPage = lazyWithChunkRecovery(() => import('./components/InventarioPage').then(m => ({ default: m.InventarioPage })), 'inventario');
+const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
+const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
+const FinanzasPage = lazyWithChunkRecovery(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })), 'finanzas');
+const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })), 'rh');
+const ClientesPage = lazyWithChunkRecovery(() => import('./components/ClientesPage').then(m => ({ default: m.ClientesPage })), 'clientes');
+const ProveedoresPage = lazyWithChunkRecovery(() => import('./components/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })), 'proveedores');
+const ActividadesPage = lazyWithChunkRecovery(() => import('./components/ActividadesPage').then(m => ({ default: m.ActividadesPage })), 'actividades');
+const TicketsPage = lazyWithChunkRecovery(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })), 'tickets');
+const DocumentosPage = lazyWithChunkRecovery(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })), 'documentos');
+const NotificacionesPage = lazyWithChunkRecovery(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })), 'notificaciones');
+const TransferenciasPage = lazyWithChunkRecovery(() => import('./components/TransferenciasPage').then(m => ({ default: m.TransferenciasPage })), 'transferencias');
+const ReportesPage = lazyWithChunkRecovery(() => import('./components/ReportesPage').then(m => ({ default: m.ReportesPage })), 'reportes');
+const ConfiguracionPage = lazyWithChunkRecovery(() => import('./components/ConfiguracionPage').then(m => ({ default: m.ConfiguracionPage })), 'configuracion');
+const SuscripcionesPage = lazyWithChunkRecovery(() => import('./components/SuscripcionesPage').then(m => ({ default: m.SuscripcionesPage })), 'suscripciones');
+const PrismaSchemaPage = lazyWithChunkRecovery(() => import('./components/PrismaSchemaPage').then(m => ({ default: m.PrismaSchemaPage })), 'schema');
+const FinanciamientoPymePage = lazyWithChunkRecovery(() => import('./components/FinanciamientoPymePage').then(m => ({ default: m.FinanciamientoPymePage })), 'financiamiento');
+const AsesoriaLegalPage = lazyWithChunkRecovery(() => import('./components/AsesoriaLegalPage').then(m => ({ default: m.AsesoriaLegalPage })), 'asesoria');
+const NovaChatView = lazyWithChunkRecovery(() => import('./components/novachat/NovaChatView').then(m => ({ default: m.NovaChatView })), 'novachat');
+const TrainingHubView = lazyWithChunkRecovery(() => import('./components/help/TrainingHubView').then(m => ({ default: m.TrainingHubView })), 'training');
+const SoporteTecnicoView = lazyWithChunkRecovery(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })), 'support');
+const SoporteTecnicoAdminView = lazyWithChunkRecovery(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })), 'support-admin');
+const ContabilidadPage = lazyWithChunkRecovery(() => import('./components/contabilidad/ContabilidadPage').then(m => ({ default: m.ContabilidadPage })), 'contabilidad');
+const QaConsoleView = lazyWithChunkRecovery(() => import('./components/qa/QaConsoleView').then(m => ({ default: m.QaConsoleView })), 'qa');
+const ManagerPage = lazyWithChunkRecovery(() => import('./components/ManagerPage').then(m => ({ default: m.ManagerPage })), 'manager');
+const EnterpriseGroupsAdminView = lazyWithChunkRecovery(() => import('./components/admin/EnterpriseGroupsAdminView').then(m => ({ default: m.EnterpriseGroupsAdminView })), 'enterprise-groups');
 
 function PageLoader() {
   return (

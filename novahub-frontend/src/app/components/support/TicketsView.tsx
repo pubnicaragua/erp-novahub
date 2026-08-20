@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Ticket, TicketAudit, TicketComment } from '../../types';
 import { Card, CardContent } from '../ui/card';
@@ -18,6 +18,7 @@ import {
   Eye,
   Trash2,
   Pencil,
+  ImagePlus,
 } from 'lucide-react';
 import { supportService } from '../../services/support.service';
 import { toast } from 'sonner';
@@ -34,8 +35,19 @@ interface TicketsViewProps {
   onRefresh: () => void;
 }
 
+const useCurrentTimestamp = () => {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return now;
+};
+
 const SlaStatusBadge: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
-  const now = Date.now();
+  const now = useCurrentTimestamp();
   const dueAt = ticket.slaDueAt ? new Date(ticket.slaDueAt).getTime() : null;
   const resolved = ['RESOLVED', 'CLOSED'].includes((ticket.status || '').toUpperCase());
 
@@ -73,17 +85,26 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const activeSelectedTicket = selectedTicket
+    ? data.find((item) => item.id === selectedTicket.id) || selectedTicket
+    : null;
 
   const commentsQuery = useTenantQuery<TicketComment[]>(
-    ['support', 'ticket-comments', selectedTicket?.id],
-    signal => supportService.getComments(selectedTicket!.id, signal),
-    { enabled: Boolean(selectedTicket?.id) },
+    ['support', 'ticket-comments', activeSelectedTicket?.id],
+    signal => supportService.getComments(activeSelectedTicket!.id, signal),
+    { enabled: Boolean(activeSelectedTicket?.id) },
   );
   const auditQuery = useTenantQuery<TicketAudit[]>(
-    ['support', 'ticket-audit', selectedTicket?.id],
-    signal => supportService.getAudit(selectedTicket!.id, signal),
-    { enabled: Boolean(selectedTicket?.id) },
+    ['support', 'ticket-audit', activeSelectedTicket?.id],
+    signal => supportService.getAudit(activeSelectedTicket!.id, signal),
+    { enabled: Boolean(activeSelectedTicket?.id) },
   );
+  const ticketDetailQuery = useTenantQuery<Ticket>(
+    ['support', 'ticket-detail', activeSelectedTicket?.id],
+    signal => supportService.getOne(activeSelectedTicket!.id, signal),
+    { enabled: Boolean(activeSelectedTicket?.id) },
+  );
+  const detailTicket = ticketDetailQuery.data || activeSelectedTicket;
   const comments = Array.isArray(commentsQuery.data) ? commentsQuery.data : [];
   const audit = Array.isArray(auditQuery.data) ? auditQuery.data : [];
   const detailLoading = commentsQuery.isLoading || auditQuery.isLoading || commentsQuery.isFetching || auditQuery.isFetching;
@@ -101,12 +122,6 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     { value: 'HIGH', label: 'Alta', color: 'text-amber-500' },
     { value: 'URGENT', label: 'Urgente', color: 'text-rose-500' },
   ];
-
-  useEffect(() => {
-    if (!selectedTicket?.id) return;
-    const updated = data.find((item) => item.id === selectedTicket.id);
-    if (updated) setSelectedTicket(updated);
-  }, [data, selectedTicket?.id]);
 
   const columns: ColumnDef<Ticket>[] = [
     { key: 'number', header: 'Ticket', width: '110px' },
@@ -198,7 +213,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     try {
       await supportService.delete(ticket.id);
       toast.success('Ticket eliminado');
-      if (selectedTicket?.id === ticket.id) {
+      if (activeSelectedTicket?.id === ticket.id) {
         setSelectedTicket(null);
       }
       onRefresh();
@@ -208,13 +223,13 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
   };
 
   const sendComment = async () => {
-    if (!selectedTicket?.id) return;
+    if (!activeSelectedTicket?.id) return;
     const message = newComment.trim();
     if (!message) return;
 
     try {
       setCommentLoading(true);
-      await supportService.addComment(selectedTicket.id, message);
+      await supportService.addComment(activeSelectedTicket.id, message);
       setNewComment('');
       await Promise.all([commentsQuery.refetch(), auditQuery.refetch()]);
       onRefresh();
@@ -257,15 +272,12 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     },
   ];
 
-  const filtered = useMemo(
-    () =>
-      data.filter(
-        (t) =>
-          t.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    [data, searchTerm],
+  const normalizedSearch = searchTerm.toLowerCase();
+  const filtered = data.filter(
+    (t) =>
+      t.subject?.toLowerCase().includes(normalizedSearch) ||
+      t.number?.toLowerCase().includes(normalizedSearch) ||
+      t.description?.toLowerCase().includes(normalizedSearch),
   );
 
   return (
@@ -365,15 +377,34 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
             </p>
           </div>
 
-          {!selectedTicket ? (
+          {!activeSelectedTicket ? (
             <div className="p-6 text-sm text-muted-foreground">Selecciona un ticket para ver comentarios e historial.</div>
           ) : (
             <div className="p-4 space-y-4">
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">{selectedTicket.number}</p>
-                <p className="font-semibold">{selectedTicket.subject}</p>
-                <SlaStatusBadge ticket={selectedTicket} />
+                <p className="text-xs text-muted-foreground">{activeSelectedTicket.number}</p>
+                <p className="font-semibold">{activeSelectedTicket.subject}</p>
+                <SlaStatusBadge ticket={activeSelectedTicket} />
               </div>
+
+              {ticketDetailQuery.isLoading && (activeSelectedTicket.evidenceUrl1 || activeSelectedTicket.evidenceUrl2) && (
+                <p className="text-xs text-muted-foreground">Cargando evidencias...</p>
+              )}
+              {ticketDetailQuery.data && (detailTicket?.evidenceUrl1 || detailTicket?.evidenceUrl2) && (
+                <div className="space-y-2 rounded-2xl border border-border/60 bg-background/40 p-3">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/60">
+                    <ImagePlus className="size-4" /> Evidencias
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[detailTicket?.evidenceUrl1, detailTicket?.evidenceUrl2].filter(Boolean).map((url, index) => (
+                      <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-border/60 bg-background">
+                        <img src={url} alt={`Evidencia ${index + 1}`} className="aspect-square w-full object-cover transition-transform group-hover:scale-105" />
+                        <span className="block truncate px-2 py-1.5 text-[10px] font-semibold text-primary">Abrir evidencia {index + 1}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/60">
@@ -437,6 +468,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
     </div>
 
       <TicketFormModal
+        key={`${formOpen ? 'open' : 'closed'}-${editingTicket?.id || 'new'}`}
         open={formOpen}
         onOpenChange={setFormOpen}
         ticket={editingTicket}
