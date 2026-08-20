@@ -15,8 +15,11 @@ export function useTenantQuery<TData>(
   const result = useQuery({
     queryKey: ['tenant-module', tenantKey, ...key],
     queryFn: ({ signal }) => queryFn(signal),
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
+    // Most tenant-scoped lists do not change every few seconds. Keep the
+    // result fresh enough for normal ERP work while avoiding duplicate reads
+    // when users switch tabs or remount a view. Mutations invalidate queries.
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
     ...queryOptions,

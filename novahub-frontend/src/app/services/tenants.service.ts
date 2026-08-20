@@ -41,17 +41,7 @@ export const tenantsService = {
   delete: (id: string) => api.delete(`/tenants/${id}`),
   
   // User management within a tenant
-  getUsers: async (tenantId: string, signal?: AbortSignal) => {
-    try {
-      return await api.get<TenantUser[]>(`/tenants/${tenantId}/users`, { signal });
-    } catch (primaryError) {
-      try {
-        return await api.get<TenantUser[]>('/tenant/users', { params: { tenantId }, signal });
-      } catch {
-        throw primaryError;
-      }
-    }
-  },
+  getUsers: (tenantId: string, signal?: AbortSignal) => api.get<TenantUser[]>(`/tenants/${tenantId}/users`, { signal }),
   addUser: (data: { 
     clientTenantId: string; 
     name: string; 

@@ -144,13 +144,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
     },
     {
       key: 'actions', header: 'Acciones', width: '100px', editable: false,
-      render: (val: any, row: any) => {
+      render: (_val: any, row: any) => {
         if (row.status !== 'COMPLETED') {
           return canPerform('ACTIVITIES_TASKS', 'edit') ? (
-            <Button size="sm" variant="default" className="h-7 text-xs"
+              <Button size="sm" variant="default" title="Completar tarea" className="h-8 max-w-full shrink-0 text-xs"
               onClick={() => { setSelectedTask(row); setIsCompleteOpen(true); }}
             >
-              <CheckCircle2 className="size-3 mr-1" /> Marcar como Completada
+              <CheckCircle2 className="size-3 mr-1" /> Completar
             </Button>
           ) : null;
         } else {
@@ -175,7 +175,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const filtered = data.filter(t => t.title?.toLowerCase().includes(searchTerm.toLowerCase()) || t.description?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
@@ -187,14 +187,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tareas pendientes</p></div>
-          <div className="flex items-center gap-3">
+      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
+        <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tareas pendientes</p></div>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son las Tareas" targetPrefix="tareas-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Tareas', description: 'Las tareas te permiten crear, asignar y dar seguimiento a actividades pendientes. Cada tarea puede tener prioridad, fecha de vencimiento y un responsable. Al completarla, queda registrada en la bitácora.' }, data: { title: 'Crear y asignar', description: 'Haz clic en "Nueva Tarea" para crear una. Asigna un responsable, prioridad y fecha de vencimiento.' }, actions: { title: 'Gestionar', description: 'Edita directamente en la tabla, cambia el estado a "Completada" cuando termines, o elimina tareas obsoletas.' } }} />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_TASKS', 'create') && (
-              <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Tarea</Button>
+              <Button variant="default" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"><Plus className="size-4" /> Nueva Tarea</Button>
             )}
           </div>
         </div>
@@ -203,7 +203,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_TASKS', 'delete') ? async (id) => { try { await tasksService.delete(id as string); toast.success('Tarea eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tarea'); } } : undefined}
+          actionsWidth="w-40"
         />
       </Card>
 

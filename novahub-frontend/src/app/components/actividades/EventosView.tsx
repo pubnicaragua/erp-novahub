@@ -16,6 +16,8 @@ import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Label } from '../ui/label';
 
 interface EventosViewProps {
   data: Event[];
@@ -27,6 +29,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const [searchTerm, setSearchTerm] = useState('');
   const { formatAmount, currency, displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount } = useCurrency();
   const { canPerform } = useAuth();
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '',
+  });
   const accountsQuery = useTenantQuery<any>(['finance', 'accounts'], signal => accountsService.getAll(undefined, signal));
   const defaultAccountId = asList(accountsQuery.data)[0]?.id || '';
 
@@ -111,9 +117,34 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   };
 
   const handleAdd = async () => {
+    if (!newEvent.title.trim()) { toast.error('El título del evento es obligatorio'); return; }
     try {
-      await eventsService.create({ title: 'Nuevo Evento', startDate: new Date().toISOString(), endDate: new Date(Date.now() + 3600000).toISOString(), cost: 0, income: 0, currency });
-      toast.success('Evento creado'); onRefresh();
+      const created = await eventsService.create({
+        ...newEvent,
+        title: newEvent.title.trim(),
+        startDate: newEvent.startDate ? new Date(newEvent.startDate).toISOString() : new Date().toISOString(),
+        endDate: newEvent.endDate ? new Date(newEvent.endDate).toISOString() : new Date(Date.now() + 3600000).toISOString(),
+        cost: newEvent.cost === '' ? 0 : Number(newEvent.cost),
+        income: newEvent.income === '' ? 0 : Number(newEvent.income),
+        currency,
+      });
+      const createdId = (created as any)?.id;
+      if (createdId && Number(newEvent.cost) > 0 && defaultAccountId) {
+        const expense = await expensesService.create({ amount: Number(newEvent.cost), date: new Date().toISOString(), currency, category: 'EVENTOS', description: newEvent.title.trim(), source: 'Eventos', notes: '', accountId: defaultAccountId });
+        if (expense?.id) await eventsService.update(createdId, { expenseId: expense.id });
+      } else if (Number(newEvent.cost) > 0 && !defaultAccountId) {
+        toast.warning('Evento creado, pero no se registró el costo porque no hay una cuenta bancaria configurada.');
+      }
+      if (createdId && Number(newEvent.income) > 0 && defaultAccountId) {
+        const income = await incomeService.create({ amount: Number(newEvent.income), date: new Date().toISOString(), currency, category: 'EVENTOS', description: newEvent.title.trim(), source: 'Eventos', notes: '', accountId: defaultAccountId });
+        if (income?.id) await eventsService.update(createdId, { incomeId: income.id });
+      } else if (Number(newEvent.income) > 0 && !defaultAccountId) {
+        toast.warning('Evento creado, pero no se registró el ingreso porque no hay una cuenta bancaria configurada.');
+      }
+      toast.success('Evento creado y guardado');
+      setIsAddOpen(false);
+      setNewEvent({ title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '' });
+      onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear evento'); }
   };
 
@@ -137,7 +168,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const filtered = data.filter(e => e.title?.toLowerCase().includes(searchTerm.toLowerCase()) || e.location?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
@@ -149,14 +180,14 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
-        <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Calendario y reuniones</p></div>
-          <div className="flex items-center gap-3">
+      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
+        <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Calendario y reuniones</p></div>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Eventos" targetPrefix="eventos-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Eventos', description: 'Los eventos representan reuniones, conferencias, ferias o cualquier actividad programada. Puedes registrar costos e ingresos asociados para análisis financiero.' }, data: { title: 'Crear evento', description: 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.' }, actions: { title: 'Seguimiento', description: 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.' } }} />
-            <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+            <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_EVENTS', 'create') && (
-              <Button onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Evento</Button>
+              <Button onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> Nuevo Evento</Button>
             )}
           </div>
         </div>
@@ -165,9 +196,29 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
           columns={columns} 
           onRowUpdate={canPerform('ACTIVITIES_EVENTS', 'edit') ? handleUpdate : undefined} 
           isLoading={loading} 
-          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined} 
+          onRowDelete={canPerform('ACTIVITIES_EVENTS', 'delete') ? async (id) => { try { await eventsService.delete(id as string); toast.success('Evento eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar evento'); } } : undefined}
+          actionsWidth="w-36"
         />
       </Card>
+
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+          <DialogHeader><DialogTitle className="font-black uppercase tracking-tight">Crear evento</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2"><Label>Título</Label><Input autoFocus value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder="Ej. Reunión con clientes" /></div>
+              <div className="space-y-2"><Label>Inicio</Label><Input type="datetime-local" value={newEvent.startDate} onChange={e => setNewEvent({ ...newEvent, startDate: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Fin</Label><Input type="datetime-local" value={newEvent.endDate} onChange={e => setNewEvent({ ...newEvent, endDate: e.target.value })} /></div>
+              <div className="space-y-2 sm:col-span-2"><Label>Ubicación</Label><Input value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Sala, dirección o enlace virtual" /></div>
+              <div className="space-y-2 sm:col-span-2"><Label>Descripción / notas</Label><textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="min-h-24 w-full resize-y rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20" placeholder="Objetivo, agenda y notas del evento" /></div>
+              <div className="space-y-2"><Label>Costo ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.cost} onChange={e => setNewEvent({ ...newEvent, cost: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Ingreso ({currency})</Label><Input type="number" min="0" step="0.01" value={newEvent.income} onChange={e => setNewEvent({ ...newEvent, income: e.target.value })} /></div>
+            </div>
+            <p className="text-xs text-muted-foreground">Los costos e ingresos se enlazan automáticamente con Finanzas cuando existe una cuenta bancaria configurada.</p>
+          </div>
+          <DialogFooter className="gap-2"><Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancelar</Button><Button onClick={handleAdd}>Crear evento</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

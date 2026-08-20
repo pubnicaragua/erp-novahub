@@ -2,6 +2,7 @@
 
 const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
+const manualServer = process.env.E2E_MANUAL_SERVER === '1';
 
 export default defineConfig({
   testDir: './e2e',
@@ -22,16 +23,16 @@ export default defineConfig({
   projects: [
     {
       name: 'setup',
-      testMatch: /e2e\/auth\.setup\.ts/,
+      testMatch: /auth\.setup\.ts$/,
     },
     {
       name: 'onboarding',
-      testMatch: /onboarding\.spec\.ts/,
+      testMatch: /onboarding\.spec\.ts$/,
       dependencies: ['setup'],
     },
     {
       name: 'vistas',
-      testMatch: /vistas\/.*\.spec\.ts/,
+      testMatch: /vistas[\\/].*\.spec\.ts$/,
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
@@ -39,10 +40,12 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: BASE_URL,
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  ...(manualServer ? {} : {
+    webServer: {
+      command: 'npm run dev',
+      url: BASE_URL,
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+  }),
 });

@@ -272,8 +272,22 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     const pdfToastId = toast.loading('Generando comprobante de pago...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
+      const paymentRows = row.payments?.length ? row.payments : [row];
+      const documentReference = row.invoice?.number || row.creditNote?.number || 'Anticipo';
       await generateEstimatePDF({
-        estimate: { ...row, number: row.number, customer: row.customer, items: [{ description: `Pago ${row.method}`, quantity: 1, unitPrice: Number(row.amount), total: Number(row.amount) }] },
+        estimate: {
+          ...row,
+          number: row.number,
+          customer: row.customer,
+          notes: `${row.notes || ''}${row.notes ? '\n' : ''}Documento aplicado: ${documentReference}`,
+          items: paymentRows.map((payment) => ({
+            description: `Pago ${paymentMethodLabel(String(payment.method || row.method).toUpperCase())}${payment.reference ? ` · Ref. ${payment.reference}` : ''}`,
+            quantity: 1,
+            unitPrice: Number(payment.amount || 0),
+            total: Number(payment.amount || 0),
+            currency: payment.currency,
+          })),
+        },
         tenantName,
         formatAmount: formatConvertedAmount,
         documentType: 'payment',

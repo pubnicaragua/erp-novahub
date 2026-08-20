@@ -45,9 +45,11 @@ export function useNotifications() {
         }
     };
 
-    const clearAll = () => {
-        // Not implemented in backend yet, but can keep as local clear for now
-        queryClient.setQueryData<Notification[]>(queryKey, []);
+    const clearAll = async () => {
+        // El inbox es persistente: no debemos simular un borrado local que
+        // reaparece en el siguiente polling. Se conserva la semántica segura
+        // disponible en backend: marcar todo como leído.
+        await markAllAsRead();
     };
 
     return {

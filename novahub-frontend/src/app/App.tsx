@@ -62,7 +62,10 @@ function PageLoader() {
 
 const ErrorBoundaryFallback = () => (
   <div style={{ padding: 32, fontFamily: 'monospace', background: '#0f0f0f', color: '#ff6b6b', minHeight: '100vh' }}>
-    <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>⚠ Error de renderizado detectado</h2>
+    <h2 style={{ color: '#ff6b6b', marginBottom: 16 }}>No pudimos cargar esta pantalla</h2>
+    <p style={{ color: '#d1d5db', maxWidth: 560, lineHeight: 1.6 }}>
+      El incidente fue registrado automáticamente. Intenta recargar la página; si continúa, comparte la hora del incidente con soporte.
+    </p>
     <button
       style={{ marginTop: 16, padding: '8px 20px', background: '#333', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
       onClick={() => window.location.reload()}
@@ -119,6 +122,9 @@ function DashboardLayout() {
     const urlSubModule = searchParams.get('sm');
     if (!urlModule && !urlSubModule) return;
     const nextModule = urlModule === 'roles' ? 'suscripciones' : urlModule === 'dashboard-cxc' ? 'overview' : ((urlModule as Module | 'overview') || 'overview');
+    // The URL is an external navigation source; synchronize local state only
+    // when it actually differs from the current view.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (nextModule !== activeModule) setActiveModule(nextModule);
     const nextSubModule = urlSubModule === 'dashboard' ? 'productos' : (urlSubModule || undefined);
     if (nextSubModule !== activeSubModule) setActiveSubModule(nextSubModule);
@@ -297,7 +303,9 @@ function DashboardLayout() {
         />
         <main className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           <Suspense fallback={<PageLoader />}>
-            {renderContent()}
+            <ModuleErrorBoundary moduleName={String(currentModule)}>
+              {renderContent()}
+            </ModuleErrorBoundary>
           </Suspense>
         </main>
       </div>
@@ -324,22 +332,14 @@ function AppContent() {
     const expiresAt = user.clientTenant.expiresAt ? new Date(user.clientTenant.expiresAt).getTime() : null;
     const isInactive = user.clientTenant.isActive === false;
     if (expiresAt && expiresAt <= Date.now()) {
+      // This state is driven by the server-provided tenant expiration, not a
+      // local trial flag. Keep the modal behavior unchanged.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTrialExpired(true);
     } else if (isInactive) {
       setTrialExpired(true);
     }
   }, [isAuthenticated, user?.clientTenant?.expiresAt, user?.clientTenant?.isActive]);
-
-  // Un 401/403 de sesión inválida también debe expulsar de la UI (no dejar la
-  // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.
-  useEffect(() => {
-    const handler = () => {
-      if (location.pathname === '/register' || location.pathname.startsWith('/public/')) return;
-      setSessionClosed(true);
-    };
-    window.addEventListener('session-closed', handler);
-    return () => window.removeEventListener('session-closed', handler);
-  }, [location.pathname]);
 
   // Un 401/403 de sesión inválida también debe expulsar de la UI (no dejar la
   // interfaz "operativa" con un token muerto). Solo aplica fuera de rutas públicas.

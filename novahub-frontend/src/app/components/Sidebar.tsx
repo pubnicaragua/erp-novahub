@@ -113,11 +113,6 @@ const menuItems: MenuItem[] = [
     section: 'General',
   },
   {
-    id: 'financiamiento-pyme',
-    label: 'Financiamiento PYME',
-    icon: <Landmark className="size-5" />,
-  },
-  {
     id: 'ventas',
     label: 'Ventas',
     icon: <ShoppingBag className="size-5" />,
@@ -287,6 +282,7 @@ const menuItems: MenuItem[] = [
       { id: 'reminders', label: 'Recordatorios', icon: <Bell className="size-4" /> }
     ]
   },
+  { id: 'financiamiento-pyme', label: 'Financiamiento PYME', icon: <Landmark className="size-5" /> },
   { id: 'novachat', label: 'Nova Suite', icon: <NovaSuiteIcon className="size-5" /> },
   {
     id: 'documentos',

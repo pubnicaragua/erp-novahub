@@ -81,6 +81,8 @@ export interface User {
   role: Role;
   customRoleName?: string;
   tenantId: string;
+  /** Canonical tenant id used by the current backend session contract. */
+  clientTenantId?: string;
   tenantName: string;
   permissions: Permission[];
   enabledModules: string[];

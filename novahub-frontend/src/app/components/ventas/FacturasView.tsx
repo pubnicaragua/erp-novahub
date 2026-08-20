@@ -172,6 +172,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
+  const [paymentDate, setPaymentDate] = useState('');
   const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
@@ -467,6 +468,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       paymentLineRate(initialCurrency),
     ).toFixed(2));
     setPaymentLines([paymentLine('CASH', initialAmount, initialCurrency)]);
+    setPaymentDate(today);
     setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
     setCashRegisterId('');
     setCashSession(null);
@@ -547,6 +549,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const cashControlAlreadyLinked = Boolean(paymentInvoice.registerId || paymentInvoice.sessionId);
     const maxAmount = getInvoiceBalance(paymentInvoice);
     const amount = Number(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
+    if (!paymentDate || Number.isNaN(new Date(`${paymentDate}T12:00:00`).getTime())) {
+      toast.error('Selecciona una fecha válida para registrar el pago');
+      return;
+    }
     const paymentBaseAmount = Number(paymentLines.reduce((sum, line) => sum + toBaseAmount(
       Number(line.amount || 0),
       line.currency,
@@ -595,6 +601,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           payments: paymentLines,
           currency: paymentCurrency,
           exchangeRate: paymentLineRate(paymentCurrency),
+          paymentDate: new Date(`${paymentDate}T12:00:00`).toISOString(),
           dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
           cashRegisterId,
           cashSessionId: cashSession?.id,
@@ -620,7 +627,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         customerId: invoice.customerId,
         invoiceId: activeCredit ? undefined : invoice.id,
         creditNoteId: activeCredit?.id,
-        date: new Date().toISOString(),
+        date: new Date(`${paymentDate}T12:00:00`).toISOString(),
         amount,
         currency: paymentCurrency,
         exchangeRate: paymentLineRate(paymentCurrency),
@@ -684,7 +691,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'DRAFT',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
   ) => {
     if (!localDoc) return;
     const emitir = action !== 'DRAFT';
@@ -798,6 +805,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           initialPayment: action === 'PAYMENT' ? {
             payments: settlement?.payments || [],
             currency: settlement?.currency,
+            paymentDate: settlement?.paymentDate,
             dueDate: settlement?.dueDate,
             cashRegisterId: settlement?.cashRegisterId,
             cashSessionId: settlement?.cashSessionId,
@@ -1965,6 +1973,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del pago *</p>
+                  <Input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+                  <p className="mt-1 text-[10px] text-muted-foreground">Se usará también en Caja, Bancos y Libro Diario.</p>
+                </div>
                 <div className="rounded-xl border border-border/50 bg-background/60 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado</p>
                   <p className="mt-1 text-lg font-black text-foreground">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentTotalBase)}</p>

@@ -3,6 +3,8 @@ import { ShieldAlert } from 'lucide-react';
 import { api } from '../../services/api';
 
 const GRACE_SECONDS = 20;
+const ACTIVE_CHECK_MS = 15_000;
+const BACKGROUND_CHECK_MS = 60_000;
 
 export function SessionMonitor() {
   const [warning, setWarning] = useState(false);
@@ -31,11 +33,22 @@ export function SessionMonitor() {
       }
     };
 
+    let timer = 0;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        await check();
+        if (!cancelled) schedule();
+      }, document.visibilityState === 'hidden' ? BACKGROUND_CHECK_MS : ACTIVE_CHECK_MS);
+    };
+
     check();
-    const poll = setInterval(check, 5000);
+    schedule();
+    document.addEventListener('visibilitychange', schedule);
     return () => {
       cancelled = true;
-      clearInterval(poll);
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', schedule);
     };
   }, []);
 

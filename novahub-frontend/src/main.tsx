@@ -30,7 +30,7 @@ Sentry.init({
   // Enable logs to be sent to Sentry
   enableLogs: true,
   // Tracing
-  tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+  tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || (import.meta.env.MODE === 'production' ? '0.1' : '1.0')),
   // Set 'tracePropagationTargets' to control for which URLs distributed tracing should be enabled
   tracePropagationTargets: ['localhost', /\/api/],
   // Session Replay

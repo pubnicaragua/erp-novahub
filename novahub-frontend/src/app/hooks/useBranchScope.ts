@@ -24,10 +24,10 @@ export function useBranchScope() {
     return () => window.removeEventListener('sucursales-changed', handleBranchesChanged);
   }, [fetchBranches]);
 
-  // El alcance operativo actual es la sucursal ClientTenant activa. Los
-  // branchIds históricos solo se respetan si ya contienen ese identificador;
-  // nunca deben ocultar la sucursal canónica por apuntar al modelo legado.
-  const isRestricted = !isAdmin && !!user?.branchIds?.length && Boolean(user?.clientTenantId && user.branchIds.includes(user.clientTenantId));
+  // Un usuario con branchIds explícitos solo puede seleccionar esas sucursales.
+  // La UI no sustituye la autorización del backend, pero tampoco debe mostrar
+  // sucursales fuera de su alcance por una comparación contra clientTenantId.
+  const isRestricted = !isAdmin && Boolean(user?.branchIds?.length);
   const accessibleBranches = useMemo(() => {
     if (!isRestricted) return allBranches;
     return allBranches.filter(b => user!.branchIds!.includes(b.id));
@@ -62,12 +62,13 @@ export function useBranchScope() {
     ].filter(Boolean))];
   }, [selectedBranch]);
 
-  const filterByBranch = useCallback(<T extends { branchId?: string | null; warehouseId?: string | null }>(items: T[]): T[] => {
+  const filterByBranch = useCallback(<T>(items: T[]): T[] => {
     if (!selectedBranchId) return items;
     return items.filter((item) => {
-      if (!item.branchId && !item.warehouseId) return true;
-      if (item.branchId) return item.branchId === selectedBranchId;
-      return branchWarehouseIds.includes(item.warehouseId as string);
+      const scoped = item as T & { branchId?: string | null; warehouseId?: string | null };
+      if (!scoped.branchId && !scoped.warehouseId) return true;
+      if (scoped.branchId) return scoped.branchId === selectedBranchId;
+      return branchWarehouseIds.includes(scoped.warehouseId as string);
     });
   }, [selectedBranchId, branchWarehouseIds]);
 

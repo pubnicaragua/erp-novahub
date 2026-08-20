@@ -156,7 +156,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                       <Select
                         value={String(agent.role || 'EMPLOYEE').toUpperCase()}
                         onValueChange={(value) => updateAgent(agent.id, { role: value as any })}
-                        disabled={isRowSaving || !canPerform('TICKETS', 'edit')}
+                        disabled={isRowSaving || !canPerform('CONFIG_USERS', 'edit')}
                       >
                         <SelectTrigger className="h-9 w-[150px]">
                           <SelectValue />
@@ -189,7 +189,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, 
                       <Button
                         variant={isActive ? 'outline' : 'default'}
                         size="sm"
-                        disabled={isRowSaving || !canPerform('TICKETS', 'edit')}
+                        disabled={isRowSaving || !canPerform('CONFIG_USERS', 'edit')}
                         onClick={() => updateAgent(agent.id, { isActive: !isActive })}
                         className="h-8 text-[10px] font-black uppercase tracking-widest"
                       >

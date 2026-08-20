@@ -15,6 +15,8 @@ import {
   Loader2,
   Sparkles,
   Bot,
+  ExternalLink,
+  FileText,
   DollarSign,
   ShoppingCart,
   Package,
@@ -46,11 +48,20 @@ const MODULE_CATEGORIES = [
   { id: 'CONFIGURATION', label: 'Configuración', color: 'bg-gray-100 text-gray-700 border-gray-200', gradient: 'from-gray-500 to-slate-700', icon: Settings }
 ];
 
+const PDF_GUIDES = [
+  {
+    title: 'Manual de Asientos Contables NovaERP',
+    description: 'Guía de referencia para registrar, revisar y consultar asientos contables en el ERP.',
+    module: 'FINANCIAL',
+    fileUrl: new URL('../../../../documentos-novahub/Manual_Asientos_Contables_NovaERP.pdf', import.meta.url).href,
+  },
+];
+
 export function TrainingHubView() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'superadmin';
   
-  const videosQuery = useTenantQuery<any[]>(['training', 'videos'], signal => trainingService.getVideos(undefined, signal));
+  const videosQuery = useTenantQuery<any[]>(['training', 'videos'], async signal => asList(await trainingService.getVideos(undefined, signal)));
   const videos = asList(videosQuery.data);
   const loading = videosQuery.isLoading || videosQuery.isFetching;
   const [search, setSearch] = useState('');
@@ -202,6 +213,10 @@ export function TrainingHubView() {
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600/60 mb-1">Módulos Cubiertos</p>
           <p className="text-3xl font-black tracking-tighter italic">{new Set(videos.map(v => v.module)).size} ÁREAS</p>
         </div>
+        <div className="bg-gradient-to-br from-violet-500/10 to-transparent p-4 rounded-3xl border border-violet-500/20 backdrop-blur-sm shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-violet-600/60 mb-1">Guías PDF</p>
+          <p className="text-3xl font-black tracking-tighter italic">{PDF_GUIDES.length} DOCUMENTO{PDF_GUIDES.length === 1 ? '' : 'S'}</p>
+        </div>
       </div>
 
       {/* Search & Filters Original */}
@@ -244,6 +259,40 @@ export function TrainingHubView() {
           ))}
         </div>
       </div>
+
+      {PDF_GUIDES.length > 0 && (activeCategory === 'ALL' || PDF_GUIDES.some((guide) => guide.module === activeCategory)) && (
+        <section className="space-y-3" aria-labelledby="pdf-guides-title">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Material de referencia</p>
+              <h2 id="pdf-guides-title" className="text-2xl font-black uppercase italic tracking-tight">Guías en PDF</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">Abren en una pestaña segura sin descargar el archivo al servidor.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {PDF_GUIDES.filter((guide) => activeCategory === 'ALL' || guide.module === activeCategory).map((guide) => (
+              <Card key={guide.fileUrl} className="rounded-3xl border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-transparent shadow-sm">
+                <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-600">
+                      <FileText className="size-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-black uppercase italic tracking-tight">{guide.title}</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{guide.description}</p>
+                    </div>
+                  </div>
+                  <Button asChild variant="outline" className="shrink-0 rounded-xl font-black uppercase tracking-widest text-[10px]">
+                    <a href={guide.fileUrl} target="_blank" rel="noopener noreferrer">
+                      Leer PDF <ExternalLink className="ml-2 size-3.5" />
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Videos Grid con Gradientes */}
       {loading ? (
@@ -541,8 +590,10 @@ export function TrainingHubView() {
         confirmLabel="Eliminar"
         variant="destructive"
         onConfirm={async () => {
+          const deleteId = pendingDeleteId;
+          if (!deleteId) return;
           try {
-            await trainingService.deleteVideo(pendingDeleteId);
+            await trainingService.deleteVideo(deleteId);
             toast.success('Video eliminado');
             fetchVideos();
           } catch (e: any) {

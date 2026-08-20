@@ -89,7 +89,10 @@ th .column-filter-menu .column-filter-icon,
 .finance-module [data-slot="table-container"] {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  /* Dense ERP tables must remain reachable on narrow screens. The shared
+     table primitive owns the horizontal scroll behavior; this module rule
+     must not hide columns/actions after the primitive enables it. */
+  overflow-x: auto;
 }
 
 .accounting-module {

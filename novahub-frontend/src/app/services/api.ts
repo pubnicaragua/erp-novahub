@@ -16,6 +16,10 @@ interface RequestOptions {
 }
 
 const idempotentInFlight = new Map<string, Promise<unknown>>();
+// Deduplicate only simultaneous GETs. This is deliberately not a TTL cache:
+// mutations keep their current semantics and no tenant data is retained after
+// the request settles.
+const getInFlight = new Map<string, Promise<unknown>>();
 
 export function createIdempotencyKey(prefix = 'nh'): string {
   const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -135,7 +139,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   approve: 'aprobar',
 };
 
-function humanize403Message(raw: string): string {
+function humanize403Message(raw: string, context?: string): string {
   let msg = raw;
 
   // Reemplazar permisos tecnicos (read, write, etc.)
@@ -149,6 +153,12 @@ function humanize403Message(raw: string): string {
     return MODULE_LABELS[code] || code;
   });
 
+  const technical = /forbidden|insufficient|permission denied|not authorized|unauthorized|access denied/i.test(msg);
+  if (technical) {
+    return context
+      ? `No tienes acceso para ${context}. Solicita al administrador que habilite este permiso.`
+      : 'No tienes acceso a este módulo o acción. Solicita al administrador que habilite este permiso.';
+  }
   return msg;
 }
 
@@ -173,7 +183,7 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
       return normalizeErrorMessage('', status, context);
     }
     // Para errores 403, traducir terminos tecnicos a mensajes amigables
-    if (status === 403 && raw) return humanize403Message(raw);
+    if (status === 403 && raw) return humanize403Message(raw, context);
     // Return the backend message as-is (with prefix for context)
     return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
   }
@@ -247,9 +257,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     let errorBody: ApiErrorBody | null = null;
     try {
       errorBody = await response.json();
-    } catch {
-      errorBody = null;
-    }
+    } catch { /* keep the initialized null body */ }
 
     if (errorBody?.code === 'TRIAL_EXPIRED' || (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.code === 'TRIAL_EXPIRED')) {
       const innerMsg = typeof errorBody.message === 'object' ? (errorBody.message as any)?.message : errorBody.message;
@@ -326,7 +334,17 @@ export const api = {
     const isRequestOptions = Boolean(options && ('params' in options || 'signal' in options));
     const params = isRequestOptions ? (options as any)?.params : options;
     const signal = isRequestOptions ? (options as any)?.signal : undefined;
-    return apiRequest<T>(path, { method: 'GET', params, signal });
+    if (signal) return apiRequest<T>(path, { method: 'GET', params, signal });
+
+    const token = localStorage.getItem('nh-auth-token') || '';
+    const fingerprint = `GET:${buildUrl(path, params)}:${token}`;
+    const previous = getInFlight.get(fingerprint) as Promise<T> | undefined;
+    if (previous) return previous;
+
+    const request = apiRequest<T>(path, { method: 'GET', params })
+      .finally(() => getInFlight.delete(fingerprint));
+    getInFlight.set(fingerprint, request);
+    return request;
   },
 
   post: <T>(path: string, body: unknown) =>

@@ -37,7 +37,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const [empleadosData, setEmpleadosData] = useState<Employee[]>([]);
   const [planillasArr, setPlanillasArr] = useState<Payroll[]>([]);
   const [vacacionesArr, setVacacionesArr] = useState<TimeOff[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   const fetchRHData = async () => {
     try {
@@ -142,7 +142,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const handleDeleteEmpleado = async (id: string) => {
     try {
       setDeleteLoading(true);
-      await employeesService.terminate(id, new Date().toISOString());
+      await employeesService.terminate(id);
       fetchRHData();
     } catch (error) {
       console.error('Error terminating employee:', error);
@@ -216,7 +216,7 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const handleDeleteVacaciones = async (id: string) => {
     try {
       setDeleteLoading(true);
-      // await timeOffService.delete(id);
+      await timeOffService.delete(id);
       fetchRHData();
     } catch (error) {
       console.error('Error deleting vacation:', error);

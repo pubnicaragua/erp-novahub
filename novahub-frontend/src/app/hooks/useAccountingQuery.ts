@@ -14,6 +14,8 @@ export function useAccountingQuery<TData>(
   return useQuery({
     queryKey: ['accounting', tenantKey, ...key],
     queryFn: ({ signal }) => queryFn(signal),
+    // Accounting reference data and reports are tenant-scoped and are
+    // invalidated after mutations; retain them briefly between tab switches.
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,

@@ -72,6 +72,11 @@ export interface Tenant {
 export interface User {
   id: string;
   tenantId: string;
+  /** Canonical ERP tenant id returned by the current auth/session API. */
+  clientTenantId?: string;
+  branchIds?: string[];
+  isTenantAdmin?: boolean;
+  isPlatformAdmin?: boolean;
   email: string;
   name: string;
   avatar?: string;
@@ -1327,7 +1332,7 @@ export interface Document {
 export interface Task { id: string; title: string; description?: string; status: TaskStatus; priority: Priority; dueDate?: string; assignedTo?: string; createdAt: string; updatedAt: string; }
 export interface Event { id: string; title: string; description?: string; startDate: string; endDate: string; location?: string; attendees?: string[]; cost?: number; income?: number; currency?: string; exchangeRate?: number; baseCost?: number | null; baseIncome?: number | null; expenseId?: string; incomeId?: string; createdAt: string; }
 export interface Reminder { id: string; title: string; description?: string; reminderDate: string; status: string; createdAt: string; }
-export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; }
+export interface ActivityLog { id: string; action: string; entity: string; entityId: string; userId: string; timestamp: string; details?: string; activityId?: string; fileUrl?: string; fileName?: string; fileSize?: number; }
 
 export interface Contract { id: string; number: string; title: string; clientId: string; startDate: string; endDate: string; value: number; currency?: Currency; exchangeRate?: number; status: string; createdAt: string; }
 export interface LegalInvoice { id: string; number: string; type: string; amount: number; currency?: Currency; exchangeRate?: number; issueDate: string; dueDate: string; status: string; createdAt: string; }

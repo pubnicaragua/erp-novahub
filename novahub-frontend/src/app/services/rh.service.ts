@@ -5,8 +5,8 @@ export const employeesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Employee>>('/hr/employees', { params: filters as any, signal }),
   getById: (id: string) => api.get<Employee>(`/hr/employees/${id}`),
   create: (data: Partial<Employee>) => api.post<Employee>('/hr/employees', data),
-  update: (id: string, data: Partial<Employee>) => api.put<Employee>(`/hr/employees/${id}`, data),
-  terminate: (id: string, date: string) => api.patch<Employee>(`/hr/employees/${id}/terminate`, { date }),
+  update: (id: string, data: Partial<Employee>) => api.patch<Employee>(`/hr/employees/${id}`, data),
+  terminate: (id: string) => api.delete<Employee>(`/hr/employees/${id}`),
 };
 
 export const payrollService = {
@@ -20,7 +20,8 @@ export const payrollService = {
 export const timeOffService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<TimeOff>>('/hr/leave/requests', { params: filters as any, signal }),
   getById: (id: string) => api.get<TimeOff>(`/hr/time-off/${id}`),
-  create: (data: Partial<TimeOff>) => api.post<TimeOff>('/hr/time-off', data),
-  approve: (id: string) => api.patch<TimeOff>(`/hr/time-off/${id}/approve`, {}),
-  reject: (id: string, reason: string) => api.patch<TimeOff>(`/hr/time-off/${id}/reject`, { reason }),
+  create: (data: Partial<TimeOff>) => api.post<TimeOff>('/hr/leave/requests', data),
+  approve: (id: string, approvedBy: string) => api.put<TimeOff>(`/hr/leave/requests/${id}/approve`, { approvedBy }),
+  reject: (id: string, reason: string) => api.put<TimeOff>(`/hr/leave/requests/${id}/reject`, { rejectionReason: reason }),
+  delete: (id: string) => api.delete<void>(`/hr/leave/requests/${id}`),
 };

@@ -9,7 +9,7 @@ function Table({ className, containerClassName, containerStyle, ...props }: Reac
     <div
       data-slot="table-container"
       style={containerStyle}
-      className={cn("relative w-full max-w-full overflow-x-hidden", containerClassName)}
+      className={cn("relative w-full max-w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"

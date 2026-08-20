@@ -1,4 +1,5 @@
 import React from 'react';
+import * as Sentry from '@sentry/react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from './button';
 
@@ -24,6 +25,10 @@ export class ModuleErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(`[ModuleErrorBoundary:${this.props.moduleName || 'module'}]`, error, info.componentStack);
+    Sentry.captureException(error, {
+      tags: { boundary: 'module', module: this.props.moduleName || 'module' },
+      contexts: { react: { componentStack: info.componentStack || 'unknown' } },
+    });
   }
 
   handleRetry = () => {

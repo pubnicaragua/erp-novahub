@@ -270,7 +270,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
 
   return (
     <>
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
           <Card key={kpi.title} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
@@ -288,18 +288,18 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <Card className="xl:col-span-8 border-none bg-background/50 backdrop-blur-xl shadow-sm">
-          <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
+        <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm xl:col-span-8">
+          <div className="flex min-w-0 flex-col justify-between gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center">
+            <div className="min-w-0">
               <h2 className="text-xl font-black uppercase tracking-tight">Mesa de Ayuda</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tickets y soporte</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
                 <Input
                   placeholder="Buscar..."
-                  className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs"
+                  className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -307,7 +307,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
               {canPerform('TICKETS', 'create') && (
                 <Button
                   onClick={handleAdd}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
+                  className="h-10 shrink-0 gap-2 rounded-xl bg-primary px-4 font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"
                 >
                   <Plus className="size-4" />
                   Nuevo Ticket
@@ -353,10 +353,11 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, loading, onRefre
                 )}
               </div>
             )}
+            actionsWidth="w-32"
           />
         </Card>
 
-        <Card className="xl:col-span-4 border-none bg-background/50 backdrop-blur-xl shadow-sm">
+        <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm xl:col-span-4">
           <div className="p-4 border-b border-border/50">
             <h3 className="text-lg font-black uppercase tracking-tight">Detalle del Ticket</h3>
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
