@@ -117,6 +117,7 @@ const PARENT_SUBMODULES: Record<string, string[]> = {
   TICKETS: ['TICKETS_LIST', 'TICKETS_FAQS', 'TICKETS_AGENTS'],
   TRAINING: ['TRAINING_COURSES'],
   SUPPORT_TECH: [],
+  RESTAURANT: [],
 };
 
 const SUBMODULE_NAMES_ES: Record<string, string> = {
@@ -251,6 +252,7 @@ const PARENT_NAMES_ES: Record<string, string> = {
   TICKETS: 'Tickets y Soporte',
   TRAINING: 'Centro de Capacitación',
   SUPPORT_TECH: 'Soporte Técnico',
+  RESTAURANT: 'Restaurante POS',
 };
 
 const PARENT_DESCRIPTIONS_ES: Record<string, string> = {
@@ -272,18 +274,19 @@ const PARENT_DESCRIPTIONS_ES: Record<string, string> = {
   TICKETS: 'Mesa de ayuda y base de conocimiento.',
   TRAINING: 'Aprende a usar el ERP NovaHub.',
   SUPPORT_TECH: 'Asistencia y soporte en vivo.',
+  RESTAURANT: 'Mesas, comandas, cocina y cobro POS.',
 };
 
 const FALLBACK_PARENT_PRICES: Record<string, number> = {
   SALES: 15, PURCHASES: 12, INVENTORY: 18, FINANCIAL: 25, HR: 20,
-  PROJECTS: 15, REPORTS: 10, DOCUMENTS: 8, ACTIVITIES: 5,
+  PROJECTS: 15, REPORTS: 10, DOCUMENTS: 8, ACTIVITIES: 5, RESTAURANT: 25,
   NOTIFICATIONS: 0, ACCOUNTING: 25, LEGAL: 15, TOOLS: 0, FINANCING: 0, NOVACHAT: 69,
 };
 
 const VISIBLE_PARENT_KEYS = [
   'FINANCING', 'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 
   'ACCOUNTING', 'HR', 'ACTIVITIES', 'TICKETS', 'TRAINING', 
-  'SUPPORT_TECH', 'LEGAL', 'NOVACHAT', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS'
+  'SUPPORT_TECH', 'LEGAL', 'RESTAURANT', 'NOVACHAT', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS'
 ];
 
 export function RegisterTenantPage() {
@@ -416,14 +419,6 @@ export function RegisterTenantPage() {
   };
 
   const canGoStep2 = industry !== null && companySize !== null;
-  const totalPrice = selectedModules.reduce((sum, mod) => {
-    if (!PARENT_KEYS.has(mod)) return sum;
-    const found = [
-      ...(recommendations?.recommended || []),
-      ...(recommendations?.optional || []),
-    ].find((m) => m.module === mod);
-    return sum + (found?.price ?? FALLBACK_PARENT_PRICES[mod] ?? 0);
-  }, 0);
 
   const handleFinalSubmit = async () => {
     if (!step1Data) return;

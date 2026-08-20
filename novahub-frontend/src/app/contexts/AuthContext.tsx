@@ -11,6 +11,7 @@ export type Module =
   | 'dashboard'
   | 'inventario'
   | 'ventas'
+  | 'restaurante'
   | 'compras'
   | 'finanzas'
   | 'rh'
@@ -205,7 +206,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ALL_MODULES: Module[] = [
-  'dashboard', 'inventario', 'ventas', 'compras', 'finanzas', 'rh',
+  'dashboard', 'inventario', 'ventas', 'restaurante', 'compras', 'finanzas', 'rh',
   'clientes', 'proveedores', 'actividades', 'tickets',
   'documentos', 'notificaciones', 'transferencias',
   'reportes', 'roles', 'configuracion', 'suscripciones', 'schema',
@@ -576,6 +577,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
+      'restaurante': 'RESTAURANT',
       'compras': 'PURCHASES',
       'inventario': 'INVENTORY',
       'finanzas': 'FINANCIAL',
@@ -607,6 +609,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
         'SALES_PRICE_LISTS',
       ],
+       restaurante: ['RESTAURANT'],
       compras: [
         'PURCHASES', 'PROVIDERS',
         'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',

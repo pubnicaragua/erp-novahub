@@ -27,6 +27,12 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   // Facturación por caja y Control de Caja comparten el permiso RETAIL_POS.
   { id: 'RETAIL_POS', label: 'Facturación por caja', parent: 'SALES' },
 
+  // Restaurante POS
+  { id: 'RESTAURANT_TABLES', label: 'Salón y mesas', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_MENU', label: 'Carta', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_KITCHEN', label: 'Comandas y cocina', parent: 'RESTAURANT' },
+  { id: 'RESTAURANT_REPORTS', label: 'Reportes restaurante', parent: 'RESTAURANT' },
+
   // Compras
   { id: 'PURCHASES_REQUESTS', label: 'Solicitudes', parent: 'PURCHASES' },
   { id: 'PURCHASES_PROVIDERS', label: 'Proveedores', parent: 'PURCHASES' },
@@ -279,7 +285,8 @@ export const SIDEBAR_PERMISSION_MODULE_IDS = new Set([
   'SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'ACCOUNTING', 'HR',
   'ACTIVITIES', 'TICKETS', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS',
   'FINANCING', 'LEGAL', 'HR_TRAINING', 'SUPPORT_TECH', 'NOVACHAT',
-  'MY_COMPANY', 'CONFIGURATION',
+  'MY_COMPANY', 'CONFIGURATION', 'RESTAURANT', 'RESTAURANT_TABLES',
+  'RESTAURANT_MENU', 'RESTAURANT_KITCHEN', 'RESTAURANT_REPORTS',
   ...PERMISSION_SUBMODULES.map(({ id }) => id),
 ]);
 

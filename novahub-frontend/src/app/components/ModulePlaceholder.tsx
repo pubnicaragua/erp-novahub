@@ -4,7 +4,7 @@ interface ModulePlaceholderProps {
   module: Module;
 }
 
-const moduleInfo: Record<Module, { title: string; description: string }> = {
+const moduleInfo: Partial<Record<Module, { title: string; description: string }>> = {
   inventario: { title: 'Inventario de Mercancías', description: 'Gestiona tu inventario de productos' },
   ventas: { title: 'Ventas', description: 'Administra ventas, facturas y clientes' },
   compras: { title: 'Compras', description: 'Gestiona ordenes de compra y proveedores' },
@@ -24,7 +24,7 @@ const moduleInfo: Record<Module, { title: string; description: string }> = {
 };
 
 export function ModulePlaceholder({ module }: ModulePlaceholderProps) {
-  const info = moduleInfo[module];
+  const info = moduleInfo[module] || { title: 'Módulo', description: 'Esta sección aún no tiene una descripción.' };
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
