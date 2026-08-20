@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { 
-  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Store, Info, Crown, Link2, UserRoundCheck, GitBranch
+  Zap, Building2, CircleHelp, Globe, User as UserIcon, LayoutGrid, Check, Clock, Plus, ShieldCheck, DollarSign, MessageSquare, Users, Edit2, Trash2, KeyRound, X, Mail, Shield, MapPin, Info, Crown, Link2, UserRoundCheck, GitBranch
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../ui/utils';
@@ -16,13 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { TeamAccessPanel } from './TeamAccessPanel';
 import { DepartmentsView } from './DepartmentsView';
 import { OrgChartView } from './OrgChartView';
-import { SucursalesView } from '../inventory/SucursalesView';
 import { DominiosView } from './DominiosView';
 import { TrialCountdownBanner } from '../auth/TrialCountdownBanner';
 import { tenantsService } from '../../services/tenants.service';
 import { hrService } from '../../services/hr.service';
 import { usersService } from '../../services/users.service';
-import { inventoryService } from '../../services/inventario.service';
 import { brandingService } from '../../services/branding.service';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
@@ -79,10 +77,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const canViewOrgChart = canPerform('CONFIG_ORG_CHART', 'view');
   const canEditEmployees = canPerform('HR_EMPLOYEES', 'edit');
   const canViewEmployees = canPerform('HR_EMPLOYEES', 'view');
-  const canViewCompanyBranches = canPerform('COMPANY_BRANCHES', 'view');
-  const canViewLegacyBranches = canPerform('INVENTORY_WAREHOUSES', 'view');
-  const branchPermissionModule = canViewCompanyBranches ? 'COMPANY_BRANCHES' : 'INVENTORY_WAREHOUSES';
-  const canViewWarehouses = canViewCompanyBranches || canViewLegacyBranches;
   const canViewDomains = canPerform('CONFIG_DOMAINS', 'view');
   const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
   const canRequestModules = canPerform('SUBSCRIPTIONS', 'create');
@@ -100,7 +94,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [notes, setNotes] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [companySlug, setCompanySlug] = useState('');
@@ -126,14 +119,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     ['my-company-detail', tenant?.id || 'none'],
     async (signal) => {
       if (!tenant?.id) return null;
-      const [usersRes, warehouseRes, branding, industriesRes, employeesRes] = await Promise.all([
+      const [usersRes, branding, industriesRes, employeesRes] = await Promise.all([
         canViewUsers ? tenantsService.getUsers(tenant.id, signal) : Promise.resolve([]),
-        canViewWarehouses ? inventoryService.getWarehouses(signal) : Promise.resolve([]),
         (canViewCompany || canPerform('CONFIG_BRANDING', 'view')) ? brandingService.getCurrent(signal) : Promise.resolve(null),
         canViewCompany ? api.get<any[]>(`/tenants/${tenant.id}/industries`, { signal }) : Promise.resolve([]),
         (canViewEmployees || canEditEmployees) ? hrService.getEmployees({ status: 'ACTIVE', pageSize: 500 }, signal) : Promise.resolve([]),
       ]);
-      return { users: asList(usersRes), warehouses: asList(warehouseRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
+      return { users: asList(usersRes), branding, industries: asList(industriesRes), employees: asList(employeesRes) };
     },
     { enabled: Boolean(tenant?.id), onError: (error) => toast.error(error.message || 'Error cargando Mi Empresa') },
   );
@@ -147,7 +139,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     if (!tenantData) return;
     setUsers(tenantData.users);
     setEmployees(tenantData.employees || []);
-    setWarehouses(tenantData.warehouses);
     setIndustryOptions(tenantData.industries);
   }, [tenant, tenantData, tenantDataLoading]);
 
@@ -170,9 +161,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     ...(canViewCompany ? ['general'] : []),
     ...(canViewSubscriptions ? ['plan'] : []),
     ...((canViewUsers || canViewRoles) ? ['team'] : []),
-    ...(canViewWarehouses ? ['sucursales'] : []),
     ...(canViewDomains ? ['dominio'] : []),
-  ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewWarehouses, canViewDomains]);
+  ], [canViewCompany, canViewSubscriptions, canViewUsers, canViewRoles, canViewDomains]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) setActiveTab(visibleTabs[0] || 'general');
@@ -501,9 +491,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
           {(canViewUsers || canViewRoles) && <TabsTrigger value="team" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Users className="size-4" /> Mi Equipo ({users.length})
           </TabsTrigger>}
-          {canViewWarehouses && <TabsTrigger value="sucursales" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
-            <Store className="size-4" /> Sucursales
-          </TabsTrigger>}
           {canViewDomains && <TabsTrigger value="dominio" className="px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold uppercase text-[10px] tracking-widest gap-2">
             <Globe className="size-4" /> Dominio propio
           </TabsTrigger>}
@@ -819,12 +806,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             {canViewRoles && <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={onRefresh} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} />}
           </div>
           </>}
-         </TabsContent>
-         <TabsContent value="sucursales" className="space-y-6">
-           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-             <strong className="text-foreground">Sucursales de la empresa.</strong> Crea sucursales y asigna los usuarios que tendrán acceso a cada una.
-           </div>
-           <SucursalesView permissionModule={branchPermissionModule} warehouses={warehouses} onRefresh={() => inventoryService.getWarehouses().then((response: any) => setWarehouses(Array.isArray(response) ? response : (response?.data || []))).catch(() => undefined)} />
          </TabsContent>
          <TabsContent value="dominio" className="space-y-6">
            <DominiosView />

@@ -17,7 +17,7 @@ export interface CashRegister {
   code: string;
   location?: string;
   isActive: boolean;
-  branchId?: string;
+  warehouseId?: string;
   warehouse?: any;
   hasActiveSession?: boolean;
   resolvedWarehouseId?: string | null;
@@ -193,6 +193,7 @@ export interface BranchProductAvailability {
   currentStock: number;
   requestedQuantity: number;
   available: boolean;
+  sourceType?: 'BODEGA' | 'ALMACEN_CORPORATIVO';
 }
 
 export interface PosHoldItem {
@@ -220,9 +221,10 @@ export interface PosHold {
   customerId?: string | null;
   customCustomerName?: string | null;
   date: string;
-  billingBranchId: string;
+  billingBranchId?: string | null;
   billingWarehouseId?: string | null;
-  deliveryBranchId: string;
+  deliveryBranchId?: string | null;
+  deliveryClientTenantId?: string | null;
   status: PosHoldStatus;
   deliveryStatus: PosDeliveryStatus;
   payNow: boolean;
@@ -280,7 +282,7 @@ export interface CreatePosHoldDto {
   irTaxId?: string | null;
   includeTax?: boolean;
   priceListId?: string;
-  deliveryBranchId: string;
+  deliveryClientTenantId: string;
   items: PosHoldItemInput[];
   currency?: 'NIO' | 'USD';
   exchangeRate?: number;
@@ -293,6 +295,7 @@ export interface HoldFilters {
   status?: string;
   billingBranchId?: string;
   deliveryBranchId?: string;
+  deliveryClientTenantId?: string;
   registerId?: string;
   search?: string;
   page?: number;
@@ -378,10 +381,10 @@ export const cajaService = {
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),
 
-  createRegister: (data: { name: string; code: string; location?: string; branchId?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string; warehouseId?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
 
-  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; branchId?: string }) =>
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; warehouseId?: string }) =>
     api.put<CashRegister>(`/caja/registers/${id}`, data),
 
   deleteRegister: (id: string) =>

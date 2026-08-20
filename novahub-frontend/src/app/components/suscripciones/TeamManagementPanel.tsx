@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, UserCog, Store, Plus, Trash2, Clock } from 'lucide-react'
+import { Building2, UserCog, Plus, Trash2, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -13,29 +13,20 @@ interface TeamPanelProps {
   tenantName: string
 }
 
-const normalizeList = (res: any): any[] => {
-  if (Array.isArray(res)) return res
-  if (res && Array.isArray(res.data)) return res.data
-  return []
-}
-
 export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
   const [departments, setDepartments] = useState<any[]>([])
   const [roles, setRoles] = useState<any[]>([])
-  const [branches, setBranches] = useState<any[]>([])
   const [newDept, setNewDept] = useState('')
   const [newRole, setNewRole] = useState('')
-  const [newBranch, setNewBranch] = useState('')
 
   const { data: teamData, refetch: refetchTeam } = useTenantQuery(
     ['my-company-team-management', tenantId],
     async (signal) => {
-      const [dRes, rRes, bRes] = await Promise.all([
+      const [dRes, rRes] = await Promise.all([
         api.get<any>('/hr/departments', { signal }),
         api.get<any>('/roles', { signal }),
-        api.get<any>('/sucursales', { signal }),
       ])
-      return { departments: asList(dRes), roles: asList(rRes), branches: asList(bRes) }
+      return { departments: asList(dRes), roles: asList(rRes) }
     },
     { enabled: Boolean(tenantId), onError: (error) => toast.error(error.message || 'No se pudo cargar la configuración del equipo') },
   )
@@ -44,7 +35,6 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
     if (!teamData) return
     setDepartments(teamData.departments)
     setRoles(teamData.roles)
-    setBranches(teamData.branches)
   }, [teamData])
 
   const load = async () => {
@@ -90,32 +80,6 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar') }
   }
 
-  const createBranch = async () => {
-    const name = newBranch.trim()
-    if (!name) { toast.error('Escribe el nombre de la sucursal'); return }
-    try {
-      const warehouses = normalizeList(await api.get<any>('/inventory/warehouses').catch(() => []))
-      const wh = warehouses.find((w: any) => w.isActive !== false)
-      if (!wh) {
-        toast.error('Primero crea un almacén en Inventario para poder crear la sucursal')
-        return
-      }
-      const code = 'SUC-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + Math.floor(Math.random() * 100)
-      await api.post('/sucursales', { name, code, warehouseIds: [wh.id], primaryWarehouseId: wh.id, location: null, isActive: true })
-      toast.success('Sucursal creada')
-      setNewBranch('')
-      load()
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al crear sucursal') }
-  }
-
-  const deleteBranch = async (id: string) => {
-    try {
-      await api.delete(`/sucursales/${id}`)
-      toast.success('Sucursal eliminada')
-      load()
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar') }
-  }
-
   const Block = ({ title, icon: Icon, count, children }: { title: string; icon: any; count: number; children: React.ReactNode }) => (
     <Card className="bg-card border-border/50">
       <CardHeader className="pb-2">
@@ -144,11 +108,11 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
       <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 flex items-center gap-3">
         <Clock className="size-4 text-amber-500 shrink-0" />
         <p className="text-xs text-muted-foreground">
-          Administrá los <strong>departamentos</strong>, <strong>roles</strong> y <strong>sucursales</strong> de <strong>{tenantName}</strong> desde un solo lugar.
+          Administrá los <strong>departamentos</strong> y <strong>roles</strong> de <strong>{tenantName}</strong> desde un solo lugar. Las bodegas se gestionan en Inventario.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Block title="Departamentos" icon={Building2} count={departments.length}>
           <div className="flex gap-2">
             <Input value={newDept} onChange={e => setNewDept(e.target.value)} placeholder="Nuevo departamento..." className="h-8 text-xs"
@@ -179,19 +143,6 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
           </div>
         </Block>
 
-        <Block title="Sucursales" icon={Store} count={branches.length}>
-          <div className="flex gap-2">
-            <Input value={newBranch} onChange={e => setNewBranch(e.target.value)} placeholder="Nueva sucursal..." className="h-8 text-xs"
-              onKeyDown={e => e.key === 'Enter' && createBranch()} />
-            <Button size="sm" className="h-8 shrink-0" onClick={createBranch}><Plus className="size-3.5" /></Button>
-          </div>
-          <div className="space-y-1 max-h-52 overflow-y-auto">
-            {branches.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Sin sucursales</p>}
-            {branches.map((b: any) => (
-              <ItemRow key={b.id || b.name} name={b.name} onDelete={() => deleteBranch(b.id)} />
-            ))}
-          </div>
-        </Block>
       </div>
     </div>
   )

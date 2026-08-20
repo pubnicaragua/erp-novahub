@@ -199,7 +199,9 @@ export function SuscripcionesPage() {
         const [reqs, allTenants, rolesRes] = await Promise.all([
           user.role === 'partner' ? subscriptionsService.getPartnerRequests(undefined, signal) : subscriptionsService.getAllRequests(undefined, signal),
           tenantsService.getAll(undefined, signal),
-          rolesService.getAll(undefined, signal),
+          // Los roles son propios de cada sucursal; el SuperAdmin no tiene
+          // tenant operativo y no debe cargar roles con alcance null.
+          Promise.resolve([]),
         ]);
         return { requests: asList(reqs), tenants: asList(allTenants), customRoles: asList(rolesRes) };
       }

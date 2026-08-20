@@ -24,7 +24,10 @@ export function useBranchScope() {
     return () => window.removeEventListener('sucursales-changed', handleBranchesChanged);
   }, [fetchBranches]);
 
-  const isRestricted = !isAdmin && !!user?.branchIds?.length;
+  // El alcance operativo actual es la sucursal ClientTenant activa. Los
+  // branchIds históricos solo se respetan si ya contienen ese identificador;
+  // nunca deben ocultar la sucursal canónica por apuntar al modelo legado.
+  const isRestricted = !isAdmin && !!user?.branchIds?.length && Boolean(user?.clientTenantId && user.branchIds.includes(user.clientTenantId));
   const accessibleBranches = useMemo(() => {
     if (!isRestricted) return allBranches;
     return allBranches.filter(b => user!.branchIds!.includes(b.id));

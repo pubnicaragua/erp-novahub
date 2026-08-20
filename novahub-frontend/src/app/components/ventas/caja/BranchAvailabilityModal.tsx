@@ -10,7 +10,7 @@ import { cn } from '../../ui/utils';
 import type { PosProduct, BranchProductAvailability } from '../../../services/caja.service';
 
 export interface HoldReservationSelection {
-  deliveryBranchId: string;
+  deliveryClientTenantId: string;
   deliveryWarehouseId: string | null;
   notes?: string;
   payNow: boolean;
@@ -65,7 +65,7 @@ export function BranchAvailabilityModal({
   const handleSubmit = () => {
     if (!canSubmit || !selectedRow) return;
     onSubmit({
-      deliveryBranchId: selectedRow.branchId,
+      deliveryClientTenantId: selectedRow.branchId,
       deliveryWarehouseId: selectedRow.warehouseId,
       notes: notes.trim() || undefined,
       payNow,

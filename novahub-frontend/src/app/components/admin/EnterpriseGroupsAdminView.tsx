@@ -1,50 +1,187 @@
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { Building2, Link2, Plus, Users, Warehouse } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Building2, GitBranch, HardDrive, Link2, Plus, Search, Users, Warehouse } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService } from '../../services/enterprise-groups.service';
+import { getBusinessTypeLabel } from '../../constants/businessTypes';
+import { GroupBranchSupportDialog } from './GroupBranchSupportDialog';
+import { GroupManagerSupportDialog } from './GroupManagerSupportDialog';
+import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
 
-export function EnterpriseGroupsAdminView() {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+function formatStorage(value: unknown) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let amount = bytes;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; }
+  return `${amount >= 10 || index === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`;
+}
+
+export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boolean }) {
+  const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const query = useTenantQuery(['platform-enterprise-groups'], (signal) => enterpriseGroupsService.getPlatformGroups(signal));
   const data = query.data;
-  const createMutation = useMutation({
-    mutationFn: () => enterpriseGroupsService.createPlatformGroup({ name, description, branchIds: selectedBranchIds }),
-    onSuccess: () => { setName(''); setDescription(''); setSelectedBranchIds([]); query.refetch(); toast.success('Grupo empresarial creado'); },
-    onError: (error: Error) => toast.error(error.message),
-  });
-  const assignMutation = useMutation({
-    mutationFn: ({ groupId, branchIds }: { groupId: string; branchIds: string[] }) => enterpriseGroupsService.updatePlatformGroup(groupId, { branchIds }),
-    onSuccess: () => { query.refetch(); toast.success('Sucursales actualizadas'); },
-    onError: (error: Error) => toast.error(error.message),
-  });
-  const allBranches = (data?.groups || []).flatMap((group: any) => group.branches || []);
+  const totalGroupUsers = (data?.groups || []).reduce((total: number, group: any) => total + Number(group.userCount || 0), 0);
+  const filteredGroups = useMemo(() => {
+    const term = searchTerm.trim().toLocaleLowerCase();
+    if (!term) return data?.groups || [];
+    return (data?.groups || []).filter((group: any) => {
+      const haystack = [
+        group.name,
+        group.description,
+        ...(group.businessUnits || []).map((unit: any) => unit.name),
+        ...(group.branches || []).map((branch: any) => branch.name),
+      ].filter(Boolean).join(' ').toLocaleLowerCase();
+      return haystack.includes(term);
+    });
+  }, [data?.groups, searchTerm]);
+  if (workspace) {
+    const selectedGroup = workspace.groupId ? data?.groups?.find((group: any) => group.id === workspace.groupId) : undefined;
+    return <EnterpriseGroupSetupView mode={workspace.mode} initialGroup={selectedGroup} onBack={() => setWorkspace(null)} onChanged={() => query.refetch()} />;
+  }
+  const content = (
+    <section className="space-y-8">
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-[66px] shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Building2 className="size-9" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">Nueva jerarquía</p>
+            <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
+              Grupos <span className="text-primary">empresariales</span>
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium text-muted-foreground/70">
+              Crea primero el grupo y administra dentro sus sucursales, soporte y métricas.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 md:justify-end">
+          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+            {data?.groups?.length || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes
+          </Badge>
+          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+            Métrica global en Master Console
+          </Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs"><Users className="size-3.5 text-primary" /> {totalGroupUsers} usuarios</Badge>
+          <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs"><HardDrive className="size-3.5 text-primary" /> {formatStorage(data?.storageBytes)} · {data?.storageObjects || 0} archivos</Badge>
+        </div>
+      </div>
 
-  return <section className="space-y-4">
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Nueva jerarquía</p><h2 className="text-xl font-black uppercase tracking-tight">Grupos empresariales</h2></div><div className="flex flex-wrap gap-2"><Badge variant="outline">{data?.groups?.length || 0} grupos · {data?.unassignedBranches?.length || 0} pendientes</Badge><Badge variant="outline">{formatBytes(data?.storageBytes)} registrados</Badge></div></div>
-    <Card className="rounded-3xl border-primary/20 bg-primary/[0.03]"><CardContent className="space-y-4 p-5"><div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end"><label className="text-xs font-bold text-muted-foreground">Nombre del grupo<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej. Grupo Comercial Nova" className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground" /></label><label className="text-xs font-bold text-muted-foreground">Descripción<input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Opcional" className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground" /></label><Button className="h-10 rounded-xl" disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}><Plus className="mr-2 size-4" /> Crear grupo</Button></div><div><p className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales a incluir (permite reagrupar tenants existentes)</p><div className="grid max-h-40 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-border/50 p-3 sm:grid-cols-2 xl:grid-cols-3">{allBranches.map((branch: any) => <label key={branch.id} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-muted/50"><input type="checkbox" checked={selectedBranchIds.includes(branch.id)} onChange={(event) => setSelectedBranchIds(event.target.checked ? [...selectedBranchIds, branch.id] : selectedBranchIds.filter((id) => id !== branch.id))} /><span className="truncate">{branch.name}</span></label>)}{!allBranches.length && <p className="text-xs text-muted-foreground">No hay sucursales cargadas.</p>}</div></div></CardContent></Card>
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{(data?.groups || []).map((group: any) => <GroupCard key={group.id} group={group} onAssign={(branchIds) => assignMutation.mutate({ groupId: group.id, branchIds })} saving={assignMutation.isPending} />)}</div>
-    {!!data?.unassignedBranches?.length && <Card className="rounded-3xl border-dashed border-amber-500/40"><CardHeader><CardTitle className="flex items-center gap-2 text-base font-black uppercase"><Link2 className="size-5 text-amber-500" /> Sucursales pendientes de clasificar</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{data.unassignedBranches.map((branch: any) => <Badge key={branch.id} variant="outline" className="px-3 py-2">{branch.name}</Badge>)}</CardContent></Card>}
-  </section>;
+      <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm">
+        <CardContent className="space-y-6 p-6 sm:p-7">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+            <label className="text-xs font-bold text-muted-foreground">
+              Crear un grupo empresarial
+              <p className="mt-2 text-sm font-normal text-muted-foreground">Se abrirá el flujo avanzado para capturar Manager, rubros, almacenes y sucursales.</p>
+            </label>
+            <div className="flex items-end justify-end lg:col-span-2">
+              <Button className="h-11 rounded-xl px-5" onClick={() => setWorkspace({ mode: 'create' })}>
+                <Plus className="mr-2 size-4" /> Iniciar configuración
+              </Button>
+            </div>
+          </div>
+
+          <p className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.04] p-4 text-xs font-medium text-muted-foreground">
+            Después de crear el grupo, la primera y las siguientes sucursales se registran desde su propia tarjeta. Así ninguna sucursal queda creada fuera de un grupo.
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="relative max-w-2xl">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Buscar grupo empresarial, rubro o sucursal…"
+          aria-label="Buscar grupo empresarial"
+          className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
+      </div>
+
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+        {filteredGroups.map((group: any) => (
+          <GroupCard
+            key={group.id}
+            group={group}
+            onOpenWorkspace={() => setWorkspace({ mode: 'edit', groupId: group.id })}
+            onChanged={() => query.refetch()}
+          />
+        ))}
+        {!filteredGroups.length && <div className="rounded-3xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground xl:col-span-2">No se encontraron grupos con ese criterio.</div>}
+      </div>
+
+      {!!data?.unassignedBranches?.length && (
+        <Card className="rounded-3xl border-dashed border-amber-500/40 shadow-sm">
+          <CardHeader className="p-6 pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-black uppercase">
+              <Link2 className="size-5 text-amber-500" /> Sucursales pendientes de clasificar
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2 p-6 pt-3">
+            {data.unassignedBranches.map((branch: any) => (
+              <Badge key={branch.id} variant="outline" className="px-3 py-2">
+                {branch.name}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <div className="master-console-module min-w-0 max-w-full overflow-x-hidden bg-background">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
+        {content}
+      </div>
+    </div>
+  );
 }
 
-function formatBytes(value: unknown) {
-  const bytes = Number(value || 0);
-  if (!bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWorkspace: () => void; onChanged: () => void }) {
+  const units = group.businessUnits || [];
+  const warehouses = group.warehouses || [];
+  return (
+    <Card className="rounded-3xl border-border/60 bg-card/60 shadow-sm transition-shadow hover:shadow-md">
+      <CardHeader className="p-6 pb-4">
+        <div className="flex min-w-0 items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle className="flex min-w-0 items-center gap-2 text-lg font-black"><Building2 className="size-5 shrink-0 text-primary" /><span className="truncate">{group.name}</span></CardTitle>
+            <p className="mt-2 truncate text-xs text-muted-foreground">Catálogo por rubro · inventario compartido dentro del rubro</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2"><GroupManagerSupportDialog group={group} /><Button className="rounded-xl" onClick={onOpenWorkspace}><GitBranch className="mr-2 size-4" /> Configurar</Button></div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5 p-6 pt-0">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Metric icon={Building2} label="Sucursales" value={group.branchCount} />
+          <Metric icon={Users} label="Usuarios" value={group.userCount} />
+          <Metric icon={GitBranch} label="Rubros" value={units.length} />
+          <Metric icon={Warehouse} label="Almacenes" value={warehouses.length} />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><GitBranch className="size-4 text-primary" /> Rubros</p><div className="space-y-2">{units.slice(0, 4).map((unit: any) => <div key={unit.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{unit.name}</span><Badge variant="outline" className="shrink-0 text-[10px]">{group.branches.filter((branch: any) => branch.businessUnitId === unit.id).length} suc.</Badge></div>)}{!units.length && <p className="text-xs text-muted-foreground">Configura los rubros desde el flujo avanzado.</p>}{units.length > 4 && <p className="text-xs text-primary">+{units.length - 4} rubros más</p>}</div></div>
+          <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-4 text-primary" /> Almacenes corporativos</p><div className="space-y-2">{warehouses.slice(0, 4).map((warehouse: any) => <div key={warehouse.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{warehouse.name}</span><span className="shrink-0 text-[10px] text-muted-foreground">{units.find((unit: any) => unit.id === warehouse.businessUnitId)?.name || 'Rubro pendiente'}</span></div>)}{!warehouses.length && <p className="text-xs text-muted-foreground">Aún no hay almacenes fuera de las sucursales.</p>}{warehouses.length > 4 && <p className="text-xs text-primary">+{warehouses.length - 4} almacenes más</p>}</div></div>
+        </div>
+        <div className="space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales y soporte</p>{(group.branches || []).slice(0, 5).map((branch: any) => <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><div className="flex min-w-0 items-center gap-3"><Building2 className="size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="truncate font-semibold">{branch.name}</p><p className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{units.find((unit: any) => unit.id === branch.businessUnitId)?.name || getBusinessTypeLabel(branch.industry, branch.subIndustry)} · {branch._count?.users || 0} usuarios</p></div></div><GroupBranchSupportDialog branch={branch} onChanged={onChanged} /></div>)}{!group.branches?.length && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}{group.branches?.length > 5 && <p className="text-xs text-primary">+{group.branches.length - 5} sucursales más. Abre Configurar para verlas.</p>}</div>
+      </CardContent>
+    </Card>
+  );
 }
 
-function GroupCard({ group, onAssign, saving }: { group: any; onAssign: (branchIds: string[]) => void; saving: boolean }) {
-  const [selected, setSelected] = useState<string[]>(group.branches.map((branch: any) => branch.id));
-  return <Card className="rounded-3xl border-border/60 bg-card/60"><CardHeader><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-lg font-black"><Building2 className="size-5 text-primary" />{group.name}</CardTitle><p className="mt-1 text-xs text-muted-foreground">/{group.slug} · catálogo {group.catalogMode}</p></div><Badge variant={group.isActive ? 'default' : 'secondary'}>{group.isActive ? 'Activo' : 'Inactivo'}</Badge></div></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-3 gap-2"><Metric icon={Building2} label="Sucursales" value={group.branchCount} /><Metric icon={Users} label="Usuarios" value={group.userCount} /><Metric icon={Warehouse} label="Almacenes" value={group.localWarehouseCount + group._count.warehouses} /></div><div><p className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales del grupo</p><div className="space-y-2">{group.branches.map((branch: any) => <label key={branch.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><span className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={selected.includes(branch.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, branch.id] : selected.filter((id) => id !== branch.id))} /><span className="truncate font-semibold">{branch.name}</span></span><span className="shrink-0 text-xs text-muted-foreground">{branch._count.users} usuarios</span></label>)}</div></div><Button variant="outline" className="w-full rounded-xl" disabled={saving} onClick={() => onAssign(selected)}>Guardar sucursales</Button></CardContent></Card>;
+function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value?: number }) {
+  return (
+    <div className="rounded-2xl bg-muted/30 p-4 text-center">
+      <Icon className="mx-auto mb-2 size-4 text-primary" />
+      <p className="text-lg font-black">{value || 0}</p>
+      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+    </div>
+  );
 }
-
-function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: number }) { return <div className="rounded-2xl bg-muted/30 p-3 text-center"><Icon className="mx-auto mb-1 size-4 text-primary" /><p className="text-lg font-black">{value || 0}</p><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p></div>; }

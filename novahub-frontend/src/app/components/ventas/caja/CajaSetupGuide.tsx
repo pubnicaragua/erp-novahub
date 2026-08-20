@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Banknote, CheckCircle2, Loader2, Store, Warehouse } from 'lucide-react';
+import { Banknote, CheckCircle2, Loader2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
@@ -7,11 +7,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import { api, getApiErrorMessage } from '../../../services/api';
+import { getApiErrorMessage } from '../../../services/api';
 import { cajaService, type CashRegister } from '../../../services/caja.service';
 import { inventoryService } from '../../../services/inventario.service';
 
-type SetupModal = 'warehouse' | 'branch' | 'register' | null;
+type SetupModal = 'warehouse' | 'register' | null;
 
 interface SetupGuideProps {
   registers: CashRegister[];
@@ -22,8 +22,7 @@ interface SetupGuideProps {
 }
 
 const initialWarehouseForm = { name: '', location: '', type: 'STORE' };
-const initialBranchForm = { name: '', code: '', location: '', warehouseId: '' };
-const initialRegisterForm = { name: '', code: '', location: '', branchId: '' };
+const initialRegisterForm = { name: '', code: '', location: '', warehouseId: '' };
 
 export function CajaSetupGuide({
   registers,
@@ -33,28 +32,20 @@ export function CajaSetupGuide({
   onOpenManageCajas,
 }: SetupGuideProps) {
   const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
   const [modal, setModal] = useState<SetupModal>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [warehouseForm, setWarehouseForm] = useState(initialWarehouseForm);
-  const [branchForm, setBranchForm] = useState(initialBranchForm);
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
 
   const loadSetupData = useCallback(async () => {
     setLoading(true);
     try {
-      const [warehouseRes, branchRes] = await Promise.all([
-        inventoryService.getWarehouses(),
-        api.get<any[]>('/sucursales'),
-      ]);
+      const warehouseRes = await inventoryService.getWarehouses();
       const nextWarehouses = Array.isArray(warehouseRes) ? warehouseRes : ((warehouseRes as any)?.data || []);
-      const nextBranches = Array.isArray(branchRes) ? branchRes : ((branchRes as any)?.data || []);
 
       setWarehouses(nextWarehouses);
-      setBranches(nextBranches);
-      setBranchForm((current) => ({ ...current, warehouseId: current.warehouseId || nextWarehouses[0]?.id || '' }));
-      setRegisterForm((current) => ({ ...current, branchId: current.branchId || nextBranches[0]?.id || '' }));
+      setRegisterForm((current) => ({ ...current, warehouseId: current.warehouseId || nextWarehouses[0]?.id || '' }));
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo cargar la configuracion inicial de caja'));
     } finally {
@@ -69,11 +60,10 @@ export function CajaSetupGuide({
 
   const nextStep = useMemo<SetupModal>(() => {
     if (warehouses.length === 0) return 'warehouse';
-    if (branches.length === 0) return 'branch';
     if (registers.length === 0) return 'register';
     if (!selectedRegister || selectedRegister === 'ALL') return 'register';
     return null;
-  }, [branches.length, registers.length, selectedRegister, warehouses.length]);
+  }, [registers.length, selectedRegister, warehouses.length]);
 
   if (loading) {
     return (
@@ -127,40 +117,24 @@ export function CajaSetupGuide({
     setWarehouseForm(initialWarehouseForm);
   }, 'Almacen creado');
 
-  const createBranch = () => completeStep(async () => {
-    const payload = {
-      name: branchForm.name.trim(),
-      code: branchForm.code.trim(),
-      location: branchForm.location.trim(),
-      warehouseId: branchForm.warehouseId,
-      isActive: true,
-    };
-    if (!payload.name || !payload.code || !payload.warehouseId) {
-      throw new Error('Completa nombre, codigo y almacen para crear la sucursal.');
-    }
-    await api.post('/sucursales', payload);
-    setBranchForm({ ...initialBranchForm, warehouseId: warehouses[0]?.id || '' });
-  }, 'Sucursal creada');
-
   const createRegister = () => completeStep(async () => {
     const payload = {
       name: registerForm.name.trim(),
       code: registerForm.code.trim(),
       location: registerForm.location.trim(),
-      branchId: registerForm.branchId,
+      warehouseId: registerForm.warehouseId,
       isActive: true,
     };
-    if (!payload.name || !payload.code || !payload.branchId) {
-      throw new Error('Completa nombre, codigo y sucursal para crear la caja.');
+    if (!payload.name || !payload.code || !payload.warehouseId) {
+      throw new Error('Completa nombre, codigo y bodega para crear la caja.');
     }
     const created = await cajaService.createRegister(payload);
     onSelectRegister(created.id);
-    setRegisterForm({ ...initialRegisterForm, branchId: branches[0]?.id || '' });
+    setRegisterForm({ ...initialRegisterForm, warehouseId: warehouses[0]?.id || '' });
   }, 'Caja creada');
 
   const steps = [
-    { key: 'warehouse', label: 'Almacen operativo', done: warehouses.length > 0, icon: Warehouse },
-    { key: 'branch', label: 'Sucursal vinculada', done: branches.length > 0, icon: Store },
+    { key: 'warehouse', label: 'Bodega operativa', done: warehouses.length > 0, icon: Warehouse },
     { key: 'register', label: 'Caja activa', done: registers.length > 0, icon: Banknote },
   ];
 
@@ -174,8 +148,8 @@ export function CajaSetupGuide({
           <CardTitle className="text-base font-black">{allDone ? 'Caja lista para operar' : 'Configurar caja paso a paso'}</CardTitle>
           <p className="text-sm text-muted-foreground">
             {allDone
-              ? 'Almacen, sucursal y caja estan configurados. Solo falta seleccionar la caja con la que vas a operar.'
-              : 'Para aperturar caja se necesita este orden: almacen, sucursal y caja. Completa el siguiente paso aqui mismo.'}
+              ? 'Bodega y caja están configuradas. Solo falta seleccionar la caja con la que vas a operar.'
+              : 'Para aperturar caja se necesita una bodega operativa y una caja. Completa el siguiente paso aquí mismo.'}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -204,7 +178,7 @@ export function CajaSetupGuide({
           </div>
           <Button onClick={openNextStep} className="gap-2">
             {nextStep === 'warehouse' && 'Crear almacen ahora'}
-            {nextStep === 'branch' && 'Crear sucursal ahora'}
+            {nextStep === 'warehouse' && 'Crear bodega ahora'}
             {nextStep === 'register' && (registers.length > 0 ? 'Seleccionar caja disponible' : 'Crear caja ahora')}
           </Button>
         </CardContent>
@@ -214,7 +188,7 @@ export function CajaSetupGuide({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Crear almacen</DialogTitle>
-            <DialogDescription>Este almacen sera la base de inventario para la sucursal.</DialogDescription>
+            <DialogDescription>Esta bodega será la base de inventario de la sucursal operativa.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -229,44 +203,6 @@ export function CajaSetupGuide({
           <DialogFooter>
             <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
             <Button onClick={createWarehouse} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : 'Guardar almacen'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={modal === 'branch'} onOpenChange={(open) => !open && setModal(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Crear sucursal</DialogTitle>
-            <DialogDescription>La sucursal agrupa las cajas que operan en una ubicacion.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Codigo</Label>
-                <Input value={branchForm.code} onChange={(event) => setBranchForm({ ...branchForm, code: event.target.value })} placeholder="SUC-01" />
-              </div>
-              <div className="space-y-2">
-                <Label>Nombre</Label>
-                <Input value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} placeholder="Sucursal central" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Almacen padre</Label>
-              <Select value={branchForm.warehouseId} onValueChange={(value) => setBranchForm({ ...branchForm, warehouseId: value })}>
-                <SelectTrigger><SelectValue placeholder="Selecciona almacen" /></SelectTrigger>
-                <SelectContent>
-                  {warehouses.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Ubicacion</Label>
-              <Input value={branchForm.location} onChange={(event) => setBranchForm({ ...branchForm, location: event.target.value })} placeholder="Direccion o referencia" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModal(null)}>Cancelar</Button>
-            <Button onClick={createBranch} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : 'Guardar sucursal'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -289,11 +225,11 @@ export function CajaSetupGuide({
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Sucursal</Label>
-              <Select value={registerForm.branchId} onValueChange={(value) => setRegisterForm({ ...registerForm, branchId: value })}>
-                <SelectTrigger><SelectValue placeholder="Selecciona sucursal" /></SelectTrigger>
+              <Label>Bodega</Label>
+              <Select value={registerForm.warehouseId} onValueChange={(value) => setRegisterForm({ ...registerForm, warehouseId: value })}>
+                <SelectTrigger><SelectValue placeholder="Selecciona bodega" /></SelectTrigger>
                 <SelectContent>
-                  {branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
+                  {warehouses.map((warehouse) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

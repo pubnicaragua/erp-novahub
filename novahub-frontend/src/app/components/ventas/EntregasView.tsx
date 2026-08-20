@@ -50,7 +50,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
     setHoldsLoading(true);
     try {
       const res = await cajaService.getHolds({
-        deliveryBranchId: filter === 'all' ? undefined : filter,
+        deliveryClientTenantId: filter === 'all' ? undefined : filter,
       });
       const data = (res as any)?.data !== undefined ? (res as any).data : res;
       setHolds(data?.items || (Array.isArray(data) ? data : []));
@@ -63,8 +63,9 @@ export function EntregasView({ branchId }: EntregasViewProps) {
 
   useEffect(() => {
     let active = true;
-    api.get<any[]>('/sucursales').then((res) => {
-      const list = Array.isArray(res) ? res : (res as any)?.data || [];
+    api.get<any>('/inventory/warehouse-supply-requests/options').then((res) => {
+      const data = Array.isArray(res) ? { branches: res } : (res as any)?.data || res;
+      const list = Array.isArray(data?.branches) ? data.branches : [];
       if (active) setBranches(list.map((b: any) => ({ id: b.id, name: b.name })));
     }).catch(() => undefined);
     return () => { active = false; };
@@ -99,9 +100,9 @@ export function EntregasView({ branchId }: EntregasViewProps) {
         const allHolds = data?.items || (Array.isArray(data) ? data : []);
         const target = allHolds.find((h: PosHold) => h.id === highlightedHoldId);
         if (!target) return;
-        if (target.deliveryBranchId) {
-          setDeliveryBranchFilter(target.deliveryBranchId);
-          await loadHolds(target.deliveryBranchId);
+        if (target.deliveryClientTenantId) {
+          setDeliveryBranchFilter(target.deliveryClientTenantId);
+          await loadHolds(target.deliveryClientTenantId);
         } else {
           setHolds(allHolds);
         }

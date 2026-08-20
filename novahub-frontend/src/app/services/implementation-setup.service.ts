@@ -6,7 +6,6 @@ export type ImplementationSetupAction =
   | 'open-currency-settings'
   | 'open-role-settings'
   | 'open-warehouse-form'
-  | 'open-branch-form'
   | 'open-cash-register-form'
   | 'validate-setup';
 
@@ -226,14 +225,6 @@ const STEP_DEFINITIONS: StepDefinition[] = [
     actionLabel: 'Crear almacen',
     target: { module: 'inventario', subModule: 'almacenes', action: 'open-warehouse-form' },
     load: () => api.get('/inventory/warehouses'),
-  },
-  {
-    id: 'branches',
-    title: 'Crear sucursales que se alimenten del almacen',
-    description: 'Puntos operativos conectados a uno o varios almacenes.',
-    actionLabel: 'Crear sucursal',
-    target: { module: 'inventario', subModule: 'almacenes', action: 'open-branch-form' },
-    load: () => api.get('/sucursales'),
   },
   {
     id: 'cash-registers',

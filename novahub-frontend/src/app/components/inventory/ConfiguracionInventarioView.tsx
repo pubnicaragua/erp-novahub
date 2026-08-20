@@ -84,7 +84,7 @@ const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="config-header"]',
     title: 'Configuración contable de Inventario',
-    description: 'Esta vista conecta tus sucursales y almacenes con las cuentas de inventario del Plan de Cuentas, para que los movimientos de mercadería se registren automáticamente en Contabilidad.',
+    description: 'Esta vista conecta las bodegas de la sucursal con las cuentas de inventario del Plan de Cuentas, para que los movimientos de mercadería se registren automáticamente en Contabilidad.',
     tip: 'La lógica es una jerarquía: Cuenta control → Cuenta de sucursal → Cuenta de almacén.',
     placement: 'bottom',
   },
@@ -96,8 +96,8 @@ const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
   },
   {
     target: '[data-tour="config-tab-almacenes"]',
-    title: 'Sucursales y Almacenes',
-    description: 'Primero crea tus sucursales y almacenes aquí (múltiples almacenes por sucursal). Cada almacén que crees aparecerá después en las tablas de vinculación contable.',
+    title: 'Bodegas',
+    description: 'Crea y administra las bodegas operativas de esta sucursal. Cada bodega aparecerá después en las tablas de vinculación contable.',
     placement: 'bottom',
   },
   {
@@ -161,14 +161,13 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true)
-      const [whRes, brRes, accRes, cfgRes] = await Promise.all([
+      const [whRes, accRes, cfgRes] = await Promise.all([
         inventoryService.getWarehouses(),
-        api.get<any>('/sucursales'),
         contabilidadService.getChartOfAccounts(false),
         contabilidadService.getConfig(),
       ])
       setWarehouses(Array.isArray(whRes) ? whRes : [])
-      setBranches(Array.isArray(brRes) ? brRes : (brRes as any)?.data || [])
+      setBranches([])
       setAccounts(Array.isArray(accRes) ? accRes : (accRes as any)?.data || accRes || [])
 
       const cfg = (cfgRes as any)?.config || cfgRes || {}
@@ -269,13 +268,11 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     }
   }
 
-  // Estado y cuenta contable del almacén DENTRO de una sucursal concreta.
-  const linkInfo = (wh: any, branchId?: string) => {
-    const links = Array.isArray(wh?.branches) ? wh.branches : []
-    const link = branchId ? links.find((b: any) => b.id === branchId) || null : null
-    const linkAccount = link?.inventoryAccount ?? null
-    const whAccount = wh?.inventoryAccount ?? null
-    const account = linkAccount ?? whAccount
+  // Estado y cuenta contable de la bodega. Ya no existe una cuenta por vínculo
+  // bodega-sucursal; la cuenta vive directamente en Warehouse.
+  const linkInfo = (wh: any, _branchId?: string) => {
+    const link = null
+    const account = wh?.inventoryAccount ?? null
     // El backend entrega el estado calculado; si falta (datos antiguos), se
     // deriva de la cuenta: sin cuenta -> pendiente; con cuenta -> vinculado.
     const status = link?.accountingStatus ?? wh?.accountingStatus ?? accountStatusFromAccount(account)
@@ -283,31 +280,27 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       link,
       status,
       account,
-      accountId: linkAccount?.id ?? link?.inventoryAccountId ?? wh?.inventoryAccountId ?? null,
+      accountId: wh?.inventoryAccountId ?? null,
     }
   }
 
   const openConfig = (wh: any, branch?: any) => {
-    const info = linkInfo(wh, branch?.id)
+    const info = linkInfo(wh)
     if (info.status === 'VINCULADO') return
     setConfigTarget(wh)
-    setConfigBranch(branch || null)
+    setConfigBranch(null)
     setConfigMode('auto')
     setExistingAccountId(info.accountId || '')
-    setBranchAccountId(branchGroupFor(branch?.id)?.id || '')
+    setBranchAccountId('')
   }
 
-  const buildHierarchyPreview = (wh: any, branchOverride?: any) => {
+  const buildHierarchyPreview = (wh: any, _branchOverride?: any) => {
     const control = flatAccounts.find((a: any) => a.code === controlAccountId)
-    const branch = branchOverride || wh?.primaryBranch || wh?.branches?.[0] || null
-    const branchId = branch?.id
-    const group = branchId ? flatAccounts.find((a: any) => a.notes === `INV_GROUP:${branchId}`) : undefined
-    const info = linkInfo(wh, branchId)
+    const info = linkInfo(wh)
     const whAccount = info.accountId ? flatAccounts.find((a: any) => a.id === info.accountId) : undefined
     return [
       { code: control?.code, name: control?.name || 'Inventario', exists: !!control, note: 'Cuenta control (consolida)' },
-      { code: group?.code, name: group?.name || `Inventario Sucursal ${branch?.name || 'General'}`, exists: !!group, note: 'Agrupadora de sucursal' },
-      { code: whAccount?.code, name: whAccount?.name || `Inventario Almacén ${wh?.name || ''}`, exists: !!whAccount, note: 'Cuenta del almacén (recibe movimientos)' },
+      { code: whAccount?.code, name: whAccount?.name || `Inventario Bodega ${wh?.name || ''}`, exists: !!whAccount, note: 'Cuenta de la bodega (recibe movimientos)' },
     ]
   }
 
@@ -320,11 +313,11 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           toast.error('Selecciona una cuenta contable')
           return
         }
-        await inventoryService.updateWarehouse(configTarget.id, { inventoryAccountId: existingAccountId, branchAccountId: branchAccountId || undefined, targetBranchId: configBranch?.id } as any)
-        toast.success('Cuenta vinculada al almacén. Revisa Contabilidad → Plan de Cuentas')
+        await inventoryService.updateWarehouse(configTarget.id, { inventoryAccountId: existingAccountId })
+        toast.success('Cuenta vinculada a la bodega. Revisa Contabilidad → Plan de Cuentas')
       } else {
-        await inventoryService.autoCreateAccountingLink(configTarget.id, configBranch?.id)
-        toast.success('Cuentas de sucursal y almacén creadas y vinculadas. Revisa Contabilidad → Plan de Cuentas')
+        await inventoryService.autoCreateAccountingLink(configTarget.id)
+        toast.success('Cuenta de la bodega creada y vinculada. Revisa Contabilidad → Plan de Cuentas')
       }
       setConfigTarget(null)
       setConfigBranch(null)
@@ -340,8 +333,8 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     if (!unlinkTarget) return
     setUnlinkSaving(true)
     try {
-      await inventoryService.updateWarehouse(unlinkTarget.wh.id, { inventoryAccountId: null, targetBranchId: unlinkTarget.branch?.id } as any)
-      toast.success('Cuenta contable desvinculada del almacén')
+      await inventoryService.updateWarehouse(unlinkTarget.wh.id, { inventoryAccountId: null })
+      toast.success('Cuenta contable desvinculada de la bodega')
       setUnlinkTarget(null)
       await refresh()
     } catch (e: any) {
@@ -374,17 +367,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       if (existing) existing.warehouses.push(wh)
       else groups.push({ branch: branch || { id: 'sin-sucursal', name: 'Sin sucursal' }, warehouses: [wh] })
     }
-    for (const wh of warehouses) {
-      const whBranches = Array.isArray(wh.branches) && wh.branches.length > 0
-        ? wh.branches
-        : (wh.primaryBranch ? [wh.primaryBranch] : [])
-      if (whBranches.length > 0) {
-        for (const b of whBranches) upsert(b, wh)
-      } else {
-        const fallback = branches.find((b: any) => b.warehouses?.some((w: any) => w.id === wh.id)) || null
-        upsert(fallback, wh)
-      }
-    }
+    for (const wh of warehouses) upsert({ id: `warehouse-${wh.id}`, name: wh.name }, wh)
     return groups.sort((a, b) => a.branch.name.localeCompare(b.branch.name))
   }, [warehouses, branches])
 
@@ -420,7 +403,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-border/40 bg-muted/40 p-1.5">
           <TabsTrigger value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
-          <TabsTrigger value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Sucursales y Almacenes</TabsTrigger>
+      <TabsTrigger value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Bodegas</TabsTrigger>
           <TabsTrigger value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
           <TabsTrigger value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
           {isManufacturing && <TabsTrigger value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
@@ -489,7 +472,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                     <p className="mt-1 text-2xl font-black">{branches.length}</p>
                   </div>
                   <div className="rounded-xl border border-border/40 p-3">
-                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-3" /> Almacenes</p>
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-3" /> Bodegas</p>
                     <p className="mt-1 text-2xl font-black">{warehouses.length}</p>
                   </div>
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
@@ -535,7 +518,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 <h4 className="mb-3 flex items-center gap-2 font-bold"><Link2 className="size-4 text-primary" /> Ramas por sucursal</h4>
                 {branchGroups.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">
-                    Aún no hay sucursales ni almacenes. Créalos desde la pestaña <span className="font-semibold">Sucursales y Almacenes</span> y luego vincúlalos en <span className="font-semibold">Configuración Contable</span>.
+                    Aún no hay bodegas. Créala desde la pestaña <span className="font-semibold">Bodegas</span> y luego vincúlala en <span className="font-semibold">Configuración Contable</span>.
                   </p>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
@@ -564,10 +547,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           </div>
         </TabsContent>
 
-        {/* Sucursales y Almacenes */}
+        {/* Bodegas */}
         <TabsContent value="almacenes" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
-            Crea y administra tus sucursales y almacenes. Cada almacén creado aquí podrá vincularse a una cuenta contable desde la pestaña <span className="font-semibold text-foreground">Configuración Contable</span>.
+            Crea y administra tus bodegas. Cada bodega creada aquí podrá vincularse a una cuenta contable desde la pestaña <span className="font-semibold text-foreground">Configuración Contable</span>.
           </p>
           <Card className="p-4">
             <AlmacenesView warehouses={warehouses} onRefresh={refresh} />
@@ -592,7 +575,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               </TableHeader>
               <TableBody>
                 {branchGroups.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No hay almacenes. Crea uno desde la pestaña <span className="font-semibold">Sucursales y Almacenes</span> para poder configurar su cuenta contable.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-muted-foreground">No hay bodegas. Crea una desde la pestaña <span className="font-semibold">Bodegas</span> para poder configurar su cuenta contable.</TableCell></TableRow>
                 ) : branchGroups.map(({ branch, warehouses: groupWarehouses }) => {
                   const isCollapsed = collapsedBranches.has(branch.id)
                   const linkedInGroup = groupWarehouses.filter((w: any) => linkInfo(w, branch.id).status === 'VINCULADO').length
@@ -675,7 +658,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursales</p><p className="text-2xl font-black">{branches.length}</p></Card>
-            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p><p className="text-2xl font-black">{warehouses.length}</p></Card>
+            <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bodegas</p><p className="text-2xl font-black">{warehouses.length}</p></Card>
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p><p className="text-2xl font-black text-emerald-600">{statusCounts.VINCULADO || 0}</p></Card>
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendientes</p><p className="text-2xl font-black text-amber-600">{statusCounts.PENDIENTE || 0}</p></Card>
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Con errores</p><p className="text-2xl font-black text-red-600">{(statusCounts.CUENTA_INACTIVA || 0) + (statusCounts.CUENTA_NO_POSTEABLE || 0)}</p></Card>

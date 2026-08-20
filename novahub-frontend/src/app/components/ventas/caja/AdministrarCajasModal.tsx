@@ -9,7 +9,8 @@ import { Badge } from '../../ui/badge';
 import { Banknote, Plus, Loader2, Edit2, Ban, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
-import { api, getApiErrorMessage } from '../../../services/api';
+import { getApiErrorMessage } from '../../../services/api';
+import { inventoryService } from '../../../services/inventario.service';
 import { SalesViewTutorial } from '../SalesViewTutorial';
 
 interface AdministrarCajasModalProps {
@@ -25,7 +26,7 @@ function toCajaPayload(form: Partial<CashRegister>) {
     name: String(form.name || '').trim(),
     code: String(form.code || '').trim(),
     location: String(form.location || '').trim(),
-    branchId: form.branchId || undefined,
+    warehouseId: form.warehouseId || undefined,
     isActive: form.isActive !== false,
   };
 }
@@ -35,7 +36,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
-  const [sucursalesList, setSucursalesList] = useState<any[]>([]);
+  const [bodegasList, setBodegasList] = useState<any[]>([]);
 
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
@@ -55,10 +56,11 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
     }
   };
 
-  const fetchSucursales = async () => {
+  const fetchBodegas = async () => {
     try {
-      const res: any = await api.get('/sucursales');
-      setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
+      const res: any = await inventoryService.getWarehouses();
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      setBodegasList(list.filter((warehouse: any) => warehouse.scopeType !== 'BUSINESS_UNIT'));
     } catch (e: any) {
       console.error(e);
     }
@@ -67,7 +69,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   useEffect(() => {
     if (open) {
       Promise.resolve().then(fetchCajas);
-      Promise.resolve().then(fetchSucursales);
+      Promise.resolve().then(fetchBodegas);
     }
   }, [open]);
 
@@ -156,7 +158,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                       <tr className="border-b border-border bg-muted/20">
                         <th className="px-4 py-3 text-left font-semibold">Código</th>
                         <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                        <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
+                        <th className="px-4 py-3 text-left font-semibold">Bodega</th>
                         <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
                         <th className="px-4 py-3 text-left font-semibold">Estado</th>
                         <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
@@ -164,12 +166,12 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                     </thead>
                     <tbody className="divide-y divide-border/50">
                       {cajasList.map((caja) => {
-                        const sucursal = sucursalesList.find(s => s.id === caja.branchId);
+                        const bodega = caja.warehouse || bodegasList.find((warehouse: any) => warehouse.id === caja.warehouseId);
                         return (
                         <tr key={caja.id} className="hover:bg-muted/10">
                           <td className="px-4 py-3 font-medium">{caja.code}</td>
                           <td className="px-4 py-3">{caja.name}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{bodega ? bodega.name : 'No asignada'}</td>
                           <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
                           <td className="px-4 py-3">
                             <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
@@ -188,7 +190,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                                   name: caja.name,
                                   code: caja.code,
                                   location: caja.location || '',
-                                  branchId: caja.branchId,
+                                  warehouseId: caja.warehouseId,
                                   isActive: caja.isActive !== false,
                                 });
                                 setIsCajaFormOpen(true);
@@ -249,11 +251,11 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
               <Input value={cajaForm.name || ''} onChange={e => setCajaForm({...cajaForm, name: e.target.value})} placeholder="Caja Principal" />
             </div>
             <div className="space-y-2">
-              <Label>Sucursal</Label>
-              <Select value={cajaForm.branchId || ''} onValueChange={v => setCajaForm({...cajaForm, branchId: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccione una Sucursal" /></SelectTrigger>
+              <Label>Bodega</Label>
+              <Select value={cajaForm.warehouseId || ''} onValueChange={v => setCajaForm({...cajaForm, warehouseId: v})}>
+                <SelectTrigger><SelectValue placeholder="Seleccione una bodega" /></SelectTrigger>
                 <SelectContent>
-                  {sucursalesList.map(w => (
+                  {bodegasList.map(w => (
                     <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>

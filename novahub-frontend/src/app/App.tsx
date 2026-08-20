@@ -251,6 +251,9 @@ function DashboardLayout() {
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
+      // Alias de compatibilidad para enlaces antiguos: la administración de
+      // sucursales ahora vive dentro de Grupos empresariales.
+      case 'tenant-admin': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
       case 'schema': return <PrismaSchemaPage />;
       case 'financiamiento-pyme': return <FinanciamientoPymePage />;
       case 'centro-capacitacion': return <TrainingHubView />;
@@ -306,6 +309,7 @@ function DashboardLayout() {
 
 function AppContent() {
   const { isAuthenticated, login, logout, user } = useAuth();
+  const { isImpersonating } = useImpersonation();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
@@ -430,7 +434,7 @@ function AppContent() {
           }}
         />
       )}
-      {user?.role === 'manager' && !user.isPlatformAdmin ? (
+      {user?.role === 'manager' && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage /></Suspense>
       ) : <DashboardLayout />}
       <SessionMonitor />

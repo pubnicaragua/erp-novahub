@@ -33,7 +33,6 @@ import { type RoleManagement, type Permission } from '../types';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { modulePricingService, type ModulePriceItem } from '../services/module-pricing.service';
 import { CountriesView } from './admin/CountriesView';
-import { SucursalesView } from './inventory/SucursalesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
@@ -515,8 +514,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const canViewTenancy = canPerform('CONFIG_TENANCY', 'view');
   const canViewCurrency = canPerform('CONFIG_CURRENCY', 'view');
   const canViewModulePricing = canPerform('CONFIG_MODULE_PRICING', 'view');
-  const canViewWarehouses = canPerform('COMPANY_BRANCHES', 'view');
-  const canCreateWarehouses = canPerform('COMPANY_BRANCHES', 'create');
   const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
   const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
   const canDeactivateCompany = canPerform('CONFIG_COMPANY', 'deactivate');
@@ -831,8 +828,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [, setIsLoadingModules] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [pendingDeleteRole, setPendingDeleteRole] = useState<RoleManagement | null>(null);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [sucursalModalOpen, setSucursalModalOpen] = useState(false);
 
   const fetchPricing = async () => {
     setPricingLoading(true);
@@ -851,12 +846,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     } finally {
       setIsLoadingRoles(false);
     }
-  };
-
-  const fetchWarehouses = async () => {
-    try {
-      await refetchConfiguration();
-    } catch { /* ignore */ }
   };
 
   const handleSaveCurrencySettings = async () => {
@@ -911,22 +900,21 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
   const [pricingEdits, setPricingEdits] = useState<Record<string, number>>({});
 
   const { data: configurationData, refetch: refetchConfiguration } = useTenantQuery(
-    ['configuration', user?.tenantId || 'current', scenario, canViewRoles, canViewCompany, canViewBranding, canViewCurrency, canViewModulePricing, canViewWarehouses],
+    ['configuration', user?.tenantId || 'current', scenario, canViewRoles, canViewCompany, canViewBranding, canViewCurrency, canViewModulePricing],
     async (signal) => {
       const tenantId = user?.tenantId;
-      const [branding, currency, industries, pricing, rolesData, warehouseData, modules] = await Promise.all([
+      const [branding, currency, industries, pricing, rolesData, modules] = await Promise.all([
         canViewBranding || canViewCompany || canViewTenancy ? brandingService.getCurrent(signal) : Promise.resolve(null),
         canViewCurrency ? api.get<any>('/tools/exchange-rate', { signal }) : Promise.resolve(null),
         tenantId && canViewCompany ? api.get<any>(`/tenants/${tenantId}/industries`, { signal }) : Promise.resolve([]),
         scenario === 'superadmin' && canViewModulePricing ? modulePricingService.getAll(signal) : Promise.resolve([]),
         // Los roles se administran exclusivamente desde Mi Empresa > Mi Equipo.
         Promise.resolve([]),
-        tenantId && canViewWarehouses ? api.get<any>('/inventory/warehouses', { signal }) : Promise.resolve([]),
         tenantId && (user?.isTenantAdmin || canPerform('SUBSCRIPTIONS', 'view'))
           ? subscriptionsService.getEnabledModules(tenantId, undefined, signal)
           : Promise.resolve(user?.enabledModules || []),
       ]);
-      return { branding, currency, industries, pricing, roles: rolesData, warehouses: warehouseData, modules };
+      return { branding, currency, industries, pricing, roles: rolesData, modules };
     },
     { enabled: Boolean(user), onError: (error) => toast.error(error.message || 'Error cargando configuración') },
   );
@@ -937,7 +925,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     const currency = configurationData.currency as any;
     const industries = asList(configurationData.industries);
     const rolesList = asList(configurationData.roles);
-    const warehouseList = asList(configurationData.warehouses);
     const pricingList = asList(configurationData.pricing);
     const modulesList = asList(configurationData.modules);
 
@@ -968,7 +955,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     setIndustryOptions(industries);
     setPricingData(pricingList);
     setRoles(rolesList);
-    setWarehouses(warehouseList);
     setEnabledModules(modulesList);
   }, [configurationData]);
 
@@ -1634,35 +1620,6 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
               </CardContent>
             </Card>
           </motion.div>
-
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="border-b border-border/30 bg-muted/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 font-black"><Building2 className="size-5 text-primary" />Sucursales</CardTitle>
-                    <CardDescription>Gestiona las sucursales de tu empresa</CardDescription>
-                  </div>
-                  {canCreateWarehouses && <Button onClick={() => { setSucursalModalOpen(true); fetchWarehouses(); }} className="rounded-xl gap-2 font-black text-xs uppercase tracking-widest h-10">
-                    <Plus className="size-4" />Crear Sucursal
-                  </Button>}
-                </div>
-              </CardHeader>
-            </Card>
-          </motion.div>
-
-          <Dialog open={sucursalModalOpen} onOpenChange={setSucursalModalOpen}>
-            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogTitle>Sucursales</DialogTitle>
-              <SucursalesView
-                permissionModule="COMPANY_BRANCHES"
-                warehouses={warehouses}
-                onRefresh={() => {}}
-                isModal
-                autoOpenCreate
-              />
-            </DialogContent>
-          </Dialog>
 
           {/* Role Edit Dialog */}
           <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>

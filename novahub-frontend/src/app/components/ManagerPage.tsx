@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { Building2, Boxes, Download, Landmark, LayoutDashboard, Package, Plus, ShieldCheck, Users, Warehouse, Cloud, RefreshCw, Tags, ArrowRight, BarChart3, ArrowRightLeft } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Building2, Boxes, Download, FileStack, KeyRound, Landmark, Package, Pencil, Plus, ShieldCheck, Trash2, Users, Warehouse, Cloud, RefreshCw, Tags, ArrowRight, BarChart3, ArrowRightLeft, UserCheck, UserX } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -10,29 +11,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { enterpriseGroupsService, type ManagerOverview } from '../services/enterprise-groups.service';
-
-type ManagerSection = 'overview' | 'inventory' | 'accounting' | 'users' | 'warehouses' | 'managers' | 'catalog' | 'consolidated' | 'transfers';
-
-const sections: Array<{ id: ManagerSection; label: string; icon: typeof LayoutDashboard }> = [
-  { id: 'overview', label: 'Resumen', icon: LayoutDashboard },
-  { id: 'inventory', label: 'Inventario consolidado', icon: Boxes },
-  { id: 'accounting', label: 'Contabilidad y finanzas', icon: Landmark },
-  { id: 'consolidated', label: 'Estados Financieros', icon: BarChart3 },
-  { id: 'transfers', label: 'Transferencias', icon: ArrowRightLeft },
-  { id: 'users', label: 'Usuarios', icon: Users },
-  { id: 'warehouses', label: 'Almacenes', icon: Warehouse },
-  { id: 'catalog', label: 'Catálogo compartido', icon: Tags },
-  { id: 'managers', label: 'Accesos Manager', icon: ShieldCheck },
-];
+import { MANAGER_SECTIONS, ManagerShell, type ManagerSection } from './ManagerShell';
+import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
+import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
-const formatBytes = (value: unknown) => {
+const formatStorage = (value: unknown) => {
   const bytes = Number(value || 0);
-  if (!bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let amount = bytes;
+  let unitIndex = -1;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 };
 
 function downloadCsv(name: string, rows: Array<Record<string, unknown>>) {
@@ -47,34 +42,64 @@ function downloadCsv(name: string, rows: Array<Record<string, unknown>>) {
   URL.revokeObjectURL(url);
 }
 
+async function readSpreadsheet(file: File) {
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return sheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }) : [];
+}
+
 export function ManagerPage() {
   const [section, setSection] = useState<ManagerSection>('overview');
-  const [selectedGroupId, setSelectedGroupId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [warehouseName, setWarehouseName] = useState('');
   const [warehouseLocation, setWarehouseLocation] = useState('');
-  const [managerUserId, setManagerUserId] = useState('');
+  const [warehouseBusinessUnitId, setWarehouseBusinessUnitId] = useState('');
+  const [warehouseBranchIds, setWarehouseBranchIds] = useState<string[]>([]);
+  const [editingManagerId, setEditingManagerId] = useState('');
+  const [managerName, setManagerName] = useState('');
+  const [managerEmail, setManagerEmail] = useState('');
+  const [managerPassword, setManagerPassword] = useState('');
   const [managerBranchIds, setManagerBranchIds] = useState<string[]>([]);
+  const [managerCanManageManagers, setManagerCanManageManagers] = useState(false);
+  const [managerCanEdit, setManagerCanEdit] = useState(false);
+  const [managerPermissionState, setManagerPermissionState] = useState<ManagerPermissionState>(defaultManagerPermissionState);
+  const [editingBranchUser, setEditingBranchUser] = useState<any | null>(null);
   const [catalogSourceBranchId, setCatalogSourceBranchId] = useState('');
   const [catalogProductIds, setCatalogProductIds] = useState<string[]>([]);
   const [catalogTargetBranchIds, setCatalogTargetBranchIds] = useState<string[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [inventoryImportSourceBranchId, setInventoryImportSourceBranchId] = useState('');
+  const [inventoryImportBranchIds, setInventoryImportBranchIds] = useState<string[]>([]);
+  const [inventoryImportRows, setInventoryImportRows] = useState<any[]>([]);
+  const [inventoryImportFileName, setInventoryImportFileName] = useState('');
+  const [inventoryImportPriceMode, setInventoryImportPriceMode] = useState<'SAME' | 'BY_BRANCH'>('SAME');
+  const [inventoryPricesByBranch, setInventoryPricesByBranch] = useState<Record<string, Record<string, string>>>({});
+  const [inventoryWarehouseByBranch, setInventoryWarehouseByBranch] = useState<Record<string, string>>({});
+  const [accountingImportUnitId, setAccountingImportUnitId] = useState('');
+  const [accountingImportBranchIds, setAccountingImportBranchIds] = useState<string[]>([]);
+  const [accountingImportRows, setAccountingImportRows] = useState<any[]>([]);
+  const [accountingImportFileName, setAccountingImportFileName] = useState('');
   const { enterBranch } = useImpersonation();
 
   const groupsQuery = useTenantQuery(['manager-groups'], (signal) => enterpriseGroupsService.getManagerGroups(signal));
   const groups = groupsQuery.data || [];
-  const groupId = selectedGroupId || groups[0]?.id || '';
-  const group = groups.find((item) => item.id === groupId);
+  const groupId = groups[0]?.id || '';
+  const group = groups[0];
+  const allowedSections = useMemo(() => getAllowedManagerSections(group?.managerAccess), [group?.managerAccess]);
+  const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS'), [group?.managerAccess]);
+  const canEditBranchUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'edit'), [group?.managerAccess]);
+  const canManageManagersFromUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_MANAGERS', 'manage'), [group?.managerAccess]);
 
   useEffect(() => {
-    if (groupId && !selectedGroupId) setSelectedGroupId(groupId);
     if (selectedBranchId && !group?.branches.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
-  }, [groupId, selectedGroupId, selectedBranchId, group]);
+    if (!allowedSections.includes(section) && allowedSections[0]) setSection(allowedSections[0]);
+  }, [groupId, selectedBranchId, group, allowedSections, section]);
 
   const overviewQuery = useTenantQuery(
     ['manager-overview', groupId, selectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getOverview(groupId, selectedBranchId || undefined, signal),
-    { enabled: Boolean(groupId) },
+    { enabled: Boolean(groupId) && allowedSections.includes('overview') },
   );
   const inventoryQuery = useTenantQuery(
     ['manager-inventory', groupId, selectedBranchId || 'all'],
@@ -89,7 +114,7 @@ export function ManagerPage() {
   const usersQuery = useTenantQuery(
     ['manager-users', groupId, selectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getUsers(groupId, selectedBranchId || undefined, signal),
-    { enabled: Boolean(groupId) && (section === 'users' || section === 'managers') },
+    { enabled: Boolean(groupId) && section === 'users' },
   );
   const managersQuery = useTenantQuery(
     ['manager-assignments', groupId],
@@ -108,13 +133,42 @@ export function ManagerPage() {
   );
 
   const warehouseMutation = useMutation({
-    mutationFn: () => enterpriseGroupsService.createWarehouse(groupId, { name: warehouseName, location: warehouseLocation, scopeType: 'GROUP' }),
-    onSuccess: () => { setWarehouseName(''); setWarehouseLocation(''); overviewQuery.refetch(); toast.success('Almacén corporativo creado'); },
+    mutationFn: () => enterpriseGroupsService.createWarehouse(groupId, { name: warehouseName, location: warehouseLocation, businessUnitId: warehouseBusinessUnitId, scopeType: 'BUSINESS_UNIT', authorizedBranchIds: warehouseBranchIds }),
+    onSuccess: () => { setWarehouseName(''); setWarehouseLocation(''); setWarehouseBusinessUnitId(''); setWarehouseBranchIds([]); overviewQuery.refetch(); toast.success('Almacén agregado'); },
     onError: (error: Error) => toast.error(error.message),
   });
+  const syncWarehouseCatalogMutation = useMutation({
+    mutationFn: (warehouseId: string) => enterpriseGroupsService.syncCorporateWarehouseCatalog(groupId, warehouseId),
+    onSuccess: (result: any) => { void overviewQuery.refetch(); toast.success(`Catálogo preparado: ${result.productsLinked || 0} producto(s), ${result.stockLevelsCreated || 0} registro(s) en cero`); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const managerPayload = () => ({ name: managerName.trim(), email: managerEmail.trim(), ...(managerPassword ? { password: managerPassword } : {}), branchIds: managerBranchIds, permissions: managerStateToPermissions(managerPermissionState), canEdit: managerCanEdit, canManageManagers: managerCanManageManagers });
+  const resetManagerForm = () => { setEditingManagerId(''); setManagerName(''); setManagerEmail(''); setManagerPassword(''); setManagerBranchIds([]); setManagerCanManageManagers(false); setManagerCanEdit(false); setManagerPermissionState(defaultManagerPermissionState()); };
   const managerMutation = useMutation({
-    mutationFn: () => enterpriseGroupsService.assignManager(groupId, { userId: managerUserId, branchIds: managerBranchIds, canEdit: false, canManageManagers: false }),
-    onSuccess: () => { setManagerUserId(''); setManagerBranchIds([]); managersQuery.refetch(); toast.success('Acceso Manager asignado'); },
+    mutationFn: () => editingManagerId
+      ? enterpriseGroupsService.updateManager(groupId, editingManagerId, managerPayload())
+      : enterpriseGroupsService.createManager(groupId, { ...managerPayload(), password: managerPassword }),
+    onSuccess: () => { const wasEditing = Boolean(editingManagerId); resetManagerForm(); managersQuery.refetch(); toast.success(wasEditing ? 'Manager actualizado' : 'Manager creado'); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const managerPasswordMutation = useMutation({
+    mutationFn: ({ userId, password }: { userId: string; password: string }) => enterpriseGroupsService.updateManagerPassword(groupId, userId, password),
+    onSuccess: () => toast.success('Contraseña de Manager actualizada'),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const revokeManagerMutation = useMutation({
+    mutationFn: (userId: string) => enterpriseGroupsService.revokeManager(groupId, userId),
+    onSuccess: () => { managersQuery.refetch(); toast.success('Acceso Manager revocado'); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const branchUserMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: string; payload: { name?: string; email?: string; password?: string; isActive?: boolean } }) => enterpriseGroupsService.updateBranchUser(groupId, userId, payload),
+    onSuccess: () => {
+      setEditingBranchUser(null);
+      void usersQuery.refetch();
+      void overviewQuery.refetch();
+      toast.success('Usuario de sucursal actualizado');
+    },
     onError: (error: Error) => toast.error(error.message),
   });
   const shareCatalogMutation = useMutation({
@@ -129,7 +183,29 @@ export function ManagerPage() {
   });
   const syncMutation = useMutation({
     mutationFn: (productId: string) => enterpriseGroupsService.syncFromMaster(groupId, { productId }),
-    onSuccess: (result) => { sharedCatalogQuery.refetch(); toast.success(`Espejos sincronizados: ${result.synced}`); },
+    onSuccess: (result: any) => { sharedCatalogQuery.refetch(); toast.success(`Espejos sincronizados: ${result.synced}`); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const inventoryImportMutation = useMutation({
+    mutationFn: () => enterpriseGroupsService.importSharedInventory(groupId, {
+      sourceBranchId: inventoryImportSourceBranchId,
+      branchIds: inventoryImportBranchIds,
+      warehouseByBranch: inventoryWarehouseByBranch,
+      priceMode: inventoryImportPriceMode,
+      pricesByBranch: inventoryPricesByBranch,
+      rows: inventoryImportRows.map((row) => ({
+        code: row.code ?? row.codigo ?? row.Código ?? row.SKU ?? row.sku,
+        stock: row.stock ?? row.cantidad ?? row.Stock ?? row.Cantidad,
+        salePrice: row.salePrice ?? row.precio ?? row.precio_venta ?? row.Precio ?? row['Precio de venta'],
+        costPrice: row.costPrice ?? row.costo ?? row.costo_unitario ?? row.Costo,
+      })),
+    }),
+    onSuccess: (result: any) => { setInventoryImportRows([]); setInventoryImportFileName(''); inventoryQuery.refetch(); overviewQuery.refetch(); toast.success(`Inventario aplicado a ${result.stockUpdated} ubicación(es)`); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const accountingImportMutation = useMutation({
+    mutationFn: () => enterpriseGroupsService.importSharedAccounts(groupId, { businessUnitId: accountingImportUnitId, branchIds: accountingImportBranchIds, rows: accountingImportRows }),
+    onSuccess: (result: any) => { setAccountingImportRows([]); setAccountingImportFileName(''); accountingQuery.refetch(); toast.success(`Plan de cuentas propagado a ${result.branches?.length || 0} sucursal(es)`); },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -162,109 +238,199 @@ export function ManagerPage() {
   );
 
   const overview = overviewQuery.data as ManagerOverview | undefined;
-  const metrics = overview?.metrics;
   const branchOptions = group?.branches || [];
-  const managerCandidates = usersQuery.data?.filter((user) => ['MANAGER', 'ADMIN'].includes(String(user.role).toUpperCase())) || [];
-  const catalogSourceOptions = branchOptions.filter((branch) => branch.id === selectedBranchId || !selectedBranchId);
   const catalogProducts = branchProductsQuery.data || [];
-  const activeTitle = sections.find((item) => item.id === section)?.label;
+  const activeTitle = MANAGER_SECTIONS.find((item) => item.id === section)?.label;
   const loading = groupsQuery.isLoading || (section === 'overview' && overviewQuery.isLoading);
 
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <div className="border-b border-border/60 bg-card/40 px-4 py-4 sm:px-6 lg:px-10">
-        <div className="mx-auto flex max-w-[1700px] flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Building2 className="size-6" /></div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">NovaHub Manager</p>
-              <h1 className="truncate text-2xl font-black uppercase tracking-tight italic">Control empresarial</h1>
-              <p className="truncate text-sm text-muted-foreground">Consolidado por grupo, unidad, sucursal y almacén.</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <select aria-label="Grupo empresarial" value={groupId} onChange={(event) => { setSelectedGroupId(event.target.value); setSelectedBranchId(''); }} className="h-10 min-w-[220px] max-w-full rounded-xl border border-border bg-background px-3 text-sm font-semibold">
-              {groups.length === 0 && <option value="">Sin grupos asignados</option>}
-              {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <select aria-label="Filtrar sucursal" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} className="h-10 min-w-[220px] max-w-full rounded-xl border border-border bg-background px-3 text-sm">
-              <option value="">Todas las sucursales</option>
-              {branchOptions.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            </select>
-            <Button variant="outline" className="h-10 rounded-xl" onClick={() => overviewQuery.refetch()} aria-label="Actualizar panel"><RefreshCw className="mr-2 size-4" /> Actualizar</Button>
-          </div>
+    <ManagerShell
+      section={section}
+      onSectionChange={setSection}
+      group={group}
+      branches={branchOptions}
+      allowedSections={allowedSections}
+      selectedBranchId={selectedBranchId}
+      onBranchChange={setSelectedBranchId}
+    >
+      <div className="min-w-0 space-y-6">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2><p className="mt-2 text-sm text-muted-foreground">Consolidado por grupo, rubro, sucursal y ubicación.</p></div>
+          <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, section === 'inventory' ? (inventoryQuery.data || []).map((row: any) => ({ producto: row.product?.name, codigo: row.product?.code, sucursal: row.clientTenant?.name, almacen: row.warehouse?.name, cantidad: row.quantity, reservado: row.reserved })) : (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
         </div>
+
+        {loading && <div className="flex min-h-[240px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando consolidado...</div>}
+        {!loading && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
+
+        {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
+        {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
+        {section === 'inventory' && <InventoryContent data={inventoryQuery.data || []} loading={inventoryQuery.isLoading} branches={overview?.branches || []} warehouses={overview?.warehouses || []} search={inventorySearch} setSearch={setInventorySearch} importSourceBranchId={inventoryImportSourceBranchId} setImportSourceBranchId={(value) => { setInventoryImportSourceBranchId(value); setInventoryImportBranchIds([]); setInventoryWarehouseByBranch({}); }} importBranchIds={inventoryImportBranchIds} setImportBranchIds={setInventoryImportBranchIds} importRows={inventoryImportRows} setImportRows={setInventoryImportRows} importFileName={inventoryImportFileName} setImportFileName={setInventoryImportFileName} priceMode={inventoryImportPriceMode} setPriceMode={setInventoryImportPriceMode} pricesByBranch={inventoryPricesByBranch} setPricesByBranch={setInventoryPricesByBranch} warehouseByBranch={inventoryWarehouseByBranch} setWarehouseByBranch={setInventoryWarehouseByBranch} onImport={() => inventoryImportMutation.mutate()} importing={inventoryImportMutation.isPending} />}
+        {section === 'accounting' && <AccountingContent data={accountingQuery.data} loading={accountingQuery.isLoading} units={group?.businessUnits || []} branches={overview?.branches || []} importUnitId={accountingImportUnitId} setImportUnitId={(value) => { setAccountingImportUnitId(value); setAccountingImportBranchIds([]); }} importBranchIds={accountingImportBranchIds} setImportBranchIds={setAccountingImportBranchIds} importRows={accountingImportRows} setImportRows={setAccountingImportRows} importFileName={accountingImportFileName} setImportFileName={setAccountingImportFileName} onImport={() => accountingImportMutation.mutate()} importing={accountingImportMutation.isPending} />}
+        {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
+        {section === 'warehouses' && <WarehouseContent overview={overview} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />}
+        {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
+        {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
+        {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} />}
+        {section === 'managers' && <ManagersContent data={managersQuery.data || []} branches={branchOptions} canEditOwner={Boolean(!group?.managerAccess || group.managerAccess.isOwner)} editingManagerId={editingManagerId} name={managerName} email={managerEmail} password={managerPassword} branchIds={managerBranchIds} canManageManagers={managerCanManageManagers} canEdit={managerCanEdit} permissionState={managerPermissionState} setEditingManagerId={setEditingManagerId} setName={setManagerName} setEmail={setManagerEmail} setPassword={setManagerPassword} setBranchIds={setManagerBranchIds} setCanManageManagers={setManagerCanManageManagers} setCanEdit={setManagerCanEdit} setPermissionState={setManagerPermissionState} onReset={resetManagerForm} onSave={() => managerMutation.mutate()} saving={managerMutation.isPending} onPassword={(userId, password) => managerPasswordMutation.mutate({ userId, password })} resettingPassword={managerPasswordMutation.isPending} onRevoke={(userId) => revokeManagerMutation.mutate(userId)} revoking={revokeManagerMutation.isPending} />}
       </div>
-
-      <div className="mx-auto flex max-w-[1700px] flex-col gap-6 p-4 sm:p-6 md:p-10 lg:flex-row">
-        <aside className="w-full shrink-0 lg:w-64">
-          <div className="flex gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-card/30 p-2 lg:block lg:space-y-1 lg:overflow-visible">
-            {sections.map((item) => {
-              const Icon = item.icon;
-              const active = section === item.id;
-              return <button key={item.id} onClick={() => setSection(item.id)} className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors lg:w-full ${active ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/15' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`} aria-current={active ? 'page' : undefined}><Icon className="size-4" /><span>{item.label}</span></button>;
-            })}
-          </div>
-          <Card className="mt-4 hidden rounded-2xl border-border/60 bg-card/40 lg:flex">
-            <CardContent className="p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-primary">Alcance activo</p><p className="mt-2 leading-relaxed">Las métricas respetan las sucursales y almacenes autorizados para tu acceso.</p><p className="mt-3 rounded-lg bg-muted/40 p-2 font-semibold text-foreground">{overview?.inventoryScopeLabel || 'Solo inventario propio'}</p></CardContent>
-          </Card>
-        </aside>
-
-        <main className="min-w-0 flex-1 space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div><p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">Panel Manager / {group?.name || '...'}</p><h2 className="mt-1 text-2xl font-black tracking-tight">{activeTitle}</h2></div>
-            <Button variant="outline" className="w-fit rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, section === 'inventory' ? (inventoryQuery.data || []).map((row: any) => ({ producto: row.product?.name, codigo: row.product?.code, sucursal: row.clientTenant?.name, almacen: row.warehouse?.name, cantidad: row.quantity, reservado: row.reserved })) : (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
-          </div>
-
-          {loading && <div className="flex min-h-[240px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando consolidado...</div>}
-          {!loading && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
-
-          {!loading && groupId && section === 'overview' && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} />}
-          {section === 'inventory' && <InventoryContent data={inventoryQuery.data || []} loading={inventoryQuery.isLoading} />}
-          {section === 'accounting' && <AccountingContent data={accountingQuery.data} loading={accountingQuery.isLoading} />}
-          {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} />}
-          {section === 'warehouses' && <WarehouseContent overview={overview} name={warehouseName} location={warehouseLocation} setName={setWarehouseName} setLocation={setWarehouseLocation} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} />}
-          {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
-          {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
-          {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} />}
-          {section === 'managers' && <ManagersContent data={managersQuery.data || []} users={managerCandidates} selectedUserId={managerUserId} setSelectedUserId={setManagerUserId} branches={branchOptions} branchIds={managerBranchIds} setBranchIds={setManagerBranchIds} onAssign={() => managerMutation.mutate()} assigning={managerMutation.isPending} />}
-        </main>
-      </div>
-    </div>
+      <ManagerUserEditorDialog user={editingBranchUser} open={Boolean(editingBranchUser)} saving={branchUserMutation.isPending} onOpenChange={(open) => { if (!open) setEditingBranchUser(null); }} onSave={(payload) => { if (editingBranchUser?.id) branchUserMutation.mutate({ userId: editingBranchUser.id, payload }); }} />
+    </ManagerShell>
   );
 }
 
-function OverviewContent({ overview, groupId, onEnterBranch }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void> }) {
+function defaultManagerPermissionState(): ManagerPermissionState {
+  const state = emptyManagerPermissionState();
+  ['MANAGER_OVERVIEW', 'MANAGER_INVENTORY', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
+  return state;
+}
+
+const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
+  overview: 'MANAGER_OVERVIEW',
+  inventory: 'MANAGER_INVENTORY',
+  accounting: 'MANAGER_ACCOUNTING',
+  consolidated: 'MANAGER_CONSOLIDATED',
+  transfers: 'MANAGER_TRANSFERS',
+  catalog: 'MANAGER_CATALOG',
+  users: 'MANAGER_USERS',
+  warehouses: 'MANAGER_WAREHOUSES',
+  managers: 'MANAGER_MANAGERS',
+};
+
+function getAllowedManagerSections(access?: ManagerOverview['group']['managerAccess']): ManagerSection[] {
+  if (!access || access.isOwner) return MANAGER_SECTIONS.map((item) => item.id);
+  const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
+  return MANAGER_SECTIONS.filter((item) => {
+    if (item.id === 'settings') return true;
+    const module = MANAGER_SECTION_MODULES[item.id];
+    const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
+    return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
+  }).map((item) => item.id);
+}
+
+function managerAccessAllows(access: ManagerOverview['group']['managerAccess'], module: string) {
+  if (!access || access.isOwner) return true;
+  const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
+  const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
+  return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
+}
+
+function managerAccessAllowsAction(access: ManagerOverview['group']['managerAccess'], module: string, action: string) {
+  if (!access || access.isOwner) return true;
+  const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
+  const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
+  return Boolean(permission && (permission[action] === true || permission.manage === true));
+}
+
+function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = true }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean }) {
   const metrics = overview?.metrics;
   const cards = [
     { label: 'Sucursales visibles', value: metrics?.branches, icon: Building2, tone: 'text-blue-500 bg-blue-500/10' },
     { label: 'Usuarios generales', value: metrics?.users, icon: Users, tone: 'text-violet-500 bg-violet-500/10' },
+    { label: 'Usuarios activos', value: metrics?.activeUsers, icon: ShieldCheck, tone: 'text-cyan-500 bg-cyan-500/10' },
     { label: 'Unidades en inventario', value: metrics?.inventoryUnits, icon: Package, tone: 'text-emerald-500 bg-emerald-500/10' },
-    { label: 'Almacenamiento registrado', value: formatBytes(metrics?.storageBytes), icon: Cloud, tone: 'text-amber-500 bg-amber-500/10' },
+    { label: 'Archivos almacenados', value: formatStorage(metrics?.storageBytes), icon: Cloud, tone: 'text-amber-500 bg-amber-500/10' },
+    { label: 'Objetos registrados', value: metrics?.storageObjects, icon: FileStack, tone: 'text-orange-500 bg-orange-500/10' },
   ];
   return <>
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-      <Card className="rounded-3xl border-border/60 xl:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Building2 className="size-5 text-primary" /> Distribución por sucursal</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead>Rubro</TableHead><TableHead>Usuarios</TableHead><TableHead>Productos</TableHead><TableHead>Almacenes</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{(overview?.branches || []).map((branch) => <TableRow key={branch.id}><TableCell className="font-semibold">{branch.name}</TableCell><TableCell><Badge variant="outline">{String(branch.industry || 'OTRO')}</Badge></TableCell><TableCell>{formatNumber(branch._count.users)}</TableCell><TableCell>{formatNumber(branch._count.products)}</TableCell><TableCell>{formatNumber(branch._count.warehouses)}</TableCell><TableCell className="text-right">{onEnterBranch && groupId && <Button variant="ghost" size="sm" className="gap-1.5 text-xs font-bold text-primary hover:text-primary/80" onClick={() => onEnterBranch(groupId, branch.id)}><ArrowRight className="size-3.5" /> Trabajar</Button>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-      <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Landmark className="size-5 text-primary" /> Cuentas emparejadas</CardTitle></CardHeader><CardContent className="space-y-3">{(overview?.accounts || []).slice(0, 8).map((account) => <div key={account.code} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 p-3"><div><p className="font-mono text-xs text-primary">{account.code}</p><p className="text-sm font-semibold">{account.name}</p></div><p className="font-black tabular-nums">{formatNumber(account.totalBalance)}</p></div>)}{!overview?.accounts?.length && <p className="text-sm text-muted-foreground">Aún no hay cuentas contables para consolidar.</p>}</CardContent></Card>
+      <Card className="rounded-3xl border-border/60 xl:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Building2 className="size-5 text-primary" /> Distribución por sucursal</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead>Rubro</TableHead><TableHead>Usuarios</TableHead><TableHead>Productos</TableHead><TableHead>Almacenes</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{(overview?.branches || []).map((branch) => <TableRow key={branch.id}><TableCell className="font-semibold">{branch.name}</TableCell><TableCell><Badge variant="outline">{String(branch.industry || 'OTRO')}</Badge></TableCell><TableCell>{formatNumber(branch._count.users)}</TableCell><TableCell>{formatNumber(branch._count.products)}</TableCell><TableCell>{formatNumber(branch._count.warehouses)}</TableCell><TableCell className="text-right">{onEnterBranch && canEnterBranch && groupId && <Button variant="ghost" size="sm" className="gap-1.5 text-xs font-bold text-primary hover:text-primary/80" onClick={() => onEnterBranch(groupId, branch.id)}><ArrowRight className="size-3.5" /> Trabajar</Button>}{onEnterBranch && !canEnterBranch && <span className="text-xs text-muted-foreground">Solo consulta</span>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+      <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Cuentas emparejadas</CardTitle></CardHeader><CardContent className="space-y-3">{(overview?.accounts || []).slice(0, 8).map((account) => <div key={account.code} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 p-3"><div><p className="font-mono text-xs text-primary">{account.code}</p><p className="text-sm font-semibold">{account.name}</p></div><p className="font-black tabular-nums">{formatNumber(account.totalBalance)}</p></div>)}{!overview?.accounts?.length && <p className="text-sm text-muted-foreground">Aún no hay cuentas contables para consolidar.</p>}</CardContent></Card>
     </div>
   </>;
 }
 
-function InventoryContent({ data, loading }: { data: any[]; loading: boolean }) { return <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Boxes className="size-5 text-primary" /> Existencias por producto, sucursal y ubicación</CardTitle></CardHeader><CardContent>{loading ? <div className="p-8 text-center text-muted-foreground">Cargando inventario...</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Sucursal</TableHead><TableHead>Ubicación</TableHead><TableHead className="text-right">Cantidad</TableHead><TableHead className="text-right">Reservado</TableHead></TableRow></TableHeader><TableBody>{data.map((row) => <TableRow key={row.id}><TableCell><p className="font-semibold">{row.product?.name}</p><p className="font-mono text-xs text-muted-foreground">{row.product?.code}</p></TableCell><TableCell>{row.clientTenant?.name}</TableCell><TableCell><Badge variant="outline">{row.warehouse?.name}</Badge><span className="ml-2 text-xs text-muted-foreground">{row.warehouse?.scopeType}</span></TableCell><TableCell className="text-right font-bold">{formatNumber(row.quantity)}</TableCell><TableCell className="text-right">{formatNumber(row.reserved)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card>; }
+function InventoryContent({ data, loading, branches, warehouses, search, setSearch, importSourceBranchId, setImportSourceBranchId, importBranchIds, setImportBranchIds, importRows, setImportRows, importFileName, setImportFileName, priceMode, setPriceMode, pricesByBranch, setPricesByBranch, warehouseByBranch, setWarehouseByBranch, onImport, importing }: {
+  data: any[]; loading: boolean; branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
+  warehouses: Array<{ id: string; name: string; clientTenantId: string | null; businessUnitId?: string | null; authorizedBranchIds?: string[] }>;
+  search: string; setSearch: (value: string) => void; importSourceBranchId: string; setImportSourceBranchId: (value: string) => void;
+  importBranchIds: string[]; setImportBranchIds: (value: string[]) => void; importRows: any[]; setImportRows: (value: any[]) => void;
+  importFileName: string; setImportFileName: (value: string) => void; priceMode: 'SAME' | 'BY_BRANCH'; setPriceMode: (value: 'SAME' | 'BY_BRANCH') => void; pricesByBranch: Record<string, Record<string, string>>; setPricesByBranch: (value: Record<string, Record<string, string>>) => void;
+  warehouseByBranch: Record<string, string>; setWarehouseByBranch: (value: Record<string, string>) => void; onImport: () => void; importing: boolean;
+}) {
+  const term = search.trim().toLowerCase();
+  const filtered = data.filter((row) => !term || [row.product?.name, row.product?.code, row.clientTenant?.name, row.warehouse?.name].some((value) => String(value || '').toLowerCase().includes(term)));
+  const grouped = Array.from(filtered.reduce((map, row) => {
+    const key = row.product?.id || row.product?.code || row.id;
+    const current = map.get(key) || { key, product: row.product, total: 0, reserved: 0, locations: [] as any[] };
+    current.total += Number(row.quantity || 0); current.reserved += Number(row.reserved || 0); current.locations.push(row); map.set(key, current); return map;
+  }, new Map<string, any>()).values());
+  const source = branches.find((branch) => branch.id === importSourceBranchId);
+  const targetBranches = branches.filter((branch) => branch.businessUnitId === source?.businessUnitId);
+  const toggleBranch = (id: string) => setImportBranchIds(importBranchIds.includes(id) ? importBranchIds.filter((value) => value !== id) : [...importBranchIds, id]);
+  const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    try { setImportRows(await readSpreadsheet(file)); setImportFileName(file.name); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo leer el archivo'); }
+  };
+  const rowCode = (row: any) => String(row.code ?? row.codigo ?? row.Código ?? row.SKU ?? row.sku ?? '').trim();
+  const updateBranchPrice = (branchId: string, code: string, value: string) => setPricesByBranch({ ...pricesByBranch, [branchId]: { ...(pricesByBranch[branchId] || {}), [code]: value } });
+  return <div className="space-y-6">
+    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Boxes className="size-5 text-primary" /> Inventario consolidado por producto y bodega</CardTitle><p className="text-sm text-muted-foreground">Consulta el total y abre el desglose por sucursal, bodega y cantidad reservada.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.length)}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.reduce((sum, row) => sum + row.total, 0))}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ubicaciones</p><p className="mt-1 text-2xl font-black">{formatNumber(filtered.length)}</p></div></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar producto, SKU, sucursal o bodega..." className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm" />{loading ? <div className="p-8 text-center text-muted-foreground">Cargando inventario...</div> : !grouped.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay existencias para este filtro.</p> : <div className="space-y-3">{grouped.map((row) => <div key={row.key} className="rounded-2xl border border-border/60 bg-muted/10 p-4"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate font-bold">{row.product?.name || 'Producto sin nombre'}</p><p className="font-mono text-xs text-muted-foreground">{row.product?.code || 'Sin código'}</p></div><div className="flex shrink-0 gap-4 text-right text-sm"><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Total</span><b>{formatNumber(row.total)}</b></span><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Reservado</span><b>{formatNumber(row.reserved)}</b></span></div></div><div className="mt-3 grid gap-2 md:grid-cols-2">{row.locations.map((location: any) => <div key={location.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 bg-background p-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{location.clientTenant?.name || 'Sucursal'}</p><p className="truncate text-xs text-muted-foreground">{location.warehouse?.name || 'Bodega'} · {location.warehouse?.scopeType === 'BUSINESS_UNIT' ? 'Almacén corporativo' : 'Bodega'}</p></div><span className="shrink-0 font-black tabular-nums">{formatNumber(location.quantity)}</span></div>)}</div></div>)}</div>}</CardContent></Card>
+    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Download className="size-5 text-primary" /> Importar stock por rubro</CardTitle><p className="text-sm text-muted-foreground">La importación usa el catálogo de una sucursal y lo replica únicamente en sucursales del mismo rubro.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-3"><select value={importSourceBranchId} onChange={(event) => setImportSourceBranchId(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="">Sucursal de origen</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select><select value={priceMode} onChange={(event) => setPriceMode(event.target.value as 'SAME' | 'BY_BRANCH')} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="SAME">Usar el precio del catálogo</option><option value="BY_BRANCH">Precio indicado por sucursal</option></select><label className="flex h-10 cursor-pointer items-center justify-center rounded-xl border border-dashed border-border px-3 text-sm font-semibold hover:bg-muted/40"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{importFileName || 'Seleccionar Excel/CSV'}</label></div><div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><div className="rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales destino del rubro</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{targetBranches.map((branch) => <label key={branch.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/50 p-2 text-sm"><input type="checkbox" checked={importBranchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!source && <p className="text-xs text-muted-foreground">Selecciona una sucursal de origen.</p>}</div></div><div className="rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Bodega o almacén receptor</p><div className="mt-2 space-y-2">{targetBranches.filter((branch) => importBranchIds.includes(branch.id)).map((branch) => { const options = warehouses.filter((warehouse) => warehouse.clientTenantId === branch.id || warehouse.authorizedBranchIds?.includes(branch.id)); return <label key={branch.id} className="flex min-w-0 items-center gap-2 text-sm"><span className="w-28 shrink-0 truncate font-semibold">{branch.name}</span><select value={warehouseByBranch[branch.id] || ''} onChange={(event) => setWarehouseByBranch({ ...warehouseByBranch, [branch.id]: event.target.value })} className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-background px-2 text-xs"><option value="">Automático</option>{options.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>; })}</div></div></div>{importRows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Stock</TableHead><TableHead>Precio</TableHead><TableHead>Costo</TableHead></TableRow></TableHeader><TableBody>{importRows.slice(0, 8).map((row, index) => <TableRow key={index}><TableCell className="font-mono">{String(row.code ?? row.codigo ?? row.Código ?? row.SKU ?? row.sku ?? '-')}</TableCell><TableCell>{String(row.stock ?? row.cantidad ?? row.Stock ?? row.Cantidad ?? '-')}</TableCell><TableCell>{String(row.salePrice ?? row.precio ?? row.precio_venta ?? row.Precio ?? '-')}</TableCell><TableCell>{String(row.costPrice ?? row.costo ?? row.costo_unitario ?? row.Costo ?? '-')}</TableCell></TableRow>)}</TableBody></Table><p className="px-3 py-2 text-xs text-muted-foreground">Vista previa: {importRows.length} fila(s). Se aplicará todo en una sola transacción.</p></div>}{priceMode === 'BY_BRANCH' && importRows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Precios por sucursal (opcional)</p><div className="mt-2 min-w-[620px] space-y-2">{importRows.slice(0, 50).map((row, index) => <div key={rowCode(row) || index} className="grid grid-cols-[minmax(150px,1fr)_repeat(auto-fit,minmax(150px,1fr))] items-center gap-2 text-xs"><span className="truncate font-mono">{rowCode(row) || 'Sin código'}</span>{targetBranches.filter((branch) => importBranchIds.includes(branch.id)).map((branch) => <input key={branch.id} type="number" min="0" step="0.01" value={pricesByBranch[branch.id]?.[rowCode(row)] || ''} onChange={(event) => updateBranchPrice(branch.id, rowCode(row), event.target.value)} placeholder={branch.name} className="h-9 min-w-0 rounded-xl border border-border bg-background px-2" />)}</div>)}</div></div>}<Button className="w-full rounded-xl" disabled={!importSourceBranchId || !importBranchIds.length || !importRows.length || importing} onClick={onImport}>{importing ? 'Aplicando importación...' : 'Importar stock seleccionado'}</Button></CardContent></Card>
+  </div>;
+}
 
-function AccountingContent({ data, loading }: { data?: { accounts: any[]; transactions: any[] }; loading: boolean }) { return <div className="grid grid-cols-1 gap-6 xl:grid-cols-2"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Landmark className="size-5 text-primary" /> Catálogo contable consolidado</CardTitle></CardHeader><CardContent>{loading ? <div className="p-8 text-center text-muted-foreground">Cargando contabilidad...</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Cuenta</TableHead><TableHead>Sucursal</TableHead><TableHead className="text-right">Saldo</TableHead></TableRow></TableHeader><TableBody>{(data?.accounts || []).map((account, index) => <TableRow key={`${account.clientTenantId}-${account.code}-${index}`}><TableCell className="font-mono text-primary">{account.code}</TableCell><TableCell>{account.name}</TableCell><TableCell>{account.clientTenantId}</TableCell><TableCell className="text-right font-bold">{formatNumber(account.balance)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase">Últimos movimientos</CardTitle></CardHeader><CardContent><div className="space-y-2">{(data?.transactions || []).slice(0, 12).map((transaction) => <div key={transaction.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{transaction.description}</p><p className="text-xs text-muted-foreground">{transaction.clientTenant?.name} · {transaction.account?.code}</p></div><div className="shrink-0 text-right text-xs tabular-nums"><p className="text-emerald-500">D {formatNumber(transaction.debit)}</p><p className="text-rose-500">C {formatNumber(transaction.credit)}</p></div></div>)}</div></CardContent></Card></div>; }
+function AccountingContent({ data, loading, units, branches, importUnitId, setImportUnitId, importBranchIds, setImportBranchIds, importRows, setImportRows, importFileName, setImportFileName, onImport, importing }: { data?: { accounts: any[]; transactions: any[] }; loading: boolean; units: Array<{ id: string; name: string; isActive?: boolean }>; branches: Array<{ id: string; name: string; businessUnitId?: string | null }>; importUnitId: string; setImportUnitId: (value: string) => void; importBranchIds: string[]; setImportBranchIds: (value: string[]) => void; importRows: any[]; setImportRows: (value: any[]) => void; importFileName: string; setImportFileName: (value: string) => void; onImport: () => void; importing: boolean }) {
+  const targetBranches = branches.filter((branch) => branch.businessUnitId === importUnitId);
+  const toggleBranch = (id: string) => setImportBranchIds(importBranchIds.includes(id) ? importBranchIds.filter((value) => value !== id) : [...importBranchIds, id]);
+  const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; try { setImportRows(await readSpreadsheet(file)); setImportFileName(file.name); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo leer el archivo'); } };
+  return <div className="space-y-6"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Propagar plan de cuentas por rubro</CardTitle><p className="text-sm text-muted-foreground">Los códigos se emparejan en cada sucursal; los saldos y cuentas adicionales existentes se conservan.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><select value={importUnitId} onChange={(event) => { setImportUnitId(event.target.value); setImportBranchIds([]); }} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="">Seleccionar rubro</option>{units.filter((unit) => unit.isActive !== false).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><label className="flex h-10 cursor-pointer items-center justify-center rounded-xl border border-dashed border-border px-3 text-sm font-semibold hover:bg-muted/40"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{importFileName || 'Seleccionar Excel/CSV'}</label></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{targetBranches.map((branch) => <label key={branch.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/60 p-3 text-sm"><input type="checkbox" checked={importBranchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!importUnitId && <p className="text-xs text-muted-foreground">Selecciona un rubro para listar sus sucursales.</p>}</div>{importRows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Nombre</TableHead><TableHead>Tipo</TableHead><TableHead>Padre</TableHead></TableRow></TableHeader><TableBody>{importRows.slice(0, 8).map((row, index) => <TableRow key={index}><TableCell className="font-mono">{String(row.codigo ?? row.code ?? '-')}</TableCell><TableCell>{String(row.nombre ?? row.name ?? '-')}</TableCell><TableCell>{String(row.tipo_cuenta ?? row.type ?? '-')}</TableCell><TableCell>{String(row.codigo_padre ?? row.parentCode ?? '-')}</TableCell></TableRow>)}</TableBody></Table><p className="px-3 py-2 text-xs text-muted-foreground">Vista previa: {importRows.length} cuenta(s). La propagación es atómica.</p></div>}<Button className="w-full rounded-xl" disabled={!importUnitId || !importBranchIds.length || !importRows.length || importing} onClick={onImport}>{importing ? 'Propagando plan...' : 'Propagar plan a sucursales seleccionadas'}</Button></CardContent></Card><div className="grid grid-cols-1 gap-6 xl:grid-cols-2"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Catálogo contable consolidado</CardTitle></CardHeader><CardContent>{loading ? <div className="p-8 text-center text-muted-foreground">Cargando contabilidad...</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Cuenta</TableHead><TableHead>Sucursal</TableHead><TableHead className="text-right">Saldo</TableHead></TableRow></TableHeader><TableBody>{(data?.accounts || []).map((account, index) => <TableRow key={`${account.clientTenantId}-${account.code}-${index}`}><TableCell className="font-mono text-primary">{account.code}</TableCell><TableCell>{account.name}</TableCell><TableCell>{account.clientTenant?.name || account.clientTenantId}</TableCell><TableCell className="text-right font-bold">{formatNumber(account.balance)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Últimos movimientos</CardTitle></CardHeader><CardContent><div className="space-y-2">{(data?.transactions || []).slice(0, 12).map((transaction) => <div key={transaction.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{transaction.description}</p><p className="text-xs text-muted-foreground">{transaction.clientTenant?.name} · {transaction.account?.code}</p></div><div className="shrink-0 text-right text-xs tabular-nums"><p className="text-emerald-500">D {formatNumber(transaction.debit)}</p><p className="text-rose-500">C {formatNumber(transaction.credit)}</p></div></div>)}</div></CardContent></Card></div></div>;
+}
 
-function UsersContent({ data, loading }: { data: any[]; loading: boolean }) { return <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Users className="size-5 text-primary" /> Recuento general de usuarios</CardTitle></CardHeader><CardContent>{loading ? <div className="p-8 text-center text-muted-foreground">Cargando usuarios...</div> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Usuario</TableHead><TableHead>Rol</TableHead><TableHead>Sucursal</TableHead><TableHead>RR. HH.</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader><TableBody>{data.map((user) => <TableRow key={user.id}><TableCell><p className="font-semibold">{user.name}</p><p className="text-xs text-muted-foreground">{user.email}</p></TableCell><TableCell><Badge variant="outline">{user.role}</Badge></TableCell><TableCell>{user.clientTenant?.name}</TableCell><TableCell>{user.employee ? 'Vinculado' : 'Usuario independiente'}</TableCell><TableCell><Badge variant={user.isActive ? 'default' : 'secondary'}>{user.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card>; }
+function UsersContent({ data, loading, error, canEditUsers, canManageManagers, onEditUser, onToggleUser, togglingUserId, onCreateManager }: {
+  data: any[];
+  loading: boolean;
+  error?: Error | null;
+  canEditUsers: boolean;
+  canManageManagers: boolean;
+  onEditUser: (user: any) => void;
+  onToggleUser: (user: any) => void;
+  togglingUserId: string;
+  onCreateManager: () => void;
+}) {
+  return <Card className="rounded-3xl border-border/60">
+    <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Users className="size-5 text-primary" /> Recuento general de usuarios</CardTitle>
+        <p className="text-sm text-muted-foreground">Incluye usuarios operativos de sucursales y Managers globales del grupo.</p>
+      </div>
+      {canManageManagers && <Button type="button" className="w-full shrink-0 rounded-xl sm:w-auto" onClick={onCreateManager}><ShieldCheck className="mr-2 size-4" /> Agregar acceso Manager</Button>}
+    </CardHeader>
+    <CardContent>
+      {loading ? <div className="p-8 text-center text-muted-foreground">Cargando usuarios...</div> : error ? <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive"><p className="font-bold">No se pudo cargar el recuento de usuarios.</p><p className="mt-1 break-words">{error.message}</p></div> : !data.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay usuarios en el alcance seleccionado.</p> : <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Usuario</TableHead><TableHead>Rol</TableHead><TableHead>Sucursal / grupo</TableHead><TableHead>RR. HH.</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{data.map((user) => {
+        const isManager = Boolean(user.managerGroup);
+        const isToggling = togglingUserId === user.id;
+        return <TableRow key={`${user.id}-${user.managerGroup?.id || user.clientTenant?.id || 'user'}`}>
+          <TableCell><p className="font-semibold">{user.name}</p><p className="text-xs text-muted-foreground">{user.email}</p></TableCell>
+          <TableCell><Badge variant={isManager ? 'default' : 'outline'}>{isManager ? (user.managerOwner ? 'Manager propietario' : 'Manager') : user.role}</Badge></TableCell>
+          <TableCell>{isManager ? <span className="font-semibold">Grupo empresarial</span> : user.clientTenant?.name || 'Sin sucursal'}</TableCell>
+          <TableCell>{user.employee ? 'Vinculado' : 'Usuario independiente'}</TableCell>
+          <TableCell><Badge variant={user.isActive ? 'default' : 'secondary'}>{user.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell>
+          <TableCell className="text-right">{!isManager && canEditUsers ? <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => onEditUser(user)}><Pencil className="size-3.5" /> Editar</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={isToggling || user.role === 'ADMIN'} title={user.role === 'ADMIN' ? 'El administrador principal está protegido' : undefined} onClick={() => onToggleUser(user)}>{user.isActive ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}<span className="hidden sm:inline">{isToggling ? 'Guardando…' : user.isActive ? 'Inhabilitar' : 'Habilitar'}</span></Button></div> : <span className="text-xs text-muted-foreground">Solo consulta</span>}</TableCell>
+        </TableRow>;
+      })}</TableBody></Table>}
+    </CardContent>
+  </Card>;
+}
 
-function WarehouseContent({ overview, name, location, setName, setLocation, onCreate, creating }: { overview?: ManagerOverview; name: string; location: string; setName: (value: string) => void; setLocation: (value: string) => void; onCreate: () => void; creating: boolean }) { return <div className="space-y-6"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Warehouse className="size-5 text-primary" /> Almacenes y bodegas</CardTitle></CardHeader><CardContent><div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{(overview?.warehouses || []).map((warehouse) => <div key={warehouse.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{warehouse.name}</p><p className="text-xs text-muted-foreground">{warehouse.location || 'Sin ubicación registrada'}</p></div><Badge variant={warehouse.scopeType === 'GROUP' ? 'default' : 'outline'}>{warehouse.scopeType === 'GROUP' ? 'Corporativo' : 'Sucursal'}</Badge></div><p className="mt-4 text-xs text-muted-foreground">Propietario compatible: {warehouse.clientTenant?.name || warehouse.clientTenantId}</p></div>)}</div>{!overview?.warehouses?.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay almacenes visibles.</p>}</CardContent></Card><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Plus className="size-5 text-primary" /> Nuevo almacén corporativo</CardTitle></CardHeader><CardContent className="flex flex-col gap-3 sm:flex-row"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del almacén" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ubicación (opcional)" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><Button className="h-10 rounded-xl" disabled={!name.trim() || creating} onClick={onCreate}>{creating ? 'Creando...' : 'Crear almacén'}</Button></CardContent></Card></div>; }
+function WarehouseContent({ overview, units, name, location, businessUnitId, branchIds, setName, setLocation, setBusinessUnitId, setBranchIds, onCreate, creating, onSyncCatalog, syncingCatalogId }: { overview?: ManagerOverview; units: Array<{ id: string; name: string }>; name: string; location: string; businessUnitId: string; branchIds: string[]; setName: (value: string) => void; setLocation: (value: string) => void; setBusinessUnitId: (value: string) => void; setBranchIds: (value: string[]) => void; onCreate: () => void; creating: boolean; onSyncCatalog: (warehouseId: string) => void; syncingCatalogId: string }) {
+  const destinationBranches = (overview?.branches || []).filter((branch) => branch.businessUnitId === businessUnitId);
+  const toggleBranch = (id: string) => setBranchIds(branchIds.includes(id) ? branchIds.filter((value) => value !== id) : [...branchIds, id]);
+  return <div className="space-y-6">
+    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Warehouse className="size-5 text-primary" /> Almacenes corporativos</CardTitle></CardHeader><CardContent>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{(overview?.warehouses || []).map((warehouse) => <div key={warehouse.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{warehouse.name}</p><p className="text-xs text-muted-foreground">{warehouse.location || 'Sin ubicación registrada'}</p></div><Badge variant="outline">Por rubro</Badge></div><p className="mt-4 text-xs text-muted-foreground">Rubro: {units.find((unit) => unit.id === warehouse.businessUnitId)?.name || 'Pendiente de normalizar'}</p><p className="mt-2 text-xs text-muted-foreground">Abastece: {warehouse.authorizedBranchIds?.map((id) => overview?.branches.find((branch) => branch.id === id)?.name).filter(Boolean).join(', ') || 'Sin autorización registrada'}</p><Button type="button" variant="outline" size="sm" className="mt-4 w-full rounded-xl" disabled={Boolean(syncingCatalogId)} onClick={() => onSyncCatalog(warehouse.id)}>{syncingCatalogId === warehouse.id ? 'Preparando catálogo...' : 'Preparar catálogo en cero'}</Button></div>)}</div>
+      {!overview?.warehouses?.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay almacenes visibles.</p>}
+    </CardContent></Card>
+    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Plus className="size-5 text-primary" /> Nuevo almacén corporativo</CardTitle></CardHeader><CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del almacén" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Ubicación (opcional)" className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" /><select value={businessUnitId} onChange={(event) => setBusinessUnitId(event.target.value)} className="h-10 min-w-0 rounded-xl border border-border bg-background px-3 text-sm" disabled={!units.length}><option value="">{units.length ? 'Selecciona un rubro' : 'Crea primero un rubro'}</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select><div className="rounded-2xl border border-border/60 bg-muted/20 p-3 sm:col-span-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales que puede abastecer</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{destinationBranches.map((branch) => <label key={branch.id} className="flex items-center gap-2 rounded-xl border border-border/60 p-2 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 accent-primary" />{branch.name}</label>)}{!destinationBranches.length && <p className="text-xs text-muted-foreground">Selecciona un rubro con sucursales.</p>}</div></div><Button className="h-10 rounded-xl sm:col-span-3" disabled={!name.trim() || !businessUnitId || !branchIds.length || creating} onClick={onCreate}>{creating ? 'Guardando...' : 'Agregar almacén'}</Button></CardContent></Card>
+  </div>;
+}
 
 function TransfersContent({ data, loading }: { data: any[]; loading: boolean }) {
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = { PENDING: 'bg-amber-500/10 text-amber-600', COMPLETED: 'bg-emerald-500/10 text-emerald-600', CANCELLED: 'bg-rose-500/10 text-rose-600' };
     return <Badge variant="outline" className={styles[status] || ''}>{status}</Badge>;
   };
-  return <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><ArrowRightLeft className="size-5 text-primary" /> Transferencias entre sucursales del grupo</CardTitle></CardHeader><CardContent>
+  return <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><ArrowRightLeft className="size-5 text-primary" /> Transferencias entre sucursales del grupo</CardTitle></CardHeader><CardContent>
     {loading ? <div className="p-8 text-center text-muted-foreground">Cargando transferencias...</div> : <>
       {!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay transferencias registradas en el grupo.</p>}
       <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Número</TableHead><TableHead>Fecha</TableHead><TableHead>Origen</TableHead><TableHead>Destino</TableHead><TableHead>Estado</TableHead><TableHead>Items</TableHead></TableRow></TableHeader><TableBody>{data.map((t) => <TableRow key={t.id}><TableCell className="font-mono font-bold">{t.number}</TableCell><TableCell>{new Date(t.date).toLocaleDateString('es-NI')}</TableCell><TableCell>{t.from?.name || '-'}</TableCell><TableCell>{t.to?.name || '-'}</TableCell><TableCell>{statusBadge(t.status)}</TableCell><TableCell>{(t.items || []).length} producto(s)</TableCell></TableRow>)}</TableBody></Table>
@@ -285,22 +451,22 @@ function ConsolidatedContent({ trialBalance, profitLoss, balanceSheet, branchCom
     </div>
     {loading ? <div className="flex min-h-[200px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-4 animate-spin" /> Cargando estados financieros...</div> : <>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase">Estado de Resultados</CardTitle></CardHeader><CardContent className="space-y-3">
+        <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Estado de Resultados</CardTitle></CardHeader><CardContent className="space-y-3">
           <div className="rounded-xl bg-emerald-500/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Ingresos</p><p className="mt-1 text-2xl font-black text-emerald-600">{formatNumber(profitLoss?.totalIngresos || 0)}</p></div>
           {(profitLoss?.ingresos || []).slice(0, 5).map((item: any) => <div key={item.code} className="flex justify-between text-sm"><span className="text-muted-foreground">{item.code} {item.name}</span><span className="font-bold">{formatNumber(item.balance)}</span></div>)}
           <div className="rounded-xl bg-rose-500/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Gastos</p><p className="mt-1 text-2xl font-black text-rose-600">{formatNumber(profitLoss?.totalGastos || 0)}</p></div>
           {(profitLoss?.gastos || []).slice(0, 5).map((item: any) => <div key={item.code} className="flex justify-between text-sm"><span className="text-muted-foreground">{item.code} {item.name}</span><span className="font-bold">{formatNumber(item.balance)}</span></div>)}
           <div className="border-t pt-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Utilidad Neta</p><p className="text-2xl font-black text-primary">{formatNumber(profitLoss?.utilidadNeta || 0)}</p></div>
         </CardContent></Card>
-        <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase">Balance General</CardTitle></CardHeader><CardContent className="space-y-3">
+        <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Balance General</CardTitle></CardHeader><CardContent className="space-y-3">
           <div className="rounded-xl bg-blue-500/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Activos</p><p className="mt-1 text-2xl font-black text-blue-600">{formatNumber(balanceSheet?.totalActivos || 0)}</p></div>
           {(balanceSheet?.activos || []).slice(0, 4).map((item: any) => <div key={item.code} className="flex justify-between text-sm"><span className="text-muted-foreground">{item.code} {item.name}</span><span className="font-bold">{formatNumber(item.balance)}</span></div>)}
           <div className="rounded-xl bg-amber-500/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pasivos</p><p className="mt-1 text-2xl font-black text-amber-600">{formatNumber(balanceSheet?.totalPasivos || 0)}</p></div>
           <div className="rounded-xl bg-violet-500/5 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-violet-600">Patrimonio</p><p className="mt-1 text-2xl font-black text-violet-600">{formatNumber(balanceSheet?.totalPatrimonio || 0)}</p></div>
         </CardContent></Card>
       </div>
-      <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><BarChart3 className="size-5 text-primary" /> Comparación por Sucursal</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead className="text-right">Ingresos</TableHead><TableHead className="text-right">Gastos</TableHead><TableHead className="text-right">Utilidad</TableHead><TableHead className="text-right">Movimientos</TableHead></TableRow></TableHeader><TableBody>{(branchComparison?.branches || []).map((b: any) => <TableRow key={b.branchId}><TableCell className="font-semibold">{b.branchName}</TableCell><TableCell className="text-right text-emerald-600 font-bold">{formatNumber(b.ingresos)}</TableCell><TableCell className="text-right text-rose-600 font-bold">{formatNumber(b.gastos)}</TableCell><TableCell className={`text-right font-black ${b.utilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatNumber(b.utilidad)}</TableCell><TableCell className="text-right">{formatNumber(b.movimientos)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
-      {trialBalance && <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase">Balance de Comprobación</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Cuenta</TableHead><TableHead className="text-right">Débito</TableHead><TableHead className="text-right">Crédito</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="text-right">Sucursales</TableHead></TableRow></TableHeader><TableBody>{(trialBalance?.rows || []).slice(0, 30).map((row: any, i: number) => <TableRow key={i}><TableCell className="font-mono text-primary">{row.code}</TableCell><TableCell>{row.name}</TableCell><TableCell className="text-right">{formatNumber(row.debit)}</TableCell><TableCell className="text-right">{formatNumber(row.credit)}</TableCell><TableCell className={`text-right font-bold ${row.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatNumber(row.balance)}</TableCell><TableCell className="text-right">{row.branchCount}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>}
+      <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><BarChart3 className="size-5 text-primary" /> Comparación por Sucursal</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead className="text-right">Ingresos</TableHead><TableHead className="text-right">Gastos</TableHead><TableHead className="text-right">Utilidad</TableHead><TableHead className="text-right">Movimientos</TableHead></TableRow></TableHeader><TableBody>{(branchComparison?.branches || []).map((b: any) => <TableRow key={b.branchId}><TableCell className="font-semibold">{b.branchName}</TableCell><TableCell className="text-right text-emerald-600 font-bold">{formatNumber(b.ingresos)}</TableCell><TableCell className="text-right text-rose-600 font-bold">{formatNumber(b.gastos)}</TableCell><TableCell className={`text-right font-black ${b.utilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatNumber(b.utilidad)}</TableCell><TableCell className="text-right">{formatNumber(b.movimientos)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+      {trialBalance && <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Balance de Comprobación</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Cuenta</TableHead><TableHead className="text-right">Débito</TableHead><TableHead className="text-right">Crédito</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="text-right">Sucursales</TableHead></TableRow></TableHeader><TableBody>{(trialBalance?.rows || []).slice(0, 30).map((row: any, i: number) => <TableRow key={i}><TableCell className="font-mono text-primary">{row.code}</TableCell><TableCell>{row.name}</TableCell><TableCell className="text-right">{formatNumber(row.debit)}</TableCell><TableCell className="text-right">{formatNumber(row.credit)}</TableCell><TableCell className={`text-right font-bold ${row.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatNumber(row.balance)}</TableCell><TableCell className="text-right">{row.branchCount}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>}
     </>}
   </div>;
 }
@@ -316,7 +482,7 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
   const toggleTarget = (id: string) => setTargetBranchIds(targetBranchIds.includes(id) ? targetBranchIds.filter((value) => value !== id) : [...targetBranchIds, id]);
   return <div className="space-y-6">
     <Card className="rounded-3xl border-border/60">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Tags className="size-5 text-primary" /> Compartir productos entre sucursales</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Tags className="size-5 text-primary" /> Compartir productos entre sucursales</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-2">
@@ -345,7 +511,7 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
     </Card>
 
     <Card className="rounded-3xl border-border/60">
-      <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><Tags className="size-5 text-primary" /> Productos compartidos ({data.length})</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Tags className="size-5 text-primary" /> Productos compartidos ({data.length})</CardTitle></CardHeader>
       <CardContent>
         {loading ? <div className="p-8 text-center text-muted-foreground">Cargando catálogo compartido...</div> : <div className="space-y-4">
           {!data.length && <p className="py-6 text-center text-sm text-muted-foreground">Aún no hay productos compartidos en el grupo.</p>}
@@ -354,7 +520,7 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
               <div className="min-w-0"><p className="font-bold">{master.name}</p><p className="font-mono text-xs text-muted-foreground">{master.code} · {master.clientTenant?.name} · {formatNumber(master.salePrice)}</p></div>
               <div className="flex items-center gap-2"><Badge variant="outline">{master.sharedCount} espejo(s)</Badge><Button variant="outline" size="sm" disabled={syncing} onClick={() => onSync(master.id)}><RefreshCw className="mr-1.5 size-3.5" /> Sincronizar</Button></div>
             </div>
-            {master.mirrors?.length > 0 && <Table containerClassName="mt-3 overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal espejo</TableHead><TableHead>Precio</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{master.mirrors.map((mirror) => <TableRow key={mirror.id}><TableCell className="font-semibold">{mirror.clientTenant?.name}</TableCell><TableCell>{formatNumber(mirror.salePrice)}</TableCell><TableCell><Badge variant={mirror.isActive ? 'default' : 'secondary'}>{mirror.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-destructive" disabled={unsharing} onClick={() => onUnshare([mirror.id])}>Quitar</Button></TableCell></TableRow>)}</TableBody></Table>}
+            {master.mirrors?.length > 0 && <Table containerClassName="mt-3 overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal espejo</TableHead><TableHead>Precio</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{master.mirrors.map((mirror: any) => <TableRow key={mirror.id}><TableCell className="font-semibold">{mirror.clientTenant?.name}</TableCell><TableCell>{formatNumber(mirror.salePrice)}</TableCell><TableCell><Badge variant={mirror.isActive ? 'default' : 'secondary'}>{mirror.isActive ? 'Activo' : 'Inactivo'}</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" className="text-destructive" disabled={unsharing} onClick={() => onUnshare([mirror.id])}>Quitar</Button></TableCell></TableRow>)}</TableBody></Table>}
           </div>)}
         </div>}
       </CardContent>
@@ -362,4 +528,123 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
   </div>;
 }
 
-function ManagersContent({ data, users, selectedUserId, setSelectedUserId, branches, branchIds, setBranchIds, onAssign, assigning }: { data: any[]; users: any[]; selectedUserId: string; setSelectedUserId: (value: string) => void; branches: Array<{ id: string; name: string }>; branchIds: string[]; setBranchIds: (value: string[]) => void; onAssign: () => void; assigning: boolean }) { return <div className="space-y-6"><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase"><ShieldCheck className="size-5 text-primary" /> Asignar acceso Manager</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-2"><select aria-label="Usuario Manager" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)} className="h-10 rounded-xl border border-border bg-background px-3 text-sm"><option value="">Seleccionar usuario</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.email}</option>)}</select><Button className="h-10 rounded-xl" disabled={!selectedUserId || assigning} onClick={onAssign}>{assigning ? 'Guardando...' : 'Asignar acceso'}</Button></div><div><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales visibles</p><div className="flex flex-wrap gap-2">{branches.map((branch) => { const checked = branchIds.includes(branch.id); return <label key={branch.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-sm"><input type="checkbox" checked={checked} onChange={() => setBranchIds(checked ? branchIds.filter((id) => id !== branch.id) : [...branchIds, branch.id])} />{branch.name}</label>; })}</div></div></CardContent></Card><Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="text-lg font-black uppercase">Managers configurados</CardTitle></CardHeader><CardContent><div className="space-y-3">{data.map((assignment) => <div key={assignment.id} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{assignment.user?.name}</p><p className="text-xs text-muted-foreground">{assignment.user?.email}</p></div><div className="flex flex-wrap gap-2"><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Delegado'}</Badge><Badge variant="outline">{assignment.branchIds?.length || 0} sucursal(es)</Badge></div></div>)}{!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay accesos Manager explícitos todavía.</p>}</div></CardContent></Card></div>; }
+type ManagersContentProps = {
+  data: any[];
+  branches: Array<{ id: string; name: string }>;
+  canEditOwner: boolean;
+  editingManagerId: string;
+  name: string;
+  email: string;
+  password: string;
+  branchIds: string[];
+  canManageManagers: boolean;
+  canEdit: boolean;
+  permissionState: ManagerPermissionState;
+  setEditingManagerId: (value: string) => void;
+  setName: (value: string) => void;
+  setEmail: (value: string) => void;
+  setPassword: (value: string) => void;
+  setBranchIds: (value: string[]) => void;
+  setCanManageManagers: (value: boolean) => void;
+  setCanEdit: (value: boolean) => void;
+  setPermissionState: (value: ManagerPermissionState) => void;
+  onReset: () => void;
+  onSave: () => void;
+  saving: boolean;
+  onPassword: (userId: string, password: string) => void;
+  resettingPassword: boolean;
+  onRevoke: (userId: string) => void;
+  revoking: boolean;
+};
+
+function ManagersContent({
+  data,
+  branches,
+  canEditOwner,
+  editingManagerId,
+  name,
+  email,
+  password,
+  branchIds,
+  canManageManagers,
+  canEdit,
+  permissionState,
+  setEditingManagerId,
+  setName,
+  setEmail,
+  setPassword,
+  setBranchIds,
+  setCanManageManagers,
+  setCanEdit,
+  setPermissionState,
+  onReset,
+  onSave,
+  saving,
+  onPassword,
+  resettingPassword,
+  onRevoke,
+  revoking,
+}: ManagersContentProps) {
+  const [passwordTargetId, setPasswordTargetId] = useState('');
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const isEditing = Boolean(editingManagerId);
+  const toggleBranch = (id: string) => setBranchIds(branchIds.includes(id) ? branchIds.filter((value) => value !== id) : [...branchIds, id]);
+  const updatePermission = (module: string, level: ManagerPermissionLevel) => setPermissionState({ ...permissionState, [module]: level });
+  const startEditing = (assignment: any) => {
+    setEditingManagerId(assignment.user?.id || '');
+    setName(assignment.user?.name || '');
+    setEmail(assignment.user?.email || '');
+    setPassword('');
+    setBranchIds(assignment.branchIds || []);
+    setCanManageManagers(Boolean(assignment.canManageManagers));
+    setCanEdit(Boolean(assignment.canEdit));
+    setPermissionState(assignment.isOwner ? defaultManagerPermissionState() : managerPermissionsToState(assignment.permissions));
+  };
+  const submitPassword = (userId: string) => {
+    if (!passwordDraft.trim()) return;
+    onPassword(userId, passwordDraft);
+    setPasswordTargetId('');
+    setPasswordDraft('');
+  };
+
+  return <div className="space-y-6">
+    <Card className="rounded-3xl border-border/60">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><ShieldCheck className="size-5 text-primary" /> {isEditing ? 'Editar acceso Manager' : 'Nuevo usuario Manager'}</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">El Manager es global al grupo y no se registra como usuario de una sucursal.</p>
+        </div>
+        {isEditing && <Button type="button" variant="outline" className="w-fit rounded-xl" onClick={onReset}>Cancelar edición</Button>}
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="min-w-0 space-y-2 text-sm font-semibold"><span>Nombre completo</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del Manager" className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /></label>
+          <label className="min-w-0 space-y-2 text-sm font-semibold"><span>Correo de acceso</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="manager@empresa.com" className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /></label>
+          <label className="min-w-0 space-y-2 text-sm font-semibold md:col-span-2"><span>{isEditing ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isEditing ? 'Déjala vacía para conservarla' : 'Contraseña segura'} className="h-10 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm font-normal" /></label>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales con acceso</p><span className="text-xs text-muted-foreground">{branchIds.length} seleccionada(s)</span></div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{branches.map((branch) => <label key={branch.id} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-border/60 bg-background p-3 text-sm"><input type="checkbox" checked={branchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!branches.length && <p className="text-sm text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}</div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canEdit} onChange={(event) => setCanEdit(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede realizar cambios operativos</span><span className="mt-1 block text-xs text-muted-foreground">Permite operar dentro de las sucursales asignadas y deja trazabilidad del Manager.</span></span></label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60 p-4"><input type="checkbox" checked={canManageManagers} onChange={(event) => setCanManageManagers(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" /><span><span className="block text-sm font-bold">Puede administrar Managers</span><span className="mt-1 block text-xs text-muted-foreground">Puede crear, editar, restablecer y revocar Managers delegados.</span></span></label>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Permisos de la vista Manager</p><p className="mt-1 text-xs text-muted-foreground">Define el nivel de cada módulo. Los permisos de sucursal se controlan aparte.</p></div><Badge variant="outline">{Object.values(permissionState).filter((value) => value !== 'NONE').length} módulo(s)</Badge></div>
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">{MANAGER_PERMISSION_OPTIONS.map((option) => <div key={option.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-bold">{option.label}</p><p className="text-xs text-muted-foreground">{option.description}</p></div><select aria-label={`Nivel de ${option.label}`} value={permissionState[option.id] || 'NONE'} onChange={(event) => updatePermission(option.id, event.target.value as ManagerPermissionLevel)} className="h-9 w-full shrink-0 rounded-xl border border-border bg-background px-2 text-xs font-bold sm:w-32"><option value="NONE">Sin acceso</option><option value="READ">Lectura</option><option value="EDIT">Editar</option><option value="FULL">Total</option></select></div>)}</div>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" className="rounded-xl" onClick={onReset} disabled={saving}>Limpiar</Button><Button type="button" className="rounded-xl" disabled={saving || !name.trim() || !email.trim() || (!isEditing && !password.trim())} onClick={onSave}>{saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear Manager'}</Button></div>
+      </CardContent>
+    </Card>
+
+    <Card className="rounded-3xl border-border/60">
+      <CardHeader><CardTitle className="text-lg font-black uppercase italic tracking-tight">Managers configurados</CardTitle></CardHeader>
+      <CardContent><div className="space-y-3">{data.map((assignment) => <div key={assignment.id} className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Delegado'}</Badge><Badge variant="outline">{assignment.branchIds?.length ? `${assignment.branchIds.length} sucursal(es)` : "Todas las sucursales"}</Badge></div><p className="truncate text-xs text-muted-foreground">{assignment.user?.email}</p><p className="mt-1 text-xs text-muted-foreground">{assignment.isOwner ? 'Acceso completo al grupo.' : `${(assignment.permissions || []).filter((permission: any) => permission.read || permission.create || permission.edit || permission.manage).length} módulo(s) configurado(s).`}</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={assignment.isOwner && !canEditOwner} onClick={() => startEditing(assignment)}><Pencil className="size-3.5" /> Editar</Button><Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl" disabled={assignment.isOwner && !canEditOwner} onClick={() => { setPasswordTargetId(passwordTargetId === assignment.user?.id ? '' : assignment.user?.id || ''); setPasswordDraft(''); }}><KeyRound className="size-3.5" /> Contraseña</Button>{!assignment.isOwner && <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl text-destructive hover:text-destructive" disabled={revoking} onClick={() => { if (window.confirm(`¿Revocar el acceso de ${assignment.user?.name || 'este Manager'}?`)) onRevoke(assignment.user.id); }}><Trash2 className="size-3.5" /> Revocar</Button>}</div></div>{passwordTargetId === assignment.user?.id && <div className="mt-4 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row"><input type="password" value={passwordDraft} onChange={(event) => setPasswordDraft(event.target.value)} placeholder="Nueva contraseña" className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm" /><Button type="button" className="h-10 rounded-xl" disabled={!passwordDraft.trim() || resettingPassword} onClick={() => submitPassword(assignment.user.id)}>{resettingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</Button></div>}</div>)}{!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay accesos Manager explícitos todavía.</p>}</div></CardContent>
+    </Card>
+  </div>;
+}

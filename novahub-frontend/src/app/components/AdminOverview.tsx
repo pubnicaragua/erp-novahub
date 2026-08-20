@@ -7,17 +7,29 @@ import {
   TrendingUp, 
   Clock, 
   Activity, 
-  ArrowUpRight
+  ArrowUpRight,
+  Database,
+  FileStack,
+  HardDrive,
+  Layers3,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { masterConsoleService } from '../services/master-console.service';
 import { useTenantQuery } from '../hooks/useTenantQuery';
-import { 
+import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line 
 } from 'recharts';
-import { EnterpriseGroupsAdminView } from './admin/EnterpriseGroupsAdminView';
+
+function formatStorageBytes(bytes: number | undefined) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const amount = value / (1024 ** unitIndex);
+  return `${amount >= 100 || unitIndex === 0 ? amount.toFixed(0) : amount.toFixed(2)} ${units[unitIndex]}`;
+}
 
 export function AdminOverview() {
   const { data: overview, isLoading: loading } = useTenantQuery(
@@ -25,6 +37,15 @@ export function AdminOverview() {
     (signal) => masterConsoleService.getOverview(signal),
     { onError: (error) => console.error('Error fetching admin stats:', error) },
   );
+  const storageQuery = useTenantQuery(
+    ['master-console-storage-metrics'],
+    (signal) => masterConsoleService.getStorageMetrics(signal),
+    { staleTime: 60_000, onError: (error) => console.error('Error fetching storage metrics:', error) },
+  );
+  const storage = storageQuery.data;
+  const storageLoading = storageQuery.isLoading;
+  const storageUnavailable = storageQuery.isError;
+  const databaseUnavailable = storage?.database.status === 'unavailable';
   const tenants = overview?.tenantsSummary || [];
   const requests = overview?.pendingRequestDetails || [];
 
@@ -36,11 +57,13 @@ export function AdminOverview() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="master-console-module min-w-0 max-w-full overflow-x-hidden bg-background">
+      <div className="mx-auto min-h-[calc(100vh-5rem)] w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">
+      <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-black tracking-tighter text-foreground uppercase">Console Master <span className="text-primary italic">Admin</span></h1>
+          <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter text-foreground sm:text-4xl">Console Master <span className="text-primary">Admin</span></h1>
           <p className="text-muted-foreground/60 font-medium">Panel de control global del ecosistema NovaHub.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -80,7 +103,60 @@ export function AdminOverview() {
         ))}
       </div>
 
-      <EnterpriseGroupsAdminView />
+      <Card className="rounded-3xl border-border/50 bg-card/30 backdrop-blur-md">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg font-bold uppercase tracking-tight">
+              <HardDrive className="size-5 text-primary" /> Consumo de almacenamiento
+            </CardTitle>
+            <CardDescription>
+              Medición global para análisis de precios y capacidad. No limita ni suspende grupos o sucursales.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="w-fit border-primary/20 bg-primary/5 text-[10px] font-black uppercase tracking-widest text-primary">
+            Solo métrica
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StorageMetricCard
+              icon={FileStack}
+              label="Archivos externos"
+              value={storageLoading ? '...' : storageUnavailable ? 'N/D' : formatStorageBytes(storage?.files.bytes)}
+              detail={storageLoading ? 'Calculando…' : storageUnavailable ? 'Endpoint no disponible' : `${storage?.files.objects || 0} objetos registrados`}
+            />
+            <StorageMetricCard
+              icon={Database}
+              label="Datos de registros"
+              value={storageLoading ? '...' : storageUnavailable || databaseUnavailable ? 'N/D' : formatStorageBytes(storage?.database.tableBytes)}
+              detail={storageLoading ? 'Calculando…' : storageUnavailable || databaseUnavailable ? 'Medición no disponible' : `${formatCount(storage?.database.liveRows)} filas vivas estimadas`}
+            />
+            <StorageMetricCard
+              icon={Layers3}
+              label="Índices"
+              value={storageLoading ? '...' : storageUnavailable || databaseUnavailable ? 'N/D' : formatStorageBytes(storage?.database.indexBytes)}
+              detail={storageUnavailable || databaseUnavailable ? 'Medición no disponible' : 'Espacio de índices PostgreSQL'}
+            />
+            <StorageMetricCard
+              icon={Database}
+              label="Base de datos"
+              value={storageLoading ? '...' : storageUnavailable || databaseUnavailable ? 'N/D' : formatStorageBytes(storage?.database.physicalBytes)}
+              detail={storageUnavailable || databaseUnavailable ? 'Medición no disponible' : 'Tamaño físico PostgreSQL'}
+            />
+            <StorageMetricCard
+              icon={HardDrive}
+              label="Total medido"
+              value={storageLoading ? '...' : storageUnavailable || databaseUnavailable ? 'N/D' : formatStorageBytes(storage?.totalBytes)}
+              detail={storageUnavailable || databaseUnavailable ? 'Medición incompleta' : 'Archivos + base de datos'}
+            />
+          </div>
+          {storage?.measuredAt && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+              Última medición: {new Date(storage.measuredAt).toLocaleString('es-NI')}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Growth Chart */}
@@ -170,6 +246,35 @@ export function AdminOverview() {
           )}
         </div>
       </div>
+      </div>
+      </div>
     </div>
   );
+}
+
+function StorageMetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: typeof HardDrive;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-border/50 bg-muted/15 p-4">
+      <div className="mb-3 flex items-center gap-2 text-primary">
+        <Icon className="size-4" />
+        <p className="truncate text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+      </div>
+      <p className="text-2xl font-black tracking-tight text-foreground tabular-nums">{value}</p>
+      <p className="mt-1 text-[10px] font-medium text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function formatCount(value: number | undefined) {
+  return new Intl.NumberFormat('es-NI').format(Number(value || 0));
 }

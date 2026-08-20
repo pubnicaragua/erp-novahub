@@ -161,7 +161,7 @@ const menuItems: MenuItem[] = [
       { id: 'productos', label: 'Productos', icon: <Package className="size-4" /> },
       { id: 'servicios', label: 'Servicios', icon: <BriefcaseBusiness className="size-4" /> },
       { id: 'atributos', label: 'Atributos y Categoría', icon: <Tags className="size-4" /> },
-      { id: 'almacenes', label: 'Almacenes', icon: <Archive className="size-4" /> },
+      { id: 'almacenes', label: 'Bodegas', icon: <Archive className="size-4" /> },
       { id: 'transferencias', label: 'Transferencias', icon: <Truck className="size-4" /> },
       { id: 'ajustes', label: 'Ajustes', icon: <Scale className="size-4" /> },
       { id: 'auditorias', label: 'Auditorías', icon: <ClipboardCheck className="size-4" /> },
@@ -521,7 +521,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                     Nova<span className="text-primary">Hub</span>
                   </span>
                   <span className="text-[10px] text-sidebar-foreground/50 tracking-widest uppercase mt-0.5 truncate max-w-[130px]">
-                    {themeConfig.tenantName || 'ERP Platform'}
+                    {user?.isPlatformAdmin ? 'NovaHub Platform' : (themeConfig.tenantName || 'ERP Platform')}
                   </span>
                 </div>
               )}

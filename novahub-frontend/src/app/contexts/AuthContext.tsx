@@ -30,6 +30,7 @@ export type Module =
   | 'roles'
   | 'configuracion'
   | 'suscripciones'
+  | 'tenant-admin'
   | 'schema'
   | 'financiamiento-pyme'
   | 'centro-capacitacion'
@@ -403,8 +404,11 @@ const createUserObject = (apiPayload: any): User => {
     avatar: apiUser.avatar,
     role,
     customRoleName: apiUser.customRoleName,
-    tenantId: apiUser.clientTenantId,
-    tenantName: apiUser.clientTenant?.name || 'Nova Hub',
+    // Un SuperAdmin es una identidad de plataforma, no un usuario operativo
+    // de una sucursal. Conservamos el tenantId vacío en el frontend para que
+    // ningún módulo tenant intente usarlo accidentalmente.
+    tenantId: apiUser.clientTenantId || '',
+    tenantName: isPlatformAdmin ? 'NovaHub Platform' : (apiUser.clientTenant?.name || 'Nova Hub'),
     permissions: mergedPermissions,
     enabledModules: apiUser.enabledModules || [],
     isPlatformAdmin,
@@ -496,7 +500,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Platform Admins (SuperAdmin, Partner) don't have ERP modules, only platform control modules.
     if (user.isPlatformAdmin) {
       const platformModules = [
-        'dashboard', 'suscripciones', 'configuracion', 'notificaciones',
+        'dashboard', 'suscripciones', 'tenant-admin', 'configuracion', 'notificaciones',
         'centro-capacitacion', 'soporte-tecnico', 'asesoria-legal', 'novachat',
         'qa-console',
       ];

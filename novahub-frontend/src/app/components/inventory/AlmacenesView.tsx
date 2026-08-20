@@ -14,13 +14,13 @@ import { cajaService, type CashRegister } from '../../services/caja.service';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
-import { SucursalesView } from './SucursalesView';
 
-import { api, getApiErrorMessage } from '../../services/api';
+import { getApiErrorMessage } from '../../services/api';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { WarehouseSupplyPanel } from './WarehouseSupplyPanel';
 interface AlmacenesViewProps {
   warehouses: any[];
   onRefresh: () => void;
@@ -31,7 +31,6 @@ interface EditingWarehouse {
   name: string;
   location: string;
   type: string;
-  parentId: string | null;
   isNew?: boolean;
 }
 
@@ -45,27 +44,21 @@ const WAREHOUSE_TYPES = [
 const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="almacenes-title"]',
-    title: 'Almacenes y Sucursales',
-    description: 'Gestiona todos tus almacenes y sucursales desde esta vista. Puedes crear, editar y desactivar almacenes, asignar tipos y configurar cajas registradoras.',
-    tip: 'Cada almacén puede tener su propio inventario y estar asociado a una sucursal.',
-    placement: 'bottom',
-  },
-  {
-    target: '[data-tour="almacenes-sucursales-btn"]',
-    title: 'Administrar Sucursales',
-    description: 'Gestiona las sucursales de tu empresa. Cada sucursal puede tener múltiples almacenes asociados.',
+    title: 'Bodegas de la sucursal',
+    description: 'Gestiona las bodegas operativas de esta sucursal. Cada bodega conserva su inventario y puede tener su propia cuenta contable.',
+    tip: 'Los almacenes corporativos se administran desde la vista Manager.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="almacenes-add-btn"]',
-    title: 'Agregar Almacén',
-    description: 'Crea un nuevo almacén o sucursal. Completa el nombre, ubicación, tipo y selecciona la sucursal a la que pertenece.',
+    title: 'Agregar Bodega',
+    description: 'Crea una bodega operativa de esta sucursal. La bodega conserva su inventario y cuenta contable de forma independiente.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="almacenes-table"]',
-    title: 'Listado de Almacenes',
-    description: 'Tabla completa con todos los almacenes. Puedes editar con doble clic o usando los botones de acción en cada fila.',
+    title: 'Listado de Bodegas',
+    description: 'Tabla completa con las bodegas de esta sucursal. Puedes editar con los botones de acción en cada fila.',
     placement: 'top',
   },
 ];
@@ -75,14 +68,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
   const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
   const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'deactivate');
-  const canManageBranches = canPerform('INVENTORY_WAREHOUSES', 'edit');
   const canManagePos = canPerform('RETAIL_POS', 'edit');
   const [showTutorial, setShowTutorial] = useState(false);
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [autoOpenSucursalForm, setAutoOpenSucursalForm] = useState(false);
   const cameFromSetupRef = useRef(false);
   const [stockByWarehouse, setStockByWarehouse] = useState<Record<string, number>>({});
   const [detailWarehouse, setDetailWarehouse] = useState<any | null>(null);
@@ -93,21 +84,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
-  const [sucursalesList, setSucursalesList] = useState<any[]>([]);
-
-  const fetchSucursales = async () => {
-    try {
-      const res: any = await api.get('/sucursales');
-      setSucursalesList(Array.isArray(res) ? res : (res?.data || []));
-    } catch (e: any) {
-      console.error(e);
-    }
-  };
-
-  useEffect(() => {
-    fetchSucursales();
-  }, [warehouses]);
-
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -164,16 +140,11 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     const loadCatalogs = async () => {
       try {
         setCajasLoading(true);
-        const [cajas, sucursales] = await Promise.all([
-          cajaService.getRegisters(true, controller.signal),
-          api.get('/sucursales', { signal: controller.signal }),
-        ]);
+        const cajas = await cajaService.getRegisters(true, controller.signal);
         setCajasList(Array.isArray(cajas) ? cajas : []);
-        const branches: any = sucursales;
-        setSucursalesList(Array.isArray(branches) ? branches : (branches?.data || []));
       } catch (error: any) {
         if (error?.name !== 'AbortError' && !controller.signal.aborted && error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
-          toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de almacenes'));
+          toast.error(getApiErrorMessage(error, 'Error al cargar catálogos de bodegas'));
         }
       } finally {
         if (!controller.signal.aborted) setCajasLoading(false);
@@ -201,7 +172,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       }
       setStockByWarehouse(counts);
     } catch (e) {
-      console.error('Error al cargar stock de almacenes:', e);
+      console.error('Error al cargar stock de bodegas:', e);
     }
   };
 
@@ -217,7 +188,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       name: '',
       location: '',
       type: 'STORE',
-      parentId: null,
       isNew: true,
     };
     setEditingRows(new Map(editingRows.set(tempId, newWarehouse)));
@@ -233,9 +203,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       if (context.action === 'open-warehouse-form') {
         handleAddNewRow();
       }
-      if (context.action === 'open-branch-form') {
-        setAutoOpenSucursalForm(true);
-      }
     }, 250);
   }, []);
 
@@ -246,7 +213,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       name: wh.name,
       location: wh.location || '',
       type: wh.type || 'STORE',
-      parentId: wh.parentId,
     };
     setEditingRows(new Map(editingRows.set(wh.id, editWarehouse)));
   };
@@ -281,17 +247,15 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           name: warehouse.name,
           location: warehouse.location,
           type: warehouse.type,
-          parentId: warehouse.parentId,
         } as any);
-        toast.success('Almacén creado');
+        toast.success('Bodega creada');
       } else {
         await inventoryService.updateWarehouse(id, {
           name: warehouse.name,
           location: warehouse.location,
           type: warehouse.type,
-          parentId: warehouse.parentId,
         } as any);
-        toast.success('Almacén actualizado');
+        toast.success('Bodega actualizada');
       }
       handleCancelEdit(id);
       onRefresh();
@@ -320,7 +284,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     setDeleteLoading(true);
     try {
       await inventoryService.deleteWarehouse(pendingDeleteId);
-      toast.success('Almacén eliminado');
+      toast.success('Bodega eliminada');
       setPendingDeleteId(null);
       onRefresh();
     } catch (e: any) {
@@ -352,7 +316,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             value={warehouse.name}
             onChange={(e) => handleUpdateField(warehouse.id, 'name', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, warehouse.id)}
-            placeholder="Nombre del almacén"
+            placeholder="Nombre de la bodega"
             className="h-8 text-xs"
             disabled={isSaving}
             autoFocus={warehouse.isNew}
@@ -385,25 +349,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </Select>
         </TableCell>
         <TableCell>
-          <Select 
-            value={warehouse.parentId || 'none'} 
-            onValueChange={(v) => handleUpdateField(warehouse.id, 'parentId', v === 'none' ? null : v)}
-            disabled={isSaving}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Sin padre" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin padre</SelectItem>
-              {warehouses.filter(w => w.id !== warehouse.id).map((w: any) => (
-                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </TableCell>
-        <TableCell>
           {warehouse.isNew ? (
-            <span className="text-[10px] text-muted-foreground">Se asigna al vincular con sucursales</span>
+            <span className="text-[10px] text-muted-foreground">Se configura para la bodega</span>
           ) : (
             (() => {
               const live = warehouses.find((w: any) => w.id === warehouse.id);
@@ -414,9 +361,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               );
             })()
           )}
-        </TableCell>
-        <TableCell>
-          <span className="text-[10px] text-muted-foreground">-</span>
         </TableCell>
         <TableCell className="text-right">
           {warehouse.isNew ? (
@@ -460,23 +404,22 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       return (
         <Card key={draft.id} className="rounded-2xl border-primary/30 bg-primary/5 p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-primary">{draft.isNew ? 'Nuevo almacén' : 'Editar almacén'}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-primary">{draft.isNew ? 'Nueva bodega' : 'Editar bodega'}</p>
             <div className="flex items-center gap-1">
-              <Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={() => handleSaveRow(draft.id)} disabled={isSaving} aria-label="Guardar almacén">
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={() => handleSaveRow(draft.id)} disabled={isSaving} aria-label="Guardar bodega">
                 {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               </Button>
               <Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleCancelEdit(draft.id)} disabled={isSaving} aria-label="Cancelar edición"><X className="size-4" /></Button>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p><Input value={draft.name} onChange={(e) => handleUpdateField(draft.id, 'name', e.target.value)} placeholder="Nombre del almacén" disabled={isSaving} autoFocus={draft.isNew} /></div>
+            <div className="space-y-1 sm:col-span-2"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p><Input value={draft.name} onChange={(e) => handleUpdateField(draft.id, 'name', e.target.value)} placeholder="Nombre de la bodega" disabled={isSaving} autoFocus={draft.isNew} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ubicación</p><Input value={draft.location} onChange={(e) => handleUpdateField(draft.id, 'location', e.target.value)} placeholder="Ubicación" disabled={isSaving} /></div>
             <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</p><Select value={draft.type} onValueChange={(value) => handleUpdateField(draft.id, 'type', value)} disabled={isSaving}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{WAREHOUSE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Almacén matriz</p><Select value={draft.parentId || 'none'} onValueChange={(value) => handleUpdateField(draft.id, 'parentId', value === 'none' ? null : value)} disabled={isSaving}><SelectTrigger><SelectValue placeholder="Sin padre" /></SelectTrigger><SelectContent><SelectItem value="none">Sin padre</SelectItem>{warehouses.filter((item) => item.id !== draft.id).map((item: any) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cuenta contable</p>
               {draft.isNew ? (
-                <p className="text-xs text-muted-foreground">Se asigna al vincular con sucursales</p>
+                <p className="text-xs text-muted-foreground">Se configura para la bodega</p>
               ) : (
                 (() => {
                   const live = warehouses.find((w: any) => w.id === draft.id);
@@ -494,7 +437,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     }
 
     const stockCount = getStockCount(warehouse);
-    const assignedSucursales = warehouse.branches || [];
     return (
       <Card key={warehouse.id} className={`min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm cursor-pointer ${detailWarehouse?.id === warehouse.id ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/30' : ''}`} onClick={(e) => { if ((e.target as HTMLElement).closest('button')) return; setDetailWarehouse(warehouse); }}>
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -504,10 +446,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
           </div>
           <Badge variant="outline" className="shrink-0 text-[9px]">{WAREHOUSE_TYPES.find((type) => type.value === warehouse.type)?.label || warehouse.type}</Badge>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4">
-          <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Matriz</p><p className="truncate font-medium">{warehouse.parent?.name || '—'}</p></div>
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3">
           <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</p><p className="truncate font-medium">{warehouse.inventoryAccount?.code || 'Sin asignar'}</p></div>
-          <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Sucursales</p><p className="font-bold tabular-nums">{assignedSucursales.length}</p></div>
           <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock</p><p className="font-bold tabular-nums">{stockCount}</p></div>
         </div>
         <div className="mt-3 flex justify-end gap-1 border-t border-border/40 pt-3">
@@ -522,15 +462,16 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     <>
       <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Almacenes</h3>
+      <div>
+          <h3 className="font-black text-lg uppercase tracking-tight italic" data-tour="almacenes-title">Bodegas</h3>
           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-            {warehouses.length} ubicaciones · {warehouses.filter((w: any) => String(w.type || '').toUpperCase() === 'STORE').length} sucursales
+            {warehouses.length} bodegas operativas
           </p>
         </div>
         <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+          <WarehouseSupplyPanel />
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
-            <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar almacenes
+            <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar bodegas
           </Button>
 
           {canCreateWarehouse && <Button 
@@ -540,7 +481,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             data-tour="almacenes-add-btn"
           >
             <Plus className="size-4" />
-            Agregar Almacén
+            Agregar Bodega
           </Button>}
         </div>
       </div>
@@ -550,7 +491,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <div className="space-y-3 lg:hidden" data-tour="almacenes-table">
         {Array.from(editingRows.values()).filter((warehouse) => warehouse.isNew).map(renderMobileWarehouseCard)}
         {warehouses.map(renderMobileWarehouseCard)}
-        {warehouses.length === 0 && editingRows.size === 0 && <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Warehouse className="mx-auto mb-2 size-9 opacity-20" /><p>No hay almacenes</p></Card>}
+        {warehouses.length === 0 && editingRows.size === 0 && <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Warehouse className="mx-auto mb-2 size-9 opacity-20" /><p>No hay bodegas</p></Card>}
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="almacenes-table">
@@ -560,9 +501,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Nombre</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest">Ubicación</TableHead>
                <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Tipo</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Almacén matriz</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest whitespace-nowrap">Cuenta contable</TableHead>
-               <TableHead className="font-black text-[10px] uppercase tracking-widest">Sucursales</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Stock</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Acciones</TableHead>
             </TableRow>
@@ -574,10 +513,10 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             
             {warehouses.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+              <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                   <Warehouse className="size-10 mx-auto mb-2 opacity-20" />
-                  <p className="font-medium">No hay almacenes</p>
-                  <p className="text-sm">Haz clic en "Agregar Almacén" para comenzar</p>
+                  <p className="font-medium">No hay bodegas</p>
+                  <p className="text-sm">Haz clic en "Agregar Bodega" para comenzar</p>
                 </TableCell>
               </TableRow>
             ) : (
@@ -588,7 +527,6 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 }
                 
                 const stockCount = getStockCount(wh);
-                const assignedSucursales = wh.branches || [];
                 return (
                   <TableRow 
                     key={wh.id} 
@@ -612,25 +550,11 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                         {WAREHOUSE_TYPES.find(t => t.value === wh.type)?.label || wh.type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">
-                      {wh.parent?.name || '-'}
-                    </TableCell>
                     <TableCell className="text-xs truncate max-w-[160px]">
                       {wh.inventoryAccount ? (
                         <Badge variant="outline" className="text-[9px] font-mono whitespace-nowrap">{wh.inventoryAccount.code} - {wh.inventoryAccount.name}</Badge>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">No asignada</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {assignedSucursales.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {(assignedSucursales as any[]).map((s: any) => (
-                            <Badge key={s.id} variant="secondary" className="text-[9px] bg-muted/50" title={s.name}>{s.code || s.id.slice(0, 4)}</Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">{stockCount}</TableCell>
@@ -667,7 +591,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
               <div className="flex items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Warehouse className="size-4 text-muted-foreground" />
-                  <h4 className="text-sm font-bold">Detalle de Almacén</h4>
+                  <h4 className="text-sm font-bold">Detalle de Bodega</h4>
                 </div>
                 <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => setDetailWarehouse(null)} title="Cerrar detalle" aria-label="Cerrar detalle">
                   <X className="size-3.5" />
@@ -677,7 +601,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Almacén seleccionado</p>
+                      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Bodega seleccionada</p>
                       <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
                     </div>
                     <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Almacén'}</Badge>
@@ -688,46 +612,13 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                     <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ubicación</p>
                     <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.location || '—'}</p>
                   </div>
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacén matriz</p>
-                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.parent?.name || '—'}</p>
-                  </div>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuentas contables por sucursal</p>
-                  {(detailWarehouse.branches || []).length > 0 ? (
-                    <div className="space-y-1.5">
-                      {(detailWarehouse.branches || []).map((link: any) => {
-                        const account = link.inventoryAccount || detailWarehouse.inventoryAccount;
-                        const status = link.accountingStatus || detailWarehouse.accountingStatus;
-                        return (
-                          <div key={link.id} className="flex items-start justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-bold">{link.name}</p>
-                              {account ? (
-                                <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{account.code} - {account.name}</p>
-                              ) : (
-                                <p className="mt-0.5 text-[10px] text-muted-foreground">Sin cuenta asignada</p>
-                              )}
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-1">
-                              {link.isPrimary && <Badge variant="outline" className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Primaria</Badge>}
-                              {status && status !== 'VINCULADO' && (
-                                <Badge variant="outline" className={`text-[9px] ${status === 'PENDIENTE' ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600'}`}>
-                                  {status === 'PENDIENTE' ? 'Pendiente' : status === 'CUENTA_INACTIVA' ? 'Cuenta inactiva' : status === 'CUENTA_NO_POSTEABLE' ? 'No posteable' : status}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
-                      <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.inventoryAccount?.code ? `${detailWarehouse.inventoryAccount.code} - ${detailWarehouse.inventoryAccount.name}` : 'Sin asignar'}</p>
-                    </div>
-                  )}
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable de la bodega</p>
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
+                    <p className="mt-1 truncate text-sm font-bold">{detailWarehouse.inventoryAccount?.code ? `${detailWarehouse.inventoryAccount.code} - ${detailWarehouse.inventoryAccount.name}` : 'Sin asignar'}</p>
+                  </div>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                   <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos con stock</p>
@@ -741,24 +632,14 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <ConfirmDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
-        title="¿Eliminar almacén?"
-        description="Esta acción eliminará el almacén seleccionado."
+        title="¿Eliminar bodega?"
+        description="Esta acción desactivará la bodega seleccionada."
         confirmLabel="Eliminar"
         loading={deleteLoading}
         onConfirm={handleConfirmDeleteWarehouse}
       />
-      {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Almacenes y Sucursales" allowTargetInteraction />}
+      {showTutorial && <GuidedTour steps={ALMACEN_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Bodegas" allowTargetInteraction />}
     </Card>
-
-    <div className="mt-8">
-      <SucursalesView
-        warehouses={warehouses}
-        onRefresh={onRefresh}
-        isModal={false}
-        autoOpenCreate={autoOpenSucursalForm}
-        onAutoOpenHandled={() => setAutoOpenSucursalForm(false)}
-      />
-    </div>
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
       <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
@@ -786,7 +667,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                   <tr className="border-b border-border bg-muted/20">
                     <th className="px-4 py-3 text-left font-semibold">Código</th>
                     <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                    <th className="px-4 py-3 text-left font-semibold">Sucursal</th>
+                    <th className="px-4 py-3 text-left font-semibold">Bodega</th>
                     <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
                     <th className="px-4 py-3 text-left font-semibold">Estado</th>
                     <th className="px-4 py-3 text-right font-semibold">Acciones</th>
@@ -794,12 +675,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {cajasList.map((caja) => {
-                    const sucursal = sucursalesList.find(s => s.id === caja.branchId);
+                    const bodega = caja.warehouse || warehouses.find((warehouse: any) => warehouse.id === caja.warehouseId);
                     return (
                     <tr key={caja.id} className="hover:bg-muted/10">
                       <td className="px-4 py-3 font-medium">{caja.code}</td>
                       <td className="px-4 py-3">{caja.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{sucursal ? sucursal.name : 'No Asignada'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{bodega ? bodega.name : 'No asignada'}</td>
                       <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
                       <td className="px-4 py-3">
                         <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
@@ -848,8 +729,8 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
       <DialogContent>
         <DialogHeader data-tour="inventory-cash-register-title">
           <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
-          <DialogDescription>Completa la información de la caja.</DialogDescription>
-          <InventoryViewTutorial label={cajaForm.id ? 'Cómo editar caja' : 'Cómo crear caja'} targetPrefix="inventory-cash-register" copy={{ data: { description: 'Completa código, nombre, sucursal, ubicación y estado de la caja.' }, actions: { description: 'Guarda la caja para que esté disponible en el sistema POS.' } }} />
+          <DialogDescription>Completa la información de la caja y su bodega operativa.</DialogDescription>
+          <InventoryViewTutorial label={cajaForm.id ? 'Cómo editar caja' : 'Cómo crear caja'} targetPrefix="inventory-cash-register" copy={{ data: { description: 'Completa código, nombre, bodega, ubicación y estado de la caja.' }, actions: { description: 'Guarda la caja para que esté disponible en el sistema POS.' } }} />
         </DialogHeader>
         <div className="space-y-4 py-4" data-tour="inventory-cash-register-data">
           <div className="space-y-2">
@@ -861,11 +742,11 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             <Input value={cajaForm.name || ''} onChange={e => setCajaForm({...cajaForm, name: e.target.value})} placeholder="Caja Principal" />
           </div>
           <div className="space-y-2">
-            <Label>Sucursal</Label>
-            <Select value={cajaForm.branchId || ''} onValueChange={v => setCajaForm({...cajaForm, branchId: v})}>
-              <SelectTrigger><SelectValue placeholder="Seleccione una Sucursal" /></SelectTrigger>
+            <Label>Bodega</Label>
+            <Select value={cajaForm.warehouseId || ''} onValueChange={v => setCajaForm({...cajaForm, warehouseId: v})}>
+              <SelectTrigger><SelectValue placeholder="Seleccione una bodega" /></SelectTrigger>
               <SelectContent>
-                {sucursalesList.map(w => (
+                {warehouses.filter((warehouse: any) => warehouse.scopeType !== 'BUSINESS_UNIT').map((w: any) => (
                   <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                 ))}
               </SelectContent>

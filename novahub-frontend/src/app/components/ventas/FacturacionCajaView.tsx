@@ -489,7 +489,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setLoading(true);
     try {
       const cashRegisters = await cajaService.getRegisters();
-      const branchRegisters = branchId ? cashRegisters.filter((r) => !r.branchId || r.branchId === branchId) : cashRegisters;
+      const branchRegisters = cashRegisters;
       setRegisters(branchRegisters);
 
       if (branchRegisters.length === 0) {
@@ -830,7 +830,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       irTaxId: irTaxId || undefined,
       includeTax,
       priceListId: selectedPriceListId || undefined,
-      deliveryBranchId: selection.deliveryBranchId,
+      deliveryClientTenantId: selection.deliveryClientTenantId,
       items,
       currency: 'NIO',
       exchangeRate: Number(activeSession.exchangeRateUSD),

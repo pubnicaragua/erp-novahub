@@ -354,7 +354,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         {/* Tenancy Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/30 border border-border/50">
           <Building2 className="size-3.5 text-primary" />
-          <span className="text-xs font-medium truncate max-w-[120px]">{user?.tenantName || 'Nova Hub'}</span>
+          <span className="text-xs font-medium truncate max-w-[120px]">{user?.isPlatformAdmin ? 'NovaHub Platform' : (user?.tenantName || 'Nova Hub')}</span>
           {getRoleBadge(user?.role || '')}
         </div>
 
