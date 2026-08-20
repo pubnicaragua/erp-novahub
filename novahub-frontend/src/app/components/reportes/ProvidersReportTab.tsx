@@ -67,7 +67,8 @@ function getRangeDates(range: string) {
 export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canViewPurchases = canPerform('PURCHASES', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -79,7 +80,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       purchaseOrdersService.getAll(filters, signal), suppliersService.getAll(filters, signal),
     ]);
     return { bills: asList(billRes), payments: asList(payRes), orders: asList(ordRes), suppliers: asList(suppRes) };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando proveedores') });
+  }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando proveedores') });
   const bills = reportData?.bills || [];
   const payments = reportData?.payments || [];
   const orders = reportData?.orders || [];

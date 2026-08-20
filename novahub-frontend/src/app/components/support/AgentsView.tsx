@@ -33,7 +33,8 @@ interface AgentsViewProps {
   onRefresh: () => void;
 }
 
-const roleOptions = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER', 'PARTNER'];
+// Manager es un tipo de usuario global y no un rol operativo del tenant.
+const roleOptions = ['ADMIN', 'EMPLOYEE', 'VIEWER', 'PARTNER'];
 
 export const AgentsView: React.FC<AgentsViewProps> = ({ data, tickets, loading, onRefresh }) => {
   const { canPerform } = useAuth();

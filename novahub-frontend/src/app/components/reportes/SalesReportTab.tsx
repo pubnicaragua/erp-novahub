@@ -9,6 +9,7 @@ import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TrendingUp, ShoppingCart, ArrowUpRight, Activity, Scale, BarChart3, PieChart as PieChartIcon, Users, Eye, Clock, DollarSign, Percent, Target, CalendarDays, AlertTriangle, Package, CreditCard, Receipt, Info } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
@@ -186,6 +187,8 @@ const DARK_TOOLTIP = {
 export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const { canPerform } = useAuth();
+  const canViewSales = canPerform('SALES', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -197,7 +200,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       salesReturnsService.getAll(filters, signal), creditNotesService.getAll(filters, signal),
     ]);
     return { invoices: asList(invRes), payments: asList(payRes), returns: asList(retRes), creditNotes: asList(cnRes) };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando ventas') });
+  }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando ventas') });
   const invoices = reportData?.invoices || [];
   const payments = reportData?.payments || [];
   const returns = reportData?.returns || [];

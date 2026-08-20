@@ -10,6 +10,7 @@ import { cn } from './ui/utils';
 import { reportsService } from '../services/ventas.service';
 import { purchasesReportsService } from '../services/compras.service';
 import { safeSetItem } from '../services/safe-storage';
+import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -51,6 +52,9 @@ const defaultChecklist: ChecklistItem[] = [
 ];
 
 function DashboardCxc() {
+  const { canPerform } = useAuth();
+  const canViewSales = canPerform('SALES', 'view');
+  const canViewPurchases = canPerform('PURCHASES', 'view');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [ar, setAr] = useState<AgingData | null>(null);
@@ -69,8 +73,8 @@ function DashboardCxc() {
   const loadData = useCallback(async () => {
     try {
       const [arRes, apRes] = await Promise.all([
-        reportsService.getAging(),
-        purchasesReportsService.getAging(),
+        canViewSales ? reportsService.getAging() : Promise.resolve(null),
+        canViewPurchases ? purchasesReportsService.getAging() : Promise.resolve(null),
       ]);
       setAr(arRes);
       setAp(apRes);
@@ -80,7 +84,7 @@ function DashboardCxc() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewSales, canViewPurchases]);
 
   useEffect(() => {
     const timer = window.setTimeout(loadData, 0);

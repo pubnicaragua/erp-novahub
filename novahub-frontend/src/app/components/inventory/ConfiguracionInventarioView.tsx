@@ -119,7 +119,10 @@ interface ConfiguracionInventarioViewProps {
 }
 
 export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewProps) {
-  const { user } = useAuth()
+  const { user, canPerform } = useAuth()
+  const canViewInventory = canPerform('INVENTORY', 'view')
+  const canViewAccounting = canPerform('ACCOUNTING', 'view')
+  const canViewCompany = canPerform('CONFIG_COMPANY', 'view')
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('general')
   const [warehouses, setWarehouses] = useState<any[]>([])
@@ -162,9 +165,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     try {
       setLoading(true)
       const [whRes, accRes, cfgRes] = await Promise.all([
-        inventoryService.getWarehouses(),
-        contabilidadService.getChartOfAccounts(false),
-        contabilidadService.getConfig(),
+        canViewInventory ? inventoryService.getWarehouses() : Promise.resolve([]),
+        canViewAccounting ? contabilidadService.getChartOfAccounts(false) : Promise.resolve([]),
+        canViewAccounting ? contabilidadService.getConfig() : Promise.resolve({}),
       ])
       setWarehouses(Array.isArray(whRes) ? whRes : [])
       setBranches([])
@@ -174,7 +177,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       setControlAccountId(cfg.accountMappings?.inventory?.control || '')
       setRequiresPerWarehouse(!!cfg.inventory?.requiresAccountPerWarehouse)
 
-      if (user?.tenantId) {
+      if (user?.tenantId && canViewCompany) {
         try {
           const tenant = await tenantsService.getOne(user.tenantId)
           setTenantIndustry(tenant?.industry || '')
@@ -185,16 +188,16 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     } finally {
       setLoading(false)
     }
-  }, [user?.tenantId])
+  }, [user?.tenantId, canViewInventory, canViewAccounting, canViewCompany])
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
   useEffect(() => {
-    if (!isManufacturing) return
+    if (!isManufacturing || !canViewAccounting) return
     api.get<any>('/accounting/cost-centers').then((res) => {
       setCostCenters(Array.isArray(res) ? res : (res as any)?.data || [])
     }).catch(() => setCostCenters([]))
-  }, [isManufacturing])
+  }, [isManufacturing, canViewAccounting])
 
   const refresh = async () => {
     setRefreshing(true)

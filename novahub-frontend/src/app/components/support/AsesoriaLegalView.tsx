@@ -29,6 +29,7 @@ interface AsesoriaLegalViewProps {
 
 export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: AsesoriaLegalViewProps) {
   const { canPerform } = useAuth();
+  const canViewLegal = canPerform('LEGAL', 'view');
   const [activeTab, setActiveTab] = useState(activeSubModule || 'cases');
   const [selectedCase, setSelectedCase] = useState<LegalCase | null>(null);
   const [showNewCase, setShowNewCase] = useState(false);
@@ -39,10 +40,10 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
   const casesQuery = useTenantQuery<LegalCase[]>(
     ['legal', 'cases', filterType, filterStatus],
     signal => legalService.listCases(filterType !== 'all' ? filterType : undefined, filterStatus !== 'all' ? filterStatus : undefined, signal),
-    { enabled: activeTab === 'cases' },
+    { enabled: canViewLegal && activeTab === 'cases' },
   );
   const remindersQuery = useTenantQuery<LegalReminder[]>(['legal', 'reminders'], signal => legalService.listReminders(signal), {
-    enabled: activeTab === 'reminders',
+    enabled: canViewLegal && activeTab === 'reminders',
   });
   const cases = asList(casesQuery.data) as LegalCase[];
   const reminders = asList(remindersQuery.data) as LegalReminder[];

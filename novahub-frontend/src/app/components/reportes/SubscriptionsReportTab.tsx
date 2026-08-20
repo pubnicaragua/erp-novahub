@@ -7,6 +7,7 @@ import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
@@ -64,6 +65,8 @@ function getRangeDates(range: string) {
 export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const { canPerform } = useAuth();
+  const canViewSubscriptions = canPerform('SUBSCRIPTIONS', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -71,7 +74,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
   const { data: requests = [], isLoading: loading } = useTenantQuery(['reports', 'subscriptions'], async (signal) => {
     const result = await subscriptionsService.getAllRequests({ report: true, pageSize: 5000 } as any, signal);
     return asList(result);
-  }, { onError: (e) => toast.error(e.message || 'Error cargando suscripciones') });
+  }, { enabled: canViewSubscriptions, onError: (e) => toast.error(e.message || 'Error cargando suscripciones') });
 
   const fmtShort = (v: number) => {
     const converted = toBaseAmount(v, baseCurrency);

@@ -42,6 +42,7 @@ interface RecursosHumanosPageProps {
 
 export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: RecursosHumanosPageProps) {
   const { user, canPerform } = useAuth();
+  const canReadHr = canPerform('HR', 'view');
   const queryClient = useQueryClient();
   
   // Map sidebar submodule IDs to tab values
@@ -167,7 +168,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           return {};
       }
     },
-    enabled: activeTab !== 'config-nomina' && activeTab !== 'ausencias-config',
+    enabled: canReadHr && activeTab !== 'config-nomina' && activeTab !== 'ausencias-config',
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,

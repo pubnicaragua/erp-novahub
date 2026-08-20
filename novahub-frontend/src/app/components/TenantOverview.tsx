@@ -84,7 +84,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [isExporting, setIsExporting] = useState(false);
   const [showSetupView, setShowSetupView] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canViewPos = canPerform('RETAIL_POS', 'view');
 
   useEffect(() => {
     if (!loading) return;
@@ -169,6 +170,15 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     setDataLoadError(false);
     setAccessDenied(false);
 
+    // Este resumen consulta exclusivamente el dashboard de Caja. No debe
+    // intentar acceder a RETAIL_POS cuando el usuario solo tiene acceso a
+    // otros módulos del tenant.
+    if (!canViewPos) {
+      setAccessDenied(true);
+      setLoading(false);
+      return;
+    }
+
     const effectivePeriod = period === 'custom' ? 'month' : period;
     const params = period === 'custom'
       ? { startDate: dateFrom || undefined, endDate: dateTo || undefined }
@@ -199,7 +209,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     setLoading(false);
 
     if (previous) setPrevData(previous);
-  }, [period, dateFrom, dateTo, valuationMode]);
+  }, [canViewPos, period, dateFrom, dateTo, valuationMode]);
 
   useEffect(() => {
     mountedRef.current = true;

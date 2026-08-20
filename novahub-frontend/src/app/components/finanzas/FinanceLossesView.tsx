@@ -20,7 +20,8 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 export function FinanceLossesView() {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canViewInventory = canPerform('INVENTORY', 'view');
   const { formatCurrentAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');
@@ -39,7 +40,7 @@ export function FinanceLossesView() {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
-    enabled: Boolean(user),
+    enabled: Boolean(user) && canViewInventory,
   });
 
   const data = lossesQuery.data;

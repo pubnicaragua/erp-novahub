@@ -196,7 +196,9 @@ const DARK_TOOLTIP = {
 export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canViewPurchases = canPerform('PURCHASES', 'view');
+  const canViewAccounting = canPerform('ACCOUNTING', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -209,7 +211,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       purchaseReceiptsService.getAll(filters, signal), purchaseRequestsService.getAll(filters, signal),
     ]);
     return { bills: asList(billRes), payments: asList(payRes), credits: asList(credRes), orders: asList(ordRes), receipts: asList(recRes), requests: asList(reqRes) };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando compras') });
+  }, { enabled: canViewPurchases, onError: (e) => toast.error(e.message || 'Error cargando compras') });
   const bills = reportData?.bills || [];
   const payments = reportData?.payments || [];
   const credits = reportData?.credits || [];
@@ -239,6 +241,11 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   };
 
   useEffect(() => {
+    if (!canViewAccounting) {
+      setBudgetItems([]);
+      setBudgetAccounts([]);
+      return;
+    }
     let active = true;
     Promise.all([contabilidadService.getBudgetItems(), contabilidadService.getChartOfAccounts()]).then(([bgtRes, accRes]) => {
       if (!active) return;
@@ -249,19 +256,19 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       setBudgetAccounts(flatAccounts);
     }).catch(() => null);
     return () => { active = false; };
-  }, []);
+  }, [canViewAccounting]);
 
   const { start: currentStart, prevStart, prevEnd, durationDays } = useMemo(() => getRangeDates(dateRange), [dateRange]);
 
   useEffect(() => {
-    if (currentStart.getTime() === 0) return;
+    if (currentStart.getTime() === 0 || !canViewAccounting) return;
     contabilidadService.getTrialBalance({
       dateFrom: currentStart.toISOString(),
       dateTo: new Date().toISOString()
     }).catch(() => null).then((res: any) => {
       setBudgetTrial(res?.rows || []);
     });
-  }, [currentStart]);
+  }, [currentStart, canViewAccounting]);
 
   const navigateToBudget = () => {
     window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'contabilidad', subModule: 'presupuestos' } }));

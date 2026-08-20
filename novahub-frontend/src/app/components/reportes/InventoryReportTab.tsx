@@ -15,6 +15,7 @@ import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Scale, Warehouse, Tag, ShieldAlert, Gauge, Layers, Upload, CalendarClock, Download, Loader2, CheckCircle2 } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
@@ -194,6 +195,8 @@ const TD = 'px-3 py-2 text-xs whitespace-nowrap';
 export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource } = useCurrency();
   const { themeConfig } = useTheme();
+  const { canPerform } = useAuth();
+  const canViewInventory = canPerform('INVENTORY', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -208,7 +211,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       inventoryService.getReplenishmentReport('monthly', signal),
     ]);
     return { products: asList(prodRes), movements: asList(movRes), adjustments: asList(adjRes), transfers: asList(trfRes), replenishment: replRes };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando inventario') });
+  }, { enabled: canViewInventory, onError: (e) => toast.error(e.message || 'Error cargando inventario') });
   const products = reportData?.products || [];
   const movements = reportData?.movements || [];
   const adjustments = reportData?.adjustments || [];

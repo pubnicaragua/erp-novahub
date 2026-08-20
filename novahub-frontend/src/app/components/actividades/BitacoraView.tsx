@@ -40,11 +40,13 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const { canPerform } = useAuth();
+  const canViewTasks = canPerform('ACTIVITIES_TASKS', 'view');
+  const canViewEvents = canPerform('ACTIVITIES_EVENTS', 'view');
   const tasksQuery = useTenantQuery<any[]>(['activities', 'tasks'], signal => tasksService.getAll(signal), {
-    enabled: isAddOpen,
+    enabled: isAddOpen && canViewTasks,
   });
   const eventsQuery = useTenantQuery<any[]>(['activities', 'events'], signal => eventsService.getAll(signal), {
-    enabled: isAddOpen,
+    enabled: isAddOpen && canViewEvents,
   });
   const linkedActivityIds = new Set(data.map(l => l.activityId).filter(Boolean));
   const availableTasks = asList(tasksQuery.data).filter((task: any) => !linkedActivityIds.has(task.id));

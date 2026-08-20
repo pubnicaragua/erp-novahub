@@ -29,11 +29,14 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
   const [searchTerm, setSearchTerm] = useState('');
   const { formatAmount, currency, displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount } = useCurrency();
   const { canPerform } = useAuth();
+  const canViewFinance = canPerform('FINANCIAL', 'view');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', location: '', startDate: '', endDate: '', cost: '', income: '',
   });
-  const accountsQuery = useTenantQuery<any>(['finance', 'accounts'], signal => accountsService.getAll(undefined, signal));
+  const accountsQuery = useTenantQuery<any>(['finance', 'accounts'], signal => accountsService.getAll(undefined, signal), {
+    enabled: canViewFinance,
+  });
   const defaultAccountId = asList(accountsQuery.data)[0]?.id || '';
 
   const columns: ColumnDef<Event>[] = [

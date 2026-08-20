@@ -5,6 +5,7 @@ import { subscriptionsService } from '../services/subscriptions.service';
 import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
+export type UserType = 'admin' | 'collaborator' | 'manager';
 
 export type Module =
   | 'dashboard'
@@ -78,6 +79,8 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  /** Tipo de identidad canónico. Los roles operativos no incluyen Manager. */
+  userType: UserType;
   role: Role;
   customRoleName?: string;
   tenantId: string;
@@ -89,6 +92,9 @@ export interface User {
   isPlatformAdmin: boolean;
   isTenantUser: boolean;
   isTenantAdmin: boolean;
+  /** Sesión temporal de trabajo de un Manager dentro de una sucursal. */
+  managerMode?: boolean;
+  managerCanEdit?: boolean;
   branchIds?: string[];
   /** Datos del tenant propietario tal como los devuelve /auth/profile.
    *  `expiresAt` es la fecha real de expiración de la suscripción/trial
@@ -274,7 +280,19 @@ const createUserObject = (apiPayload: any): User => {
   // Manejar el caso donde el backend devuelve { user: {...} } o { data: {...} }
   const apiUser = apiPayload?.user || apiPayload?.data || apiPayload || {};
   
-  const role = normalizeRole(apiUser?.role);
+  const normalizedUserType = String(apiUser?.userType || '').toLowerCase();
+  const userType: UserType = normalizedUserType === 'manager'
+    ? 'manager'
+    : normalizedUserType === 'admin'
+      ? 'admin'
+      : ['manager'].includes(String(apiUser?.role || '').toLowerCase())
+        ? 'manager'
+        : ['admin', 'super_admin', 'partner'].includes(String(apiUser?.role || '').toLowerCase())
+          ? 'admin'
+          : 'collaborator';
+  // `role=manager` se mantiene como compatibilidad de presentación para
+  // sesiones antiguas, pero la fuente de verdad es userType.
+  const role = userType === 'manager' ? 'manager' : normalizeRole(apiUser?.role);
   
   // Platform Admins: SuperAdmin, Partner, or DEV admin
   const isPlatformAdmin = ['superadmin', 'partner'].includes(role);
@@ -404,18 +422,22 @@ const createUserObject = (apiPayload: any): User => {
     name: apiUser.name,
     email: apiUser.email,
     avatar: apiUser.avatar,
+    userType,
     role,
     customRoleName: apiUser.customRoleName,
     // Un SuperAdmin es una identidad de plataforma, no un usuario operativo
     // de una sucursal. Conservamos el tenantId vacío en el frontend para que
     // ningún módulo tenant intente usarlo accidentalmente.
     tenantId: apiUser.clientTenantId || '',
+    clientTenantId: apiUser.clientTenantId || undefined,
     tenantName: isPlatformAdmin ? 'NovaHub Platform' : (apiUser.clientTenant?.name || 'Nova Hub'),
     permissions: mergedPermissions,
     enabledModules: apiUser.enabledModules || [],
     isPlatformAdmin,
     isTenantUser: !isPlatformAdmin,
-    isTenantAdmin: role === 'admin' && !isPlatformAdmin,
+    isTenantAdmin: userType === 'admin' && role === 'admin' && !isPlatformAdmin,
+    managerMode: Boolean(apiUser.managerMode),
+    managerCanEdit: Boolean(apiUser.managerCanEdit),
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
     clientTenant: apiUser.clientTenant
       ? {
@@ -626,6 +648,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!isSubscribed) return false;
 
+    // Al entrar a una sucursal, el Manager debe ver el mismo menú operativo
+    // que el usuario administrador de esa sucursal. El backend sigue
+    // validando la suscripción y el contexto Manager en cada request.
+    if (user.managerMode) return true;
+
     // El ADMIN tiene todas las acciones, pero únicamente dentro de los
     // módulos habilitados para su empresa.
     if (user.isTenantAdmin) return true;
@@ -653,6 +680,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
+    if (user.managerMode) return tenantAdminHasModuleEnabled(user, module);
     // El administrador de la empresa tiene todas las acciones de los módulos
     // habilitados, incluidos permisos de flujo nuevos.
     if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module);

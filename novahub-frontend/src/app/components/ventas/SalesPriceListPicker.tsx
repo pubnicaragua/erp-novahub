@@ -21,11 +21,11 @@ interface SalesPriceListPickerProps {
 
 /** Selecciona la tarifa comercial y aplica sus precios sin permitir edición manual. */
 export function SalesPriceListPicker({ customer, value, items, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesPriceListPickerProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
-    enabled: Boolean(user?.tenantId),
+    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view'),
     staleTime: 60_000,
   });
   const matrix = useMemo(() => unwrapSalesPriceListMatrix(matrixQuery.data), [matrixQuery.data]);

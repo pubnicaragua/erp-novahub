@@ -122,6 +122,8 @@ function groupSalesIncomePayments(
 
 export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: FinanzasPageProps) {
   const { user, canPerform } = useAuth();
+  const canReadFinancial = canPerform('FINANCIAL', 'view');
+  const canReadAccounting = canPerform('ACCOUNTING', 'view');
   const queryClient = useQueryClient();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const { displayCurrency, baseCurrency, exchangeRate: globalRate, valuationMode, valuationModeLabel, showValuationLegend, convertAmount, convertCurrentAmount, formatCurrentAmount, toBaseAmount } = useCurrency();
@@ -191,7 +193,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const incomesQuery = useQuery({
     queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => incomeService.getAll(financeParams, signal),
-    enabled: activeDataTabs.income,
+    enabled: canReadFinancial && activeDataTabs.income,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -200,7 +202,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const expensesQuery = useQuery({
     queryKey: ['finance', 'expenses', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => expensesService.getAll(financeParams, signal),
-    enabled: activeDataTabs.expense,
+    enabled: canReadFinancial && activeDataTabs.expense,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -209,7 +211,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const recurringExpensesQuery = useQuery({
     queryKey: ['finance', 'recurring-expenses', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => recurringExpensesService.getAll(financeParams, signal),
-    enabled: activeDataTabs.recurringExpense,
+    enabled: canReadFinancial && activeDataTabs.recurringExpense,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -218,7 +220,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const recurringIncomesQuery = useQuery({
     queryKey: ['finance', 'recurring-incomes', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => recurringIncomesService.getAll(financeParams, signal),
-    enabled: activeDataTabs.recurringIncome,
+    enabled: canReadFinancial && activeDataTabs.recurringIncome,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -227,7 +229,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const accountsQuery = useQuery({
     queryKey: ['finance', 'accounts', tenantKey],
     queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
-    enabled: activeDataTabs.accounts,
+    enabled: canReadFinancial && activeDataTabs.accounts,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
@@ -236,7 +238,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const accountingMappingsQuery = useQuery({
     queryKey: ['finance', 'accounting-mappings', tenantKey],
     queryFn: ({ signal }) => contabilidadService.getSuggestedAccounts(signal),
-    enabled: activeDataTabs.accounts,
+    enabled: canReadAccounting && activeDataTabs.accounts,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,

@@ -18,6 +18,7 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { invoicesService } from '../../services/ventas.service';
 import { supplierInvoicesService } from '../../services/compras.service';
 import { DateField } from '../ui/DateField';
+import { useAuth } from '../../contexts/AuthContext';
 
 type AuditKind = 'SALE' | 'PURCHASE';
 type AuditStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'ISSUES';
@@ -51,6 +52,8 @@ const HISTORY_ACTIONS = [
 ];
 
 export function InvoiceAuditView() {
+  const { canPerform } = useAuth();
+  const canViewInvoiceAudit = canPerform('ACCOUNTING_INVOICE_AUDIT', 'view') || canPerform('ACCOUNTING', 'view');
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>('invoices');
   const [kind, setKind] = useState<AuditKind>('SALE');
@@ -74,6 +77,7 @@ export function InvoiceAuditView() {
       page, pageSize: 20,
     }, signal),
     staleTime: 30_000, gcTime: 5 * 60_000, retry: 1,
+    enabled: canViewInvoiceAudit,
   });
 
   const [histAction, setHistAction] = useState('ALL');
@@ -84,6 +88,7 @@ export function InvoiceAuditView() {
       kind, action: histAction === 'ALL' ? undefined : histAction, page: histPage, pageSize: 20,
     }, signal),
     staleTime: 30_000, gcTime: 5 * 60_000, retry: 1,
+    enabled: canViewInvoiceAudit,
   });
 
   const data = listQuery.data as any;

@@ -17,6 +17,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
 import { usersService } from '../../services/users.service';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../contexts/AuthContext';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
@@ -204,6 +205,8 @@ function productStockForWarehouses(product: any, warehouseIds: Set<string>): num
 }
 
 export function InventoryAuditsView({ audits, warehouses, products, onRefresh, onRefreshWarehouses, pagination }: InventoryAuditsViewProps) {
+  const { canPerform } = useAuth();
+  const canViewUsers = canPerform('CONFIG_USERS', 'view');
   const [isCreating, setIsCreating] = useState(false);
   const [detailAudit, setDetailAudit] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
@@ -251,6 +254,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const usersQuery = useQuery({
     queryKey: ['tenant-users', 'audits'],
     queryFn: () => usersService.getAll(),
+    enabled: canViewUsers,
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
     retry: 1,

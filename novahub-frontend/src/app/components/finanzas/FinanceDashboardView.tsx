@@ -31,13 +31,17 @@ const toList = (response: any) => Array.isArray(response) ? response : (Array.is
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, accounts, onNavigate }: Props) {
   const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canReadSales = canPerform('SALES', 'view');
+  const canReadPurchases = canPerform('PURCHASES', 'view');
+  const canReadFinancial = canPerform('FINANCIAL', 'view');
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
   const salesInvoicesQuery = useQuery({
     queryKey: ['finance', 'sales-invoices', tenantKey],
     queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: canReadSales,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -46,6 +50,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const supplierInvoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
     queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -54,6 +59,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const chartAccountsQuery = useQuery({
     queryKey: ['finance', 'accounts', tenantKey],
     queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal),
+    enabled: canReadFinancial,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,

@@ -96,6 +96,9 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const [activeSection, setActiveSection] = useState(normalize(activeSubModule));
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
+  const canReadAccounting = canPerform('ACCOUNTING', 'view');
+  const canReadInventory = canPerform('INVENTORY', 'view');
+  const canReadPurchases = canPerform('PURCHASES', 'view');
   const purchasesStaleTime = 15_000;
   const [searchState, setSearchState] = useState<Record<string, string>>({});
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
@@ -183,14 +186,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const suppliersQuery = useQuery({
     queryKey: ['purchases', 'suppliers', tenantKey, suppliersPage.page, suppliersPage.pageSize, searchFor('proveedores')],
     queryFn: ({ signal }) => suppliersService.getAll({ page: suppliersPage.page, pageSize: suppliersPage.pageSize, search: searchFor('proveedores') }, signal),
-    enabled: activeSection === 'proveedores',
+    enabled: canReadPurchases && activeSection === 'proveedores',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const suppliersCatalogQuery = useQuery({
     queryKey: ['purchases', 'suppliers-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => suppliersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
+    enabled: canReadPurchases && ['solicitudes', 'gastos', 'gastos-rec', 'ordenes', 'recepciones', 'facturas-rec', 'pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -198,39 +201,39 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const chartAccountsQuery = useQuery({
     queryKey: ['purchases', 'chart-accounts-catalog', tenantKey],
     queryFn: ({ signal }) => contabilidadService.getChartOfAccounts(false, signal),
-    enabled: ['gastos', 'recepciones'].includes(activeSection),
+    enabled: canReadAccounting && ['gastos', 'recepciones'].includes(activeSection),
     staleTime: 30_000,
   });
   const expenseCategoriesQuery = useQuery({
     queryKey: ['purchases', 'expense-categories-catalog', tenantKey],
     queryFn: ({ signal }) => contabilidadService.getExpenseCategories(undefined, signal),
-    enabled: activeSection === 'gastos',
+    enabled: canReadAccounting && activeSection === 'gastos',
     staleTime: 30_000,
   });
   const warehouseCatalogQuery = useQuery({
     queryKey: ['purchases', 'warehouses-catalog', tenantKey],
     queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
-    enabled: ['solicitudes', 'recepciones'].includes(activeSection),
+    enabled: canReadInventory && ['solicitudes', 'recepciones'].includes(activeSection),
     staleTime: 30_000,
   });
   const productCatalogQuery = useQuery({
     queryKey: ['purchases', 'products-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => inventoryService.getProducts({ page: 1, pageSize: 200 }, signal),
-    enabled: ['ordenes', 'recepciones', 'creditos'].includes(activeSection),
+    enabled: canReadInventory && ['ordenes', 'recepciones', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
   const productCategoriesQuery = useQuery({
     queryKey: ['purchases', 'products-categories-catalog', tenantKey],
     queryFn: ({ signal }) => inventoryService.getCategories(signal),
-    enabled: ['ordenes', 'recepciones'].includes(activeSection),
+    enabled: canReadInventory && ['ordenes', 'recepciones'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
   const orderCatalogQuery = useQuery({
     queryKey: ['purchases', 'orders-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: 1, pageSize: 200 }, signal),
-    enabled: activeSection === 'recepciones',
+    enabled: canReadPurchases && activeSection === 'recepciones',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -244,7 +247,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const expensesQuery = useQuery({
     queryKey: ['purchases', 'expenses', tenantKey, expensesPage.page, expensesPage.pageSize, searchFor('gastos'), expenseDateFilter.from, expenseDateFilter.to],
     queryFn: ({ signal }) => expensesService.getAll({ page: expensesPage.page, pageSize: expensesPage.pageSize, search: searchFor('gastos'), dateFrom: expenseDateFilter.from, dateTo: expenseDateFilter.to }, signal),
-    enabled: activeSection === 'gastos',
+    enabled: canReadPurchases && activeSection === 'gastos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -252,7 +255,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const recurringExpensesQuery = useQuery({
     queryKey: ['purchases', 'recurring-expenses', tenantKey, recurringExpensesPage.page, recurringExpensesPage.pageSize, searchFor('gastos-rec')],
     queryFn: ({ signal }) => recurringExpensesService.getAll({ page: recurringExpensesPage.page, pageSize: recurringExpensesPage.pageSize, search: searchFor('gastos-rec') }, signal),
-    enabled: activeSection === 'gastos-rec',
+    enabled: canReadPurchases && activeSection === 'gastos-rec',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -260,7 +263,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const ordersQuery = useQuery({
     queryKey: ['purchases', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes'), statusFor('ordenes'), selectedBranchId],
     queryFn: ({ signal }) => purchaseOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes'), status: statusFor('ordenes'), branchId: selectedBranchId || undefined }, signal),
-    enabled: activeSection === 'ordenes',
+    enabled: canReadPurchases && activeSection === 'ordenes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -268,14 +271,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const receiptsQuery = useQuery({
     queryKey: ['purchases', 'receipts', tenantKey, receiptsPage.page, receiptsPage.pageSize, searchFor('recepciones'), selectedBranchId],
     queryFn: ({ signal }) => purchaseReceiptsService.getAll({ page: receiptsPage.page, pageSize: receiptsPage.pageSize, search: searchFor('recepciones'), branchId: selectedBranchId || undefined }, signal),
-    enabled: activeSection === 'recepciones',
+    enabled: canReadPurchases && activeSection === 'recepciones',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
   const invoicesCatalogQuery = useQuery({
     queryKey: ['purchases', 'invoices-catalog', tenantKey, 1, 200, selectedBranchId],
     queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200, branchId: selectedBranchId || undefined }, signal),
-    enabled: ['pagos', 'creditos'].includes(activeSection),
+    enabled: canReadPurchases && ['pagos', 'creditos'].includes(activeSection),
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -284,7 +287,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const recurringInvoicesQuery = useQuery({
     queryKey: ['purchases', 'recurring-invoices', tenantKey, recurringInvoicesPage.page, recurringInvoicesPage.pageSize, searchFor('facturas-rec')],
     queryFn: ({ signal }) => recurringSupplierInvoicesService.getAll({ page: recurringInvoicesPage.page, pageSize: recurringInvoicesPage.pageSize, search: searchFor('facturas-rec') }, signal),
-    enabled: activeSection === 'facturas-rec',
+    enabled: canReadPurchases && activeSection === 'facturas-rec',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -292,7 +295,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const paymentsQuery = useQuery({
     queryKey: ['purchases', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos'), selectedBranchId],
     queryFn: ({ signal }) => paymentsMadeService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos'), branchId: selectedBranchId || undefined }, signal),
-    enabled: activeSection === 'pagos',
+    enabled: canReadPurchases && activeSection === 'pagos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -300,7 +303,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const creditsQuery = useQuery({
     queryKey: ['purchases', 'credits', tenantKey, creditsPage.page, creditsPage.pageSize, searchFor('creditos'), selectedBranchId],
     queryFn: ({ signal }) => supplierCreditsService.getAll({ page: creditsPage.page, pageSize: creditsPage.pageSize, search: searchFor('creditos'), branchId: selectedBranchId || undefined }, signal),
-    enabled: activeSection === 'creditos',
+    enabled: canReadPurchases && activeSection === 'creditos',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });
@@ -308,7 +311,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
   const requestsQuery = useQuery({
     queryKey: ['purchases', 'requests', tenantKey, requestsPage.page, requestsPage.pageSize, searchFor('solicitudes'), statusFor('solicitudes'), selectedBranchId],
     queryFn: ({ signal }) => purchaseRequestsService.getAll({ page: requestsPage.page, pageSize: requestsPage.pageSize, search: searchFor('solicitudes'), status: statusFor('solicitudes'), branchId: selectedBranchId || undefined }, signal),
-    enabled: activeSection === 'solicitudes',
+    enabled: canReadPurchases && activeSection === 'solicitudes',
     placeholderData: keepPreviousData,
     staleTime: purchasesStaleTime,
   });

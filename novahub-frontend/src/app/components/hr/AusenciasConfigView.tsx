@@ -55,6 +55,7 @@ type ConfigFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'DOC';
 
 export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
   const { canPerform } = useAuth();
+  const canViewHr = canPerform('HR', 'view');
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
+    enabled: canViewHr,
   });
   const loading = absenceQuery.isLoading;
   const absenceTypes = (Array.isArray(absenceQuery.data) ? absenceQuery.data : absenceQuery.data?.data || []) as AbsenceType[];

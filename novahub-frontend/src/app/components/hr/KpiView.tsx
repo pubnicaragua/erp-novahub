@@ -89,6 +89,7 @@ const resultCompliance = (r: KpiResult): string => {
 
 export function KpiView({ employees = [], departments = [], onRefresh }: KpiViewProps) {
   const { canPerform } = useAuth();
+  const canViewHr = canPerform('HR', 'view');
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('definitions');
 
@@ -120,6 +121,7 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
+    enabled: canViewHr,
     placeholderData: keepPreviousData,
   });
   const loading = kpiQuery.isLoading;

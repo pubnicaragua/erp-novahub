@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { getApiErrorMessage } from '../../../services/api';
 import { cajaService, type CashRegister } from '../../../services/caja.service';
 import { inventoryService } from '../../../services/inventario.service';
+import { useAuth } from '../../../contexts/AuthContext';
 
 type SetupModal = 'warehouse' | 'register' | null;
 
@@ -31,6 +32,8 @@ export function CajaSetupGuide({
   onRegistersChanged,
   onOpenManageCajas,
 }: SetupGuideProps) {
+  const { canPerform } = useAuth();
+  const canViewInventory = canPerform('INVENTORY', 'view');
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [modal, setModal] = useState<SetupModal>(null);
   const [saving, setSaving] = useState(false);
@@ -40,6 +43,11 @@ export function CajaSetupGuide({
 
   const loadSetupData = useCallback(async () => {
     setLoading(true);
+    if (!canViewInventory) {
+      setWarehouses([]);
+      setLoading(false);
+      return;
+    }
     try {
       const warehouseRes = await inventoryService.getWarehouses();
       const nextWarehouses = Array.isArray(warehouseRes) ? warehouseRes : ((warehouseRes as any)?.data || []);
@@ -51,7 +59,7 @@ export function CajaSetupGuide({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewInventory]);
 
   useEffect(() => {
     const timer = window.setTimeout(loadSetupData, 0);
@@ -76,7 +84,7 @@ export function CajaSetupGuide({
     );
   }
 
-  if (!nextStep) return null;
+  if (!canViewInventory || !nextStep) return null;
 
   const openNextStep = () => {
     if (nextStep === 'register') {

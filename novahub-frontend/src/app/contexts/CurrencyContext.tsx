@@ -46,6 +46,10 @@ const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
+  // Un Manager global no tiene una sucursal activa. La tasa de cambio es
+  // configuración de una sucursal, por lo que no debe consultarse desde el
+  // contexto consolidado del grupo.
+  const activeTenantId = user?.clientTenantId || user?.tenantId || '';
   const [currency, setCurrencyState] = useState<Currency>(() => {
     const saved = (localStorage.getItem(STORAGE_CURRENCY_KEY) || '').toUpperCase();
     if (saved === 'COR') return 'NIO';
@@ -79,6 +83,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshRate = async () => {
+    if (!activeTenantId) return;
+
     try {
       const data = await api.get<{
         rate: number;
@@ -115,9 +121,9 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !activeTenantId) return;
     Promise.resolve().then(refreshRate);
-  }, [isAuthenticated, user?.tenantId]);
+  }, [isAuthenticated, activeTenantId]);
 
   const setCurrency = (c: Currency) => {
     if (!currencyInteractionEnabled) return;

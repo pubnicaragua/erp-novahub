@@ -11,6 +11,7 @@ import { KnowledgeBaseView } from './support/KnowledgeBaseView';
 import { AgentsView } from './support/AgentsView';
 import { GuidedTour, type GuidedTourStep } from './ui/GuidedTour';
 import { asList, useTenantQuery } from '../hooks/useTenantQuery';
+import { useAuth } from '../contexts/AuthContext';
 
 interface KnowledgeArticle {
   id: string;
@@ -53,19 +54,23 @@ interface TicketsPageProps {
 }
 
 export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: TicketsPageProps) => {
+  const { canPerform } = useAuth();
+  const canViewTickets = canPerform('TICKETS', 'view');
+  const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
+  const canViewAgents = canPerform('TICKETS_AGENTS', 'view');
   const [activeTab, setActiveTab] = useState(activeSubModule || 'tickets');
   const [showTutorial, setShowTutorial] = useState(false);
 
   // Las pestañas son independientes: no cargamos tickets, artículos y agentes
   // al mismo tiempo cuando el usuario solo necesita una de ellas.
   const ticketsQuery = useTenantQuery<Ticket[]>(['support', 'tickets'], signal => supportService.getAll(undefined, signal), {
-    enabled: activeTab === 'tickets' || activeTab === 'agents',
+    enabled: canViewTickets && (activeTab === 'tickets' || activeTab === 'agents'),
   });
   const knowledgeBaseQuery = useTenantQuery<KnowledgeArticle[]>(['support', 'knowledge-base'], signal => knowledgeBaseService.getAll(undefined, signal), {
-    enabled: activeTab === 'faqs',
+    enabled: canViewKnowledge && activeTab === 'faqs',
   });
   const agentsQuery = useTenantQuery<SupportAgent[]>(['support', 'agents'], signal => supportAgentsService.getAll(undefined, signal), {
-    enabled: activeTab === 'agents',
+    enabled: canViewAgents && activeTab === 'agents',
   });
 
   const data = {

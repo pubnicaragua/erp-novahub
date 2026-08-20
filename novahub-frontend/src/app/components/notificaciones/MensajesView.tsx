@@ -94,7 +94,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onRef
   const recipientsQuery = useTenantQuery<MessageParticipant[]>(
     ['notifications', 'recipients'],
     signal => messagesService.getRecipients(signal),
-    { enabled: composeOpen },
+    { enabled: composeOpen && canPerform('NOTIFICATIONS_MESSAGES', 'create') },
   );
   const recipients = asList(recipientsQuery.data) as MessageParticipant[];
   const recipientsLoading = recipientsQuery.isLoading || recipientsQuery.isFetching;

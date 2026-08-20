@@ -72,6 +72,9 @@ interface VentasPageProps {
 export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: VentasPageProps) {
   const { user, canPerform } = useAuth();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
+  const canReadInventory = canPerform('INVENTORY', 'view');
+  const canReadHr = canPerform('HR', 'view');
+  const canReadSales = canPerform('SALES', 'view');
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -207,79 +210,79 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customersListQuery = useQuery({
     queryKey: ['sales', 'customers', tenantKey, customersPage.page, customersPage.pageSize, searchFor('clientes')],
     queryFn: ({ signal }) => customersService.getAll({ page: customersPage.page, pageSize: customersPage.pageSize, search: searchFor('clientes') }, signal),
-    enabled: activeSection === 'clientes',
+    enabled: canReadSales && activeSection === 'clientes',
     placeholderData: keepPreviousData,
   });
   const customersCatalogQuery = useQuery({
     queryKey: ['sales', 'customers-catalog', tenantKey, 1, 200],
     queryFn: ({ signal }) => customersService.getAll({ page: 1, pageSize: 200, status: 'ACTIVE' }, signal),
-    enabled: needsCatalogs,
+    enabled: canReadSales && needsCatalogs,
     placeholderData: keepPreviousData,
   });
   const estimatesQuery = useQuery({
     queryKey: ['sales', 'estimates', tenantKey, estimatesPage.page, estimatesPage.pageSize, searchFor('estimaciones'), estimatesDates.dateFrom, estimatesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => estimatesService.getAll({ page: estimatesPage.page, pageSize: estimatesPage.pageSize, search: searchFor('estimaciones'), ...estimatesDates, ...branchFilter }, signal),
-    enabled: activeSection === 'estimaciones',
+    enabled: canReadSales && activeSection === 'estimaciones',
     placeholderData: keepPreviousData,
   });
   const ordersQuery = useQuery({
     queryKey: ['sales', 'orders', tenantKey, ordersPage.page, ordersPage.pageSize, searchFor('ordenes-venta'), ordersDates.dateFrom, ordersDates.dateTo, selectedBranchId, ordersStatusParam],
     queryFn: ({ signal }) => salesOrdersService.getAll({ page: ordersPage.page, pageSize: ordersPage.pageSize, search: searchFor('ordenes-venta'), status: ordersStatusParam, ...ordersDates, ...branchFilter }, signal),
-    enabled: activeSection === 'ordenes-venta',
+    enabled: canReadSales && activeSection === 'ordenes-venta',
     placeholderData: keepPreviousData,
   });
   const invoicesQuery = useQuery({
     queryKey: ['sales', 'invoices', tenantKey, invoicesPage.page, invoicesPage.pageSize, searchFor('facturas'), invoicesDates.dateFrom, invoicesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => invoicesService.getAll({ page: invoicesPage.page, pageSize: invoicesPage.pageSize, search: searchFor('facturas'), ...invoicesDates, ...branchFilter }, signal),
-    enabled: needsInvoices,
+    enabled: canReadSales && needsInvoices,
     placeholderData: keepPreviousData,
   });
   const paymentsQuery = useQuery({
     queryKey: ['sales', 'payments', tenantKey, paymentsPage.page, paymentsPage.pageSize, searchFor('pagos-recibidos'), paymentsDates.dateFrom, paymentsDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => paymentsService.getAll({ page: paymentsPage.page, pageSize: paymentsPage.pageSize, search: searchFor('pagos-recibidos'), ...paymentsDates, ...branchFilter }, signal),
-    enabled: activeSection === 'pagos-recibidos',
+    enabled: canReadSales && activeSection === 'pagos-recibidos',
     placeholderData: keepPreviousData,
   });
   const recurringQuery = useQuery({
     queryKey: ['sales', 'recurring-invoices', tenantKey, recurringPage.page, recurringPage.pageSize, searchFor('facturas-recurrentes'), recurringDates.dateFrom, recurringDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => recurringInvoicesService.getAll({ page: recurringPage.page, pageSize: recurringPage.pageSize, search: searchFor('facturas-recurrentes'), ...recurringDates, ...branchFilter }, signal),
-    enabled: activeSection === 'facturas-recurrentes',
+    enabled: canReadSales && activeSection === 'facturas-recurrentes',
     placeholderData: keepPreviousData,
   });
   const returnsQuery = useQuery({
     queryKey: ['sales', 'returns', tenantKey, returnsPage.page, returnsPage.pageSize, searchFor('devoluciones-venta'), returnsDates.dateFrom, returnsDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => salesReturnsService.getAll({ page: returnsPage.page, pageSize: returnsPage.pageSize, search: searchFor('devoluciones-venta'), ...returnsDates, ...branchFilter }, signal),
-    enabled: activeSection === 'devoluciones-venta',
+    enabled: canReadSales && activeSection === 'devoluciones-venta',
     placeholderData: keepPreviousData,
   });
   const creditNotesQuery = useQuery({
     queryKey: ['sales', 'credit-notes', tenantKey, creditNotesQueryPage.page, creditNotesQueryPage.pageSize, searchFor('notas-credito'), creditNotesDates.dateFrom, creditNotesDates.dateTo, selectedBranchId],
     queryFn: ({ signal }) => creditNotesService.getAll({ page: creditNotesQueryPage.page, pageSize: creditNotesQueryPage.pageSize, search: searchFor('notas-credito'), ...creditNotesDates, ...branchFilter }, signal),
-    enabled: needsCredits,
+    enabled: canReadSales && needsCredits,
     placeholderData: keepPreviousData,
   });
   const productsQuery = useQuery({
     queryKey: ['sales', 'products-catalog', tenantKey, 1, 200],
     queryFn: () => inventoryService.getProducts({ page: 1, pageSize: 200 }),
-    enabled: needsProducts,
+    enabled: canReadInventory && needsProducts,
     placeholderData: keepPreviousData,
   });
   const seriesQuery = useQuery({
     queryKey: ['sales', 'series', tenantKey],
     queryFn: () => inventoryService.getSeries(),
-    enabled: activeSection === 'facturas',
+    enabled: canReadInventory && activeSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const warehousesQuery = useQuery({
     queryKey: ['sales', 'warehouses', tenantKey],
     queryFn: () => inventoryService.getWarehouses(),
-    enabled: activeSection === 'facturas',
+    enabled: canReadInventory && activeSection === 'facturas',
     placeholderData: keepPreviousData,
   });
   const employeesQuery = useQuery({
     queryKey: ['sales', 'employees', tenantKey],
     queryFn: () => hrService.getEmployees({ status: 'ACTIVE', isSeller: true, pageSize: 500 }),
-    enabled: ['ordenes-venta', 'facturas'].includes(activeSection),
+    enabled: canReadHr && ['ordenes-venta', 'facturas'].includes(activeSection),
     placeholderData: keepPreviousData,
   });
 

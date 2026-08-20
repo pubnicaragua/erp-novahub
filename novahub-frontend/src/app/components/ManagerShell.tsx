@@ -1,35 +1,62 @@
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import {
   BarChart3,
   Boxes,
+  ArrowDownToLine,
+  ArrowRightLeft,
   Building2,
+  ClipboardCheck,
+  ChevronDown,
+  History,
   LayoutDashboard,
   Menu,
   Moon,
+  Package,
   ShieldCheck,
   Settings2,
   Sun,
   Tags,
+  TrendingDown,
+  Wrench,
   Users,
   Warehouse,
   X,
-  ArrowRightLeft,
   Landmark,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { type ManagerGroup } from '../services/enterprise-groups.service';
 import { safeGetItem, safeSetItem } from '../services/safe-storage';
 import { Button } from './ui/button';
+import { NovaHubLogo } from './NovaHubLogo';
 import { cn } from './ui/utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { MANAGER_INVENTORY_VIEWS, type ManagerInventoryView } from './manager/manager-inventory.types';
+
+const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
+  overview: LayoutDashboard,
+  products: Package,
+  services: Wrench,
+  warehouses: Warehouse,
+  corporateWarehouses: Warehouse,
+  transfers: ArrowRightLeft,
+  adjustments: ArrowDownToLine,
+  audits: ClipboardCheck,
+  losses: TrendingDown,
+  movements: History,
+  assets: Boxes,
+};
 
 export type ManagerSection =
   | 'overview'
   | 'inventory'
   | 'accounting'
   | 'users'
-  | 'warehouses'
   | 'managers'
   | 'settings'
   | 'catalog'
@@ -38,13 +65,12 @@ export type ManagerSection =
 
 export const MANAGER_SECTIONS: Array<{ id: ManagerSection; label: string; icon: LucideIcon; group: string }> = [
   { id: 'overview', label: 'Resumen', icon: LayoutDashboard, group: 'General' },
-  { id: 'inventory', label: 'Inventario consolidado', icon: Boxes, group: 'Consolidado' },
+  { id: 'inventory', label: 'Inventario', icon: Boxes, group: 'Consolidado' },
   { id: 'accounting', label: 'Contabilidad y finanzas', icon: Landmark, group: 'Consolidado' },
   { id: 'consolidated', label: 'Estados financieros', icon: BarChart3, group: 'Consolidado' },
   { id: 'transfers', label: 'Transferencias', icon: ArrowRightLeft, group: 'Operaciones' },
   { id: 'catalog', label: 'Catálogo compartido', icon: Tags, group: 'Operaciones' },
   { id: 'users', label: 'Usuarios', icon: Users, group: 'Administración' },
-  { id: 'warehouses', label: 'Almacenes', icon: Warehouse, group: 'Administración' },
   { id: 'managers', label: 'Accesos Manager', icon: ShieldCheck, group: 'Administración' },
   { id: 'settings', label: 'Configuración', icon: Settings2, group: 'Sistema' },
 ];
@@ -55,6 +81,9 @@ type ManagerThemeState = {
 };
 
 const MANAGER_THEME_KEY = 'novahub:manager-theme';
+const MANAGER_SIDEBAR_COLLAPSED_KEY = 'novahub:manager-sidebar-collapsed';
+const ManagerShellNavigationContext = createContext({ sidebarCollapsed: false });
+export const useManagerShellNavigation = () => useContext(ManagerShellNavigationContext);
 const MANAGER_THEME_VARIABLES = ['--primary', '--accent', '--sidebar', '--sidebar-primary', '--sidebar-accent'];
 const MANAGER_THEME_PRESETS = {
   emerald: { label: 'Esmeralda', primary: 'oklch(0.65 0.2 155)', sidebar: 'oklch(0.16 0.01 155)', accent: 'oklch(0.22 0.02 155)' },
@@ -127,7 +156,12 @@ type ManagerShellProps = {
   section: ManagerSection;
   onSectionChange: (section: ManagerSection) => void;
   group?: ManagerGroup;
-  branches: Array<{ id: string; name: string }>;
+  branches: Array<{ id: string; name: string; businessUnitId?: string | null }>;
+  businessUnits: Array<{ id: string; name: string; isActive?: boolean }>;
+  selectedBusinessUnitId: string;
+  onBusinessUnitChange: (businessUnitId: string) => void;
+  inventoryView: ManagerInventoryView;
+  onInventoryViewChange: (view: ManagerInventoryView) => void;
   selectedBranchId: string;
   onBranchChange: (branchId: string) => void;
   allowedSections?: ManagerSection[];
@@ -139,14 +173,28 @@ export function ManagerShell({
   onSectionChange,
   group,
   branches,
+  businessUnits,
+  selectedBusinessUnitId,
+  onBusinessUnitChange,
+  inventoryView,
+  onInventoryViewChange,
   selectedBranchId,
   onBranchChange,
   allowedSections,
 }: ManagerShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => safeGetItem(MANAGER_SIDEBAR_COLLAPSED_KEY) === 'true');
+  const [expandedSection, setExpandedSection] = useState<ManagerSection | null>(() => section === 'inventory' ? 'inventory' : null);
+  const { user, logout } = useAuth();
   const { theme, setTheme } = useManagerTheme();
   const visibleSections = allowedSections ? MANAGER_SECTIONS.filter((item) => allowedSections.includes(item.id)) : MANAGER_SECTIONS;
+  const scopedBranches = selectedBusinessUnitId
+    ? branches.filter((branch) => branch.businessUnitId === selectedBusinessUnitId)
+    : branches;
+
+  useEffect(() => {
+    if (section !== 'inventory') setExpandedSection(null);
+  }, [section]);
 
   const toggleTheme = (event?: MouseEvent<HTMLElement>) => {
     const root = document.documentElement;
@@ -200,14 +248,42 @@ export function ManagerShell({
     setSidebarOpen(false);
   };
 
+  const handleSectionClick = (next: ManagerSection) => {
+    if (next === 'inventory') {
+      onInventoryViewChange(MANAGER_INVENTORY_VIEWS[0].id);
+      if (sidebarCollapsed) {
+        if (section !== next) updateSection(next);
+        setExpandedSection(next);
+        return;
+      }
+      if (section !== next) updateSection(next);
+      setExpandedSection((current) => current === next ? null : next);
+      return;
+    }
+    setExpandedSection(null);
+    updateSection(next);
+  };
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      safeSetItem(MANAGER_SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+
   return (
-    <div className="manager-shell min-h-screen overflow-x-hidden bg-background text-foreground">
-      <ManagerSidebar open={sidebarOpen} section={section} onSectionChange={updateSection} onClose={() => setSidebarOpen(false)} groupName={group?.name} sections={visibleSections} />
-      <div className="min-h-screen min-w-0 lg:pl-[280px]">
+    <ManagerShellNavigationContext.Provider value={{ sidebarCollapsed }}>
+      <div className="manager-shell min-h-screen overflow-x-hidden bg-background text-foreground">
+        <ManagerSidebar collapsed={sidebarCollapsed} open={sidebarOpen} section={section} onSectionClick={handleSectionClick} expandedSection={expandedSection} onClose={() => setSidebarOpen(false)} groupName={group?.name} sections={visibleSections} inventoryView={inventoryView} onInventoryViewChange={onInventoryViewChange} />
+        <div className={cn('min-h-screen min-w-0 transition-[padding] duration-300', sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[280px]')}>
         <header className="sticky top-0 z-30 border-b border-border/60 bg-card/90 backdrop-blur-xl">
-          <div className="mx-auto flex min-h-16 w-full max-w-[1700px] min-w-0 flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-10">
+          <div className="flex min-h-16 w-full min-w-0 flex-wrap items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6">
             <Button variant="outline" size="icon" className="size-10 shrink-0 rounded-xl lg:hidden" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú Manager">
               <Menu className="size-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="hidden shrink-0 text-muted-foreground mr-2 lg:flex" onClick={toggleSidebarCollapsed} aria-label={sidebarCollapsed ? 'Expandir menú Manager' : 'Colapsar menú Manager'} title={sidebarCollapsed ? 'Expandir menú Manager' : 'Colapsar menú Manager'}>
+              {sidebarCollapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="hidden size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:flex"><Building2 className="size-5" /></div>
@@ -216,54 +292,91 @@ export function ManagerShell({
               </div>
             </div>
             <div className="order-3 flex w-full min-w-0 flex-col gap-2 sm:order-none sm:w-auto sm:flex-row sm:items-center">
+              <select aria-label="Filtrar rubro" value={selectedBusinessUnitId} onChange={(event) => onBusinessUnitChange(event.target.value)} className="h-10 min-w-0 max-w-full rounded-xl border border-border bg-background px-3 text-sm sm:w-48">
+                <option value="" disabled={section === 'inventory'}>{section === 'inventory' ? 'Seleccionar rubro' : 'Todos los rubros'}</option>
+                {businessUnits.filter((unit) => unit.isActive !== false).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
               <select aria-label="Filtrar sucursal" value={selectedBranchId} onChange={(event) => onBranchChange(event.target.value)} className="h-10 min-w-0 max-w-full rounded-xl border border-border bg-background px-3 text-sm sm:w-52">
                 <option value="">Todas las sucursales</option>
-                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                {scopedBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <Button variant="ghost" size="icon" className="size-10 rounded-xl" onClick={toggleTheme} aria-label={theme.mode === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'} title={theme.mode === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
                 {theme.mode === 'dark' ? <Sun className="size-5" /> : <Moon className="size-5" />}
               </Button>
-              <div className="ml-1 hidden items-center gap-2 border-l border-border/60 pl-3 sm:flex">
-                <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">{String(user?.name || 'M').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div>
-                <div className="hidden min-w-0 xl:block"><p className="max-w-32 truncate text-xs font-black">{user?.name || 'Manager'}</p><p className="text-[10px] uppercase tracking-widest text-primary">Manager global</p></div>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="ml-1 h-10 gap-2 rounded-xl border-l border-border/60 pl-3 pr-1 hover:bg-muted/60 focus-visible:ring-1" aria-label="Menú de usuario Manager">
+                    <div className="flex size-9 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">{String(user?.name || 'M').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div>
+                    <div className="hidden min-w-0 flex-col items-start text-left leading-tight xl:flex"><span className="max-w-32 truncate text-xs font-black">{user?.name || 'Manager'}</span><span className="text-[10px] uppercase tracking-widest text-primary">Manager global</span></div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)] rounded-xl">
+                  <DropdownMenuLabel><div className="flex flex-col space-y-1"><p className="text-sm font-medium">{user?.name || 'Manager'}</p><p className="text-xs text-muted-foreground">{user?.email || 'Acceso Manager'}</p></div></DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="text-red-600 transition-colors focus:bg-red-500/10 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"><LogOut className="mr-2 size-4 text-rose-500" /><span>Cerrar sesión</span></DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1700px] min-w-0 p-4 sm:p-6 md:p-10">{section === 'settings' ? <ManagerThemeSettings theme={theme} onPresetChange={(preset) => setTheme((current) => ({ ...current, preset }))} onToggleTheme={toggleTheme} /> : children}</main>
+        <main className={cn('mx-auto w-full max-w-[1700px] min-w-0', section === 'inventory' ? 'p-0' : 'p-4 sm:p-5 lg:p-7')}>{section === 'settings' ? <ManagerThemeSettings theme={theme} onPresetChange={(preset) => setTheme((current) => ({ ...current, preset }))} onToggleTheme={toggleTheme} /> : children}</main>
+        </div>
       </div>
-    </div>
+    </ManagerShellNavigationContext.Provider>
   );
 }
 
-function ManagerSidebar({ open, section, onSectionChange, onClose, groupName, sections = MANAGER_SECTIONS }: { open: boolean; section: ManagerSection; onSectionChange: (section: ManagerSection) => void; onClose: () => void; groupName?: string; sections?: typeof MANAGER_SECTIONS }) {
+function ManagerSidebar({ collapsed, open, section, onSectionClick, expandedSection, onClose, groupName, sections = MANAGER_SECTIONS, inventoryView, onInventoryViewChange }: { collapsed: boolean; open: boolean; section: ManagerSection; onSectionClick: (section: ManagerSection) => void; expandedSection: ManagerSection | null; onClose: () => void; groupName?: string; sections?: typeof MANAGER_SECTIONS; inventoryView: ManagerInventoryView; onInventoryViewChange: (view: ManagerInventoryView) => void }) {
   const { user } = useAuth();
   const groups = [...new Set(sections.map((item) => item.group))];
   return (
     <>
       <div className={cn('fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden', open ? 'block' : 'hidden')} onClick={onClose} aria-hidden="true" />
-      <aside className={cn('fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:translate-x-0', open && 'translate-x-0')}>
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border px-5">
-          <div className="min-w-0"><p className="truncate text-sm font-black uppercase tracking-tight text-sidebar-foreground">{groupName || 'Grupo empresarial'}</p><p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-sidebar-foreground/55">Panel de Control</p></div>
-          <Button variant="ghost" size="icon" className="size-9 text-sidebar-foreground hover:bg-sidebar-accent lg:hidden" onClick={onClose} aria-label="Cerrar menú Manager"><X className="size-5" /></Button>
+      <aside className={cn('fixed left-0 top-0 z-50 h-screen w-[270px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300', open ? 'translate-x-0' : '-translate-x-full', 'lg:translate-x-0', collapsed ? 'lg:w-[72px]' : 'lg:w-[270px]')}>
+        <div className="flex h-full flex-col">
+        <div className={cn('flex h-16 shrink-0 items-center overflow-visible border-b border-sidebar-border px-3', collapsed ? 'justify-center' : 'justify-between')}>
+          {collapsed ? (
+            <div className="flex items-center justify-center" title={groupName || 'Grupo empresarial'} aria-label={groupName || 'Grupo empresarial'}>
+              <NovaHubLogo size={36} />
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-3">
+              <NovaHubLogo size={38} />
+              <div className="flex min-w-0 flex-col items-start overflow-hidden leading-none">
+                <span className="max-w-[150px] truncate text-sm font-black tracking-tight text-sidebar-foreground">{groupName || 'Grupo empresarial'}</span>
+                <span className="mt-1 max-w-[150px] truncate text-[10px] uppercase tracking-widest text-sidebar-foreground/50">Panel de Control</span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="size-9 text-sidebar-foreground hover:bg-sidebar-accent lg:hidden" onClick={onClose} aria-label="Cerrar menú Manager"><X className="size-5" /></Button>
+          </div>
         </div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+        <TooltipProvider delayDuration={100}>
+        <nav className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {groups.map((group) => (
-            <div key={group} className="mb-5">
-              <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-sidebar-foreground/50">{group}</p>
-              <div className="space-y-1">
+            <div key={group} className="mb-3">
+              {!collapsed && <div className="flex px-3 pb-1 pt-4"><span className="w-full border-b border-sidebar-border/50 pb-1 text-[11px] font-bold uppercase tracking-widest text-sidebar-foreground/60">{group}</span></div>}
+              {collapsed && <div className="pt-3" />}
+              <div className="space-y-0.5">
                 {sections.filter((item) => item.group === group).map((item) => {
                   const Icon = item.icon;
                   const active = section === item.id;
-                  return <button key={item.id} type="button" onClick={() => onSectionChange(item.id)} className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors', active ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-sidebar-primary/20' : 'text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground')} aria-current={active ? 'page' : undefined}><Icon className="size-4 shrink-0" /><span className="min-w-0 truncate">{item.label}</span></button>;
+                  const hasInventorySubmenu = item.id === 'inventory';
+                  const isExpanded = expandedSection === item.id;
+                  const button = <button type="button" onClick={() => onSectionClick(item.id)} className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150', 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground', 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', collapsed && 'justify-center', active ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold' : 'text-sidebar-foreground/70')} aria-current={active ? 'page' : undefined} aria-label={collapsed ? item.label : undefined}><Icon className="size-5 shrink-0" />{!collapsed && <><span className="flex-1 truncate text-left">{item.label}</span>{hasInventorySubmenu && <ChevronDown className={cn('size-4 shrink-0 opacity-50 transition-transform', isExpanded && 'rotate-180')} />}</>}</button>;
+                  const submenu = active && hasInventorySubmenu && isExpanded && !collapsed && <div className="ml-5 mt-0.5 max-h-[52vh] space-y-0.5 overflow-y-auto py-1 pl-3">{MANAGER_INVENTORY_VIEWS.map((view) => { const SubIcon = MANAGER_INVENTORY_VIEW_ICONS[view.id]; const subActive = inventoryView === view.id; return <button key={view.id} type="button" onClick={() => onInventoryViewChange(view.id)} aria-current={subActive ? 'page' : undefined} className={cn('flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150', 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground', 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', subActive ? 'bg-primary text-primary-foreground font-medium shadow-sm' : 'text-sidebar-foreground/55')}><SubIcon className="size-4 shrink-0" /><span className="flex-1 truncate text-left">{view.label}</span></button>; })}</div>;
+                  return <div key={item.id}>{collapsed ? <Tooltip><TooltipTrigger asChild>{button}</TooltipTrigger><TooltipContent side="right" sideOffset={10} className="border-sidebar-border bg-sidebar-accent text-xs font-bold text-sidebar-foreground shadow-lg">{item.label}</TooltipContent></Tooltip> : button}{submenu}</div>;
                 })}
               </div>
             </div>
           ))}
         </nav>
-        <div className="shrink-0 border-t border-sidebar-border p-4"><div className="flex items-center gap-3 rounded-2xl bg-sidebar-accent/60 p-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-black text-sidebar-primary-foreground">{String(user?.name || 'M').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold text-sidebar-foreground">{user?.name || 'Manager'}</p><p className="text-[10px] uppercase tracking-widest text-sidebar-foreground/55">Acceso Manager</p></div></div></div>
+        </TooltipProvider>
+        <div className="shrink-0 border-t border-sidebar-border p-3"><div className={cn('flex items-center gap-3 rounded-xl border border-sidebar-border/50 bg-sidebar-accent', collapsed ? 'justify-center p-1.5' : 'px-3 py-3')} title={collapsed ? `${user?.name || 'Manager'} · Acceso Manager` : undefined}><div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm">{String(user?.name || 'M').charAt(0).toUpperCase()}</div>{!collapsed && <div className="flex-1 overflow-hidden"><p className="truncate text-sm font-medium text-sidebar-foreground">{user?.name || 'Manager'}</p><p className="truncate text-[11px] capitalize text-sidebar-foreground/50">Acceso Manager</p></div>}</div></div>
+        </div>
       </aside>
     </>
   );

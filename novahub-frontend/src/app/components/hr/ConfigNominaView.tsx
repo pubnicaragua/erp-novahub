@@ -69,6 +69,7 @@ export function ConfigNominaView() {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
+    enabled: canPerform('HR', 'view'),
   });
   const loading = configQuery.isLoading;
 

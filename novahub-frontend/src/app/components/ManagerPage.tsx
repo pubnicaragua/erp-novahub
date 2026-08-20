@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { Building2, Boxes, Download, FileStack, KeyRound, Landmark, Package, Pencil, Plus, ShieldCheck, Trash2, Users, Warehouse, Cloud, RefreshCw, Tags, ArrowRight, BarChart3, ArrowRightLeft, UserCheck, UserX } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BarChart3, Building2, Boxes, Cloud, Download, FileStack, KeyRound, Landmark, MapPin, Package, Pencil, Plus, ShieldCheck, Sparkles, Trash2, Users, UserCheck, UserX, Warehouse, RefreshCw, Tags, ArrowRightLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -12,8 +12,11 @@ import { useTenantQuery } from '../hooks/useTenantQuery';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { enterpriseGroupsService, type ManagerOverview } from '../services/enterprise-groups.service';
 import { MANAGER_SECTIONS, ManagerShell, type ManagerSection } from './ManagerShell';
+import { ManagerInventoryModule } from './manager/ManagerInventoryModule';
+import type { ManagerInventoryView } from './manager/manager-inventory.types';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
+import { getBusinessTypeLabel } from '../constants/businessTypes';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -50,6 +53,8 @@ async function readSpreadsheet(file: File) {
 
 export function ManagerPage() {
   const [section, setSection] = useState<ManagerSection>('overview');
+  const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('overview');
+  const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [warehouseName, setWarehouseName] = useState('');
   const [warehouseLocation, setWarehouseLocation] = useState('');
@@ -86,15 +91,25 @@ export function ManagerPage() {
   const groups = groupsQuery.data || [];
   const groupId = groups[0]?.id || '';
   const group = groups[0];
+  const businessUnits = group?.businessUnits || [];
+  const branchOptions = useMemo(
+    () => (group?.branches || []).filter((branch) => !selectedBusinessUnitId || branch.businessUnitId === selectedBusinessUnitId),
+    [group?.branches, selectedBusinessUnitId],
+  );
   const allowedSections = useMemo(() => getAllowedManagerSections(group?.managerAccess), [group?.managerAccess]);
   const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS'), [group?.managerAccess]);
   const canEditBranchUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'edit'), [group?.managerAccess]);
   const canManageManagersFromUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_MANAGERS', 'manage'), [group?.managerAccess]);
 
   useEffect(() => {
-    if (selectedBranchId && !group?.branches.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
+    if (selectedBusinessUnitId && !businessUnits.some((unit) => unit.id === selectedBusinessUnitId && unit.isActive !== false)) setSelectedBusinessUnitId('');
+    if (section === 'inventory' && !selectedBusinessUnitId) {
+      const firstActiveUnit = businessUnits.find((unit) => unit.isActive !== false);
+      if (firstActiveUnit) setSelectedBusinessUnitId(firstActiveUnit.id);
+    }
+    if (selectedBranchId && !branchOptions.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
     if (!allowedSections.includes(section) && allowedSections[0]) setSection(allowedSections[0]);
-  }, [groupId, selectedBranchId, group, allowedSections, section]);
+  }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, branchOptions, allowedSections, section]);
 
   const overviewQuery = useTenantQuery(
     ['manager-overview', groupId, selectedBranchId || 'all'],
@@ -102,9 +117,10 @@ export function ManagerPage() {
     { enabled: Boolean(groupId) && allowedSections.includes('overview') },
   );
   const inventoryQuery = useTenantQuery(
-    ['manager-inventory', groupId, selectedBranchId || 'all'],
-    (signal) => enterpriseGroupsService.getInventory(groupId, selectedBranchId || undefined, signal),
-    { enabled: Boolean(groupId) && section === 'inventory' },
+    ['manager-inventory', groupId, selectedBusinessUnitId || 'all', selectedBranchId || 'all'],
+    (signal) => enterpriseGroupsService.getInventory(groupId, selectedBranchId || undefined, selectedBusinessUnitId || undefined, signal),
+    // El módulo nuevo consulta cada subvista con su propio alcance y paginación.
+    { enabled: false },
   );
   const accountingQuery = useTenantQuery(
     ['manager-accounting', groupId, selectedBranchId || 'all'],
@@ -238,7 +254,15 @@ export function ManagerPage() {
   );
 
   const overview = overviewQuery.data as ManagerOverview | undefined;
-  const branchOptions = group?.branches || [];
+  const scopedWarehouses = useMemo(() => (overview?.warehouses || []).filter((warehouse) => {
+    const ownerBranch = group?.branches.find((branch) => branch.id === warehouse.clientTenantId);
+    const warehouseBusinessUnitId = warehouse.businessUnitId || ownerBranch?.businessUnitId;
+    const matchesBusinessUnit = !selectedBusinessUnitId || warehouseBusinessUnitId === selectedBusinessUnitId;
+    const matchesBranch = !selectedBranchId
+      || warehouse.clientTenantId === selectedBranchId
+      || warehouse.authorizedBranchIds?.includes(selectedBranchId);
+    return matchesBusinessUnit && matchesBranch;
+  }), [overview?.warehouses, group?.branches, selectedBusinessUnitId, selectedBranchId]);
   const catalogProducts = branchProductsQuery.data || [];
   const activeTitle = MANAGER_SECTIONS.find((item) => item.id === section)?.label;
   const loading = groupsQuery.isLoading || (section === 'overview' && overviewQuery.isLoading);
@@ -249,25 +273,29 @@ export function ManagerPage() {
       onSectionChange={setSection}
       group={group}
       branches={branchOptions}
+      businessUnits={businessUnits}
+      selectedBusinessUnitId={selectedBusinessUnitId}
+      onBusinessUnitChange={(businessUnitId) => { setSelectedBusinessUnitId(businessUnitId); setSelectedBranchId(''); }}
+      inventoryView={inventoryView}
+      onInventoryViewChange={setInventoryView}
       allowedSections={allowedSections}
       selectedBranchId={selectedBranchId}
       onBranchChange={setSelectedBranchId}
     >
       <div className="min-w-0 space-y-6">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {section !== 'inventory' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2><p className="mt-2 text-sm text-muted-foreground">Consolidado por grupo, rubro, sucursal y ubicación.</p></div>
-          <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, section === 'inventory' ? (inventoryQuery.data || []).map((row: any) => ({ producto: row.product?.name, codigo: row.product?.code, sucursal: row.clientTenant?.name, almacen: row.warehouse?.name, cantidad: row.quantity, reservado: row.reserved })) : (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
-        </div>
+          <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
+        </div>}
 
         {loading && <div className="flex min-h-[240px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-5 animate-spin" /> Cargando consolidado...</div>}
         {!loading && !groupId && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">SuperAdmin todavía no ha asignado este usuario a un grupo empresarial.</CardContent></Card>}
 
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
         {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
-        {section === 'inventory' && <InventoryContent data={inventoryQuery.data || []} loading={inventoryQuery.isLoading} branches={overview?.branches || []} warehouses={overview?.warehouses || []} search={inventorySearch} setSearch={setInventorySearch} importSourceBranchId={inventoryImportSourceBranchId} setImportSourceBranchId={(value) => { setInventoryImportSourceBranchId(value); setInventoryImportBranchIds([]); setInventoryWarehouseByBranch({}); }} importBranchIds={inventoryImportBranchIds} setImportBranchIds={setInventoryImportBranchIds} importRows={inventoryImportRows} setImportRows={setInventoryImportRows} importFileName={inventoryImportFileName} setImportFileName={setInventoryImportFileName} priceMode={inventoryImportPriceMode} setPriceMode={setInventoryImportPriceMode} pricesByBranch={inventoryPricesByBranch} setPricesByBranch={setInventoryPricesByBranch} warehouseByBranch={inventoryWarehouseByBranch} setWarehouseByBranch={setInventoryWarehouseByBranch} onImport={() => inventoryImportMutation.mutate()} importing={inventoryImportMutation.isPending} />}
+        {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} corporateWarehouseContent={<WarehouseContent overview={overview} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
         {section === 'accounting' && <AccountingContent data={accountingQuery.data} loading={accountingQuery.isLoading} units={group?.businessUnits || []} branches={overview?.branches || []} importUnitId={accountingImportUnitId} setImportUnitId={(value) => { setAccountingImportUnitId(value); setAccountingImportBranchIds([]); }} importBranchIds={accountingImportBranchIds} setImportBranchIds={setAccountingImportBranchIds} importRows={accountingImportRows} setImportRows={setAccountingImportRows} importFileName={accountingImportFileName} setImportFileName={setAccountingImportFileName} onImport={() => accountingImportMutation.mutate()} importing={accountingImportMutation.isPending} />}
         {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
-        {section === 'warehouses' && <WarehouseContent overview={overview} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} />}
@@ -292,7 +320,6 @@ const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   transfers: 'MANAGER_TRANSFERS',
   catalog: 'MANAGER_CATALOG',
   users: 'MANAGER_USERS',
-  warehouses: 'MANAGER_WAREHOUSES',
   managers: 'MANAGER_MANAGERS',
 };
 
@@ -333,8 +360,40 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
   ];
   return <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-      <Card className="rounded-3xl border-border/60 xl:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Building2 className="size-5 text-primary" /> Distribución por sucursal</CardTitle></CardHeader><CardContent><Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Sucursal</TableHead><TableHead>Rubro</TableHead><TableHead>Usuarios</TableHead><TableHead>Productos</TableHead><TableHead>Almacenes</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{(overview?.branches || []).map((branch) => <TableRow key={branch.id}><TableCell className="font-semibold">{branch.name}</TableCell><TableCell><Badge variant="outline">{String(branch.industry || 'OTRO')}</Badge></TableCell><TableCell>{formatNumber(branch._count.users)}</TableCell><TableCell>{formatNumber(branch._count.products)}</TableCell><TableCell>{formatNumber(branch._count.warehouses)}</TableCell><TableCell className="text-right">{onEnterBranch && canEnterBranch && groupId && <Button variant="ghost" size="sm" className="gap-1.5 text-xs font-bold text-primary hover:text-primary/80" onClick={() => onEnterBranch(groupId, branch.id)}><ArrowRight className="size-3.5" /> Trabajar</Button>}{onEnterBranch && !canEnterBranch && <span className="text-xs text-muted-foreground">Solo consulta</span>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <Card className="overflow-hidden rounded-3xl border-border/60 xl:col-span-2">
+        <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Building2 className="size-5 text-primary" /> Sucursales del grupo</CardTitle><p className="mt-1 text-sm text-muted-foreground">Consulta rápidamente el estado de cada operación y entra a trabajar cuando necesites operar dentro de ella.</p></div>
+            <Badge variant="outline" className="w-fit rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">{formatNumber(overview?.branches?.length)} visibles</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+            {(overview?.branches || []).map((branch, index) => {
+              const businessType = getBusinessTypeLabel(branch.industry, branch.subIndustry || undefined);
+              const isActive = branch.isActive !== false;
+              return <motion.article key={branch.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="group relative min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/80 via-primary/30 to-transparent opacity-70" />
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">{branch.logo ? <img src={branch.logo} alt="" className="size-full object-cover" /> : <Building2 className="size-5" />}</div>
+                    <div className="min-w-0"><h3 className="truncate text-base font-black tracking-tight">{branch.name}</h3><p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground"><Sparkles className="size-3 shrink-0 text-primary" />{businessType}</p></div>
+                  </div>
+                  <Badge variant={isActive ? 'default' : 'secondary'} className="shrink-0 rounded-full text-[10px]">{isActive ? 'Activa' : 'Inactiva'}</Badge>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/30 p-2.5">
+                  <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Usuarios</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.users)}</p></div>
+                  <div className="min-w-0 border-l border-border/60 pl-2"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Productos</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.products)}</p></div>
+                  <div className="min-w-0 border-l border-border/60 pl-2"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Bodegas</p><p className="mt-1 text-sm font-black tabular-nums">{formatNumber(branch._count.warehouses)}</p></div>
+                </div>
+                <div className="mt-3 flex min-w-0 items-center justify-between gap-3"><p className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground"><MapPin className="size-3.5 shrink-0" />{branch.slug || 'Sucursal operativa'}</p>{onEnterBranch && canEnterBranch && groupId && isActive ? <Button variant="ghost" size="sm" className="h-8 shrink-0 gap-1 rounded-lg px-2.5 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary" onClick={() => onEnterBranch(groupId, branch.id)}><span>Ir a sucursal</span><ArrowUpRight className="size-3.5" /></Button> : <span className="shrink-0 text-[11px] text-muted-foreground">{isActive ? 'Solo consulta' : 'No disponible'}</span>}</div>
+              </motion.article>;
+            })}
+          </div>
+          {!overview?.branches?.length && <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No hay sucursales en el alcance seleccionado.</p>}
+        </CardContent>
+      </Card>
       <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Landmark className="size-5 text-primary" /> Cuentas emparejadas</CardTitle></CardHeader><CardContent className="space-y-3">{(overview?.accounts || []).slice(0, 8).map((account) => <div key={account.code} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 p-3"><div><p className="font-mono text-xs text-primary">{account.code}</p><p className="text-sm font-semibold">{account.name}</p></div><p className="font-black tabular-nums">{formatNumber(account.totalBalance)}</p></div>)}{!overview?.accounts?.length && <p className="text-sm text-muted-foreground">Aún no hay cuentas contables para consolidar.</p>}</CardContent></Card>
     </div>
   </>;
@@ -365,7 +424,7 @@ function InventoryContent({ data, loading, branches, warehouses, search, setSear
   const rowCode = (row: any) => String(row.code ?? row.codigo ?? row.Código ?? row.SKU ?? row.sku ?? '').trim();
   const updateBranchPrice = (branchId: string, code: string, value: string) => setPricesByBranch({ ...pricesByBranch, [branchId]: { ...(pricesByBranch[branchId] || {}), [code]: value } });
   return <div className="space-y-6">
-    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Boxes className="size-5 text-primary" /> Inventario consolidado por producto y bodega</CardTitle><p className="text-sm text-muted-foreground">Consulta el total y abre el desglose por sucursal, bodega y cantidad reservada.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.length)}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.reduce((sum, row) => sum + row.total, 0))}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ubicaciones</p><p className="mt-1 text-2xl font-black">{formatNumber(filtered.length)}</p></div></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar producto, SKU, sucursal o bodega..." className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm" />{loading ? <div className="p-8 text-center text-muted-foreground">Cargando inventario...</div> : !grouped.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay existencias para este filtro.</p> : <div className="space-y-3">{grouped.map((row) => <div key={row.key} className="rounded-2xl border border-border/60 bg-muted/10 p-4"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate font-bold">{row.product?.name || 'Producto sin nombre'}</p><p className="font-mono text-xs text-muted-foreground">{row.product?.code || 'Sin código'}</p></div><div className="flex shrink-0 gap-4 text-right text-sm"><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Total</span><b>{formatNumber(row.total)}</b></span><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Reservado</span><b>{formatNumber(row.reserved)}</b></span></div></div><div className="mt-3 grid gap-2 md:grid-cols-2">{row.locations.map((location: any) => <div key={location.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 bg-background p-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{location.clientTenant?.name || 'Sucursal'}</p><p className="truncate text-xs text-muted-foreground">{location.warehouse?.name || 'Bodega'} · {location.warehouse?.scopeType === 'BUSINESS_UNIT' ? 'Almacén corporativo' : 'Bodega'}</p></div><span className="shrink-0 font-black tabular-nums">{formatNumber(location.quantity)}</span></div>)}</div></div>)}</div>}</CardContent></Card>
+    <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Boxes className="size-5 text-primary" /> Existencias por producto y bodega</CardTitle><p className="text-sm text-muted-foreground">Consulta el total y abre el desglose por sucursal, bodega y cantidad reservada.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.length)}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unidades</p><p className="mt-1 text-2xl font-black">{formatNumber(grouped.reduce((sum, row) => sum + row.total, 0))}</p></div><div className="rounded-2xl bg-muted/30 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ubicaciones</p><p className="mt-1 text-2xl font-black">{formatNumber(filtered.length)}</p></div></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar producto, SKU, sucursal o bodega..." className="h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm" />{loading ? <div className="p-8 text-center text-muted-foreground">Cargando inventario...</div> : !grouped.length ? <p className="py-8 text-center text-sm text-muted-foreground">No hay existencias para este filtro.</p> : <div className="space-y-3">{grouped.map((row) => <div key={row.key} className="rounded-2xl border border-border/60 bg-muted/10 p-4"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate font-bold">{row.product?.name || 'Producto sin nombre'}</p><p className="font-mono text-xs text-muted-foreground">{row.product?.code || 'Sin código'}</p></div><div className="flex shrink-0 gap-4 text-right text-sm"><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Total</span><b>{formatNumber(row.total)}</b></span><span><span className="block text-[10px] font-black uppercase text-muted-foreground">Reservado</span><b>{formatNumber(row.reserved)}</b></span></div></div><div className="mt-3 grid gap-2 md:grid-cols-2">{row.locations.map((location: any) => <div key={location.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 bg-background p-3 text-sm"><div className="min-w-0"><p className="truncate font-semibold">{location.clientTenant?.name || 'Sucursal'}</p><p className="truncate text-xs text-muted-foreground">{location.warehouse?.name || 'Bodega'} · {location.warehouse?.scopeType === 'BUSINESS_UNIT' ? 'Almacén corporativo' : 'Bodega'}</p></div><span className="shrink-0 font-black tabular-nums">{formatNumber(location.quantity)}</span></div>)}</div></div>)}</div>}</CardContent></Card>
     <Card className="rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><Download className="size-5 text-primary" /> Importar stock por rubro</CardTitle><p className="text-sm text-muted-foreground">La importación usa el catálogo de una sucursal y lo replica únicamente en sucursales del mismo rubro.</p></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-1 gap-3 md:grid-cols-3"><select value={importSourceBranchId} onChange={(event) => setImportSourceBranchId(event.target.value)} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="">Sucursal de origen</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select><select value={priceMode} onChange={(event) => setPriceMode(event.target.value as 'SAME' | 'BY_BRANCH')} className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"><option value="SAME">Usar el precio del catálogo</option><option value="BY_BRANCH">Precio indicado por sucursal</option></select><label className="flex h-10 cursor-pointer items-center justify-center rounded-xl border border-dashed border-border px-3 text-sm font-semibold hover:bg-muted/40"><input type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="sr-only" />{importFileName || 'Seleccionar Excel/CSV'}</label></div><div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><div className="rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursales destino del rubro</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{targetBranches.map((branch) => <label key={branch.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/50 p-2 text-sm"><input type="checkbox" checked={importBranchIds.includes(branch.id)} onChange={() => toggleBranch(branch.id)} className="size-4 shrink-0 accent-primary" /><span className="min-w-0 truncate">{branch.name}</span></label>)}{!source && <p className="text-xs text-muted-foreground">Selecciona una sucursal de origen.</p>}</div></div><div className="rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Bodega o almacén receptor</p><div className="mt-2 space-y-2">{targetBranches.filter((branch) => importBranchIds.includes(branch.id)).map((branch) => { const options = warehouses.filter((warehouse) => warehouse.clientTenantId === branch.id || warehouse.authorizedBranchIds?.includes(branch.id)); return <label key={branch.id} className="flex min-w-0 items-center gap-2 text-sm"><span className="w-28 shrink-0 truncate font-semibold">{branch.name}</span><select value={warehouseByBranch[branch.id] || ''} onChange={(event) => setWarehouseByBranch({ ...warehouseByBranch, [branch.id]: event.target.value })} className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-background px-2 text-xs"><option value="">Automático</option>{options.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>; })}</div></div></div>{importRows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Stock</TableHead><TableHead>Precio</TableHead><TableHead>Costo</TableHead></TableRow></TableHeader><TableBody>{importRows.slice(0, 8).map((row, index) => <TableRow key={index}><TableCell className="font-mono">{String(row.code ?? row.codigo ?? row.Código ?? row.SKU ?? row.sku ?? '-')}</TableCell><TableCell>{String(row.stock ?? row.cantidad ?? row.Stock ?? row.Cantidad ?? '-')}</TableCell><TableCell>{String(row.salePrice ?? row.precio ?? row.precio_venta ?? row.Precio ?? '-')}</TableCell><TableCell>{String(row.costPrice ?? row.costo ?? row.costo_unitario ?? row.Costo ?? '-')}</TableCell></TableRow>)}</TableBody></Table><p className="px-3 py-2 text-xs text-muted-foreground">Vista previa: {importRows.length} fila(s). Se aplicará todo en una sola transacción.</p></div>}{priceMode === 'BY_BRANCH' && importRows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60 p-3"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Precios por sucursal (opcional)</p><div className="mt-2 min-w-[620px] space-y-2">{importRows.slice(0, 50).map((row, index) => <div key={rowCode(row) || index} className="grid grid-cols-[minmax(150px,1fr)_repeat(auto-fit,minmax(150px,1fr))] items-center gap-2 text-xs"><span className="truncate font-mono">{rowCode(row) || 'Sin código'}</span>{targetBranches.filter((branch) => importBranchIds.includes(branch.id)).map((branch) => <input key={branch.id} type="number" min="0" step="0.01" value={pricesByBranch[branch.id]?.[rowCode(row)] || ''} onChange={(event) => updateBranchPrice(branch.id, rowCode(row), event.target.value)} placeholder={branch.name} className="h-9 min-w-0 rounded-xl border border-border bg-background px-2" />)}</div>)}</div></div>}<Button className="w-full rounded-xl" disabled={!importSourceBranchId || !importBranchIds.length || !importRows.length || importing} onClick={onImport}>{importing ? 'Aplicando importación...' : 'Importar stock seleccionado'}</Button></CardContent></Card>
   </div>;
 }

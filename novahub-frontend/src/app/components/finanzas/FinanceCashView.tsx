@@ -17,7 +17,10 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'
 
 export function FinanceCashView() {
   const { displayCurrency, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatCurrentAmount } = useCurrency()
-  const { user } = useAuth()
+  const { user, canPerform } = useAuth()
+  const canReadFinancial = canPerform('FINANCIAL', 'view')
+  const canReadSales = canPerform('SALES', 'view')
+  const canReadPurchases = canPerform('PURCHASES', 'view')
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
   // Los saldos contables y de las cuentas están en moneda funcional. Solo se
@@ -31,10 +34,10 @@ export function FinanceCashView() {
   }
 
   const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : [])
-  const accountsQuery = useQuery({ queryKey: ['finance', 'accounts', tenantKey], queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal), staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 })
-  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices', tenantKey], queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
-  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices', tenantKey], queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
-  const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const accountsQuery = useQuery({ queryKey: ['finance', 'accounts', tenantKey], queryFn: ({ signal }) => accountsService.getAll({ page: 1, pageSize: 500 }, signal), enabled: canReadFinancial, staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const salesInvoicesQuery = useQuery({ queryKey: ['finance', 'sales-invoices', tenantKey], queryFn: ({ signal }) => invoicesService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadSales, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const supplierInvoicesQuery = useQuery({ queryKey: ['finance', 'supplier-invoices', tenantKey], queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
+  const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
   const bankAccounts = toList(accountsQuery.data).filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO'))
   const salesInvoices = toList(salesInvoicesQuery.data)
   const supplierInvoices = toList(supplierInvoicesQuery.data)

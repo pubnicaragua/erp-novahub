@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { cn } from '../ui/utils';
 import { hrService } from '../../services/hr.service';
 import { formatDateEs } from '../../utils/dateFormat';
+import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente',
@@ -27,6 +28,8 @@ const fmt = (value: number, currency: string) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: 2 }).format(value || 0);
 
 export function ComisionesView() {
+  const { canPerform } = useAuth();
+  const canViewHr = canPerform('HR', 'view');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('ALL');
@@ -40,6 +43,7 @@ export function ComisionesView() {
         { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(status !== 'ALL' ? { status } : {}), ...(sellerId !== 'ALL' ? { sellerId } : {}), pageSize: 500 },
         signal,
       ),
+    enabled: canViewHr,
   });
 
   const report = query.data as any;

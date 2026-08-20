@@ -16,7 +16,8 @@ const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
 
 export function FinancePayablesView() {
   const { displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency()
-  const { user } = useAuth()
+  const { user, canPerform } = useAuth()
+  const canReadPurchases = canPerform('PURCHASES', 'view')
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current'
   const sym = displayCurrency === 'USD' ? '$' : 'C$'
   const fmt = (n: number) => formatCurrentAmount(n, displayCurrency)
@@ -29,6 +30,7 @@ export function FinancePayablesView() {
   const invoicesQuery = useQuery({
     queryKey: ['finance', 'supplier-invoices', tenantKey],
     queryFn: ({ signal }) => supplierInvoicesService.getAll({ page: 1, pageSize: 200 }, signal),
+    enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,

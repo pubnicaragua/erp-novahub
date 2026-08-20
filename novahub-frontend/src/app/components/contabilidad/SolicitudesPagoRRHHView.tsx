@@ -119,6 +119,7 @@ export function SolicitudesPagoRRHHView() {
   const canApproveRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'approve') || canPerform('ACCOUNTING_JOURNAL', 'approve');
   const canRejectRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'reject') || canPerform('ACCOUNTING_JOURNAL', 'reject');
   const canPayRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'pay') || canPerform('ACCOUNTING_JOURNAL', 'pay');
+  const canReadPaymentRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'view') || canPerform('ACCOUNTING', 'view');
   const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(exchangeRate || 1);
   const paymentLine = (method: string, amount = '0', currency: 'NIO' | 'USD' = displayCurrency): PaymentLine => ({
@@ -139,6 +140,7 @@ export function SolicitudesPagoRRHHView() {
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+    enabled: canReadPaymentRequests,
   });
 
   const requests = (query.data || []) as PaymentRequest[];

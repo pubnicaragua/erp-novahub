@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { getApiErrorMessage } from '../../../services/api';
 import { inventoryService } from '../../../services/inventario.service';
+import { useAuth } from '../../../contexts/AuthContext';
 import { SalesViewTutorial } from '../SalesViewTutorial';
 
 interface AdministrarCajasModalProps {
@@ -32,6 +33,8 @@ function toCajaPayload(form: Partial<CashRegister>) {
 }
 
 export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, initialMode, onInitialModeHandled }: AdministrarCajasModalProps) {
+  const { canPerform } = useAuth();
+  const canViewInventory = canPerform('INVENTORY', 'view');
   const [cajasList, setCajasList] = useState<CashRegister[]>([]);
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
@@ -57,6 +60,10 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
   };
 
   const fetchBodegas = async () => {
+    if (!canViewInventory) {
+      setBodegasList([]);
+      return;
+    }
     try {
       const res: any = await inventoryService.getWarehouses();
       const list = Array.isArray(res) ? res : (res?.data || []);

@@ -720,7 +720,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [isServiceView, products.length]);
 
   useEffect(() => {
-    if (!warehouseModalOpen || warehouseAccounts.length > 0) return;
+    if (!warehouseModalOpen || warehouseAccounts.length > 0 || !canPerform('ACCOUNTING', 'view')) return;
     const controller = new AbortController();
     setWarehouseAccountsLoading(true);
     contabilidadService.getChartOfAccounts(false, controller.signal)
@@ -728,7 +728,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       .catch(() => setWarehouseAccounts([]))
       .finally(() => setWarehouseAccountsLoading(false));
     return () => controller.abort();
-  }, [warehouseModalOpen, warehouseAccounts.length]);
+  }, [warehouseModalOpen, warehouseAccounts.length, canPerform]);
 
 
   // Reset page when filters change; keep selection so users can pick items and search freely

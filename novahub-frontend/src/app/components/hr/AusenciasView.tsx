@@ -42,6 +42,7 @@ const countWorkDays = (start: Date, end: Date) => {
 
 export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform, user } = useAuth();
+  const canViewHr = canPerform('HR', 'view');
   const [showNewForm, setShowNewForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch] = useState('');
@@ -66,7 +67,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const balanceQuery = useQuery({
     queryKey: ['hr', 'vacation-balance', newRequest.employeeId, currentYear],
     queryFn: ({ signal }) => hrService.getVacationBalance(newRequest.employeeId, currentYear, signal) as any,
-    enabled: Boolean(newRequest.employeeId),
+    enabled: canViewHr && Boolean(newRequest.employeeId),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -79,6 +80,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
+    enabled: canViewHr,
   });
   const vacationBalance = (balanceQuery.data || null) as VacationBalance | null;
   const balanceLoading = balanceQuery.isFetching;

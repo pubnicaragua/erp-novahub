@@ -81,7 +81,12 @@ const DARK_TOOLTIP = {
 export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canViewSales = canPerform('SALES', 'view');
+  const canViewPurchases = canPerform('PURCHASES', 'view');
+  const canViewFinancial = canPerform('FINANCIAL', 'view');
+  const canViewAccounting = canPerform('ACCOUNTING', 'view');
+  const canViewPos = canPerform('RETAIL_POS', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -104,17 +109,26 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
     const now = new Date();
     const filters = { page: 1, pageSize: 5000, report: true } as const;
     const [invR, payR, bilR, ppayR, incR, expR, rincR, rexpR, plR, plPrevR, bsR, bsStartR, tbR, bdR, accR, perR, recR, jR, regR, sesR] = await Promise.all([
-      invoicesService.getAll(filters, signal), paymentsService.getAll(filters, signal), billsService.getAll(filters, signal), paymentsMadeService.getAll(filters, signal),
-      incomeService.getAll(filters, signal), expensesService.getAll(filters, signal), recurringIncomesService.getAll(filters, signal), recurringExpensesService.getAll(filters, signal),
-      contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal),
-      (prevStart && prevEnd) ? contabilidadService.getProfitLoss({ dateFrom: toIso(prevStart), dateTo: toIso(prevEnd) }, signal) : Promise.resolve(null),
-      contabilidadService.getBalanceSheet({ date: toIso(now) }, signal),
-      contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }, signal),
-      contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }, signal),
-      contabilidadService.getBudgetItems(undefined, signal), contabilidadService.getChartOfAccounts(false, signal),
-      contabilidadService.getPeriods(signal), contabilidadService.getReconciliations(signal),
-      contabilidadService.getJournals({ page: 1, pageSize: 5000 }, signal),
-      cajaService.getRegisters(true, signal), cajaService.getSessionHistory(undefined, 1, signal),
+      canViewSales ? invoicesService.getAll(filters, signal) : Promise.resolve([]),
+      canViewSales ? paymentsService.getAll(filters, signal) : Promise.resolve([]),
+      canViewPurchases ? billsService.getAll(filters, signal) : Promise.resolve([]),
+      canViewPurchases ? paymentsMadeService.getAll(filters, signal) : Promise.resolve([]),
+      canViewFinancial ? incomeService.getAll(filters, signal) : Promise.resolve([]),
+      canViewFinancial ? expensesService.getAll(filters, signal) : Promise.resolve([]),
+      canViewFinancial ? recurringIncomesService.getAll(filters, signal) : Promise.resolve([]),
+      canViewFinancial ? recurringExpensesService.getAll(filters, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getProfitLoss({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve(null),
+      canViewAccounting && prevStart && prevEnd ? contabilidadService.getProfitLoss({ dateFrom: toIso(prevStart), dateTo: toIso(prevEnd) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getBalanceSheet({ date: toIso(now) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getBalanceSheet({ date: toIso(new Date(start.getTime() - DAY_MS)) }, signal) : Promise.resolve(null),
+      canViewAccounting ? contabilidadService.getTrialBalance({ dateFrom: toIso(start), dateTo: toIso(now) }, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getBudgetItems(undefined, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getChartOfAccounts(false, signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getPeriods(signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getReconciliations(signal) : Promise.resolve([]),
+      canViewAccounting ? contabilidadService.getJournals({ page: 1, pageSize: 5000 }, signal) : Promise.resolve([]),
+      canViewPos ? cajaService.getRegisters(true, signal) : Promise.resolve([]),
+      canViewPos ? cajaService.getSessionHistory(undefined, 1, signal) : Promise.resolve([]),
     ]);
     const flatAccounts: any[] = [];
     const flatten = (nodes: any[]) => { for (const n of nodes) { flatAccounts.push(n); if (n.children) flatten(n.children); } };
@@ -158,7 +172,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
       periods: asList(perR), reconciliations: asList(recR), registers: asList(regR), sessions: arr2(sesR),
       journalsPending: journals.filter((j: any) => !['POSTED', 'APPROVED', 'VOIDED', 'CANCELLED', 'CANCELED'].includes(String(j.status || '').toUpperCase())).length,
     };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando finanzas') });
+  }, { enabled: canViewSales || canViewPurchases || canViewFinancial || canViewAccounting || canViewPos, onError: (e) => toast.error(e.message || 'Error cargando finanzas') });
   const [modal, setModal] = useState<ModalState>(null);
   const [comparison, setComparison] = useState<'anterior' | 'anio-anterior'>('anterior');
   const [serieMode, setSerieMode] = useState<'intervalo' | 'acumulado'>('intervalo');

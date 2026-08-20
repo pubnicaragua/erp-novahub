@@ -26,7 +26,8 @@ interface InventoryLossesViewProps {
 }
 
 export function InventoryLossesView({ warehouses, warehouseId }: InventoryLossesViewProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
+  const canReadInventory = canPerform('INVENTORY', 'view');
   const { formatCurrentAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');
@@ -46,7 +47,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
-    enabled: Boolean(user),
+    enabled: Boolean(user) && canReadInventory,
   });
 
   const data = lossesQuery.data;

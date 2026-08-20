@@ -37,8 +37,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
   const [evidenceUrl, setEvidenceUrl] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const { user, canPerform } = useAuth();
+  const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const usersQuery = useTenantQuery<any[]>(['activities', 'users'], signal => tenantsService.getUsers(user!.tenantId!, signal), {
-    enabled: Boolean(isAddOpen && user?.tenantId),
+    enabled: Boolean(isAddOpen && user?.tenantId && canViewCompany),
   });
   const employees = asList(usersQuery.data);
 

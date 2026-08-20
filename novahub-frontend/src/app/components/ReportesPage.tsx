@@ -1,5 +1,5 @@
 ﻿import { cn } from './ui/utils';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -24,6 +24,17 @@ interface ReportesPageProps {
   onSubModuleChange?: (subModule: string) => void;
 }
 
+const REPORT_TAB_CONFIG = [
+  { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
+  { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },
+  { id: 'reportes-financieros', label: 'Financiero', module: 'REPORTS_FINANCIAL' },
+  { id: 'reportes-inventario', label: 'Inventario de Mercancías', module: 'REPORTS_INVENTORY' },
+  { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
+  { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
+  { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
+  { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS', superOnly: true },
+] as const;
+
 export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: ReportesPageProps) {
   const { user, canPerform } = useAuth();
   const [dateRange, setDateRange] = useState('ultimo-mes');
@@ -38,6 +49,22 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
   const inventoryRef = useRef<ReportExportRef>(null);
   const hrRef = useRef<ReportExportRef>(null);
   const subscriptionsRef = useRef<ReportExportRef>(null);
+
+  const visibleReportTabs = useMemo(() => REPORT_TAB_CONFIG.filter((tab) => {
+    const hasRequired = user?.enabledModules?.includes(tab.module);
+    const hasFallback = user?.enabledModules?.includes('REPORTS');
+    const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'superadmin';
+    return hasAccess && (!tab.superOnly || isSuperAdmin);
+  }), [user, canPerform]);
+
+  useEffect(() => {
+    if (visibleReportTabs.length > 0 && !visibleReportTabs.some((tab) => tab.id === activeTab)) {
+      const fallback = visibleReportTabs[0].id;
+      setActiveTab(fallback);
+      onSubModuleChange?.(fallback);
+    }
+  }, [activeTab, onSubModuleChange, visibleReportTabs]);
 
   const prevSubModule = useRef(activeSubModule);
 
@@ -125,24 +152,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className={cn(!isSidebarCollapsed && "hidden lg:hidden", "w-full min-w-0 h-auto bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 flex overflow-x-auto flex-nowrap gap-1.5 rounded-2xl border border-border/40 mb-6 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground")}>
-          {[
-            { id: 'reportes-ventas', label: 'Ventas', module: 'REPORTS_SALES' },
-            { id: 'reportes-compras', label: 'Compras', module: 'REPORTS_PURCHASES' },
-            { id: 'reportes-financieros', label: 'Financiero', module: 'REPORTS_FINANCIAL' },
-            { id: 'reportes-inventario', label: 'Inventario de Mercancías', module: 'REPORTS_INVENTORY' },
-            { id: 'reportes-clientes', label: 'Clientes', module: 'REPORTS_CLIENTS' },
-            { id: 'reportes-proveedores', label: 'Proveedores', module: 'REPORTS_PROVIDERS' },
-            { id: 'reportes-rrhh', label: 'Recursos Humanos', module: 'REPORTS_HR' },
-            { id: 'reportes-suscripciones', label: 'Suscripciones', module: 'REPORTS_SUBSCRIPTIONS', superOnly: true }
-          ].map((tab: any) => {
-            const hasRequired = user?.enabledModules?.includes(tab.module);
-            // La suscripción al módulo padre (REPORTS) habilita todas sus
-            // vistas, incluso con submódulos granulares contratados.
-            const hasFallback = user?.enabledModules?.includes('REPORTS');
-            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
-            const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'superadmin';
-            if (!hasAccess) return null;
-            if (tab.superOnly && !isSuperAdmin) return null;
+          {visibleReportTabs.map((tab) => {
             return (
               <TabsTrigger 
                 key={tab.id}

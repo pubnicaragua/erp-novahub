@@ -11,6 +11,7 @@ import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, Scale, GraduationCap, FileText, Gift, Star, ShieldCheck, UserPlus, UserMinus, RefreshCw, AlertTriangle, Filter, Lightbulb, BadgeCheck, Timer, CalendarX, Trophy, Gauge } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
@@ -210,6 +211,8 @@ type ListRow = { label: string; sub?: string; right?: string; rightClass?: strin
 export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const { canPerform } = useAuth();
+  const canViewHr = canPerform('HR', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -227,7 +230,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       vacations: asList(vacRes), reviews: asList(revRes), trainings: asList(traRes), benefits: asList(benRes),
       documents: asList(docRes), kpiResults: asList(kpiRes),
     };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando RRHH') });
+  }, { enabled: canViewHr, onError: (e) => toast.error(e.message || 'Error cargando RRHH') });
   const employees = reportData?.employees || [];
   const payrolls = reportData?.payrolls || [];
   const leaves = reportData?.leaves || [];

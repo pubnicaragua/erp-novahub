@@ -434,7 +434,7 @@ function AppContent() {
           }}
         />
       )}
-      {user?.role === 'manager' && !user.isPlatformAdmin && !isImpersonating ? (
+      {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage /></Suspense>
       ) : <DashboardLayout />}
       <SessionMonitor />

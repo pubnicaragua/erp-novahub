@@ -184,7 +184,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', tenantKey],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
-    enabled: Boolean(user?.tenantId),
+    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view'),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     placeholderData: keepPreviousData,

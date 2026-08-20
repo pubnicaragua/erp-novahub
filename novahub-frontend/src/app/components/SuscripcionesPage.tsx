@@ -95,21 +95,20 @@ const AVAILABLE_MODULES = [
 
 const SYSTEM_ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'Administrador', description: 'Acceso total del tenant' },
-  { value: 'MANAGER', label: 'Gerente', description: 'Gestión operativa y supervisión' },
   { value: 'EMPLOYEE', label: 'Empleado', description: 'Acceso operativo limitado' },
   { value: 'VIEWER', label: 'Visualizador', description: 'Solo lectura' },
 ];
 
-const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER'> = {
+const LEGACY_ROLE_MAP: Record<string, 'ADMIN' | 'EMPLOYEE' | 'VIEWER'> = {
   'super-admin': 'ADMIN',
   admin: 'ADMIN',
-  gerente: 'MANAGER',
-  contador: 'MANAGER',
+  gerente: 'EMPLOYEE',
+  contador: 'EMPLOYEE',
   vendedor: 'EMPLOYEE',
   almacenero: 'EMPLOYEE',
   comprador: 'EMPLOYEE',
   empleado: 'EMPLOYEE',
-  'rh-manager': 'MANAGER',
+  'rh-manager': 'EMPLOYEE',
 };
 
 export function SuscripcionesPage() {
@@ -207,9 +206,9 @@ export function SuscripcionesPage() {
       }
       if (user.isTenantAdmin) {
         const [reqs, myTenants, rolesRes] = await Promise.all([
-          subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal),
-          tenantsService.getAll(undefined, signal),
-          rolesService.getAll({ clientTenantId: user.tenantId }, signal),
+          canViewSubscriptions ? subscriptionsService.getAllRequests({ clientTenantId: user.tenantId } as any, signal) : Promise.resolve([]),
+          canViewCompany ? tenantsService.getAll(undefined, signal) : Promise.resolve([]),
+          canViewRoles ? rolesService.getAll({ clientTenantId: user.tenantId }, signal) : Promise.resolve([]),
         ]);
         return {
           requests: asList(reqs).filter((request: any) => request.clientTenantId === user.tenantId),
@@ -261,23 +260,21 @@ export function SuscripcionesPage() {
     }
   };
 
-  const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
+  const inferSystemRoleFromCustomRole = (role: any): 'ADMIN' | 'EMPLOYEE' | 'VIEWER' => {
     const perms = Array.isArray(role?.permissions) ? role.permissions : [];
     if (perms.length === 0) return 'EMPLOYEE';
 
     const readCount = perms.filter((p: any) => p?.read).length;
     const writeCount = perms.filter((p: any) => p?.write).length;
-    const deleteCount = perms.filter((p: any) => p?.delete).length;
 
-    if (readCount > 0 && writeCount === 0 && deleteCount === 0) return 'VIEWER';
-    if (deleteCount > Math.ceil(perms.length * 0.35) || writeCount > Math.ceil(perms.length * 0.5)) return 'MANAGER';
+    if (readCount > 0 && writeCount === 0) return 'VIEWER';
     if (writeCount > 0) return 'EMPLOYEE';
     return 'EMPLOYEE';
   };
 
-  const resolveSelectedRoleToSystemRole = (selectedRole: string): 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' => {
+  const resolveSelectedRoleToSystemRole = (selectedRole: string): 'ADMIN' | 'EMPLOYEE' | 'VIEWER' => {
     if (SYSTEM_ROLE_OPTIONS.some(r => r.value === selectedRole)) {
-      return selectedRole as 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER';
+      return selectedRole as 'ADMIN' | 'EMPLOYEE' | 'VIEWER';
     }
 
     if (selectedRole.startsWith('legacy:')) {

@@ -24,11 +24,11 @@ interface SalesLinePriceListSelectProps {
 
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
 export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
-    enabled: Boolean(user?.tenantId),
+    enabled: Boolean(user?.tenantId) && canPerform('SALES_PRICE_LISTS', 'view'),
     staleTime: 60_000,
   });
 

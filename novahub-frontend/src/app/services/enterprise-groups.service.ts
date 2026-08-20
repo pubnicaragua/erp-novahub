@@ -17,7 +17,7 @@ export interface ManagerOverview {
   inventoryMode?: string;
   inventoryScopeLabel?: string;
   filters: { branchId: string | null; branchIds: string[] };
-  branches: Array<{ id: string; name: string; slug: string; logo?: string | null; industry: string; businessUnitId?: string | null; _count: { users: number; products: number; warehouses: number } }>;
+  branches: Array<{ id: string; name: string; slug: string; logo?: string | null; industry: string; subIndustry?: string | null; businessUnitId?: string | null; isActive?: boolean; _count: { users: number; products: number; warehouses: number } }>;
   metrics: {
     branches: number;
     users: number;
@@ -36,6 +36,70 @@ export interface ManagerOverview {
   accounts: Array<{ code: string; name: string; totalBalance: number; branches: number }>;
 }
 
+export interface ManagerInventoryAdjustmentItem {
+  id: string;
+  productId: string;
+  productCode?: string | null;
+  productName?: string | null;
+  variantName?: string | null;
+  currentStock: number;
+  actualStock: number;
+  difference: number;
+  unitCost?: number | null;
+  baseCost?: number | null;
+  currency?: string | null;
+  exchangeRate?: number | null;
+  impactAmount: number;
+}
+
+export interface ManagerInventoryAdjustmentRow {
+  id: string;
+  number: string;
+  date: string;
+  status: string;
+  reason: string;
+  notes?: string | null;
+  branchId: string;
+  branchName?: string | null;
+  businessUnitId?: string | null;
+  businessUnitName?: string | null;
+  warehouseId: string;
+  warehouseName?: string | null;
+  itemCount: number;
+  increasedUnits: number;
+  decreasedUnits: number;
+  differenceUnits: number;
+  impactAmount: number;
+  lossAmount: number;
+  currency?: string | null;
+  items: ManagerInventoryAdjustmentItem[];
+}
+
+export interface ManagerInventoryAdjustmentsResponse {
+  data: ManagerInventoryAdjustmentRow[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: {
+    total: number;
+    drafts: number;
+    sent: number;
+    approved: number;
+    rejected: number;
+    cancelled: number;
+    productsAffected: number;
+    increasedUnits: number;
+    decreasedUnits: number;
+    monetaryImpact: number;
+    lossAmount: number;
+  };
+}
+
+export interface ManagerInventoryModuleResponse {
+  view: string;
+  data: any[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: Record<string, number>;
+}
+
 export const enterpriseGroupsService = {
   getPlatformGroups: (signal?: AbortSignal) => api.get<{ groups: any[]; unassignedBranches: any[] }>('/enterprise-groups/platform', { signal }),
   getPlatformGroup: (groupId: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/platform/${groupId}`, { signal }),
@@ -49,7 +113,9 @@ export const enterpriseGroupsService = {
   updatePlatformGroup: (groupId: string, body: any) => api.idempotentPatch(`/enterprise-groups/platform/${groupId}`, body),
   getManagerGroups: (signal?: AbortSignal) => api.get<ManagerGroup[]>('/enterprise-groups/manager', { signal }),
   getOverview: (groupId: string, branchId?: string, signal?: AbortSignal) => api.get<ManagerOverview>(`/enterprise-groups/manager/${groupId}/overview`, { params: branchId ? { branchId } : undefined, signal }),
-  getInventory: (groupId: string, branchId?: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/inventory`, { params: branchId ? { branchId } : undefined, signal }),
+  getInventory: (groupId: string, branchId?: string, businessUnitId?: string, signal?: AbortSignal) => api.get<any[]>(`/enterprise-groups/manager/${groupId}/inventory`, { params: { ...(branchId ? { branchId } : {}), ...(businessUnitId ? { businessUnitId } : {}) }, signal }),
+  getAdjustments: (groupId: string, params: { businessUnitId?: string; branchId?: string; warehouseId?: string; status?: string; reason?: string; search?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; report?: boolean } = {}, signal?: AbortSignal) => api.get<ManagerInventoryAdjustmentsResponse>(`/enterprise-groups/manager/${groupId}/adjustments`, { params, signal }),
+  getInventoryModule: (groupId: string, params: { view: string; businessUnitId?: string; branchId?: string; warehouseId?: string; status?: string; search?: string; type?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; report?: boolean } , signal?: AbortSignal) => api.get<ManagerInventoryModuleResponse>(`/enterprise-groups/manager/${groupId}/inventory/module`, { params, signal }),
   importSharedInventory: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/inventory/import`, body),
   getAccounting: (groupId: string, branchId?: string, signal?: AbortSignal) => api.get<{ accounts: any[]; transactions: any[] }>(`/enterprise-groups/manager/${groupId}/accounting`, { params: branchId ? { branchId } : undefined, signal }),
   importSharedAccounts: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/manager/${groupId}/accounting/import`, body),

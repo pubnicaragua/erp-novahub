@@ -68,6 +68,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   const canCreateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'create');
   const canEditWarehouse = canPerform('INVENTORY_WAREHOUSES', 'edit');
   const canDeactivateWarehouse = canPerform('INVENTORY_WAREHOUSES', 'deactivate');
+  const canViewPos = canPerform('RETAIL_POS', 'view');
   const canManagePos = canPerform('RETAIL_POS', 'edit');
   const [showTutorial, setShowTutorial] = useState(false);
   const [editingRows, setEditingRows] = useState<Map<string, EditingWarehouse>>(new Map());
@@ -136,6 +137,12 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   };
 
   React.useEffect(() => {
+    if (!canViewPos) {
+      setCajasList([]);
+      setCajasLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     const loadCatalogs = async () => {
       try {
@@ -152,7 +159,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     };
     void loadCatalogs();
     return () => controller.abort();
-  }, []);
+  }, [canViewPos]);
 
   const refreshStock = async () => {
     try {

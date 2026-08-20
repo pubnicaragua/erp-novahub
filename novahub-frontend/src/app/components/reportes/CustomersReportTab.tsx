@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
 import { toast } from 'sonner';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Users, Scale, TrendingUp, DollarSign, Package, ArrowUpRight, Activity, Wallet, CreditCard, ShoppingCart } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
@@ -66,6 +67,8 @@ function getRangeDates(range: string) {
 export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange }, ref) => {
   const { displayCurrency, baseCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatConvertedAmount: formatAmountBySource, toBaseAmount, exchangeRate } = useCurrency();
   const { themeConfig } = useTheme();
+  const { canPerform } = useAuth();
+  const canViewSales = canPerform('SALES', 'view');
   const currencySymbol = displayCurrency === 'USD' ? '$' : 'C$';
   const formatConvertedAmount = (amount: number, sourceCurrency?: string, sourceExchangeRate?: number) =>
     formatAmountBySource(amount, sourceCurrency === 'NIO' ? baseCurrency : sourceCurrency, sourceExchangeRate);
@@ -77,7 +80,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       salesOrdersService.getAll(filters, signal), customersService.getAll(filters, signal),
     ]);
     return { invoices: asList(invRes), payments: asList(payRes), orders: asList(ordRes), customers: asList(cusRes) };
-  }, { onError: (e) => toast.error(e.message || 'Error cargando clientes') });
+  }, { enabled: canViewSales, onError: (e) => toast.error(e.message || 'Error cargando clientes') });
   const invoices = reportData?.invoices || [];
   const payments = reportData?.payments || [];
   const orders = reportData?.orders || [];
