@@ -12,7 +12,6 @@ import {
   DollarSign,
   Users,
   Truck,
-  Activity,
   Headphones,
   FolderOpen,
   BellRing,
@@ -310,6 +309,9 @@ const menuItems: MenuItem[] = [
   { id: 'configuracion', label: 'Configuración', icon: <Settings className="size-5" /> },
 ];
 
+/** Orden canónico de módulos: debe coincidir con el orden visual del sidebar. */
+export const SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = menuItems.map((item) => item.id);
+
 const platformMenuItems: MenuItem[] = [
   {
     id: 'overview',
@@ -319,7 +321,7 @@ const platformMenuItems: MenuItem[] = [
   },
   {
     id: 'suscripciones',
-    label: 'Grupos empresariales',
+    label: 'Grupos y cotizaciones',
     icon: <Building2 className="size-5" />,
   },
   {
@@ -344,6 +346,9 @@ const platformMenuItems: MenuItem[] = [
     superadminOnly: true,
   },
 ];
+
+/** Orden del sidebar específico para usuarios de la plataforma NovaHub. */
+export const PLATFORM_SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = platformMenuItems.map((item) => item.id);
 
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, canPerform, user } = useAuth();
@@ -693,4 +698,3 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     </>
   );
 }
-

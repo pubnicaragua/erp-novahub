@@ -541,17 +541,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 notifications.slice(0, 5).map((n) => (
                   <DropdownMenuItem 
                     key={n.id} 
-                    className={`flex flex-col items-start gap-1 p-3 cursor-pointer border-b border-border/50 last:border-0 ${n.read ? 'opacity-75' : ''}`}
+                    className="group flex cursor-pointer flex-col items-start gap-1 border-b border-border/50 p-3 text-foreground last:border-0 hover:bg-accent hover:text-accent-foreground focus:bg-primary focus:text-primary-foreground data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground"
                     onClick={() => {
                       void markAsRead(n.id);
                       navigateToNotification(n);
                     }}
                   >
                     <div className="flex items-center gap-2">
-                       <span className={`h-2 w-2 rounded-full shrink-0 ${n.read ? 'bg-muted-foreground/40' : 'bg-primary'}`} />
-                       <span className="font-medium text-sm line-clamp-1">{n.title}</span>
+                       <span className={`h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-muted-foreground/60 group-data-[highlighted]:bg-primary-foreground/70' : 'bg-primary group-data-[highlighted]:bg-primary-foreground'}`} />
+                       <span className="line-clamp-1 text-sm font-medium text-foreground group-data-[highlighted]:text-primary-foreground">{n.title}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground ml-4 line-clamp-2">
+                    <span className="ml-4 line-clamp-2 text-xs text-foreground/70 group-data-[highlighted]:text-primary-foreground/90">
                       {n.message?.startsWith('TAREA:') ? n.message.split(':').slice(2).join(':') : 
                        n.message?.startsWith('RECORDATORIO:') ? n.message.split(':').slice(2).join(':') : 
                        n.message}

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { resolveStorageReferences } from './storage.service';
 import type { Ticket, TicketComment, TicketAudit, Document, User, ApiFilters } from '../types';
 
 const normalizeList = <T>(response: any): T[] => {
@@ -8,8 +9,10 @@ const normalizeList = <T>(response: any): T[] => {
 };
 
 export const supportService = {
+  // El listado conserva las storage:// URIs y solo firma archivos al abrir un
+  // ticket; resolver cada fila aquí produciría N+1 requests a Storage.
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<Ticket[]>('/tools/tickets', { params: filters as any, signal }),
-  getOne: (id: string, signal?: AbortSignal) => api.get<Ticket>(`/tools/tickets/${id}`, { signal }),
+  getOne: async (id: string, signal?: AbortSignal) => resolveStorageReferences(await api.get<Ticket>(`/tools/tickets/${id}`, { signal })),
   create: (data: Partial<Ticket>) => api.post<Ticket>('/tools/tickets', data),
   update: (id: string, data: Partial<Ticket>) => api.patch<Ticket>(`/tools/tickets/${id}`, data),
   delete: (id: string) => api.delete(`/tools/tickets/${id}`),

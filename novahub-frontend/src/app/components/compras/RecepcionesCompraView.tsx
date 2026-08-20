@@ -1340,7 +1340,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-') && String(data.find((receipt) => receipt.id === id)?.status || '').toUpperCase() !== 'REJECTED');
             if (validIds.length === 0) return;
@@ -1574,4 +1574,3 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     </div>
   );
 }
-

@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Loader2 } from 'lucide-react';
+import { ImagePlus, Loader2, X } from 'lucide-react';
 import type { Ticket } from '../../types';
 import { supportService } from '../../services/support.service';
+import { MAX_EVIDENCE_FILES, validateEvidenceFile } from '../../services/soporte-tecnico.service';
+import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 
 interface TicketFormModalProps {
@@ -35,29 +37,27 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
   const isEditing = Boolean(ticket?.id);
   const [saving, setSaving] = useState(false);
 
-  const [subject, setSubject] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [status, setStatus] = useState('OPEN');
-  const [customerId, setCustomerId] = useState('');
+  const [subject, setSubject] = useState(ticket?.subject || '');
+  const [description, setDescription] = useState(ticket?.description || '');
+  const [priority, setPriority] = useState<string>(ticket?.priority || 'MEDIUM');
+  const [status, setStatus] = useState<string>(ticket?.status || 'OPEN');
+  const [customerId, setCustomerId] = useState(ticket?.customerId || '');
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
 
-  useEffect(() => {
-    if (open) {
-      if (ticket?.id) {
-        setSubject(ticket.subject || '');
-        setDescription(ticket.description || '');
-        setPriority(ticket.priority || 'MEDIUM');
-        setStatus(ticket.status || 'OPEN');
-        setCustomerId(ticket.customerId || '');
-      } else {
-        setSubject('');
-        setDescription('');
-        setPriority('MEDIUM');
-        setStatus('OPEN');
-        setCustomerId('');
-      }
+  const handleEvidenceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files || []);
+    event.currentTarget.value = '';
+    if (evidenceFiles.length + selected.length > MAX_EVIDENCE_FILES) {
+      toast.error(`Solo puedes adjuntar hasta ${MAX_EVIDENCE_FILES} imágenes por ticket.`);
+      return;
     }
-  }, [open, ticket]);
+    try {
+      selected.forEach(validateEvidenceFile);
+      setEvidenceFiles(current => [...current, ...selected]);
+    } catch (error: any) {
+      toast.error(error?.message || 'La evidencia no es válida');
+    }
+  };
 
   const handleSave = async () => {
     if (!subject.trim()) {
@@ -71,12 +71,21 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
 
     setSaving(true);
     try {
+      const uploadedEvidence = await Promise.all(
+        evidenceFiles.map((file, index) => storageService.uploadFile('support-evidence', file, { folder: `tickets/evidencia-${index + 1}` })),
+      );
       const data: Partial<Ticket> = {
         subject: subject.trim(),
         description: description.trim(),
         priority: priority as any,
         status: status as any,
         ...(customerId ? { customerId } : {}),
+        ...(uploadedEvidence.length > 0
+          ? {
+              evidenceUrl1: uploadedEvidence[0]?.uri,
+              evidenceUrl2: uploadedEvidence[1]?.uri,
+            }
+          : {}),
       };
 
       if (isEditing && ticket?.id) {
@@ -162,12 +171,12 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           {customerCatalog.length > 0 && (
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase font-bold text-muted-foreground">Cliente asociado (opcional)</label>
-              <Select value={customerId} onValueChange={setCustomerId}>
+              <Select value={customerId || '__none__'} onValueChange={(value) => setCustomerId(value === '__none__' ? '' : value)}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Sin cliente asociado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin cliente</SelectItem>
+                  <SelectItem value="__none__">Sin cliente</SelectItem>
                   {customerCatalog.map((c: any) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
@@ -175,6 +184,43 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
               </Select>
             </div>
           )}
+
+          <div className="space-y-2 rounded-2xl border border-dashed border-border/70 bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-muted-foreground">
+                  <ImagePlus className="size-3.5 text-primary" /> Evidencias
+                </label>
+                <p className="mt-1 text-[10px] text-muted-foreground">Hasta 2 imágenes JPG, PNG, WEBP o GIF de 5 MB cada una.</p>
+              </div>
+              {evidenceFiles.length < MAX_EVIDENCE_FILES && (
+                <label className="relative inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 text-[10px] font-black uppercase text-primary hover:bg-primary/15">
+                  <ImagePlus className="size-4" /> Adjuntar
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="absolute inset-0 cursor-pointer opacity-0" onChange={handleEvidenceChange} />
+                </label>
+              )}
+            </div>
+            {(ticket?.evidenceUrl1 || ticket?.evidenceUrl2 || evidenceFiles.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {[ticket?.evidenceUrl1, ticket?.evidenceUrl2].filter(Boolean).map((url, index) => (
+                  url?.startsWith('storage://') ? (
+                    <span key={`existing-${url}`} className="max-w-full truncate rounded-lg border border-border/60 bg-background px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground">Evidencia existente {index + 1}</span>
+                  ) : (
+                    <a key={`existing-${url}`} href={url} target="_blank" rel="noreferrer" className="max-w-full truncate rounded-lg border border-border/60 bg-background px-2.5 py-1.5 text-[10px] font-semibold text-primary hover:underline">Evidencia existente {index + 1}</a>
+                  )
+                ))}
+                {evidenceFiles.map((file, index) => (
+                  <span key={`${file.name}-${file.lastModified}`} className="flex max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2.5 py-1.5 text-[10px] font-semibold">
+                    <span className="max-w-[180px] truncate">{file.name}</span>
+                    <button type="button" onClick={() => setEvidenceFiles(current => current.filter((_, i) => i !== index))} className="text-muted-foreground hover:text-rose-500" aria-label={`Quitar ${file.name}`}>
+                      <X className="size-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {isEditing && evidenceFiles.length > 0 && <p className="text-[10px] text-amber-600">Al guardar, las nuevas evidencias reemplazarán las existentes.</p>}
+          </div>
         </div>
 
         <DialogFooter>

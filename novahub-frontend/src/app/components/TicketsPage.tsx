@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from './ui/button';
 import { Headphones, TicketIcon, Users, BookOpen, CircleHelp } from 'lucide-react';
-import { cn } from './ui/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketsView } from './support/TicketsView';
 import { Ticket } from '../types';
@@ -53,12 +52,13 @@ interface TicketsPageProps {
   onSubModuleChange?: (module: string) => void;
 }
 
-export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarCollapsed}: TicketsPageProps) => {
+export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageProps) => {
   const { canPerform } = useAuth();
   const canViewTickets = canPerform('TICKETS', 'view');
   const canViewKnowledge = canPerform('TICKETS_KNOWLEDGE_BASE', 'view');
   const canViewAgents = canPerform('TICKETS_AGENTS', 'view');
-  const [activeTab, setActiveTab] = useState(activeSubModule || 'tickets');
+  const [internalActiveTab, setInternalActiveTab] = useState('tickets');
+  const activeTab = activeSubModule || internalActiveTab;
   const [showTutorial, setShowTutorial] = useState(false);
 
   // Las pestañas son independientes: no cargamos tickets, artículos y agentes
@@ -87,14 +87,8 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
     ? Promise.all([ticketsQuery.refetch(), agentsQuery.refetch()])
     : activeQuery.refetch();
 
-  useEffect(() => {
-    if (activeSubModule && activeSubModule !== activeTab) {
-      setActiveTab(activeSubModule);
-    }
-  }, [activeSubModule]);
-
   const handleTabChange = (value: string) => {
-    setActiveTab(value);
+    setInternalActiveTab(value);
     if (onSubModuleChange) {
       onSubModuleChange(value);
     }
@@ -130,7 +124,7 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange, isSidebarColla
           </div>
 
           <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
-            <div className={cn("w-full overflow-x-auto custom-scrollbar mb-6", !isSidebarCollapsed && "hidden lg:hidden")}>
+            <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
             <TabsList className="flex w-max min-w-full h-auto gap-1.5 bg-gradient-to-br from-muted/30 to-muted/50 backdrop-blur-sm p-1.5 rounded-2xl border border-border/40 [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground" data-tour="tickets-tabs">
               {tabs.map((tab) => (
                 <TabsTrigger 

@@ -100,11 +100,56 @@ export interface ManagerInventoryModuleResponse {
   metrics: Record<string, number>;
 }
 
+export interface PlatformQuoteItem {
+  id?: string;
+  section: string;
+  description: string;
+  detail?: string | null;
+  periodicity?: string | null;
+  quantity: number;
+  unitPrice: number;
+  amount?: number;
+  isOptional: boolean;
+  sortOrder?: number;
+}
+
+export interface PlatformQuote {
+  id: string;
+  number: string;
+  prospectCompany: string;
+  prospectName: string;
+  prospectEmail?: string | null;
+  prospectPhone?: string | null;
+  country?: string | null;
+  currency: 'USD' | 'NIO';
+  validUntil?: string | null;
+  notes?: string | null;
+  subtotal: number;
+  optionalSubtotal: number;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+  enterpriseGroup?: { id: string; name: string; slug: string } | null;
+  clientTenant?: { id: string; name: string; slug: string } | null;
+  items: PlatformQuoteItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const enterpriseGroupsService = {
-  getPlatformGroups: (signal?: AbortSignal) => api.get<{ groups: any[]; unassignedBranches: any[] }>('/enterprise-groups/platform', { signal }),
+  getPlatformGroups: (signal?: AbortSignal) => api.get<{ groups: any[]; unassignedBranches: any[]; storageBytes: number; storageObjects: number }>('/enterprise-groups/platform', { signal }),
+  getPlatformLegacyUsers: (signal?: AbortSignal) => api.get<{ cutoff: string; totalUsers: number; totalTenants: number; tenants: any[] }>('/enterprise-groups/platform/legacy-users', { signal }),
+  extendPlatformLegacyTrial: (tenantId: string, extensionDays = 7) => api.idempotentPatch(`/enterprise-groups/platform/legacy-users/${tenantId}/trial`, { extensionDays }),
   getPlatformGroup: (groupId: string, signal?: AbortSignal) => api.get<any>(`/enterprise-groups/platform/${groupId}`, { signal }),
   createPlatformGroup: (body: any) => api.idempotentPost('/enterprise-groups/platform', body),
   commitPlatformOnboarding: (body: any) => api.idempotentPost('/enterprise-groups/platform/onboarding/commit', body),
+  getPlatformQuotes: (params?: { search?: string; status?: string }, signal?: AbortSignal) => api.get<PlatformQuote[]>('/enterprise-groups/platform/quotes', { params, signal }),
+  createPlatformQuote: (body: Omit<PlatformQuote, 'id' | 'number' | 'status' | 'createdAt' | 'updatedAt' | 'subtotal' | 'optionalSubtotal' | 'taxAmount' | 'total' | 'items'> & { items: PlatformQuoteItem[]; discountAmount?: number; taxRate?: number }) => api.idempotentPost<PlatformQuote>('/enterprise-groups/platform/quotes', body),
+  updatePlatformQuote: (id: string, body: any) => api.idempotentPatch<PlatformQuote>(`/enterprise-groups/platform/quotes/${id}`, body),
+  updatePlatformQuoteStatus: (id: string, status: PlatformQuote['status']) => api.idempotentPatch<PlatformQuote>(`/enterprise-groups/platform/quotes/${id}/status`, { status }),
+  deletePlatformQuote: (id: string) => api.delete<{ id: string; deleted: boolean }>(`/enterprise-groups/platform/quotes/${id}`),
   createPlatformBranch: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/platform/${groupId}/branches`, body),
   createPlatformBusinessUnit: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/platform/${groupId}/business-units`, body),
   createPlatformManager: (groupId: string, body: any) => api.idempotentPost(`/enterprise-groups/platform/${groupId}/managers`, body),

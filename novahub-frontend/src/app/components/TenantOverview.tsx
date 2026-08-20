@@ -83,9 +83,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [accessDenied, setAccessDenied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showSetupView, setShowSetupView] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user, canPerform } = useAuth();
   const canViewPos = canPerform('RETAIL_POS', 'view');
+  const returnToDashboard = () => {
+    setShowSetupView(false);
+    onNavigateToDashboard?.();
+  };
 
   useEffect(() => {
     if (!loading) return;
@@ -446,19 +451,21 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     );
   }
 
-  if (showSetupView && setupSummary && !setupSummary.isComplete) {
+  if (showSetupView && setupSummary) {
     return (
       <div className="space-y-4 p-4 md:p-6">
-        <Button variant="ghost" size="sm" onClick={() => setShowSetupView(false)} className="rounded-xl gap-1.5 text-xs font-bold">
+        <Button variant="ghost" size="sm" onClick={returnToDashboard} className="rounded-xl gap-1.5 text-xs font-bold">
           ← Volver al Dashboard
         </Button>
         <ImplementationSetupDashboard
           summary={setupSummary}
-          onNavigateToDashboard={() => { setShowSetupView(false); }}
+          onNavigateToDashboard={returnToDashboard}
           onRefresh={async () => {
             try {
+              setSetupLoading(true);
               setSetupSummary(await getImplementationSetupSummary(true, user?.enabledModules));
             } catch { /* silent */ }
+            finally { setSetupLoading(false); }
           }}
         />
       </div>
@@ -528,16 +535,19 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
             size="sm"
             onClick={async () => {
               setShowSetupView(true);
-              if (!setupSummary) {
-                try {
-                  const summary = await getImplementationSetupSummary(true, user?.enabledModules);
-                  setSetupSummary(summary);
-                } catch { /* silent - dashboard still works */ }
-              }
+              setSetupLoading(true);
+              try {
+                const summary = await getImplementationSetupSummary(true, user?.enabledModules);
+                setSetupSummary(summary);
+              } catch (error: any) {
+                toast.error(error?.message || 'No se pudo cargar la implementación');
+                setShowSetupView(false);
+              } finally { setSetupLoading(false); }
             }}
+            disabled={setupLoading}
             className="rounded-xl border-dashed border-primary/30 bg-transparent hover:bg-primary/5 text-primary/80 font-black uppercase text-[10px] tracking-widest gap-1.5"
           >
-            <ClipboardCheck className="size-3.5" />
+            {setupLoading ? <Loader2 className="size-3.5 animate-spin" /> : <ClipboardCheck className="size-3.5" />}
             Implementación
           </Button>
         </div>
