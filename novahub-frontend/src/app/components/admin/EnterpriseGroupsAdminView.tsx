@@ -211,7 +211,7 @@ function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWo
             <CardTitle className="flex min-w-0 items-center gap-2 text-lg font-black"><Building2 className="size-5 shrink-0 text-primary" /><span className="truncate">{group.name}</span></CardTitle>
             <p className="mt-2 truncate text-xs text-muted-foreground">Catálogo por rubro · inventario compartido dentro del rubro</p>
           </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2"><GroupManagerSupportDialog group={group} /><Button className="rounded-xl" onClick={onOpenWorkspace}><GitBranch className="mr-2 size-4" /> Configurar</Button></div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2"><GroupManagerSupportDialog group={group} onChanged={onChanged} /><Button className="rounded-xl" onClick={onOpenWorkspace}><GitBranch className="mr-2 size-4" /> Configurar</Button></div>
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-6 pt-0">

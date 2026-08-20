@@ -5,7 +5,10 @@ export type ManagerPermissionState = Record<string, ManagerPermissionLevel>;
 export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_OVERVIEW', label: 'Resumen empresarial', description: 'Indicadores y distribución por sucursal' },
   { id: 'MANAGER_INVENTORY', label: 'Inventario consolidado', description: 'Stock, bodegas y existencias' },
-  { id: 'MANAGER_ACCOUNTING', label: 'Contabilidad y finanzas', description: 'Movimientos y cuentas por sucursal' },
+  { id: 'MANAGER_SALES', label: 'Ventas consolidadas', description: 'Clientes, documentos, cobros y caja' },
+  { id: 'MANAGER_PURCHASES', label: 'Compras consolidadas', description: 'Proveedores, órdenes, recepciones, facturas y pagos' },
+  { id: 'MANAGER_FINANCE', label: 'Finanzas consolidadas', description: 'Caja, ingresos, gastos, saldos y análisis financieros' },
+  { id: 'MANAGER_ACCOUNTING', label: 'Contabilidad consolidada', description: 'Plan de cuentas, asientos, libros y reportes contables' },
   { id: 'MANAGER_CONSOLIDATED', label: 'Estados financieros', description: 'Balance, resultados y comparativos' },
   { id: 'MANAGER_TRANSFERS', label: 'Transferencias', description: 'Movimientos entre bodegas y sucursales' },
   { id: 'MANAGER_CATALOG', label: 'Catálogo compartido', description: 'Productos, precios y sincronización' },
@@ -41,4 +44,3 @@ export function managerStateToPermissions(state: ManagerPermissionState) {
     return [{ module: option.id, read: true, create: true, edit: true, delete: true, export: true, manage: true }];
   });
 }
-

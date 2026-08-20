@@ -140,13 +140,13 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
 
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Ajustes encontrados" value={metrics?.total} icon={ClipboardCheck} />
-        <MetricCard label="Aprobados" value={metrics?.approved} icon={Scale} tone="text-emerald-600 bg-emerald-500/10" />
-        <MetricCard label="Pendientes" value={(metrics?.drafts || 0) + (metrics?.sent || 0)} icon={Clock3} tone="text-amber-600 bg-amber-500/10" />
-        <MetricCard label="Productos afectados" value={metrics?.productsAffected} icon={Package} tone="text-sky-600 bg-sky-500/10" />
-        <MetricCard label="Unidades aumentadas" value={metrics?.increasedUnits} icon={TrendingUp} tone="text-emerald-600 bg-emerald-500/10" />
-        <MetricCard label="Unidades disminuidas" value={metrics?.decreasedUnits} icon={TrendingDown} tone="text-rose-600 bg-rose-500/10" />
-        <MetricCard label="Impacto monetario" value={formatCurrency(metrics?.monetaryImpact, 'NIO')} icon={Scale} tone="text-violet-600 bg-violet-500/10" />
-        <MetricCard label="Pérdidas registradas" value={formatCurrency(metrics?.lossAmount, 'NIO')} icon={TrendingDown} tone="text-rose-600 bg-rose-500/10" />
+        <MetricCard label="Aprobados" value={metrics?.approved} icon={Scale} tone="text-primary bg-primary/10" />
+        <MetricCard label="Pendientes" value={(metrics?.drafts || 0) + (metrics?.sent || 0)} icon={Clock3} tone="text-primary bg-primary/10" />
+        <MetricCard label="Productos afectados" value={metrics?.productsAffected} icon={Package} tone="text-primary bg-primary/10" />
+        <MetricCard label="Unidades aumentadas" value={metrics?.increasedUnits} icon={TrendingUp} tone="text-primary bg-primary/10" />
+        <MetricCard label="Unidades disminuidas" value={metrics?.decreasedUnits} icon={TrendingDown} tone="text-primary bg-primary/10" />
+        <MetricCard label="Impacto monetario" value={formatCurrency(metrics?.monetaryImpact, 'NIO')} icon={Scale} tone="text-primary bg-primary/10" />
+        <MetricCard label="Pérdidas registradas" value={formatCurrency(metrics?.lossAmount, 'NIO')} icon={TrendingDown} tone="text-primary bg-primary/10" />
       </div>
 
       <Card className="min-w-0 rounded-3xl border-border/60 shadow-sm">

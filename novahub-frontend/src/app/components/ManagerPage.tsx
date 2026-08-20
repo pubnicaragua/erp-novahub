@@ -14,6 +14,14 @@ import { enterpriseGroupsService, type ManagerOverview } from '../services/enter
 import { MANAGER_SECTIONS, ManagerShell, type ManagerSection } from './ManagerShell';
 import { ManagerInventoryModule } from './manager/ManagerInventoryModule';
 import type { ManagerInventoryView } from './manager/manager-inventory.types';
+import { ManagerSalesModule } from './manager/ManagerSalesModule';
+import type { ManagerSalesView } from './manager/manager-sales.types';
+import { ManagerPurchasesModule } from './manager/ManagerPurchasesModule';
+import type { ManagerPurchasesView } from './manager/manager-purchases.types';
+import { ManagerFinanceModule } from './manager/ManagerFinanceModule';
+import type { ManagerFinanceView } from './manager/manager-finance.types';
+import { ManagerAccountingModule } from './manager/ManagerAccountingModule';
+import type { ManagerAccountingView } from './manager/manager-accounting.types';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
 import { getBusinessTypeLabel } from '../constants/businessTypes';
@@ -54,6 +62,10 @@ async function readSpreadsheet(file: File) {
 export function ManagerPage() {
   const [section, setSection] = useState<ManagerSection>('overview');
   const [inventoryView, setInventoryView] = useState<ManagerInventoryView>('overview');
+  const [salesView, setSalesView] = useState<ManagerSalesView>('overview');
+  const [purchasesView, setPurchasesView] = useState<ManagerPurchasesView>('overview');
+  const [financeView, setFinanceView] = useState<ManagerFinanceView>('overview');
+  const [accountingView, setAccountingView] = useState<ManagerAccountingView>('overview');
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [warehouseName, setWarehouseName] = useState('');
@@ -103,7 +115,7 @@ export function ManagerPage() {
 
   useEffect(() => {
     if (selectedBusinessUnitId && !businessUnits.some((unit) => unit.id === selectedBusinessUnitId && unit.isActive !== false)) setSelectedBusinessUnitId('');
-    if (section === 'inventory' && !selectedBusinessUnitId) {
+    if ((section === 'inventory' || section === 'finances' || section === 'accounting') && !selectedBusinessUnitId) {
       const firstActiveUnit = businessUnits.find((unit) => unit.isActive !== false);
       if (firstActiveUnit) setSelectedBusinessUnitId(firstActiveUnit.id);
     }
@@ -125,7 +137,7 @@ export function ManagerPage() {
   const accountingQuery = useTenantQuery(
     ['manager-accounting', groupId, selectedBranchId || 'all'],
     (signal) => enterpriseGroupsService.getAccounting(groupId, selectedBranchId || undefined, signal),
-    { enabled: Boolean(groupId) && section === 'accounting' },
+    { enabled: false },
   );
   const usersQuery = useTenantQuery(
     ['manager-users', groupId, selectedBranchId || 'all'],
@@ -278,12 +290,20 @@ export function ManagerPage() {
       onBusinessUnitChange={(businessUnitId) => { setSelectedBusinessUnitId(businessUnitId); setSelectedBranchId(''); }}
       inventoryView={inventoryView}
       onInventoryViewChange={setInventoryView}
+      salesView={salesView}
+      onSalesViewChange={setSalesView}
+      purchasesView={purchasesView}
+      onPurchasesViewChange={setPurchasesView}
+      financeView={financeView}
+      onFinanceViewChange={setFinanceView}
+      accountingView={accountingView}
+      onAccountingViewChange={setAccountingView}
       allowedSections={allowedSections}
       selectedBranchId={selectedBranchId}
       onBranchChange={setSelectedBranchId}
     >
       <div className="min-w-0 space-y-6">
-        {section !== 'inventory' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2><p className="mt-2 text-sm text-muted-foreground">Consolidado por grupo, rubro, sucursal y ubicación.</p></div>
           <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
         </div>}
@@ -294,7 +314,10 @@ export function ManagerPage() {
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
         {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
         {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} corporateWarehouseContent={<WarehouseContent overview={overview} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
-        {section === 'accounting' && <AccountingContent data={accountingQuery.data} loading={accountingQuery.isLoading} units={group?.businessUnits || []} branches={overview?.branches || []} importUnitId={accountingImportUnitId} setImportUnitId={(value) => { setAccountingImportUnitId(value); setAccountingImportBranchIds([]); }} importBranchIds={accountingImportBranchIds} setImportBranchIds={setAccountingImportBranchIds} importRows={accountingImportRows} setImportRows={setAccountingImportRows} importFileName={accountingImportFileName} setImportFileName={setAccountingImportFileName} onImport={() => accountingImportMutation.mutate()} importing={accountingImportMutation.isPending} />}
+        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
@@ -308,13 +331,16 @@ export function ManagerPage() {
 
 function defaultManagerPermissionState(): ManagerPermissionState {
   const state = emptyManagerPermissionState();
-  ['MANAGER_OVERVIEW', 'MANAGER_INVENTORY', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
+  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
   return state;
 }
 
 const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   overview: 'MANAGER_OVERVIEW',
   inventory: 'MANAGER_INVENTORY',
+  sales: 'MANAGER_SALES',
+  purchases: 'MANAGER_PURCHASES',
+  finances: 'MANAGER_FINANCE',
   accounting: 'MANAGER_ACCOUNTING',
   consolidated: 'MANAGER_CONSOLIDATED',
   transfers: 'MANAGER_TRANSFERS',
@@ -328,10 +354,24 @@ function getAllowedManagerSections(access?: ManagerOverview['group']['managerAcc
   const permissions = Array.isArray(access.permissions) ? access.permissions as Array<Record<string, unknown>> : [];
   return MANAGER_SECTIONS.filter((item) => {
     if (item.id === 'settings') return true;
+    // Los Managers creados antes de separar Finanzas y Contabilidad pueden
+    // conservar el permiso legado. Se mantiene visible Finanzas para no
+    // romper su navegación; el backend también acepta ese permiso heredado.
+    if (item.id === 'finances') {
+      return ['MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerPermissionGranted(permissions, module));
+    }
+    if (item.id === 'accounting') {
+      return ['MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED'].some((module) => managerPermissionGranted(permissions, module));
+    }
     const module = MANAGER_SECTION_MODULES[item.id];
-    const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
-    return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
+    return managerPermissionGranted(permissions, module);
   }).map((item) => item.id);
+}
+
+function managerPermissionGranted(permissions: Array<Record<string, unknown>>, module?: string) {
+  if (!module) return false;
+  const permission = permissions.find((candidate) => String(candidate.module || '').toUpperCase() === module);
+  return Boolean(permission && (permission.read === true || permission.create === true || permission.edit === true || permission.delete === true || permission.manage === true));
 }
 
 function managerAccessAllows(access: ManagerOverview['group']['managerAccess'], module: string) {
@@ -351,12 +391,12 @@ function managerAccessAllowsAction(access: ManagerOverview['group']['managerAcce
 function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = true }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean }) {
   const metrics = overview?.metrics;
   const cards = [
-    { label: 'Sucursales visibles', value: metrics?.branches, icon: Building2, tone: 'text-blue-500 bg-blue-500/10' },
-    { label: 'Usuarios generales', value: metrics?.users, icon: Users, tone: 'text-violet-500 bg-violet-500/10' },
-    { label: 'Usuarios activos', value: metrics?.activeUsers, icon: ShieldCheck, tone: 'text-cyan-500 bg-cyan-500/10' },
-    { label: 'Unidades en inventario', value: metrics?.inventoryUnits, icon: Package, tone: 'text-emerald-500 bg-emerald-500/10' },
-    { label: 'Archivos almacenados', value: formatStorage(metrics?.storageBytes), icon: Cloud, tone: 'text-amber-500 bg-amber-500/10' },
-    { label: 'Objetos registrados', value: metrics?.storageObjects, icon: FileStack, tone: 'text-orange-500 bg-orange-500/10' },
+    { label: 'Sucursales visibles', value: metrics?.branches, icon: Building2, tone: 'text-primary bg-primary/10' },
+    { label: 'Usuarios generales', value: metrics?.users, icon: Users, tone: 'text-primary bg-primary/10' },
+    { label: 'Usuarios activos', value: metrics?.activeUsers, icon: ShieldCheck, tone: 'text-primary bg-primary/10' },
+    { label: 'Unidades en inventario', value: metrics?.inventoryUnits, icon: Package, tone: 'text-primary bg-primary/10' },
+    { label: 'Archivos almacenados', value: formatStorage(metrics?.storageBytes), icon: Cloud, tone: 'text-primary bg-primary/10' },
+    { label: 'Objetos registrados', value: metrics?.storageObjects, icon: FileStack, tone: 'text-primary bg-primary/10' },
   ];
   return <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>

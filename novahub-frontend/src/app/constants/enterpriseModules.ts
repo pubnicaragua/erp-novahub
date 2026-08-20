@@ -13,6 +13,7 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'DASHBOARD', label: 'Dashboard', description: 'KPIs y resumen general del negocio' },
   { id: 'FINANCING', label: 'Financiamiento PYME', description: 'Financiamiento y créditos para el negocio' },
   { id: 'SALES', label: 'Ventas', description: 'Clientes, cotizaciones, facturación y caja' },
+  { id: 'SALES_POS', label: 'Restaurante POS', description: 'Facturación rápida por caja para restaurante y alimentos' },
   { id: 'PURCHASES', label: 'Compras', description: 'Proveedores, órdenes y recepción' },
   { id: 'INVENTORY', label: 'Inventario de mercancías', description: 'Productos, servicios, stock, bodegas y transferencias' },
   { id: 'FINANCIAL', label: 'Finanzas', description: 'Ingresos, gastos, bancos y presupuestos' },
