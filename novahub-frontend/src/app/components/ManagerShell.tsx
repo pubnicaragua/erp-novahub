@@ -47,6 +47,7 @@ import {
   Scale,
   Wallet,
   ListChecks,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -89,6 +90,14 @@ import {
   MANAGER_ACCOUNTING_VIEWS,
   type ManagerAccountingView,
 } from "./manager/manager-accounting.types";
+import {
+  MANAGER_REPORTS_VIEWS,
+  type ManagerReportsView,
+} from "./manager/manager-reports.types";
+import {
+  MANAGER_HR_VIEWS,
+  type ManagerHrView,
+} from "./manager/manager-hr.types";
 
 const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
   overview: LayoutDashboard,
@@ -171,6 +180,32 @@ const MANAGER_ACCOUNTING_VIEW_ICONS: Record<ManagerAccountingView, LucideIcon> =
   hrPaymentRequests: ClipboardCheck,
 };
 
+const MANAGER_REPORTS_VIEW_ICONS: Record<ManagerReportsView, LucideIcon> = {
+  overview: LayoutDashboard,
+  sales: ShoppingCart,
+  purchases: Truck,
+  financial: Wallet,
+  inventory: Boxes,
+  customers: UserRound,
+  providers: Users,
+  hr: UserRound,
+  subscriptions: Layers,
+};
+
+const MANAGER_HR_VIEW_ICONS: Record<ManagerHrView, LucideIcon> = {
+  overview: LayoutDashboard,
+  employees: Users,
+  departments: Building2,
+  payroll: Wallet,
+  commissions: TrendingUp,
+  attendance: ClipboardCheck,
+  leaves: CalendarDays,
+  performance: BarChart3,
+  kpi: TrendingUp,
+  training: BookOpen,
+  benefits: ShieldCheck,
+};
+
 export type ManagerSection =
   | "overview"
   | "inventory"
@@ -178,6 +213,8 @@ export type ManagerSection =
   | "purchases"
   | "finances"
   | "accounting"
+  | "reports"
+  | "hr"
   | "users"
   | "managers"
   | "settings"
@@ -202,6 +239,8 @@ export const MANAGER_SECTIONS: Array<{
     icon: Landmark,
     group: "Consolidado",
   },
+  { id: "reports", label: "Reportes", icon: BarChart3, group: "Consolidado" },
+  { id: "hr", label: "Recursos Humanos", icon: Users, group: "Consolidado" },
   {
     id: "transfers",
     label: "Transferencias",
@@ -361,6 +400,10 @@ type ManagerShellProps = {
   onFinanceViewChange: (view: ManagerFinanceView) => void;
   accountingView: ManagerAccountingView;
   onAccountingViewChange: (view: ManagerAccountingView) => void;
+  reportView: ManagerReportsView;
+  onReportViewChange: (view: ManagerReportsView) => void;
+  hrView: ManagerHrView;
+  onHrViewChange: (view: ManagerHrView) => void;
   selectedBranchId: string;
   onBranchChange: (branchId: string) => void;
   allowedSections?: ManagerSection[];
@@ -385,6 +428,10 @@ export function ManagerShell({
   onFinanceViewChange,
   accountingView,
   onAccountingViewChange,
+  reportView,
+  onReportViewChange,
+  hrView,
+  onHrViewChange,
   selectedBranchId,
   onBranchChange,
   allowedSections,
@@ -394,7 +441,7 @@ export function ManagerShell({
     () => safeGetItem(MANAGER_SIDEBAR_COLLAPSED_KEY) === "true",
   );
   const [expandedSection, setExpandedSection] = useState<ManagerSection | null>(
-    () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" ? section : null),
+    () => (section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting" || section === "reports" || section === "hr" ? section : null),
   );
   const { user, logout } = useAuth();
   const { theme, setTheme } = useManagerTheme();
@@ -408,7 +455,7 @@ export function ManagerShell({
     : branches;
 
   useEffect(() => {
-    if (section !== "inventory" && section !== "sales" && section !== "purchases" && section !== "finances" && section !== "accounting")
+    if (section !== "inventory" && section !== "sales" && section !== "purchases" && section !== "finances" && section !== "accounting" && section !== "reports" && section !== "hr")
       setExpandedSection(null);
   }, [section]);
 
@@ -480,13 +527,15 @@ export function ManagerShell({
   };
 
   const handleSectionClick = (next: ManagerSection) => {
-    if (next === "inventory" || next === "sales" || next === "purchases" || next === "finances" || next === "accounting") {
+    if (next === "inventory" || next === "sales" || next === "purchases" || next === "finances" || next === "accounting" || next === "reports" || next === "hr") {
       if (next === "inventory")
         onInventoryViewChange(MANAGER_INVENTORY_VIEWS[0].id);
       if (next === "sales") onSalesViewChange(MANAGER_SALES_VIEWS[0].id);
       if (next === "purchases") onPurchasesViewChange(MANAGER_PURCHASES_VIEWS[0].id);
       if (next === "finances") onFinanceViewChange(MANAGER_FINANCE_VIEWS[0].id);
       if (next === "accounting") onAccountingViewChange(MANAGER_ACCOUNTING_VIEWS[0].id);
+      if (next === "reports") onReportViewChange(MANAGER_REPORTS_VIEWS[0].id);
+      if (next === "hr") onHrViewChange(MANAGER_HR_VIEWS[0].id);
       if (sidebarCollapsed) {
         if (section !== next) updateSection(next);
         setExpandedSection(next);
@@ -510,7 +559,7 @@ export function ManagerShell({
 
   return (
     <ManagerShellNavigationContext.Provider value={{ sidebarCollapsed }}>
-      <div className="manager-shell min-h-screen overflow-x-hidden bg-background text-foreground">
+      <div className="manager-shell h-screen overflow-hidden bg-background text-foreground">
         <ManagerSidebar
           collapsed={sidebarCollapsed}
           open={sidebarOpen}
@@ -531,14 +580,18 @@ export function ManagerShell({
           onFinanceViewChange={onFinanceViewChange}
           accountingView={accountingView}
           onAccountingViewChange={onAccountingViewChange}
+          reportView={reportView}
+          onReportViewChange={onReportViewChange}
+          hrView={hrView}
+          onHrViewChange={onHrViewChange}
         />
         <div
           className={cn(
-            "min-h-screen min-w-0 transition-[padding] duration-300",
+            "flex h-screen min-h-0 min-w-0 flex-col transition-[padding] duration-300",
             sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]",
           )}
         >
-          <header className="sticky top-0 z-30 border-b border-border/60 bg-card/90 backdrop-blur-xl">
+          <header className="shrink-0 border-b border-border/60 bg-card/90 backdrop-blur-xl">
             <div className="flex min-h-16 w-full min-w-0 flex-wrap items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6">
               <Button
                 variant="outline"
@@ -688,7 +741,7 @@ export function ManagerShell({
           </header>
           <main
             className={cn(
-              "mx-auto w-full max-w-[1700px] min-w-0",
+              "min-h-0 flex-1 overflow-x-hidden overflow-y-auto mx-auto w-full max-w-[1700px] min-w-0",
               section === "inventory" || section === "sales" || section === "purchases" || section === "finances" || section === "accounting"
                 ? "p-0"
                 : "p-4 sm:p-5 lg:p-7",
@@ -732,6 +785,10 @@ function ManagerSidebar({
   onFinanceViewChange,
   accountingView,
   onAccountingViewChange,
+  reportView,
+  onReportViewChange,
+  hrView,
+  onHrViewChange,
 }: {
   collapsed: boolean;
   open: boolean;
@@ -752,6 +809,10 @@ function ManagerSidebar({
   onFinanceViewChange: (view: ManagerFinanceView) => void;
   accountingView: ManagerAccountingView;
   onAccountingViewChange: (view: ManagerAccountingView) => void;
+  reportView: ManagerReportsView;
+  onReportViewChange: (view: ManagerReportsView) => void;
+  hrView: ManagerHrView;
+  onHrViewChange: (view: ManagerHrView) => void;
 }) {
   const { user } = useAuth();
   const groups = [...new Set(sections.map((item) => item.group))];
@@ -848,7 +909,7 @@ function ManagerSidebar({
                         const Icon = item.icon;
                         const active = section === item.id;
                         const hasSubmenu =
-                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting";
+                          item.id === "inventory" || item.id === "sales" || item.id === "purchases" || item.id === "finances" || item.id === "accounting" || item.id === "reports" || item.id === "hr";
                         const isExpanded = expandedSection === item.id;
                         const button = (
                           <button
@@ -897,12 +958,18 @@ function ManagerSidebar({
                                     ? MANAGER_PURCHASES_VIEWS
                                     : item.id === "finances"
                                       ? MANAGER_FINANCE_VIEWS
-                                      : MANAGER_ACCOUNTING_VIEWS
+                                      : item.id === "accounting"
+                                        ? MANAGER_ACCOUNTING_VIEWS
+                                        : item.id === "reports"
+                                          ? MANAGER_REPORTS_VIEWS
+                                          : MANAGER_HR_VIEWS
                               ).map((view) => {
                                 const isInventory = item.id === "inventory";
                                 const isSales = item.id === "sales";
                                 const isPurchases = item.id === "purchases";
                                 const isFinances = item.id === "finances";
+                                const isAccounting = item.id === "accounting";
+                                const isReports = item.id === "reports";
                                 const SubIcon = isInventory
                                   ? MANAGER_INVENTORY_VIEW_ICONS[view.id as ManagerInventoryView]
                                   : isSales
@@ -911,7 +978,11 @@ function ManagerSidebar({
                                       ? MANAGER_PURCHASES_VIEW_ICONS[view.id as ManagerPurchasesView]
                                       : isFinances
                                         ? MANAGER_FINANCE_VIEW_ICONS[view.id as ManagerFinanceView]
-                                        : MANAGER_ACCOUNTING_VIEW_ICONS[view.id as ManagerAccountingView];
+                                        : isAccounting
+                                          ? MANAGER_ACCOUNTING_VIEW_ICONS[view.id as ManagerAccountingView]
+                                          : isReports
+                                            ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView]
+                                            : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView];
                                 const subActive = isInventory
                                   ? inventoryView === view.id
                                   : isSales
@@ -920,13 +991,19 @@ function ManagerSidebar({
                                       ? purchasesView === view.id
                                       : isFinances
                                         ? financeView === view.id
-                                        : accountingView === view.id;
+                                        : isAccounting
+                                          ? accountingView === view.id
+                                          : isReports
+                                            ? reportView === view.id
+                                            : hrView === view.id;
                                 const selectView = () => {
                                   if (isInventory) onInventoryViewChange(view.id as ManagerInventoryView);
                                   else if (isSales) onSalesViewChange(view.id as ManagerSalesView);
                                   else if (isPurchases) onPurchasesViewChange(view.id as ManagerPurchasesView);
                                   else if (isFinances) onFinanceViewChange(view.id as ManagerFinanceView);
-                                  else onAccountingViewChange(view.id as ManagerAccountingView);
+                                  else if (isAccounting) onAccountingViewChange(view.id as ManagerAccountingView);
+                                  else if (isReports) onReportViewChange(view.id as ManagerReportsView);
+                                  else onHrViewChange(view.id as ManagerHrView);
                                 };
                                 return (
                                   <button

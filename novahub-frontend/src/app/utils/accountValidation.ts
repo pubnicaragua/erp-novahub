@@ -22,10 +22,10 @@ export function isValidPassword(value: string, required = true) {
   return getPasswordError(value, required) === null;
 }
 
-export function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
+export function normalizeEmail(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase();
 }
 
-export function isValidEmail(value: string) {
+export function isValidEmail(value?: string | null) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
 }

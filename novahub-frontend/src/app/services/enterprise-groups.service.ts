@@ -175,6 +175,20 @@ export interface ManagerAccountingModuleResponse {
   metrics: Record<string, any>;
 }
 
+export interface ManagerReportsModuleResponse {
+  view: string;
+  data: any[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: Record<string, any>;
+}
+
+export interface ManagerHrModuleResponse {
+  view: string;
+  data: any[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: Record<string, any>;
+}
+
 export interface PlatformQuoteItem {
   id?: string;
   section: string;
@@ -307,6 +321,16 @@ export const enterpriseGroupsService = {
   updatePlatformBusinessUnit: (groupId: string, unitId: string, body: any) =>
     api.idempotentPatch(
       `/enterprise-groups/platform/${groupId}/business-units/${unitId}`,
+      body,
+    ),
+  updatePlatformBranch: (groupId: string, branchId: string, body: any) =>
+    api.idempotentPatch(
+      `/enterprise-groups/platform/${groupId}/branches/${branchId}`,
+      body,
+    ),
+  updatePlatformWarehouse: (groupId: string, warehouseId: string, body: any) =>
+    api.idempotentPatch(
+      `/enterprise-groups/platform/${groupId}/warehouses/${warehouseId}`,
       body,
     ),
   updatePlatformGroup: (groupId: string, body: any) =>
@@ -456,6 +480,46 @@ export const enterpriseGroupsService = {
   ) =>
     api.get<ManagerAccountingModuleResponse>(
       `/enterprise-groups/manager/${groupId}/accounting/module`,
+      { params, signal },
+    ),
+  getReportsModule: (
+    groupId: string,
+    params: {
+      view: string;
+      businessUnitId?: string;
+      branchId?: string;
+      status?: string;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      pageSize?: number;
+      report?: boolean;
+    },
+    signal?: AbortSignal,
+  ) =>
+    api.get<ManagerReportsModuleResponse>(
+      `/enterprise-groups/manager/${groupId}/reports/module`,
+      { params, signal },
+    ),
+  getHrModule: (
+    groupId: string,
+    params: {
+      view: string;
+      businessUnitId?: string;
+      branchId?: string;
+      status?: string;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      pageSize?: number;
+      report?: boolean;
+    },
+    signal?: AbortSignal,
+  ) =>
+    api.get<ManagerHrModuleResponse>(
+      `/enterprise-groups/manager/${groupId}/hr/module`,
       { params, signal },
     ),
   importSharedInventory: (groupId: string, body: any) =>

@@ -22,6 +22,10 @@ import { ManagerFinanceModule } from './manager/ManagerFinanceModule';
 import type { ManagerFinanceView } from './manager/manager-finance.types';
 import { ManagerAccountingModule } from './manager/ManagerAccountingModule';
 import type { ManagerAccountingView } from './manager/manager-accounting.types';
+import { ManagerReportsModule } from './manager/ManagerReportsModule';
+import type { ManagerReportsView } from './manager/manager-reports.types';
+import { ManagerHRModule } from './manager/ManagerHRModule';
+import type { ManagerHrView } from './manager/manager-hr.types';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
 import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
 import { getBusinessTypeLabel } from '../constants/businessTypes';
@@ -66,6 +70,8 @@ export function ManagerPage() {
   const [purchasesView, setPurchasesView] = useState<ManagerPurchasesView>('overview');
   const [financeView, setFinanceView] = useState<ManagerFinanceView>('overview');
   const [accountingView, setAccountingView] = useState<ManagerAccountingView>('overview');
+  const [reportView, setReportView] = useState<ManagerReportsView>('overview');
+  const [hrView, setHrView] = useState<ManagerHrView>('overview');
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [warehouseName, setWarehouseName] = useState('');
@@ -298,12 +304,16 @@ export function ManagerPage() {
       onFinanceViewChange={setFinanceView}
       accountingView={accountingView}
       onAccountingViewChange={setAccountingView}
+      reportView={reportView}
+      onReportViewChange={setReportView}
+      hrView={hrView}
+      onHrViewChange={setHrView}
       allowedSections={allowedSections}
       selectedBranchId={selectedBranchId}
       onBranchChange={setSelectedBranchId}
     >
       <div className="min-w-0 space-y-6">
-        {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2><p className="mt-2 text-sm text-muted-foreground">Consolidado por grupo, rubro, sucursal y ubicación.</p></div>
           <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
         </div>}
@@ -318,6 +328,8 @@ export function ManagerPage() {
         {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
         {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
@@ -331,7 +343,7 @@ export function ManagerPage() {
 
 function defaultManagerPermissionState(): ManagerPermissionState {
   const state = emptyManagerPermissionState();
-  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
+  ['MANAGER_OVERVIEW', 'MANAGER_SALES', 'MANAGER_PURCHASES', 'MANAGER_INVENTORY', 'MANAGER_FINANCE', 'MANAGER_ACCOUNTING', 'MANAGER_REPORTS', 'MANAGER_HR', 'MANAGER_CONSOLIDATED', 'MANAGER_TRANSFERS', 'MANAGER_CATALOG', 'MANAGER_USERS', 'MANAGER_WAREHOUSES'].forEach((module) => { state[module] = 'READ'; });
   return state;
 }
 
@@ -342,6 +354,8 @@ const MANAGER_SECTION_MODULES: Partial<Record<ManagerSection, string>> = {
   purchases: 'MANAGER_PURCHASES',
   finances: 'MANAGER_FINANCE',
   accounting: 'MANAGER_ACCOUNTING',
+  reports: 'MANAGER_REPORTS',
+  hr: 'MANAGER_HR',
   consolidated: 'MANAGER_CONSOLIDATED',
   transfers: 'MANAGER_TRANSFERS',
   catalog: 'MANAGER_CATALOG',

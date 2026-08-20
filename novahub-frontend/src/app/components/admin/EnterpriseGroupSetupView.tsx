@@ -17,6 +17,7 @@ import {
   Save,
   ShieldCheck,
   Trash2,
+  UserCog,
   Users,
   Warehouse,
 } from "lucide-react";
@@ -24,8 +25,19 @@ import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { enterpriseGroupsService } from "../../services/enterprise-groups.service";
 import { authService } from "../../services/auth.service";
+import { GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
+import { GroupBranchSupportDialog } from "./GroupBranchSupportDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import {
   getPasswordError,
   isValidEmail,
@@ -39,6 +51,7 @@ import {
 
 type SetupMode = "create" | "edit";
 type SetupStep = "identity" | "units" | "warehouses" | "branches" | "summary";
+type EditTab = "overview" | "identity" | "managers" | "users" | "units" | "warehouses" | "branches";
 
 const steps: Array<{
   id: SetupStep;
@@ -93,10 +106,11 @@ export function EnterpriseGroupSetupView({
   onBack: () => void;
   onChanged: () => void;
 }) {
-  const [step, setStep] = useState<SetupStep>(
-    mode === "create" ? "identity" : "summary",
-  );
-  const [editDetailOpen, setEditDetailOpen] = useState(false);
+  const [step, setStep] = useState<SetupStep>("identity");
+  const [editDetailOpen, setEditDetailOpen] = useState(mode === "edit");
+  const [activeEditTab, setActiveEditTab] = useState<EditTab>("identity");
+  const [pendingModuleSelection, setPendingModuleSelection] = useState<string[] | null>(null);
+  const [moduleConfirmationOpen, setModuleConfirmationOpen] = useState(false);
   const [group, setGroup] = useState<any>(initialGroup || null);
   const [loadingGroup, setLoadingGroup] = useState(Boolean(initialGroup?.id));
   const [groupForm, setGroupForm] = useState({
@@ -134,6 +148,7 @@ export function EnterpriseGroupSetupView({
   const [branchForm, setBranchForm] = useState({
     name: "",
     slug: "",
+    logo: "",
     industry: "OTHER",
     subIndustry: "OTHER",
     businessType: "",
@@ -171,7 +186,20 @@ export function EnterpriseGroupSetupView({
     setLoadingGroup(true);
     enterpriseGroupsService
       .getPlatformGroup(initialGroup.id)
-      .then((result) => setGroup(result))
+      .then((result) => {
+        setGroup(result);
+        setGroupForm((current) => ({
+          ...current,
+          name: result.name || current.name,
+          slug: result.slug || current.slug,
+          description: result.description || "",
+          logo: result.logo || "",
+          enabledModules:
+            Array.isArray(result.enabledModules) && result.enabledModules.length
+              ? result.enabledModules
+              : current.enabledModules,
+        }));
+      })
       .catch((error: any) =>
         toast.error(error?.message || "No se pudo cargar el grupo empresarial"),
       )
@@ -266,13 +294,13 @@ export function EnterpriseGroupSetupView({
   };
 
   const updateGroupMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (enabledModules?: string[]) =>
       enterpriseGroupsService.updatePlatformGroup(group.id, {
         name: groupForm.name.trim(),
         slug: groupForm.slug.trim(),
         description: groupForm.description.trim() || null,
         logo: groupForm.logo || null,
-        enabledModules: groupForm.enabledModules,
+        enabledModules: enabledModules ?? groupForm.enabledModules,
       }),
     onSuccess: (updated) => {
       setGroup(updated);
@@ -281,6 +309,26 @@ export function EnterpriseGroupSetupView({
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const requestGroupSave = () => {
+    const currentModules = Array.isArray(group?.enabledModules)
+      ? group.enabledModules.map((module: string) => String(module).toUpperCase())
+      : [];
+    const nextModules = groupForm.enabledModules.map((module) => String(module).toUpperCase());
+    const removedModules = currentModules.filter((module: string) => !nextModules.includes(module));
+    if (mode === "edit" && removedModules.length) {
+      setPendingModuleSelection(nextModules);
+      setModuleConfirmationOpen(true);
+      return;
+    }
+    updateGroupMutation.mutate(nextModules);
+  };
+
+  const confirmGroupModuleChange = () => {
+    updateGroupMutation.mutate(pendingModuleSelection || groupForm.enabledModules);
+    setPendingModuleSelection(null);
+    setModuleConfirmationOpen(false);
+  };
 
   const managerMutation = useMutation({
     mutationFn: () =>
@@ -323,11 +371,12 @@ export function EnterpriseGroupSetupView({
   });
 
   const updateUnitMutation = useMutation({
-    mutationFn: ({ unitId, enabledModules }: { unitId: string; enabledModules: string[] }) =>
-      enterpriseGroupsService.updatePlatformBusinessUnit(group.id, unitId, { enabledModules }),
+    mutationFn: ({ unitId, body }: { unitId: string; body: any }) =>
+      enterpriseGroupsService.updatePlatformBusinessUnit(group.id, unitId, body),
     onSuccess: async () => {
       await refreshGroup();
-      toast.success('Módulos del rubro actualizados');
+      setEditingUnitId(null);
+      toast.success("Rubro actualizado");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -354,6 +403,17 @@ export function EnterpriseGroupSetupView({
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const updateWarehouseMutation = useMutation({
+    mutationFn: ({ warehouseId, body }: { warehouseId: string; body: any }) =>
+      enterpriseGroupsService.updatePlatformWarehouse(group.id, warehouseId, body),
+    onSuccess: async () => {
+      await refreshGroup();
+      setEditingWarehouseId(null);
+      toast.success("Almacén actualizado");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const units = group?.businessUnits || [];
   const warehouses = group?.warehouses || [];
   const branches = group?.branches || [];
@@ -364,6 +424,7 @@ export function EnterpriseGroupSetupView({
       enterpriseGroupsService.createPlatformBranch(group.id, {
         name: branchForm.name.trim(),
         slug: branchForm.slug.trim(),
+        logo: branchForm.logo || undefined,
         industry: branchForm.industry,
         subIndustry: branchForm.subIndustry,
         businessType: branchForm.businessType,
@@ -378,6 +439,7 @@ export function EnterpriseGroupSetupView({
       setBranchForm({
         name: "",
         slug: "",
+        logo: "",
         industry: "OTHER",
         subIndustry: "OTHER",
         businessType: "",
@@ -390,6 +452,17 @@ export function EnterpriseGroupSetupView({
       });
       await refreshGroup();
       toast.success("Sucursal agregada");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const updateBranchMutation = useMutation({
+    mutationFn: ({ branchId, body }: { branchId: string; body: any }) =>
+      enterpriseGroupsService.updatePlatformBranch(group.id, branchId, body),
+    onSuccess: async () => {
+      await refreshGroup();
+      setEditingBranchId(null);
+      toast.success("Sucursal actualizada");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -444,6 +517,7 @@ export function EnterpriseGroupSetupView({
     const nextBranch = {
       id: `draft-branch-${Date.now()}`,
       name: branchForm.name.trim(),
+      logo: branchForm.logo || null,
       industry: branchForm.industry,
       subIndustry: branchForm.subIndustry,
       businessType: branchForm.businessType,
@@ -463,6 +537,7 @@ export function EnterpriseGroupSetupView({
     setBranchForm({
       name: "",
       slug: "",
+      logo: "",
       industry: "OTHER",
       subIndustry: "OTHER",
       businessType: "",
@@ -513,6 +588,19 @@ export function EnterpriseGroupSetupView({
       enabledModules: groupModuleIds,
     });
     toast.success("Rubro actualizado");
+  };
+
+  const savePersistentUnitEdit = () => {
+    if (!editingUnitId) return;
+    updateUnitMutation.mutate({
+      unitId: editingUnitId,
+      body: {
+        name: unitForm.name.trim(),
+        slug: unitForm.slug.trim() || unitForm.name.trim(),
+        description: unitForm.description.trim() || null,
+        enabledModules: unitForm.enabledModules,
+      },
+    });
   };
 
   const removeDraftUnit = (unitId: string) => {
@@ -573,6 +661,19 @@ export function EnterpriseGroupSetupView({
     toast.success("Almacén actualizado");
   };
 
+  const savePersistentWarehouseEdit = () => {
+    if (!editingWarehouseId) return;
+    updateWarehouseMutation.mutate({
+      warehouseId: editingWarehouseId,
+      body: {
+        name: warehouseForm.name.trim(),
+        location: warehouseForm.location.trim() || null,
+        businessUnitId: warehouseForm.businessUnitId,
+        authorizedBranchIds: warehouseForm.authorizedBranchIds,
+      },
+    });
+  };
+
   const removeDraftWarehouse = (warehouseId: string) => {
     setGroup((current: any) => ({
       ...current,
@@ -589,6 +690,7 @@ export function EnterpriseGroupSetupView({
     setBranchForm({
       name: branch.name || "",
       slug: branch.slug || "",
+      logo: branch.logo || "",
       industry: branch.industry || "OTHER",
       subIndustry: branch.subIndustry || "OTHER",
       businessType: branch.businessType || "OTHER",
@@ -613,6 +715,7 @@ export function EnterpriseGroupSetupView({
           ? {
               ...branch,
               name: branchForm.name.trim(),
+              logo: branchForm.logo || null,
               industry: branchForm.industry,
               subIndustry: branchForm.subIndustry,
               businessType: branchForm.businessType,
@@ -630,6 +733,7 @@ export function EnterpriseGroupSetupView({
     setBranchForm({
       name: "",
       slug: "",
+      logo: "",
       industry: "OTHER",
       subIndustry: "OTHER",
       businessType: "",
@@ -643,6 +747,42 @@ export function EnterpriseGroupSetupView({
     setBranchAdminEmailStatus("idle");
     toast.success("Sucursal actualizada");
   };
+
+  const savePersistentBranchEdit = () => {
+    if (!editingBranchId) return;
+    updateBranchMutation.mutate({
+      branchId: editingBranchId,
+      body: {
+        name: branchForm.name.trim(),
+        slug: branchForm.slug.trim() || branchForm.name.trim(),
+        logo: branchForm.logo || null,
+        industry: branchForm.industry,
+        subIndustry: branchForm.subIndustry,
+        businessType: branchForm.businessType,
+        businessUnitId: branchForm.businessUnitId || undefined,
+        moduleMode: branchForm.moduleMode,
+        enabledModules: branchForm.enabledModules,
+      },
+    });
+  };
+
+  const updateUnitStatus = (unit: any) =>
+    updateUnitMutation.mutate({
+      unitId: unit.id,
+      body: { isActive: unit.isActive === false },
+    });
+
+  const updateWarehouseStatus = (warehouse: any) =>
+    updateWarehouseMutation.mutate({
+      warehouseId: warehouse.id,
+      body: { isActive: warehouse.isActive === false },
+    });
+
+  const updateBranchStatus = (branch: any) =>
+    updateBranchMutation.mutate({
+      branchId: branch.id,
+      body: { isActive: branch.isActive === false },
+    });
 
   const removeDraftBranch = (branchId: string) => {
     setGroup((current: any) => ({
@@ -694,6 +834,7 @@ export function EnterpriseGroupSetupView({
         })),
         branches: branches.map((branch: any) => ({
           name: branch.name,
+          logo: branch.logo || undefined,
           industry: branch.industry,
           subIndustry: branch.subIndustry,
           businessType: branch.businessType,
@@ -749,23 +890,29 @@ export function EnterpriseGroupSetupView({
     managerEmailStatus === "available" &&
     !getPasswordError(managerForm.password),
   );
-  const canCreateBranch = Boolean(
-    units.length > 0 &&
-    branchForm.businessUnitId &&
-    branchForm.name.trim() &&
-    branchForm.adminName.trim() &&
-    isValidEmail(branchForm.adminEmail) &&
-    branchAdminEmailStatus === "available" &&
-    normalizeEmail(branchForm.adminEmail) !==
-      normalizeEmail(managerForm.email) &&
-    !branches.some(
-      (branch: any) =>
-        branch.id !== editingBranchId &&
-        normalizeEmail(branch.adminEmail) ===
-          normalizeEmail(branchForm.adminEmail),
-    ) &&
-    !getPasswordError(branchForm.adminPassword),
-  );
+  const canCreateBranch = editingBranchId
+    ? Boolean(
+        units.length > 0 &&
+          branchForm.businessUnitId &&
+          branchForm.name.trim(),
+      )
+    : Boolean(
+        units.length > 0 &&
+          branchForm.businessUnitId &&
+          branchForm.name.trim() &&
+          branchForm.adminName.trim() &&
+          isValidEmail(branchForm.adminEmail) &&
+          branchAdminEmailStatus === "available" &&
+          normalizeEmail(branchForm.adminEmail) !==
+            normalizeEmail(managerForm.email) &&
+          !branches.some(
+            (branch: any) =>
+              branch.id !== editingBranchId &&
+              normalizeEmail(branch.adminEmail) ===
+                normalizeEmail(branchForm.adminEmail),
+          ) &&
+          !getPasswordError(branchForm.adminPassword),
+      );
   const progress = useMemo(() => {
     if (!group) return 0;
     const configured = [
@@ -815,13 +962,28 @@ export function EnterpriseGroupSetupView({
         warehouses={warehouses}
         manager={manager}
         updating={updateGroupMutation.isPending}
-        onSave={() => updateGroupMutation.mutate()}
-        onUpdateUnit={(unitId: string, enabledModules: string[]) => updateUnitMutation.mutate({ unitId, enabledModules })}
+        onSave={requestGroupSave}
+        onUpdateUnit={(unitId: string, enabledModules: string[]) => updateUnitMutation.mutate({ unitId, body: { enabledModules } })}
         updatingUnitId={updateUnitMutation.isPending ? String(updateUnitMutation.variables?.unitId || '') : ''}
         onBack={onBack}
+        activeTab={activeEditTab}
+        moduleConfirmationOpen={moduleConfirmationOpen}
+        onModuleConfirmationChange={setModuleConfirmationOpen}
+        onConfirmModuleChange={confirmGroupModuleChange}
+        onTabChange={(tab: EditTab) => {
+          setActiveEditTab(tab);
+          if (tab === "overview") {
+            setEditDetailOpen(false);
+            return;
+          }
+          setEditDetailOpen(true);
+          setStep(tab === "managers" || tab === "users" ? "identity" : tab);
+        }}
+        onChanged={refreshGroup}
         onOpenDetail={(next: SetupStep) => {
           setStep(next);
           setEditDetailOpen(true);
+          setActiveEditTab(next === "summary" ? "overview" : next);
         }}
       />
     );
@@ -868,8 +1030,23 @@ export function EnterpriseGroupSetupView({
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-6 lg:grid-cols-[270px_minmax(0,1fr)]">
-          <aside className="min-w-0">
+        {mode === "edit" && (
+          <GroupEditTabs
+            active={activeEditTab}
+            onChange={(tab) => {
+              setActiveEditTab(tab);
+              if (tab === "overview") {
+                setEditDetailOpen(false);
+                return;
+              }
+              setEditDetailOpen(true);
+              setStep(tab === "managers" || tab === "users" ? "identity" : tab);
+            }}
+          />
+        )}
+
+        <div className={`grid min-w-0 gap-6 ${mode === "create" ? "lg:grid-cols-[270px_minmax(0,1fr)]" : "grid-cols-1"}`}>
+          {mode === "create" && <aside className="min-w-0">
             <Card className="rounded-3xl border-border/60 bg-card/50 lg:sticky lg:top-6">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
@@ -926,12 +1103,17 @@ export function EnterpriseGroupSetupView({
                 </p>
               </CardContent>
             </Card>
-          </aside>
+          </aside>}
 
           <main className="min-w-0 space-y-6">
-            {step === "identity" && (
+            {mode === "edit" && activeEditTab === "managers" ? (
+              <ManagersEditStep group={group} onChanged={refreshGroup} />
+            ) : mode === "edit" && activeEditTab === "users" ? (
+              <UsersEditStep group={group} onChanged={refreshGroup} />
+            ) : step === "identity" && (
               <IdentityStep
                 mode={mode}
+                editMode={mode === "edit"}
                 draft={isDraft}
                 group={group}
                 groupForm={groupForm}
@@ -946,27 +1128,31 @@ export function EnterpriseGroupSetupView({
                 updating={updateGroupMutation.isPending}
                 onCreate={saveDraftIdentity}
                 onCreateManager={() => managerMutation.mutate()}
-                onUpdate={() => updateGroupMutation.mutate()}
+                onUpdate={requestGroupSave}
                 onNext={() => setStep("units")}
               />
             )}
             {step === "units" && (
               <UnitsStep
                 units={units}
+                editMode={mode === "edit"}
                 unitForm={unitForm}
                 setUnitForm={setUnitForm}
                 availableModules={groupModuleIds}
-                creating={isDraft ? false : unitMutation.isPending}
+                creating={isDraft ? false : unitMutation.isPending || updateUnitMutation.isPending}
                 editingId={editingUnitId}
                 onCreate={
                   isDraft
                     ? editingUnitId
                       ? saveDraftUnitEdit
                       : addDraftUnit
-                    : () => unitMutation.mutate()
+                    : editingUnitId
+                      ? savePersistentUnitEdit
+                      : () => unitMutation.mutate()
                 }
-                onEdit={isDraft ? startDraftUnitEdit : undefined}
+                onEdit={startDraftUnitEdit}
                 onDelete={isDraft ? removeDraftUnit : undefined}
+                onStatusChange={isDraft ? undefined : updateUnitStatus}
                 onCancelEdit={() => {
                   setEditingUnitId(null);
                   setUnitForm({
@@ -983,10 +1169,11 @@ export function EnterpriseGroupSetupView({
               <BranchesStep
                 units={units}
                 branches={branches}
+                editMode={mode === "edit"}
                 availableModules={groupModuleIds}
                 form={branchForm}
                 setForm={setBranchForm}
-                creating={isDraft ? false : branchMutation.isPending}
+                creating={isDraft ? false : branchMutation.isPending || updateBranchMutation.isPending}
                 editingId={editingBranchId}
                 canCreate={canCreateBranch}
                 emailStatus={branchAdminEmailStatus}
@@ -995,15 +1182,19 @@ export function EnterpriseGroupSetupView({
                     ? editingBranchId
                       ? saveDraftBranchEdit
                       : addDraftBranch
-                    : () => branchMutation.mutate()
+                    : editingBranchId
+                      ? savePersistentBranchEdit
+                      : () => branchMutation.mutate()
                 }
-                onEdit={isDraft ? startDraftBranchEdit : undefined}
+                onEdit={startDraftBranchEdit}
                 onDelete={isDraft ? removeDraftBranch : undefined}
+                onStatusChange={isDraft ? undefined : updateBranchStatus}
                 onCancelEdit={() => {
                   setEditingBranchId(null);
                   setBranchForm({
                     name: "",
                     slug: "",
+                    logo: "",
                     industry: "OTHER",
                     subIndustry: "OTHER",
                     businessType: "",
@@ -1023,19 +1214,23 @@ export function EnterpriseGroupSetupView({
                 units={units}
                 branches={branches}
                 warehouses={warehouses}
+                editMode={mode === "edit"}
                 form={warehouseForm}
                 setForm={setWarehouseForm}
-                creating={isDraft ? false : warehouseMutation.isPending}
+                creating={isDraft ? false : warehouseMutation.isPending || updateWarehouseMutation.isPending}
                 editingId={editingWarehouseId}
                 onCreate={
                   isDraft
                     ? editingWarehouseId
                       ? saveDraftWarehouseEdit
                       : addDraftWarehouse
-                    : () => warehouseMutation.mutate()
+                    : editingWarehouseId
+                      ? savePersistentWarehouseEdit
+                      : () => warehouseMutation.mutate()
                 }
-                onEdit={isDraft ? startDraftWarehouseEdit : undefined}
+                onEdit={startDraftWarehouseEdit}
                 onDelete={isDraft ? removeDraftWarehouse : undefined}
+                onStatusChange={isDraft ? undefined : updateWarehouseStatus}
                 onCancelEdit={() => {
                   setEditingWarehouseId(null);
                   setWarehouseForm({
@@ -1063,7 +1258,240 @@ export function EnterpriseGroupSetupView({
             )}
           </main>
         </div>
+        <ConfirmDialog
+          open={moduleConfirmationOpen}
+          onOpenChange={setModuleConfirmationOpen}
+          title="¿Desactivar módulos del grupo?"
+          description="Las sucursales dejarán de ver y utilizar temporalmente estos módulos. Los registros, roles y configuraciones se conservarán y volverán a estar disponibles al reactivarlos."
+          confirmLabel="Desactivar temporalmente"
+          cancelLabel="Mantener activos"
+          variant="warning"
+          onConfirm={confirmGroupModuleChange}
+          loading={updateGroupMutation.isPending}
+        />
       </div>
+    </div>
+  );
+}
+
+function GroupEditTabs({
+  active,
+  onChange,
+}: {
+  active: EditTab;
+  onChange: (tab: EditTab) => void;
+}) {
+  const tabs: Array<{ id: EditTab; label: string; icon: typeof Building2 }> = [
+    { id: "identity", label: "Identidad y módulos", icon: ShieldCheck },
+    { id: "managers", label: "Manager", icon: UserCog },
+    { id: "users", label: "Usuarios de sucursal", icon: Users },
+    { id: "units", label: "Rubros", icon: GitBranch },
+    { id: "warehouses", label: "Almacenes", icon: Warehouse },
+    { id: "branches", label: "Sucursales", icon: Building2 },
+  ];
+
+  return (
+    <div className="mb-6 flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-card/60 p-2 md:mb-8">
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          aria-current={active === id ? "page" : undefined}
+          className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wide transition ${active === id ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"}`}
+        >
+          <Icon className="size-4" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ManagersEditStep({
+  group,
+  onChanged,
+}: {
+  group: any;
+  onChanged: () => void | Promise<void>;
+}) {
+  const managers = group?.managerAssignments || [];
+  const [selectedManager, setSelectedManager] = useState<any>(null);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const savePassword = async () => {
+    const passwordError = getPasswordError(password);
+    if (!selectedManager?.user?.id || passwordError) {
+      toast.error(passwordError || "Selecciona un Manager");
+      return;
+    }
+    try {
+      setSaving(true);
+      await enterpriseGroupsService.updatePlatformManagerPassword(
+        group.id,
+        selectedManager.user.id,
+        password,
+      );
+      toast.success("Contraseña del Manager actualizada");
+      setSelectedManager(null);
+      setPassword("");
+      await onChanged();
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo actualizar la contraseña");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionIntro
+        icon={UserCog}
+        minimal
+        eyebrow="Configuración del grupo"
+        title="Managers del grupo"
+        description="Administra los accesos globales del grupo sin mezclarlos con los usuarios operativos de las sucursales. Los permisos y la contraseña se pueden gestionar desde soporte de plataforma."
+      />
+      <Card className="rounded-3xl border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-black uppercase">
+            <Users className="size-5 text-primary" /> Accesos Manager
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-6">
+          {managers.map((assignment: any) => (
+            <div key={assignment.id} className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-black">{assignment.user?.name || "Manager sin nombre"}</p>
+                <p className="text-sm text-muted-foreground">{assignment.user?.email || "Sin correo"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {assignment.isOwner ? "Propietario del grupo" : "Manager delegado"} · {assignment.user?.isActive === false ? "Inactivo" : "Activo"}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="shrink-0 rounded-xl"
+                onClick={() => {
+                  setSelectedManager(assignment);
+                  setPassword("");
+                }}
+              >
+                <KeyRound className="mr-2 size-4" /> Cambiar contraseña
+              </Button>
+            </div>
+          ))}
+          {!managers.length && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/30 bg-primary/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-black">Este grupo no tiene un Manager asignado</p>
+                <p className="mt-1 text-sm text-muted-foreground">Puedes crear el acceso global desde el botón de soporte.</p>
+              </div>
+              <GroupManagerSupportDialog group={group} onChanged={onChanged} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <Dialog
+        open={Boolean(selectedManager)}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            setSelectedManager(null);
+            setPassword("");
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-3xl p-5 sm:p-7">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase italic tracking-tight">
+              Cambiar contraseña del Manager
+            </DialogTitle>
+            <DialogDescription>
+              Actualiza la contraseña de {selectedManager?.user?.name || "este Manager"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className={labelClass}>
+              Nueva contraseña
+              <input
+                autoFocus
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Contraseña segura"
+                className={inputClass}
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {getPasswordError(password) || "Debe cumplir la política de seguridad de NovaHub."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              disabled={saving}
+              onClick={() => setSelectedManager(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="rounded-xl"
+              disabled={saving || Boolean(getPasswordError(password))}
+              onClick={savePassword}
+            >
+              {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+              Guardar contraseña
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function UsersEditStep({
+  group,
+  onChanged,
+}: {
+  group: any;
+  onChanged: () => void | Promise<void>;
+}) {
+  const branches = group?.branches || [];
+  return (
+    <div className="space-y-6">
+      <SectionIntro
+        icon={Users}
+        minimal
+        eyebrow="Configuración del grupo"
+        title="Usuarios de las sucursales"
+        description="Los usuarios operativos siguen perteneciendo a cada sucursal. Desde aquí puedes abrir el soporte de una sucursal para consultar usuarios, cambiar contraseñas o inhabilitar cuentas sin borrar sus registros."
+      />
+      <Card className="rounded-3xl border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-black uppercase">
+            <Building2 className="size-5 text-primary" /> Sucursales y usuarios
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-6 md:grid-cols-2">
+          {branches.map((branch: any) => (
+            <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4">
+              <div className="min-w-0">
+                <p className="truncate font-black">{branch.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {branch._count?.users ?? 0} usuarios · {branch.isActive === false ? "Sucursal inactiva" : "Sucursal activa"}
+                </p>
+              </div>
+              <GroupBranchSupportDialog branch={branch} onChanged={onChanged} />
+            </div>
+          ))}
+          {!branches.length && (
+            <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground md:col-span-2">
+              Todavía no hay sucursales en este grupo.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1082,6 +1510,11 @@ function GroupConfigurationView({
   updatingUnitId,
   onBack,
   onOpenDetail,
+  activeTab,
+  onTabChange,
+  moduleConfirmationOpen,
+  onModuleConfirmationChange,
+  onConfirmModuleChange,
 }: any) {
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [unitModuleDrafts, setUnitModuleDrafts] = useState<Record<string, string[]>>({});
@@ -1120,6 +1553,7 @@ function GroupConfigurationView({
             <ShieldCheck className="mr-2 size-4" /> Superadmin · acceso global
           </Badge>
         </div>
+        <GroupEditTabs active={activeTab} onChange={onTabChange} />
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
           <Card className="rounded-3xl border-border/60">
             <CardHeader>
@@ -1197,8 +1631,8 @@ function GroupConfigurationView({
               />
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                 Los rubros y sucursales no podrán seleccionar módulos fuera de
-                este conjunto. La reducción solo afecta accesos futuros y la
-                configuración, no elimina datos históricos.
+                este conjunto. Al reducirlo se restringe el acceso de forma
+                reversible; no se eliminan datos, registros ni permisos guardados.
               </p>
             </CardContent>
           </Card>
@@ -1228,7 +1662,7 @@ function GroupConfigurationView({
                 units.find((unit: any) => unit.id === branch.businessUnitId)
                   ?.name ||
                 "Giro pendiente",
-              badge: "Sucursal",
+              badge: branch.isActive === false ? "Inactiva" : "Activa",
             }))}
             onOpen={() => onOpenDetail("branches")}
           />
@@ -1242,7 +1676,9 @@ function GroupConfigurationView({
               detail:
                 units.find((unit: any) => unit.id === warehouse.businessUnitId)
                   ?.name || "Rubro pendiente",
-              badge: warehouse.location || "Sin ubicación",
+              badge: warehouse.isActive === false
+                ? "Inactivo"
+                : warehouse.location || "Sin ubicación",
             }))}
             onOpen={() => onOpenDetail("warehouses")}
           />
@@ -1292,6 +1728,17 @@ function GroupConfigurationView({
             </Button>
           </CardContent>
         </Card>
+        <ConfirmDialog
+          open={moduleConfirmationOpen}
+          onOpenChange={onModuleConfirmationChange}
+          title="¿Desactivar módulos del grupo?"
+          description="Las sucursales dejarán de ver y utilizar temporalmente estos módulos. Los registros, roles y configuraciones se conservarán y volverán a estar disponibles al reactivarlos."
+          confirmLabel="Desactivar temporalmente"
+          cancelLabel="Mantener activos"
+          variant="warning"
+          onConfirm={onConfirmModuleChange}
+          loading={updating}
+        />
       </div>
     </div>
   );
@@ -1364,9 +1811,15 @@ function StructureCard({
 function LogoPicker({
   value,
   onChange,
+  label = "Logo del grupo",
+  alt = "Logo del grupo empresarial",
+  helpText = "Se mostrará en el Navigator Manager.",
 }: {
   value?: string | null;
   onChange: (value: string) => void;
+  label?: string;
+  alt?: string;
+  helpText?: string;
 }) {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1387,12 +1840,12 @@ function LogoPicker({
 
   return (
     <div className="space-y-2">
-      <p className={labelClass}>Logo del grupo</p>
+      <p className={labelClass}>{label}</p>
       <label className="flex aspect-square cursor-pointer flex-col items-center justify-center overflow-hidden rounded-3xl border border-dashed border-primary/40 bg-primary/[0.04] text-center transition hover:border-primary hover:bg-primary/[0.08]">
         {value ? (
           <img
             src={value}
-            alt="Logo del grupo empresarial"
+            alt={alt}
             className="size-full object-contain p-4"
           />
         ) : (
@@ -1411,7 +1864,7 @@ function LogoPicker({
         />
       </label>
       <p className="text-[10px] leading-relaxed text-muted-foreground">
-        Se mostrará en el Navigator Manager.
+        {helpText}
       </p>
     </div>
   );
@@ -1419,6 +1872,7 @@ function LogoPicker({
 
 function IdentityStep({
   mode,
+  editMode,
   draft,
   group,
   groupForm,
@@ -1440,6 +1894,7 @@ function IdentityStep({
     <div className="space-y-6">
       <SectionIntro
         icon={ShieldCheck}
+        minimal={editMode}
         eyebrow="Paso 1"
         title="Identidad y acceso Manager"
         description="Prepara el grupo, su identidad visual y el primer usuario Manager global. El Superadmin conserva acceso global a todos los grupos."
@@ -1657,6 +2112,7 @@ function IdentityStep({
 
 function UnitsStep({
   units,
+  editMode,
   unitForm,
   setUnitForm,
   availableModules,
@@ -1665,6 +2121,7 @@ function UnitsStep({
   onCreate,
   onEdit,
   onDelete,
+  onStatusChange,
   onCancelEdit,
   onNext,
 }: any) {
@@ -1672,6 +2129,7 @@ function UnitsStep({
     <div className="space-y-6">
       <SectionIntro
         icon={GitBranch}
+        minimal={editMode}
         eyebrow="Paso 2"
         title="Define los rubros"
         description="Cada rubro separa el catálogo, precios, inventario y módulos operativos. Las sucursales del mismo rubro parten de esta configuración."
@@ -1704,7 +2162,7 @@ function UnitsStep({
                   >
                     {unit.isActive !== false ? "Activo" : "Inactivo"}
                   </Badge>
-                  {unit.__draft && onEdit && (
+                  {onEdit && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1712,6 +2170,16 @@ function UnitsStep({
                       onClick={() => onEdit(unit)}
                     >
                       <Pencil className="size-4" />
+                    </Button>
+                  )}
+                  {onStatusChange && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => onStatusChange(unit)}
+                    >
+                      {unit.isActive === false ? "Activar" : "Desactivar"}
                     </Button>
                   )}
                   {unit.__draft && onDelete && (
@@ -1817,6 +2285,7 @@ function WarehousesStep({
   units,
   branches,
   warehouses,
+  editMode,
   form,
   setForm,
   creating,
@@ -1824,6 +2293,7 @@ function WarehousesStep({
   onCreate,
   onEdit,
   onDelete,
+  onStatusChange,
   onCancelEdit,
   onNext,
 }: any) {
@@ -1841,6 +2311,7 @@ function WarehousesStep({
     <div className="space-y-6">
       <SectionIntro
         icon={Warehouse}
+        minimal={editMode}
         eyebrow="Paso 4"
         title="Crea los almacenes del grupo"
         description="El almacén corporativo está fuera de la sucursal, pertenece a un rubro y solo podrá transferir hacia las sucursales que autorices. Las bodegas se crearán dentro de cada sucursal."
@@ -1873,7 +2344,7 @@ function WarehousesStep({
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    {warehouse.__draft && onEdit && (
+                    {onEdit && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1881,6 +2352,16 @@ function WarehousesStep({
                         onClick={() => onEdit(warehouse)}
                       >
                         <Pencil className="size-4" />
+                      </Button>
+                    )}
+                    {onStatusChange && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => onStatusChange(warehouse)}
+                      >
+                        {warehouse.isActive === false ? "Activar" : "Desactivar"}
                       </Button>
                     )}
                     {warehouse.__draft && onDelete && (
@@ -2050,6 +2531,7 @@ function WarehousesStep({
 function BranchesStep({
   units,
   branches,
+  editMode,
   availableModules,
   form,
   setForm,
@@ -2060,6 +2542,7 @@ function BranchesStep({
   onCreate,
   onEdit,
   onDelete,
+  onStatusChange,
   onCancelEdit,
   onNext,
 }: any) {
@@ -2073,6 +2556,7 @@ function BranchesStep({
     <div className="space-y-6">
       <SectionIntro
         icon={Building2}
+        minimal={editMode}
         eyebrow="Paso 3"
         title="Crea las sucursales operativas"
         description="El rubro define el catálogo y los módulos máximos. El tipo de negocio se elige únicamente entre los rubros existentes en este grupo."
@@ -2105,7 +2589,7 @@ function BranchesStep({
                   {branch.businessType ||
                     getBusinessTypeLabel(branch.industry, branch.subIndustry)}
                 </Badge>
-                {branch.__draft && onEdit && (
+                {onEdit && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -2113,6 +2597,16 @@ function BranchesStep({
                     onClick={() => onEdit(branch)}
                   >
                     <Pencil className="size-4" />
+                  </Button>
+                )}
+                {onStatusChange && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => onStatusChange(branch)}
+                  >
+                    {branch.isActive === false ? "Activar" : "Desactivar"}
                   </Button>
                 )}
                 {branch.__draft && onDelete && (
@@ -2220,6 +2714,22 @@ function BranchesStep({
               ))}
             </select>
           </label>
+          <div className="sm:col-span-2 grid gap-4 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-[160px_minmax(0,1fr)]">
+            <LogoPicker
+              value={form.logo}
+              label="Logo de la sucursal"
+              alt={`Logo de ${form.name || "la sucursal"}`}
+              helpText="Logo propio de esta sucursal."
+              onChange={(logo) =>
+                setForm((current: any) => ({ ...current, logo }))
+              }
+            />
+            <div className="flex items-center text-sm leading-relaxed text-muted-foreground">
+              La sucursal puede tener una identidad visual diferente. Si no
+              cargas un logo, no heredará automáticamente el del grupo
+              empresarial.
+            </div>
+          </div>
           <div className="sm:col-span-2 grid gap-4 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-2">
             <label className={labelClass}>
               Administrador de sucursal
@@ -2558,11 +3068,13 @@ function SectionIntro({
   eyebrow,
   title,
   description,
+  minimal = false,
 }: {
   icon: typeof Building2;
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
+  minimal?: boolean;
 }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
@@ -2570,13 +3082,19 @@ function SectionIntro({
         <Icon className="size-6" />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
-          {eyebrow}
-        </p>
-        <h2 className="mt-1 text-2xl font-black tracking-tight">{title}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          {description}
-        </p>
+        {!minimal && eyebrow && (
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">
+            {eyebrow}
+          </p>
+        )}
+        <h2 className={`${minimal ? "" : "mt-1 "}text-2xl font-black tracking-tight`}>
+          {title}
+        </h2>
+        {!minimal && description && (
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+        )}
       </div>
     </div>
   );

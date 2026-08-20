@@ -9,6 +9,8 @@ export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_PURCHASES', label: 'Compras consolidadas', description: 'Proveedores, órdenes, recepciones, facturas y pagos' },
   { id: 'MANAGER_FINANCE', label: 'Finanzas consolidadas', description: 'Caja, ingresos, gastos, saldos y análisis financieros' },
   { id: 'MANAGER_ACCOUNTING', label: 'Contabilidad consolidada', description: 'Plan de cuentas, asientos, libros y reportes contables' },
+  { id: 'MANAGER_REPORTS', label: 'Reportes consolidados', description: 'Indicadores y reportes comparativos por área' },
+  { id: 'MANAGER_HR', label: 'Recursos Humanos consolidados', description: 'Personal, nómina, asistencia y talento por sucursal' },
   { id: 'MANAGER_CONSOLIDATED', label: 'Estados financieros', description: 'Balance, resultados y comparativos' },
   { id: 'MANAGER_TRANSFERS', label: 'Transferencias', description: 'Movimientos entre bodegas y sucursales' },
   { id: 'MANAGER_CATALOG', label: 'Catálogo compartido', description: 'Productos, precios y sincronización' },

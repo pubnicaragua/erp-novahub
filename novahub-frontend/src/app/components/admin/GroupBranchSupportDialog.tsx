@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Eye, KeyRound, Loader2, Pencil, Save, Users } from 'lucide-react';
+import { useEffect, useState, type ChangeEvent } from 'react';
+import { Eye, ImagePlus, KeyRound, Loader2, Pencil, Save, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { tenantsService } from '../../services/tenants.service';
 import { getPasswordError, isValidEmail } from '../../utils/accountValidation';
@@ -13,6 +13,15 @@ type BranchSupportDialogProps = {
   onChanged?: () => void;
 };
 
+function getBranchUserIdentityLabel(user: any) {
+  const role = String(user?.role || '').toUpperCase();
+  const userType = String(user?.userType || '').toUpperCase();
+  if (role === 'ADMIN' && userType === 'ADMIN') return 'ADMINISTRADOR DE SUCURSAL';
+  if (role === 'SUPER_ADMIN') return 'SUPER ADMIN';
+  if (role === 'EMPLOYEE' && userType === 'COLLABORATOR') return 'COLABORADOR';
+  return `REVISAR IDENTIDAD · ${role || 'SIN ROL'}${userType ? ` / ${userType}` : ''}`;
+}
+
 export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDialogProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'summary' | 'users'>('summary');
@@ -20,7 +29,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
   const [details, setDetails] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [savingDetails, setSavingDetails] = useState(false);
-  const [detailsForm, setDetailsForm] = useState({ name: branch.name || '', slug: branch.slug || '', industry: branch.industry || 'OTHER', subIndustry: branch.subIndustry || 'OTHER', businessType: getBusinessTypeOption(undefined, branch.industry, branch.subIndustry).key });
+  const [detailsForm, setDetailsForm] = useState({ name: branch.name || '', slug: branch.slug || '', logo: branch.logo || '', industry: branch.industry || 'OTHER', subIndustry: branch.subIndustry || 'OTHER', businessType: getBusinessTypeOption(undefined, branch.industry, branch.subIndustry).key });
   const [passwordUser, setPasswordUser] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
@@ -37,6 +46,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
         setDetailsForm({
           name: tenant?.name || branch.name || '',
           slug: tenant?.slug || branch.slug || '',
+          logo: tenant?.logo || branch.logo || '',
           industry: tenant?.industry || branch.industry || 'OTHER',
           subIndustry: tenant?.subIndustry || branch.subIndustry || 'OTHER',
           businessType: getBusinessTypeOption(undefined, tenant?.industry || branch.industry, tenant?.subIndustry || branch.subIndustry).key,
@@ -47,7 +57,24 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, branch.id, branch.industry, branch.name, branch.slug]);
+  }, [open, branch.id, branch.industry, branch.logo, branch.name, branch.slug]);
+
+  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecciona un archivo de imagen válido');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('El logo no debe superar 2 MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setDetailsForm((current) => ({ ...current, logo: String(reader.result || '') }));
+    reader.readAsDataURL(file);
+    event.currentTarget.value = '';
+  };
 
   const saveDetails = async () => {
     if (!detailsForm.name.trim() || !detailsForm.slug.trim()) {
@@ -59,6 +86,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
       const updated = await tenantsService.update(branch.id, {
         name: detailsForm.name.trim(),
         slug: detailsForm.slug.trim(),
+        logo: detailsForm.logo || null,
         industry: detailsForm.industry,
         subIndustry: detailsForm.subIndustry,
       });
@@ -139,6 +167,17 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                     {BUSINESS_TYPE_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                   </select>
                 </label>
+                <div className="space-y-2 sm:col-span-2">
+                  <p className="text-xs font-bold text-muted-foreground">Logo de la sucursal</p>
+                  <label className="flex min-h-28 cursor-pointer items-center gap-4 rounded-2xl border border-dashed border-primary/35 bg-primary/[0.03] p-3 transition hover:border-primary hover:bg-primary/[0.07]">
+                    <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-background">
+                      {detailsForm.logo ? <img src={detailsForm.logo} alt={`Logo de ${detailsForm.name || 'la sucursal'}`} className="size-full object-contain p-2" /> : <ImagePlus className="size-6 text-primary" />}
+                    </div>
+                    <span className="text-xs font-semibold text-muted-foreground">Cargar o reemplazar logo propio de esta sucursal</span>
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">No hereda automáticamente el logo del grupo empresarial.</p>
+                </div>
               </div>
               <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado operativo</p>
@@ -156,7 +195,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                   <div className="min-w-0">
                     <p className="truncate font-bold">{item.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{item.email}</p>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary/70">{item.role}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary/70">{getBranchUserIdentityLabel(item)}</p>
                   </div>
                   <Button variant="outline" className="shrink-0 rounded-xl" onClick={() => setPasswordUser(item)}>
                     <KeyRound className="size-4" /> Cambiar contraseña
