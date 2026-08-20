@@ -41,7 +41,7 @@ export function BankAccountsView() {
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [detailAccount, setDetailAccount] = useState<any>(null);
-  const [form, setForm] = useState({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '' });
+  const [form, setForm] = useState({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '', cardCommissionPercent: 0, cardCommissionAccountId: '' });
 
   const accountsQuery = useAccountingQuery<any[]>(['bank-accounts'], async (signal) => accountingList(await api.get('/bank-accounts', { signal })));
   const accounts = accountsQuery.data || [];
@@ -109,14 +109,14 @@ export function BankAccountsView() {
   const openCreate = () => {
     if (!canCreateBankAccount) return;
     setEditing(null);
-    setForm({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '' });
+    setForm({ bankName: '', accountNumber: '', accountType: 'CHECKING', currency: 'NIO', notes: '', accountId: '', cardCommissionPercent: 0, cardCommissionAccountId: '' });
     setFormOpen(true);
   };
 
   const openEdit = (a: any) => {
     if (!canEditBankAccount) return;
     setEditing(a);
-    setForm({ bankName: a.bankName, accountNumber: a.accountNumber, accountType: a.accountType, currency: a.currency, notes: a.notes || '', accountId: a.accountId || '' });
+    setForm({ bankName: a.bankName, accountNumber: a.accountNumber, accountType: a.accountType, currency: a.currency, notes: a.notes || '', accountId: a.accountId || '', cardCommissionPercent: Number(a.cardCommissionPercent || 0), cardCommissionAccountId: a.cardCommissionAccountId || '' });
     setFormOpen(true);
   };
 
@@ -175,6 +175,7 @@ export function BankAccountsView() {
                 <TableHead className="text-[10px] font-bold">Número de Cuenta</TableHead>
                 <TableHead className="text-[10px] font-bold">Tipo</TableHead>
                 <TableHead className="text-[10px] font-bold">Moneda</TableHead>
+                <TableHead className="text-[10px] font-bold">Comisión Tarjeta</TableHead>
                 <TableHead className="text-[10px] font-bold">Cuenta Contable</TableHead>
                 <TableHead className="text-[10px] font-bold">Estado</TableHead>
                 <TableHead className="text-[10px] font-bold text-right">Acciones</TableHead>
@@ -182,9 +183,9 @@ export function BankAccountsView() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="size-5 animate-spin mx-auto" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="size-5 animate-spin mx-auto" /></TableCell></TableRow>
               ) : accounts.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">Sin cuentas bancarias registradas</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-xs text-muted-foreground">Sin cuentas bancarias registradas</TableCell></TableRow>
               ) : accounts.map(a => {
                 const linked = chartAccounts.find((acc) => acc.id === a.accountId);
                 return (
@@ -193,6 +194,7 @@ export function BankAccountsView() {
                   <TableCell className="text-xs font-mono">{a.accountNumber}</TableCell>
                   <TableCell><Badge variant="outline" className="text-[9px]">{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType}</Badge></TableCell>
                   <TableCell className="text-xs">{a.currency}</TableCell>
+                  <TableCell className="text-xs font-mono">{Number(a.cardCommissionPercent || 0).toFixed(2)}%</TableCell>
                   <TableCell className="text-xs">
                     {linked ? (
                       <>
@@ -227,6 +229,7 @@ export function BankAccountsView() {
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/20 pt-2 text-[10px] text-muted-foreground">
                 <span>{ACCOUNT_TYPES.find(t => t.value === a.accountType)?.label || a.accountType} · {a.currency}</span>
+                <span className="text-muted-foreground">Comisión: {Number(a.cardCommissionPercent || 0).toFixed(2)}%</span>
                 <span className="shrink-0">
                   <Button variant="ghost" size="icon" className="size-7 text-primary" title="Ver movimientos del banco" aria-label={`Ver movimientos de ${a.bankName}`} onClick={() => setDetailAccount(a)}><Eye className="size-3.5" /></Button>
                   {canEditBankAccount && <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(a)}><Edit2 className="size-3.5" /></Button>}
@@ -284,6 +287,44 @@ export function BankAccountsView() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-bold">Comisión por tarjeta (%)</label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.cardCommissionPercent || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  const num = val === '' ? 0 : Number(val);
+                  if (num >= 0 && num <= 100) setForm({...form, cardCommissionPercent: num});
+                }}
+                placeholder="0.00"
+                className="h-9 text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">Porcentaje que cobra el banco/procesador por pagos con tarjeta. Opcional.</p>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-bold">Cuenta contable de comisiones bancarias</label>
+              <Combobox
+                options={chartAccounts
+                  .filter((a) => String(a.type || '').toUpperCase() === 'EXPENSE' && a.isLeaf && a.isActive && a.acceptsPostings)
+                  .map((a) => ({
+                    value: a.id,
+                    label: `${a.code} · ${a.name}`,
+                    description: `${a.currency}${a.parentCode ? ` · Hijo de ${a.parentCode}` : ''} · ${SUBTYPE_LABELS[a.subtype] || 'Cuenta de detalle'}`,
+                  }))}
+                value={form.cardCommissionAccountId || ''}
+                onChange={(v) => setForm({ ...form, cardCommissionAccountId: v })}
+                placeholder="Seleccionar cuenta de gastos (ej. 5300-003 Comisiones bancarias)"
+                searchPlaceholder="Buscar por código o nombre..."
+                maxVisibleOptions={200}
+                className="h-9 text-xs"
+                emptyMessage="No hay cuentas de gastos disponibles. Crea la cuenta en el Plan de Cuentas."
+              />
+              <p className="text-[10px] text-muted-foreground">Cuenta donde se registrará el gasto por comisión de tarjeta. Si está vacía, se usará la cuenta global de gastos bancarios.</p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <label className="text-xs font-bold">Cuenta Contable Hija (movimientos y conciliaciones)</label>

@@ -99,6 +99,17 @@ export function SesionActivaStep({
     }
   };
 
+  const paymentMethodLabel = (method?: string) => {
+    const labels: Record<string, string> = {
+      CASH: 'EFECTIVO',
+      CARD: 'TARJETA',
+      TRANSFER: 'TRANSFERENCIA',
+      CHECK: 'CHEQUE',
+    };
+    const normalized = String(method || '').toUpperCase();
+    return labels[normalized] || (method ? normalized : '');
+  };
+
   const { displayCurrency, exchangeRate: globalRate } = useCurrency();
   const sessionRate = session.exchangeRateUSD || globalRate;
   const isUSD = displayCurrency === 'USD';
@@ -447,7 +458,7 @@ export function SesionActivaStep({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-            <div className={`hidden xl:grid ${showSystemAmounts ? 'grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto]'} gap-3 px-3 sm:px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground`}>
+            <div className={`hidden xl:grid ${showSystemAmounts ? 'grid-cols-[minmax(4.5rem,.8fr)_minmax(5.5rem,.95fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'grid-cols-[minmax(4.5rem,.8fr)_minmax(5.5rem,.95fr)_minmax(0,2fr)_auto]'} gap-3 px-3 sm:px-6 py-3 border-b border-border/40 text-[10px] font-bold uppercase tracking-widest text-muted-foreground`}>
             <div>Ref / Ticket</div>
             <div>Tipo</div>
             <div>Descripción</div>
@@ -464,7 +475,7 @@ export function SesionActivaStep({
                   : (logNIO + (logUSD * sessionRate));
 
                 return (
-                <div key={log.id} className={`flex flex-col gap-2 rounded-xl border border-border/50 bg-card px-3 py-3 text-sm shadow-sm transition-colors hover:bg-muted/10 xl:grid ${showSystemAmounts ? 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(3.5rem,.7fr)_minmax(0,2fr)_auto]'} xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:px-3 xl:py-3 xl:shadow-none`}>
+                <div key={log.id} className={`flex flex-col gap-2 rounded-xl border border-border/50 bg-card px-3 py-3 text-sm shadow-sm transition-colors hover:bg-muted/10 xl:grid ${showSystemAmounts ? 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(5.5rem,.95fr)_minmax(0,2fr)_auto_minmax(6.5rem,auto)]' : 'xl:grid-cols-[minmax(4.5rem,.8fr)_minmax(5.5rem,.95fr)_minmax(0,2fr)_auto]'} xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:px-3 xl:py-3 xl:shadow-none`}>
                   <div className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={log.reference || ''}>
                     {(() => {
                       if (log.type === 'SALE' && log.description?.includes('Factura')) {
@@ -477,8 +488,9 @@ export function SesionActivaStep({
                       return log.type === 'SALE' ? 'TKT-' + log.id.slice(0,4).toUpperCase() : 'GST-' + log.id.slice(0,4).toUpperCase();
                     })()}
                   </div>
-                  <div className="min-w-0 truncate">
+                  <div className="flex min-w-0 flex-col items-start gap-1">
                     {renderLogIcon(log.type)}
+                    {log.paymentMethod && <span className="truncate text-[9px] font-black uppercase tracking-wide text-muted-foreground" title={paymentMethodLabel(log.paymentMethod)}>{paymentMethodLabel(log.paymentMethod)}</span>}
                   </div>
                   <div className="min-w-0 truncate text-sm font-medium" title={log.description || ''}>
                     {log.type === 'SALE' && log.description?.includes('Factura') 

@@ -178,6 +178,9 @@ export interface PosPaymentLine {
   exchangeRate?: number;
   reference?: string;
   bankAccountId?: string;
+  cardCommissionPercent?: number;
+  cardCommissionAmount?: number;
+  cardCommissionAccountId?: string;
 }
 
 // ==================== VENTAS SUSPENDIDAS / RESERVADAS ====================

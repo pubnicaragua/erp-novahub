@@ -868,9 +868,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         <span key={column.key} className={cn('min-w-0 truncate px-2', column.key === 'balance' && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
                           <span className="inline-flex items-center gap-1">
                             {column.label}
-                            {column.key === 'type' && <ColumnFilterMenu label="Tipo" options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />}
-                            {column.key === 'subtype' && <ColumnFilterMenu label="Subtipo" options={subtypeOptionsForFilter} selected={colFilters.state.subtype?.values || []} onSelect={(values) => colFilters.setValues('subtype', values)} sort={colFilters.state.subtype?.sort || null} onSort={(sort) => colFilters.setSort('subtype', sort)} />}
-                            {column.key === 'status' && <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />}
+                            {column.key === 'type' && <ColumnFilterMenu label="Tipo" hideLabel options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />}
+                            {column.key === 'subtype' && <ColumnFilterMenu label="Subtipo" hideLabel options={subtypeOptionsForFilter} selected={colFilters.state.subtype?.values || []} onSelect={(values) => colFilters.setValues('subtype', values)} sort={colFilters.state.subtype?.sort || null} onSort={(sort) => colFilters.setSort('subtype', sort)} />}
+                            {column.key === 'status' && <ColumnFilterMenu label="Estado" hideLabel options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />}
                           </span>
                         </span>
                       ))}

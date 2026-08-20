@@ -361,7 +361,7 @@ export interface PaymentReceived {
   baseAmount?: number;
   accountId?: string;
   bankAccountId?: string;
-  bankAccount?: { id: string; bankName: string; accountNumber: string; currency?: string };
+  bankAccount?: { id: string; bankName: string; accountNumber: string; currency?: string; cardCommissionPercent?: number };
   method: PaymentMethod | 'MIXED';
   reference?: string;
   notes?: string;
@@ -372,6 +372,9 @@ export interface PaymentReceived {
   paymentLabel?: string;
   paymentCount?: number;
   isGroupedPayment?: boolean;
+  cardCommissionPercent?: number | null;
+  cardCommissionAmount?: number | null;
+  cardCommissionAccountId?: string | null;
 }
 
 // ---- Sales Returns ----

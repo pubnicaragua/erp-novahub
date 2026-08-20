@@ -37,9 +37,10 @@ import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
+import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -87,6 +88,9 @@ type InvoicePaymentLine = {
   exchangeRate: number;
   bankAccountId?: string;
   reference?: string;
+  cardCommissionPercent?: number;
+  cardCommissionAmount?: number;
+  cardCommissionAccountId?: string;
 };
 
 type InvoiceSaveAction = 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
@@ -170,6 +174,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentLines, setPaymentLines] = useState<InvoicePaymentLine[]>([]);
   const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
+  const [cashRegisterId, setCashRegisterId] = useState('');
+  const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
+  const [cashLoading, setCashLoading] = useState(false);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
@@ -208,6 +216,45 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       .finally(() => { if (active) setAccountingPreflightLoading(false); });
     return () => { active = false; };
   }, [accountingPreflightSignature, localDoc?.items?.length]);
+
+  useEffect(() => {
+    if (!paymentDialogOpen || !paymentInvoice) return;
+    let active = true;
+    setCashLoading(true);
+    setCashSession(null);
+    cajaService.getRegisters()
+      .then((response: any) => {
+        if (!active) return;
+        const registers = (Array.isArray(response) ? response : response?.data || [])
+          .filter((register: CashRegister) => register.hasActiveSession);
+        setCashRegisters(registers);
+        setCashRegisterId((current) => registers.some((register: CashRegister) => register.id === current)
+          ? current
+          : registers.length === 1 ? registers[0].id : '');
+      })
+      .catch(() => {
+        if (active) {
+          setCashRegisters([]);
+          setCashRegisterId('');
+        }
+      })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [paymentDialogOpen, paymentInvoice?.id]);
+
+  useEffect(() => {
+    if (!paymentDialogOpen || !cashRegisterId) {
+      setCashSession(null);
+      return;
+    }
+    let active = true;
+    setCashLoading(true);
+    cajaService.getActiveSession(cashRegisterId)
+      .then((session) => { if (active) setCashSession(session?.status === 'OPEN' ? session : null); })
+      .catch(() => { if (active) setCashSession(null); })
+      .finally(() => { if (active) setCashLoading(false); });
+    return () => { active = false; };
+  }, [paymentDialogOpen, cashRegisterId]);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -421,6 +468,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     ).toFixed(2));
     setPaymentLines([paymentLine('CASH', initialAmount, initialCurrency)]);
     setPaymentDueDate(existingDueDate && existingDueDate >= today ? existingDueDate : today);
+    setCashRegisterId('');
+    setCashSession(null);
     setPaymentDialogOpen(true);
   };
 
@@ -495,6 +544,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleInvoicePayment = async () => {
     if (!paymentInvoice) return;
+    const cashControlAlreadyLinked = Boolean(paymentInvoice.registerId || paymentInvoice.sessionId);
     const maxAmount = getInvoiceBalance(paymentInvoice);
     const amount = Number(paymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
     const paymentBaseAmount = Number(paymentLines.reduce((sum, line) => sum + toBaseAmount(
@@ -531,6 +581,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Selecciona la fecha en que se pagará el saldo restante');
       return;
     }
+    if (!cashControlAlreadyLinked && (!cashRegisterId || !cashSession)) {
+      toast.error('Selecciona una caja con sesión abierta para registrar el pago en Control de Caja');
+      return;
+    }
 
     const invoice = paymentInvoice;
     if (!invoice.id) {
@@ -542,6 +596,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           currency: paymentCurrency,
           exchangeRate: paymentLineRate(paymentCurrency),
           dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+          cashRegisterId,
+          cashSessionId: cashSession?.id,
         });
       } finally {
         setPaymentLoading(false);
@@ -571,6 +627,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         method: paymentLines[0]?.method || 'CASH',
         payments: paymentLines,
         dueDate: remaining > 0.01 ? new Date(`${paymentDueDate}T12:00:00`).toISOString() : undefined,
+        cashRegisterId: cashControlAlreadyLinked ? undefined : cashRegisterId,
+        cashSessionId: cashControlAlreadyLinked ? undefined : cashSession?.id,
         notes: `Cobro registrado desde Facturas (${invoice.number})`,
       } as any);
 
@@ -626,7 +684,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'DRAFT',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
   ) => {
     if (!localDoc) return;
     const emitir = action !== 'DRAFT';
@@ -741,6 +799,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             payments: settlement?.payments || [],
             currency: settlement?.currency,
             dueDate: settlement?.dueDate,
+            cashRegisterId: settlement?.cashRegisterId,
+            cashSessionId: settlement?.cashSessionId,
           } : undefined,
           initialCreditDueDate: action === 'CREDIT' ? settlement?.dueDate : undefined,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
@@ -1061,7 +1121,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   );
 
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
-  if ((editingId || isCreating) && localDoc) {
+  if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isCashRegisterInvoice = !isCreating && Boolean(localDoc?.registerId || localDoc?.sessionId);
     const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
@@ -1119,7 +1179,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 )}
                 {canRegisterPayment && (
                   <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => openInvoicePayment(localDoc as Invoice)} disabled={accountingBlocked}>
+                    onClick={() => openInvoicePayment(localDoc as Invoice)}>
                     Registrar pago
                   </Button>
                 )}
@@ -1792,7 +1852,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </Dialog>
 
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <CreditCard className="size-5 text-primary" /> Registrar pago de factura
@@ -1820,25 +1880,53 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   </p>
                 )}
               </div>
+              {!paymentInvoice.registerId && !paymentInvoice.sessionId && (
+                <div className="space-y-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-cyan-600 dark:text-cyan-400">Control de Caja</p>
+                    {cashSession && <span className="text-[10px] font-black text-emerald-600">Sesión abierta</span>}
+                  </div>
+                  {cashRegisters.length > 0 ? (
+                    <Select value={cashRegisterId} onValueChange={setCashRegisterId} disabled={cashLoading || paymentLoading}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Selecciona la caja donde se recibió el pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cashRegisters.map((register) => (
+                          <SelectItem key={register.id} value={register.id}>{register.name} ({register.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-[10px] font-medium text-muted-foreground">No hay una caja abierta disponible. Apertura una sesión en Control de Caja para registrar este pago allí.</p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">El efectivo afectará el esperado físico; tarjeta, transferencia y cheque quedarán visibles sin sumarse al efectivo.</p>
+                </div>
+              )}
               <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
                   <span className="text-[10px] font-black text-primary">Mixto permitido</span>
                 </div>
                 {paymentLines.map((line, index) => (
-                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                      <div>
+                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 min-w-0">
                         <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '' } : item))} className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
+                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
                           {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                         </select>
                       </div>
+                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)] sm:items-end">
                       <CurrencySelector
                         value={line.currency}
                         baseCurrency={baseCurrency}
                         exchangeRate={globalRate}
-                        label="Moneda"
+                        label=""
+                        hideLabel
+                        rateDecimals={2}
                         onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -1852,15 +1940,23 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         }))}
                       />
                       <div>
-                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p>
-                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} autoFocus={index === 0} />
+                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
                       </div>
-                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                     </div>
-                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco global de destino" />}
+                    <p className="text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold">{line.currency === baseCurrency ? '1.00' : Number(line.exchangeRate || globalRate || 1).toFixed(2)}</span> · moneda base</p>
+                    {isBankPaymentMethod(line.method, true) && <BankAccountSelect className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                    {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
+                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
+                        <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
+                        <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
+                        <span className="text-muted-foreground">|</span>
+                        <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
+                        <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))))}</span>
+                      </div>
+                    )}
                     {requiresPaymentReference(line.method) && <div className="mt-2">
                       <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." />
+                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." className="h-9 text-xs" />
                     </div>}
                   </div>
                 ))}
@@ -1891,7 +1987,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || (!paymentInvoice?.registerId && !paymentInvoice?.sessionId && !cashSession) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)} className="bg-primary font-black">
               {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
             </Button>
           </DialogFooter>
@@ -1901,5 +1997,3 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     </div>
   );
 }
-
-

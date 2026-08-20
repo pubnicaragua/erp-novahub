@@ -43,3 +43,20 @@ export function requiresManualPaymentAccount(method?: string | null): boolean {
   const normalized = String(method || '').toUpperCase();
   return !['CASH', 'CHECK'].includes(normalized) && !isBankPaymentMethod(normalized);
 }
+
+/** Indica si el método de pago es exclusivamente tarjeta. */
+export function isCardPaymentMethod(method?: string | null): boolean {
+  return String(method || '').toUpperCase() === 'CARD';
+}
+
+/** Calcula el monto de comisión por tarjeta. */
+export function calculateCardCommission(amount: number, commissionPercent: number): number {
+  if (!commissionPercent || commissionPercent <= 0 || !amount || amount <= 0) return 0;
+  return Number((amount * commissionPercent / 100).toFixed(2));
+}
+
+/** Formatea el porcentaje de comisión para mostrar. */
+export function formatCommissionPercent(percent?: number | null): string {
+  if (percent === null || percent === undefined) return '0.00%';
+  return `${Number(percent).toFixed(2)}%`;
+}

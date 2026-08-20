@@ -145,15 +145,15 @@ export function SalesDocumentDetailSheet({
                 )}
               </section>
 
-              <section className="grid gap-2 sm:grid-cols-3">
-                <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onOpenDocument}>
-                  <Eye className="size-4 text-primary" /> Ver {document.title.toLowerCase()} completa
+              <section className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onOpenDocument}>
+                  <Eye className="size-4 shrink-0 text-primary" /> Ver {document.title.toLowerCase()} completa
                 </Button>
-                <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onDownloadPdf}>
-                  <Download className="size-4 text-primary" /> Descargar PDF
+                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onDownloadPdf}>
+                  <Download className="size-4 shrink-0 text-primary" /> Descargar PDF
                 </Button>
-                <Button type="button" variant="outline" className="justify-start gap-2 rounded-xl" onClick={onPrintDocument}>
-                  <Printer className="size-4 text-primary" /> Imprimir
+                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onPrintDocument}>
+                  <Printer className="size-4 shrink-0 text-primary" /> Imprimir
                 </Button>
               </section>
 
