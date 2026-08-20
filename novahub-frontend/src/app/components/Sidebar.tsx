@@ -66,6 +66,7 @@ import {
   Tags,
   ClipboardCheck,
   TrendingDown,
+  ChefHat,
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -146,6 +147,12 @@ const menuItems: MenuItem[] = [
       { id: 'pagos-realizados', label: 'Pagos realizados', icon: <Banknote className="size-4" /> },
       { id: 'creditos-proveedor', label: 'Créditos del proveedor', icon: <BadgeDollarSign className="size-4" /> },
     ]
+  },
+  {
+    id: 'restaurante',
+    label: 'Restaurante POS',
+    icon: <ChefHat className="size-5" />,
+    section: 'Operaciones',
   },
   {
     id: 'inventario',
@@ -424,7 +431,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     'financiamiento-pyme': 'FINANCING',
     'asesoria-legal': 'LEGAL',
     'centro-capacitacion': 'HR_TRAINING',
-    'soporte-tecnico': 'SUPPORT_TECH'
+    'soporte-tecnico': 'SUPPORT_TECH',
+    restaurante: 'RESTAURANT'
   };
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {

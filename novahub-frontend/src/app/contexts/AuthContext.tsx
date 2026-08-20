@@ -11,6 +11,7 @@ export type Module =
   | 'dashboard'
   | 'inventario'
   | 'ventas'
+  | 'restaurante'
   | 'compras'
   | 'finanzas'
   | 'rh'
@@ -576,6 +577,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
+      'restaurante': 'RESTAURANT',
       'compras': 'PURCHASES',
       'inventario': 'INVENTORY',
       'finanzas': 'FINANCIAL',
@@ -607,6 +609,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'SALES_RECURRING', 'SALES_RETURNS', 'SALES_CREDIT_NOTES', 'SALES_PAYMENTS', 'RETAIL_POS', 'SALES_POS',
         'SALES_PRICE_LISTS',
       ],
+      restaurante: ['RESTAURANT', 'RETAIL_POS', 'SALES_POS'],
       compras: [
         'PURCHASES', 'PROVIDERS',
         'PURCHASES_PROVIDERS', 'PURCHASES_REQUESTS', 'PURCHASES_EXPENSES', 'PURCHASES_EXPENSES_REC',

@@ -16,6 +16,7 @@ import { PLATFORM_SIDEBAR_MODULE_ORDER, SIDEBAR_MODULE_ORDER, Sidebar } from './
 import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
+import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
@@ -50,6 +51,7 @@ const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/Overv
 const PartnerDashboard = lazyWithChunkRecovery(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })), 'partner');
 const InventarioPage = lazyWithChunkRecovery(() => import('./components/InventarioPage').then(m => ({ default: m.InventarioPage })), 'inventario');
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
+const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
 const FinanzasPage = lazyWithChunkRecovery(() => import('./components/FinanzasPage').then(m => ({ default: m.FinanzasPage })), 'finanzas');
 const RecursosHumanosPage = lazyWithChunkRecovery(() => import('./components/RecursosHumanosPage').then(m => ({ default: m.RecursosHumanosPage })), 'rh');
@@ -279,6 +281,7 @@ function DashboardLayout() {
     switch (currentModule) {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
+      case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
@@ -420,6 +423,10 @@ function AppContent() {
 
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;
   if (location.pathname.startsWith('/public/portal/')) return <PublicAccessPage mode="portal" />;
+  if (location.pathname.startsWith('/restaurant/menu/')) {
+    const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+    return <PublicRestaurantMenuPage tableToken={tableToken} />;
+  }
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.
   if (location.pathname === '/landing') {
