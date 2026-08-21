@@ -8,6 +8,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
+const safeTrim = (value: unknown) => String(value ?? '').trim();
+
 type BranchSupportDialogProps = {
   branch: any;
   onChanged?: () => void;
@@ -77,7 +79,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
   };
 
   const saveDetails = async () => {
-    if (!detailsForm.name.trim() || !detailsForm.slug.trim()) {
+    if (!safeTrim(detailsForm.name) || !safeTrim(detailsForm.slug)) {
       toast.error('El nombre y el slug son obligatorios');
       return;
     }

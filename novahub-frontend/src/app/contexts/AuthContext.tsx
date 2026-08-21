@@ -515,8 +515,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           const me = await api.get<any>('/auth/profile');
-          resetNavigationState();
-          setSessionStartVersion((version) => version + 1);
           setUser(createUserObject(me));
           fetchBranches();
         } catch {
@@ -530,8 +528,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
           storeAuthToken(response.access_token);
-          resetNavigationState();
-          setSessionStartVersion((version) => version + 1);
           setUser(createUserObject(response.user));
           fetchBranches();
         }

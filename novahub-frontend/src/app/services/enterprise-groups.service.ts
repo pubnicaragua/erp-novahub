@@ -688,6 +688,8 @@ export const enterpriseGroupsService = {
       params: branchId ? { branchId } : undefined,
       signal,
     }),
+  updateTransferStatus: (groupId: string, transferId: string, status: string) =>
+    api.patch<any>(`/enterprise-groups/manager/${groupId}/transfers/${transferId}/status`, { status }),
   createInterTenantTransfer: (
     groupId: string,
     body: {

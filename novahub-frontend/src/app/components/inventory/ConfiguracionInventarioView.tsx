@@ -164,13 +164,15 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true)
-      const [whRes, accRes, cfgRes] = await Promise.all([
+      const [whRes, branchRes, accRes, cfgRes] = await Promise.all([
         canViewInventory ? inventoryService.getWarehouses() : Promise.resolve([]),
+        canViewInventory ? api.get<any[]>('/sucursales') : Promise.resolve([]),
         canViewAccounting ? contabilidadService.getChartOfAccounts(false) : Promise.resolve([]),
         canViewAccounting ? contabilidadService.getConfig() : Promise.resolve({}),
       ])
       setWarehouses(Array.isArray(whRes) ? whRes : [])
-      setBranches([])
+      const branchList = Array.isArray(branchRes) ? branchRes : (branchRes as any)?.data || []
+      setBranches(Array.isArray(branchList) ? branchList : [])
       setAccounts(Array.isArray(accRes) ? accRes : (accRes as any)?.data || accRes || [])
 
       const cfg = (cfgRes as any)?.config || cfgRes || {}
@@ -370,7 +372,12 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       if (existing) existing.warehouses.push(wh)
       else groups.push({ branch: branch || { id: 'sin-sucursal', name: 'Sin sucursal' }, warehouses: [wh] })
     }
-    for (const wh of warehouses) upsert({ id: `warehouse-${wh.id}`, name: wh.name }, wh)
+    const branchForWarehouse = (warehouse: any) => branches.find((branch: any) =>
+      branch.id === warehouse.clientTenantId ||
+      branch.warehouseId === warehouse.id ||
+      (Array.isArray(branch.warehouses) && branch.warehouses.some((linked: any) => linked.id === warehouse.id)),
+    ) || (Array.isArray(warehouse.branches) ? warehouse.branches.map((link: any) => branches.find((branch: any) => branch.id === link.id)).find(Boolean) : null)
+    for (const wh of warehouses) upsert(branchForWarehouse(wh), wh)
     return groups.sort((a, b) => a.branch.name.localeCompare(b.branch.name))
   }, [warehouses, branches])
 

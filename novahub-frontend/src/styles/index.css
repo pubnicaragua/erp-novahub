@@ -372,6 +372,55 @@ th .column-filter-menu .column-filter-icon,
   cursor: pointer;
 }
 
+/* Productos y Servicios usan la misma escala de 40px que las acciones de
+   Almacenes. La barra solo conserva desplazamiento en pantallas estrechas. */
+.inventory-products-toolbar > button,
+.inventory-products-toolbar > label,
+.inventory-products-toolbar > div > input,
+.inventory-products-toolbar [data-slot="select-trigger"] {
+  min-height: 2.5rem !important;
+  height: 2.5rem !important;
+}
+
+/* Native date controls need an explicit foreground/background pair: browsers
+   otherwise render the empty date segments and calendar icon too faintly. */
+.inventory-date-filter {
+  border-color: var(--border) !important;
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+  color-scheme: light;
+}
+
+.dark .inventory-date-filter {
+  color-scheme: dark;
+}
+
+.inventory-date-filter::-webkit-datetime-edit,
+.inventory-date-filter::-webkit-datetime-edit-text,
+.inventory-date-filter::-webkit-datetime-edit-month-field,
+.inventory-date-filter::-webkit-datetime-edit-day-field,
+.inventory-date-filter::-webkit-datetime-edit-year-field {
+  color: var(--foreground) !important;
+}
+
+.inventory-date-filter::-webkit-calendar-picker-indicator {
+  opacity: 0.85;
+}
+
+@media (min-width: 1024px) {
+  .inventory-products-toolbar {
+    overflow-x: hidden;
+  }
+}
+
+@media (min-width: 640px) {
+  .inventory-module [data-slot="tabs-list"] > .inventory-tabs-trigger {
+    flex: 0 0 auto !important;
+    min-width: 10rem !important;
+    min-height: 3rem !important;
+  }
+}
+
 .sales-module .grid > *,
 .sales-module .flex > *,
 .purchases-module .grid > *,

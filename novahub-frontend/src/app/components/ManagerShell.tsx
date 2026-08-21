@@ -101,6 +101,8 @@ import {
 
 const MANAGER_INVENTORY_VIEW_ICONS: Record<ManagerInventoryView, LucideIcon> = {
   overview: LayoutDashboard,
+  branchInventory: Package,
+  corporateInventory: Warehouse,
   products: Package,
   services: Wrench,
   warehouses: Warehouse,

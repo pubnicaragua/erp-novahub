@@ -200,10 +200,10 @@ function AtributosTab() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar atributo..."
-            className="h-8 w-full sm:w-56 rounded-lg text-xs"
+            className="h-10 w-full rounded-xl text-xs sm:w-56"
           />
-          <Button onClick={openCreate} size="sm" className="h-8 rounded-lg text-xs font-bold">
-            <Plus className="size-3 mr-1" /> Nuevo
+          <Button onClick={openCreate} size="sm" className="h-10 rounded-xl px-3 text-xs font-bold">
+            <Plus className="mr-1 size-3.5" /> Nuevo
           </Button>
         </div>
       </div>
@@ -468,10 +468,10 @@ function CategoriasTab() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar categoría..."
-            className="h-8 w-full sm:w-56 rounded-lg text-xs"
+            className="h-10 w-full rounded-xl text-xs sm:w-56"
           />
-          <Button onClick={openCreate} size="sm" className="h-8 rounded-lg text-xs font-bold">
-            <Plus className="size-3 mr-1" /> Nuevo
+          <Button onClick={openCreate} size="sm" className="h-10 rounded-xl px-3 text-xs font-bold">
+            <Plus className="mr-1 size-3.5" /> Nuevo
           </Button>
         </div>
       </div>

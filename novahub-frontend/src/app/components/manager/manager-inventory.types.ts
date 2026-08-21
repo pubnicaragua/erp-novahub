@@ -1,5 +1,7 @@
 export type ManagerInventoryView =
   | 'overview'
+  | 'branchInventory'
+  | 'corporateInventory'
   | 'products'
   | 'services'
   | 'warehouses'
