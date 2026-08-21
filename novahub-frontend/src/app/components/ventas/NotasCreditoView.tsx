@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
   Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle,
@@ -22,13 +22,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -364,48 +362,15 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     }
   };
 
-  const handleExportPDF = async (row: CreditNote) => {
-    const pdfToastId = toast.loading('Generando PDF del crédito...');
+  const handleExportPDF = async (row: CreditNote, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización del crédito...');
     try {
-      await generateEstimatePDF({ estimate: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount, documentType: 'credit-note' });
-      toast.success('PDF generado exitosamente', { id: pdfToastId });
+      await previewSalesTransactionPDF({ document: { ...row, customer: row.customer || customerFor(row.customerId) }, tenantName: user?.tenantName || 'Mi Empresa', formatAmount: formatConvertedAmount as any, documentType: 'credit-note', format });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al generar PDF', { id: pdfToastId });
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
     }
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Créditos',
-      columns: [
-        { key: 'number', label: 'Nº Crédito', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        customerName: customerName(item),
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Créditos',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName]);
 
   const buildCreditPanel = (row: CreditNote): SalesDocumentPanelData => ({
     id: row.id,
@@ -632,7 +597,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis"><SalesKpiCard title={`Crédito emitido (${baseCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" /><SalesKpiCard title={`Saldo abierto (${baseCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" /><SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" /><SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-rose-500" bg="bg-rose-500/10" /></div>
-      <div className="flex flex-col gap-4"><div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center"><div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2><p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p></div><div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions"><SalesViewTutorial view="credit-notes" /><PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll /><ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos" /><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} /><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} /></div><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="h-10 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"><option value="ALL">Todos los estados</option>{statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{canPerform('SALES_CREDIT_NOTES', 'create') && <Button onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}</div></div>
+      <div className="flex flex-col gap-4"><div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center"><div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2><p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p></div><div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions"><SalesViewTutorial view="credit-notes" /><ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos" /><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} /><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} /></div><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}><SelectTrigger aria-label="Filtrar créditos por estado" className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"><SelectValue /></SelectTrigger><SelectContent align="end"><SelectItem value="ALL">Todos los estados</SelectItem>{statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>{canPerform('SALES_CREDIT_NOTES', 'create') && <Button onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}</div></div>
         <EditableDataTable data={filteredData} pagination={pagination} onBulkDelete={async (ids) => { const id = toast.loading(`Eliminando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`); try { for (const recordId of ids) await creditNotesService.delete(recordId as string); toast.success('Créditos eliminados', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudieron eliminar', { id }); } }} columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls layoutMode={layoutMode} actions={(row) => <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(row.status) === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}<Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>{canPerform('SALES_CREDIT_NOTES', 'delete') && <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>}</div>} />
       </div>
 
@@ -647,38 +612,13 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           setDetailCredit(null);
           startEdit(detailCredit.id);
         }}
-        onDownloadPdf={() => { if (detailCredit) void handleExportPDF(detailCredit); }}
-        onPrintDocument={() => {
-          if (!detailCredit) return;
-          const document = buildCreditPanel(detailCredit);
-          const html = generateTableHtml({
-            title: document.title,
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
-              { key: 'totalLabel', label: 'Total', align: 'right' },
-            ],
-            rows: (document.lines || []).map((line) => ({
-              description: line.description || '',
-              quantity: Number(line.quantity || 0),
-              unitPriceLabel: line.unitPriceLabel || '',
-              totalLabel: line.totalLabel || '',
-            })),
-          });
-          printContent(html, {
-            title: `${document.title} ${document.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(format) => { if (detailCredit) void handleExportPDF(detailCredit, format); }}
       />
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Eliminar crédito?" description="Solo deben eliminarse créditos que aún no hayan sido emitidos." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!pendingDeleteId) return; const id = toast.loading('Eliminando crédito...'); try { setDeleteLoading(true); await creditNotesService.delete(pendingDeleteId); toast.success('Crédito eliminado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
 
       <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight"><CircleDollarSign className="size-5 text-primary" /> Registrar pago del crédito</DialogTitle>
             <DialogDescription>El pago quedará guardado también en Pagos Recibidos y actualizará el saldo del crédito.</DialogDescription>
@@ -706,7 +646,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as CreditPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} disabled={paymentLoading} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as CreditPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))} disabled={paymentLoading}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={paymentLoading} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);

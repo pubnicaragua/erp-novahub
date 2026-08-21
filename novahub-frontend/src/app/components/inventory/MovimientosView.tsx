@@ -158,7 +158,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   return (
     <Card className="p-4 border bg-card rounded-xl">
       <div className="flex min-w-0 flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between" data-tour="movements-title">
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap" data-tour="movements-filters">
+        <div className="erp-list-toolbar flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap" data-tour="movements-filters">
           <div className="relative min-w-0 flex-1 sm:min-w-[200px] sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
@@ -207,7 +207,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
             />
           </div>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Cómo consultar movimientos</Button><Button variant="outline" size="sm" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
+        <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" data-toolbar-role="help" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Cómo consultar movimientos</Button><Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
       </div>
 
       <div className="space-y-3 lg:hidden" data-tour="movements-table">

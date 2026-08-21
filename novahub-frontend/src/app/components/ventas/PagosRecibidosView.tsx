@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, FileDown, Trash2
+  Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -15,14 +15,14 @@ import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -268,14 +268,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
-  const handleExportPDF = async (row: PaymentReceived) => {
-    const pdfToastId = toast.loading('Generando comprobante de pago...');
+  const handleExportPDF = async (row: PaymentReceived, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización del comprobante...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
       const paymentRows = row.payments?.length ? row.payments : [row];
       const documentReference = row.invoice?.number || row.creditNote?.number || 'Anticipo';
-      await generateEstimatePDF({
-        estimate: {
+      await previewSalesTransactionPDF({
+        document: {
           ...row,
           number: row.number,
           customer: row.customer,
@@ -291,43 +291,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         tenantName,
         formatAmount: formatConvertedAmount,
         documentType: 'payment',
+        format,
       });
-      toast.success('PDF generado exitosamente', { id: pdfToastId });
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo abrir la previsualización', { id: previewToastId }); }
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Pagos Recibidos',
-      columns: [
-        { key: 'number', label: 'ID Pago', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Monto', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        customerName: item.customer?.name || 'Cliente',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.amount || 0),
-        status: item.method || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Pagos Recibidos',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName]);
 
   // Invoices filtered by selected customer
   const customerInvoices = localDoc?.customerId
@@ -492,7 +460,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{methodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -545,17 +513,16 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Pagos Recibidos</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Historial de cobranza y conciliación de ingresos.</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            </div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="payments" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos recibidos" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={startNew} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Registrar Pago</Button>
             )}
           </div>
@@ -568,7 +535,6 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="PDF" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => handleExportPDF(row)}><FileDown className="size-4" /></Button>
               <Button title="Ver detalle" aria-label={`Ver detalle del pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button>
             </div>
           )}
@@ -595,6 +561,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   <Badge className="border-none bg-emerald-500/10 text-emerald-600">Registrado</Badge>
                   <Badge variant="outline" className="border-primary/20 text-primary">{detailPayment.paymentLabel || 'Pago único'}</Badge>
                   <span>{detailPayment.currency || baseCurrency}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} />
                 </div>
               </div>
 

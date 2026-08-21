@@ -276,7 +276,6 @@ export function KpiView({ employees = [], departments = [], onRefresh }: KpiView
             <BarChart3 className="size-6 text-primary" />
             Gestión de KPI
           </h2>
-          <p className="text-muted-foreground text-sm mt-1">Define indicadores y registra resultados de evaluación</p>
         </div>
         <div className="flex flex-wrap items-center gap-2" data-tour="hr-kpi-actions">
           <HRViewTutorial label="Cómo gestionar KPI" targetPrefix="hr-kpi" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Consulta definiciones activas, resultados, cumplimiento promedio e indicadores en riesgo.' }, actions: { description: 'Crea definiciones, registra resultados y navega entre ambos procesos.' } }} />

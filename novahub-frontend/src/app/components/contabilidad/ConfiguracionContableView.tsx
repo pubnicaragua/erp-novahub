@@ -1223,9 +1223,6 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             <Settings2 className="size-6 text-primary" />
             Configuración Contable
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Define las cuentas contables que usa cada módulo del ERP para generar asientos automáticos
-          </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button variant="ghost" size="sm" onClick={loadConnections} disabled={connectionsLoading} aria-label="Probar conexiones contables">

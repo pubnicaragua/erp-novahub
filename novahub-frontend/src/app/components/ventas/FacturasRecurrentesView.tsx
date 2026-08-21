@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
@@ -19,16 +19,14 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { generateRecurringInvoicePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -244,52 +242,20 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   };
 
   // Sync currency from topbar
-  const handleExportPDF = async (row: RecurringInvoice) => {
-    const pdfToastId = toast.loading('Generando PDF de la factura recurrente...');
+  const handleExportPDF = async (row: RecurringInvoice, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización de la factura recurrente...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
-      await generateRecurringInvoicePDF({
-        recurringInvoice: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
+      await previewSalesTransactionPDF({
+        document: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
         tenantName,
-        formatAmount: formatConvertedAmount,
+        formatAmount: formatConvertedAmount as any,
+        documentType: 'recurring',
+        format,
       });
-      toast.success('PDF generado exitosamente', { id: pdfToastId });
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo abrir la previsualización', { id: previewToastId }); }
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Facturas Recurrentes',
-      columns: [
-        { key: 'number', label: 'Referencia', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filtered.map((item) => ({
-        number: `REC-${item.id.slice(0, 8)}`,
-        customerName: item.customer?.name || 'Varios',
-        date: item.startDate ? new Date(item.startDate).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Facturas Recurrentes',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-      logoUrl: themeConfig?.logo,
-    });
-  }, [filtered, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const buildRecurringPanel = (row: RecurringInvoice): SalesDocumentPanelData => ({
     id: row.id,
@@ -516,17 +482,10 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
-                  <select
-                    value={localDoc?.frequency || 'MONTHLY'}
-                    onChange={(e) => {
-                      const newFrequency = e.target.value;
+                  <Select value={localDoc?.frequency || 'MONTHLY'} onValueChange={(newFrequency) => {
                       const nextInvoiceDate = calculateNextInvoiceDate(newFrequency, localDoc?.startDate || '');
                       setLocalDoc({ ...localDoc, frequency: newFrequency, nextInvoiceDate });
-                    }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                  >
-                    {frequencyOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </select></div>
+                    }}><SelectTrigger size="sm" className="h-8 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{frequencyOptions.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent></Select></div>
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha Inicio</p>
                   <Input
                     type="date"
@@ -710,17 +669,16 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Facturación Recurrente</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión de contratos, igualas y servicios por suscripción.</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            </div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="recurring" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_RECURRING', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={startNew} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
@@ -759,32 +717,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           setDetailRecurring(null);
           setEditingId(detailRecurring.id);
         }}
-        onDownloadPdf={() => { if (detailRecurring) void handleExportPDF(detailRecurring); }}
-        onPrintDocument={() => {
-          if (!detailRecurring) return;
-          const document = buildRecurringPanel(detailRecurring);
-          const html = generateTableHtml({
-            title: document.title,
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
-              { key: 'totalLabel', label: 'Total', align: 'right' },
-            ],
-            rows: (document.lines || []).map((line) => ({
-              description: line.description || '',
-              quantity: Number(line.quantity || 0),
-              unitPriceLabel: line.unitPriceLabel || '',
-              totalLabel: line.totalLabel || '',
-            })),
-          });
-          printContent(html, {
-            title: `${document.title} ${document.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); }}
       />
       <ConfirmDialog
               open={pendingDeleteId !== null}

@@ -24,6 +24,7 @@ import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from 
 import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86_400_000;
@@ -1799,7 +1800,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
       {/* ═══ Modal de importación de inventario por mes ═══ */}
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportOpen(false); setImportRows([]); setImportFileName(''); } }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,760px)] overflow-y-auto rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="size-4 text-primary" /> Importar inventario por mes
@@ -1852,7 +1853,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           {importRows.length > 0 && (
             <div className="space-y-3">
               <ImportReviewSummary total={importPreview.length} valid={importValidCount} skipped={importPreview.length - importValidCount} entityLabel="productos" />
-              <div className="max-h-60 overflow-y-auto overflow-x-auto rounded-xl border border-border/40">
+              <div className="hidden max-h-60 overflow-y-auto overflow-x-auto rounded-xl border border-border/40 sm:block">
                 <table className="w-full min-w-[640px]">
                   <thead className="bg-muted/40 sticky top-0">
                     <tr>
@@ -1888,6 +1889,24 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                   </tbody>
                 </table>
               </div>
+              <section className="space-y-3 sm:hidden" aria-label="Ajustes de inventario para revisar">
+                <div className="flex items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
+                  <Badge variant="secondary" className="text-[10px]">{importPreview.length} filas</Badge>
+                </div>
+                {importPreview.map((r) => (
+                  <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{r.rawCode || '—'}</p></ImportPreviewField>
+                      <ImportPreviewField label="Fila"><p className="font-mono text-xs">{r.row + 2}</p></ImportPreviewField>
+                      <ImportPreviewField label="Producto" className="col-span-2"><p className="break-words text-xs font-bold">{r.productName || '—'}</p></ImportPreviewField>
+                      <ImportPreviewField label="Cantidad"><p className="text-right text-xs font-bold">{fmtQty(r.qty)}</p></ImportPreviewField>
+                      <ImportPreviewField label="Stock actual"><p className="text-right text-xs">{r.error ? '—' : fmtQty(r.currentStock)}</p></ImportPreviewField>
+                      <ImportPreviewField label="Diferencia" className="col-span-2"><p className={`text-right text-xs font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</p></ImportPreviewField>
+                    </div>
+                  </ImportPreviewMobileCard>
+                ))}
+              </section>
             </div>
           )}
 

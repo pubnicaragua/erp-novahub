@@ -123,6 +123,7 @@ export function PurchaseAlertsButton({
         <Button
           variant="outline"
           size="icon"
+          data-toolbar-role="alerts"
           className="relative size-10 shrink-0 rounded-xl border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
           aria-label={unreadCount > 0 ? `${alert.label}, ${unreadCount} sin leer` : alert.label}
           title={alert.label}

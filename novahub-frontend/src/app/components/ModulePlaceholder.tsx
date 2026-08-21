@@ -30,10 +30,6 @@ export function ModulePlaceholder({ module }: ModulePlaceholderProps) {
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6">
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">{info.title}</h1>
-        <p className="mt-2 text-muted-foreground">{info.description}</p>
-        <p className="mt-4 text-sm text-muted-foreground/80">
-          Este modulo esta en desarrollo
-        </p>
       </div>
     </div>
   );

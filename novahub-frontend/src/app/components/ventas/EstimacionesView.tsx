@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
@@ -20,7 +20,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -33,9 +33,7 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -283,54 +281,22 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   };
 
-  const handleExportPDF = async (estimate: Estimate) => {
-    const pdfToastId = toast.loading('Generando PDF de la cotización...');
+  const handleExportPDF = async (estimate: Estimate, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización de la cotización...');
     try {
-      await generateEstimatePDF({
-        estimate: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
+      await previewSalesTransactionPDF({
+        document: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
         tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
-        formatAmount: formatConvertedAmount,
+        formatAmount: formatConvertedAmount as any,
+        documentType: 'estimate',
+        format,
       });
-      toast.success('PDF descargado', { id: pdfToastId });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
     }
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Cotizaciones',
-      columns: [
-        { key: 'number', label: 'Nº Cotización', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((estimate) => ({
-        number: estimate.number,
-        customerName: customers.find((c) => c.id === estimate.customerId)?.name || estimate.customer?.name || 'Varios',
-        date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : '',
-        total: Number(estimate.total || 0),
-        status: estimate.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Cotizaciones',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-      logoUrl: themeConfig?.logo,
-    });
-  }, [filteredData, customers, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const buildEstimatePanel = (estimate: Estimate): SalesDocumentPanelData => ({
     id: estimate.id,
@@ -902,11 +868,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Cotizaciones</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Negociaciones en tiempo real sin modals ni esperas.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="quotes" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
@@ -920,7 +884,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             </div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_QUOTES', 'create') && (
-              <Button onClick={handleAddEstimate} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={handleAddEstimate} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Cotización
               </Button>
             )}
@@ -982,32 +946,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           setDetailEstimate(null);
           setEditingId(detailEstimate.id);
         }}
-        onDownloadPdf={() => { if (detailEstimate) void handleExportPDF(detailEstimate); }}
-        onPrintDocument={() => {
-          if (!detailEstimate) return;
-          const document = buildEstimatePanel(detailEstimate);
-          const html = generateTableHtml({
-            title: document.title,
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
-              { key: 'totalLabel', label: 'Total', align: 'right' },
-            ],
-            rows: (document.lines || []).map((line) => ({
-              description: line.description || '',
-              quantity: Number(line.quantity || 0),
-              unitPriceLabel: line.unitPriceLabel || '',
-              totalLabel: line.totalLabel || '',
-            })),
-          });
-          printContent(html, {
-            title: `${document.title} ${document.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(format) => { if (detailEstimate) void handleExportPDF(detailEstimate, format); }}
       />
 
       <ConfirmDialog

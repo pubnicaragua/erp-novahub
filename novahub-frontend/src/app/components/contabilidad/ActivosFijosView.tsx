@@ -125,11 +125,8 @@ export function ActivosFijosView() {
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
             Activos <span className="text-primary">Fijos</span>
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Registro y control de activos fijos de la empresa
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="erp-toolbar-primary-group flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
             <Badge variant="outline" className="h-8 border-primary/30 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">
               {selectedIds.length} seleccionado{selectedIds.length !== 1 ? 's' : ''}
@@ -154,7 +151,7 @@ export function ActivosFijosView() {
             </DropdownMenuContent>
           </DropdownMenu>
           {canPerform('ACCOUNTING_ASSETS', 'create') && (
-            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Button className="gap-2" data-toolbar-role="primary" onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               Nuevo Activo Fijo
             </Button>

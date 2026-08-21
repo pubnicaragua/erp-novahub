@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
@@ -85,11 +86,22 @@ function PriceImportPreviewPage({
     return () => window.clearTimeout(timer);
   }, [result, onDone]);
 
+  const renderMobileCard = (row: ImportRow, index: number) => (
+    <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row.error}>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+        <ImportPreviewField label="Código / SKU"><Input className={`${importPreviewFieldClass} font-mono`} value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Producto"><Input className={importPreviewFieldClass} value={row.name} disabled /></ImportPreviewField>
+        <ImportPreviewField label={`Costo (${currencyLabel(currency)})`}><Input className={`${importPreviewFieldClass} text-right`} type="number" value={row.cost} disabled /></ImportPreviewField>
+        {lists.map((list) => <ImportPreviewField key={list.id} label={list.name}><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></ImportPreviewField>)}
+      </div>
+    </ImportPreviewMobileCard>
+  );
+
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Actualización masiva</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar precios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Revisa y corrige los precios antes de actualizar las listas seleccionadas.</p>
@@ -112,6 +124,7 @@ function PriceImportPreviewPage({
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={issueRows} entityLabel="actualizaciones de precio" />
 
+        <div className="hidden min-h-0 flex-1 sm:flex">
         <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1050px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
@@ -139,6 +152,16 @@ function PriceImportPreviewPage({
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
         </HorizontalTableScroller>
+        </div>
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Actualizaciones de precios para revisar">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita los precios por tarjeta</p></div>
+            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
+          </div>
+        </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button variant="outline" onClick={onBack} disabled={importing}>Volver a la carga</Button>
@@ -738,7 +761,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 className="text-2xl font-black tracking-tight" data-tour="price-lists-title">Listas de Precios</h2><p className="text-sm text-muted-foreground">Configura las tarifas visibles y actualiza varias listas en una sola plantilla.</p></div>
+      <div><h2 className="text-2xl font-black tracking-tight" data-tour="price-lists-title">Listas de Precios</h2></div>
       <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="rounded-xl" onClick={() => setShowTutorial(true)}><CircleHelp className="mr-2 size-4" /> Cómo actualizar precios</Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
     </div>
 
@@ -758,7 +781,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
 
     <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>Productos seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div><div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div></div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá el código, nombre, costo informativo y una columna por cada lista visible.</p><p>• Los precios existentes se descargarán para usarlos como referencia.</p><p>• El costo no se modifica al importar. Si un precio permanece igual, el sistema no hará ningún cambio.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(''); } setImportOpen(open); }}>
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-2xl overflow-y-auto">
         <DialogHeader><DialogTitle>Actualizar precios en varias listas</DialogTitle><DialogDescription>Carga el archivo y luego abre la previsualización completa para editarlo antes de confirmar.</DialogDescription></DialogHeader>
         <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border bg-muted/20 p-3"><span className="text-xs font-bold uppercase">Moneda</span><Select value={importCurrency} onValueChange={setImportCurrency}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-xs font-bold uppercase">Tasa</span><Input className="h-9 w-28" type="number" min="0.0001" step="any" value={importRate} onChange={(event) => setImportRate(Number(event.target.value) || 1)} disabled={importCurrency === baseCurrency} /><div className="flex w-full min-w-0 flex-wrap gap-1 sm:ml-auto sm:w-auto sm:justify-end">{importLists.map((list) => <Badge key={list.id} variant="secondary" className="max-w-full">{list.name}</Badge>)}</div></div>
         {!importFile ? <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center sm:p-12"><FileSpreadsheet className="size-12 text-primary" /><p className="font-bold">Carga el archivo Excel de precios</p><p className="text-xs text-muted-foreground">La tabla editable aparecerá en una vista completa después de cargarlo.</p><Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-2 size-4" />Seleccionar archivo</Button><input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => event.target.files?.[0] && readFile(event.target.files[0])} /></div> : <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5"><CheckCircle2 className="size-8 shrink-0 text-emerald-500" /><div className="min-w-0 flex-1"><p className="font-bold">Archivo listo para previsualizar</p><p className="break-words text-sm text-muted-foreground">{importFile} · {importRows.length} filas detectadas</p></div><Button variant="ghost" size="sm" className="shrink-0" onClick={() => { setImportFile(''); setImportRows([]); }}>Cambiar</Button></div>}

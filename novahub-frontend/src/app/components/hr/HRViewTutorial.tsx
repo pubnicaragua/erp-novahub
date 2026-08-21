@@ -44,6 +44,7 @@ export function HRViewTutorial({
         type="button"
         variant="outline"
         onClick={() => setOpen(true)}
+        data-toolbar-role="help"
         className={`h-10 min-w-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest ${className}`}
         aria-label={label}
       >

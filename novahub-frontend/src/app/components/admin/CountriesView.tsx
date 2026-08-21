@@ -80,10 +80,6 @@ export function CountriesView({ canEdit = true }: { canEdit?: boolean }) {
               <h2 className="text-2xl font-black uppercase italic tracking-tight sm:text-3xl">
                 Configuración por <span className="text-primary">País</span>
               </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Gestioná las configuraciones fiscales, monetarias, laborales y templates
-                para cada país. Estos valores definen cómo opera el ERP en cada jurisdicción.
-              </p>
             </div>
           </div>
           <div className="flex size-20 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">

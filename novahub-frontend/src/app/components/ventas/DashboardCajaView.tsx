@@ -332,8 +332,8 @@ export function DashboardCajaView({ onNavigateToFacturacion, registerId }: { onN
           {recentTransactions.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-8">No hay transacciones recientes</p>
           ) : (
-            <div className="border border-border/50 rounded-xl overflow-hidden">
-              <table className="w-full text-xs">
+            <div className="border border-border/50 rounded-xl overflow-x-auto">
+              <table className="w-full min-w-[620px] text-xs md:min-w-0">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border/30">
                     <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Factura</th>

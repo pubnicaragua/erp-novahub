@@ -66,7 +66,6 @@ export function FaqView() {
           </div>
           <div>
             <h2 className="text-lg font-black tracking-tighter">Preguntas Frecuentes</h2>
-            <p className="text-sm text-muted-foreground">Respuestas rápidas sobre contabilidad general</p>
           </div>
         </div>
         <div className="relative max-w-md">

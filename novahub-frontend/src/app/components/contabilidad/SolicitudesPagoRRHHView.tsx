@@ -249,9 +249,6 @@ export function SolicitudesPagoRRHHView() {
               <Inbox className="size-4" /> Cola de autorización · RR. HH.
             </div>
             <h2 className="text-2xl font-black tracking-tight sm:text-3xl">Solicitudes de pago</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-              Contabilidad recibe, valida y paga los costos originados en Recursos Humanos. El asiento nace al registrar el pago real.
-            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-primary/15 bg-background/60 px-3 py-2 text-xs font-bold text-muted-foreground backdrop-blur">

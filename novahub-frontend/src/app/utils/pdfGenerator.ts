@@ -4,6 +4,7 @@ import { pdfDocumentDesignService } from '../services/pdf-document-design.servic
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { sanitizeHtml2CanvasOklch } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
+import type { PdfDownloadFormat } from './pdfDownloadFormats';
 
 type PdfRgb = [number, number, number];
 
@@ -31,9 +32,31 @@ export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
 
 export function pdfDesignPaper(settings: Record<string, any>) {
   return {
-    format: settings.paperSize === 'A4' ? 'a4' : settings.paperSize === 'LEGAL' ? 'legal' : 'letter',
+    format: settings.paperSize === 'A4'
+      ? 'a4'
+      : settings.paperSize === 'LEGAL'
+        ? 'legal'
+        : settings.paperSize === 'OFICIO'
+          ? [216, 330]
+          : 'letter',
     orientation: settings.orientation === 'landscape' ? 'landscape' : 'portrait',
-  } as const;
+  } as any;
+}
+
+function paperSettingForDownload(format: Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>) {
+  return format === 'A4' ? 'A4' : format === 'legal' ? 'LEGAL' : format === 'oficio' ? 'OFICIO' : 'LETTER';
+}
+
+function withPdfDownloadFormat(design: any, format: PdfDownloadFormat) {
+  if (format === 'configured') return design;
+  return {
+    ...(design || {}),
+    settings: {
+      ...((design && design.settings) || {}),
+      paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>),
+      orientation: 'portrait',
+    },
+  };
 }
 
 function htmlSafeColor(value: unknown, fallback: string) {
@@ -129,7 +152,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
       logging: false,
       onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('pdf-template-canvas', clonedDoc, primary),
     });
-    const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : 'letter';
+    const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : design.paperSize === 'OFICIO' ? [216, 330] : 'letter';
     const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
     const doc = new jsPDF({ orientation, unit: 'mm', format });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -170,7 +193,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // que la vista previa. El PDF original queda como referencia, no como fondo
   // para evitar duplicar textos y datos dinámicos.
   const design: any = savedDesign?.settings || {};
-  const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : 'letter';
+  const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : design.paperSize === 'OFICIO' ? [216, 330] : 'letter';
   const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
   const doc = new jsPDF({ orientation, unit: 'mm', format });
   
@@ -462,6 +485,278 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
 
   return { doc, blob };
 };
+
+type SalesTransactionDocumentType = 'estimate' | 'order' | 'invoice' | 'recurring' | 'payment' | 'return' | 'credit-note';
+
+const SALES_TRANSACTION_TITLES: Record<SalesTransactionDocumentType, string> = {
+  estimate: 'COTIZACIÓN',
+  order: 'ORDEN DE VENTA',
+  invoice: 'FACTURA',
+  recurring: 'FACTURA RECURRENTE',
+  payment: 'PAGO RECIBIDO',
+  return: 'NOTA DE CRÉDITO',
+  'credit-note': 'CRÉDITO',
+};
+
+function savePdfBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function generateSalesTicketPDF({
+  document: transaction,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  documentType,
+  format,
+  settings,
+  save = true,
+}: {
+  document: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  documentType: SalesTransactionDocumentType;
+  format: 'roll-58' | 'roll-80';
+  settings: Record<string, any>;
+  save?: boolean;
+}) {
+  const width = format === 'roll-58' ? 58 : 80;
+  const margin = width === 58 ? 3 : 4;
+  const contentWidth = width - margin * 2;
+  const items = Array.isArray(transaction.items) && transaction.items.length
+    ? transaction.items
+    : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
+  const estimatedItemHeight = items.reduce((height: number, item: any) => {
+    const descriptionLines = Math.max(1, Math.ceil(String(item.description || item.name || 'Producto').length / (width === 58 ? 24 : 36)));
+    return height + 8 + descriptionLines * 3.6;
+  }, 0);
+  const notesHeight = transaction.notes ? Math.min(24, Math.max(6, String(transaction.notes).length / (width === 58 ? 20 : 30) * 3.2)) : 0;
+  const pageHeight = Math.max(130, 83 + estimatedItemHeight + notesHeight);
+  const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [31, 41, 55]);
+  const lineColor = pdfDesignColor(settings.lineColor, [203, 213, 225]);
+  const selectedFont = String(settings.fontFamily || '').toLowerCase();
+  const fontName = selectedFont.includes('serif') ? 'times' : selectedFont.includes('mono') || selectedFont.includes('courier') ? 'courier' : 'helvetica';
+  const title = SALES_TRANSACTION_TITLES[documentType];
+  const currency = transaction.currency;
+  const rate = transaction.exchangeRate;
+  const money = (value: unknown) => formatAmount(Number(value || 0), currency, rate);
+  const logo = settings.logoUrl || tenantLogo;
+  let y = margin;
+
+  if (logo) {
+    try {
+      doc.addImage(logo, 'PNG', width / 2 - 10, y, 20, 10, undefined, 'FAST');
+      y += 13;
+    } catch {
+      // Un logo no compatible no debe impedir la descarga del comprobante.
+    }
+  }
+
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(width === 58 ? 10 : 12);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text(String(settings.companyName || tenantName || 'Nuestra Empresa'), width / 2, y, { align: 'center' });
+  y += 5;
+  if (settings.slogan) {
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(String(settings.slogan), width / 2, y, { align: 'center', maxWidth: contentWidth });
+    y += 4;
+  }
+  if (settings.fiscalInfo) {
+    doc.setFontSize(6);
+    doc.text(String(settings.fiscalInfo), width / 2, y, { align: 'center', maxWidth: contentWidth });
+    y += 4;
+  }
+
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(width === 58 ? 8.5 : 10);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text(title, width / 2, y, { align: 'center' });
+  y += 4.5;
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(7);
+  doc.text(`Nº ${transaction.number || transaction.id || 'N/A'}`, width / 2, y, { align: 'center' });
+  y += 3.5;
+  doc.text(`Fecha ${transaction.date ? new Date(transaction.date).toLocaleDateString('es-NI') : new Date().toLocaleDateString('es-NI')}`, width / 2, y, { align: 'center' });
+  y += 5;
+
+  const customerName = transaction.customer?.name || transaction.customerName || 'Cliente general';
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(6.5);
+  doc.text('CLIENTE', margin, y);
+  y += 3.5;
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(7.5);
+  doc.text(doc.splitTextToSize(String(customerName), contentWidth), margin, y);
+  y += 5;
+  doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+  doc.line(margin, y, width - margin, y);
+  y += 4;
+
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(6.5);
+  doc.text('DETALLE', margin, y);
+  y += 4;
+  items.forEach((item: any) => {
+    const description = String(item.description || item.name || 'Producto');
+    const descriptionLines = doc.splitTextToSize(description, contentWidth);
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7.5);
+    doc.text(descriptionLines, margin, y);
+    y += descriptionLines.length * 3.6;
+    doc.setFontSize(6.5);
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = money(item.unitPrice);
+    const total = money(item.total);
+    doc.text(`${quantity} x ${unitPrice}`, margin, y);
+    doc.setFont(fontName, 'bold');
+    doc.text(total, width - margin, y, { align: 'right' });
+    y += 4.5;
+    doc.setDrawColor(lineColor[0], lineColor[1], lineColor[2]);
+    doc.line(margin, y, width - margin, y);
+    y += 3;
+  });
+
+  const drawTotal = (label: string, value: unknown, bold = false) => {
+    doc.setFont(fontName, bold ? 'bold' : 'normal');
+    doc.setFontSize(bold ? 8.5 : 7);
+    doc.text(label, margin, y);
+    doc.text(money(value), width - margin, y, { align: 'right' });
+    y += bold ? 5 : 3.5;
+  };
+  drawTotal('Subtotal', transaction.subtotal ?? transaction.total);
+  if (Number(transaction.discountAmount || 0) > 0) drawTotal('Descuento', -Number(transaction.discountAmount));
+  if (Number(transaction.taxAmount || 0) > 0) drawTotal('IVA', transaction.taxAmount);
+  doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setLineWidth(0.55);
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+  drawTotal('TOTAL', transaction.total, true);
+
+  if (transaction.notes) {
+    y += 2;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6.5);
+    doc.text(doc.splitTextToSize(`Notas: ${transaction.notes}`, contentWidth), margin, y);
+    y += notesHeight;
+  }
+  y += 4;
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text(String(settings.footerText || `Documento generado por ${tenantName}`), width / 2, y, { align: 'center', maxWidth: contentWidth });
+
+  const blob = doc.output('blob');
+  if (save) savePdfBlob(blob, `${transaction.number || 'Documento'}_${format}.pdf`);
+  return { doc, blob };
+}
+
+function writePdfPreviewLoadingPage(previewWindow: Window, title: string) {
+  previewWindow.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8" /><title>${escapeHtml(title)}</title></head>
+<body style="margin:0;display:grid;min-height:100vh;place-items:center;background:#111827;color:#f8fafc;font-family:Segoe UI,Arial,sans-serif">
+  <p style="padding:24px;text-align:center">Preparando la previsualización…</p>
+</body>
+</html>`);
+  previewWindow.document.close();
+}
+
+/** Genera el PDF con la configuración guardada y lo abre en el visor nativo del navegador. */
+export async function previewSalesTransactionPDF({
+  document: transaction,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  documentType = 'estimate',
+  format = 'configured',
+}: {
+  document: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  documentType?: SalesTransactionDocumentType;
+  format?: PdfDownloadFormat;
+}) {
+  const title = SALES_TRANSACTION_TITLES[documentType];
+  const previewWindow = window.open('', '_blank', 'width=1000,height=850');
+  if (!previewWindow) {
+    throw new Error('No se pudo abrir la previsualización. Habilita las ventanas emergentes para NovaHub.');
+  }
+
+  writePdfPreviewLoadingPage(previewWindow, title);
+  try {
+    const { blob } = await generateSalesTransactionPDF({
+      document: transaction,
+      tenantName,
+      formatAmount,
+      tenantLogo,
+      documentType,
+      format,
+      save: false,
+    });
+    const previewUrl = URL.createObjectURL(blob);
+    previewWindow.location.href = previewUrl;
+    // El visor necesita conservar el Blob mientras el usuario decide si lo descarga.
+    window.setTimeout(() => URL.revokeObjectURL(previewUrl), 10 * 60 * 1000);
+    return { blob, previewUrl };
+  } catch (error) {
+    previewWindow.close();
+    throw error;
+  }
+}
+
+export async function generateSalesTransactionPDF({
+  document: transaction,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  documentType = 'estimate',
+  format = 'configured',
+  save = true,
+  designOverride,
+}: {
+  document: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  documentType?: SalesTransactionDocumentType;
+  format?: PdfDownloadFormat;
+  save?: boolean;
+  designOverride?: any;
+}) {
+  const target = getPdfTemplateTarget(documentType).key;
+  const design = designOverride || await pdfDocumentDesignService.active(target).catch(() => null);
+  if (format === 'roll-58' || format === 'roll-80') {
+    return generateSalesTicketPDF({ document: transaction, tenantName, formatAmount, tenantLogo, documentType, format, settings: design?.settings || {}, save });
+  }
+  return generateEstimatePDF({
+    estimate: transaction,
+    tenantName,
+    formatAmount: formatAmount as any,
+    tenantLogo,
+    documentType,
+    save,
+    designOverride: withPdfDownloadFormat(design, format),
+  });
+}
 
 export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {
   const settings = await getPdfDesignSettings('compras.supplier-history');

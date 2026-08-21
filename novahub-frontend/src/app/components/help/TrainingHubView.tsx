@@ -185,10 +185,6 @@ export function TrainingHubView() {
           <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Centro de <span className="text-primary">Capacitación</span>
           </h1>
-          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Video className="size-4" />
-            Domina el ERP con nuestras guías visuales paso a paso.
-          </p>
           </div>
         </div>
 
@@ -204,7 +200,7 @@ export function TrainingHubView() {
       </div>
 
       {/* Stats Quick View */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-gradient-to-br from-primary/10 to-transparent p-4 rounded-3xl border border-primary/20 backdrop-blur-sm shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">Total Guías</p>
           <p className="text-3xl font-black tracking-tighter italic">{videos.length} VIDEOS</p>

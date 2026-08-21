@@ -165,8 +165,8 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
   const filtered = data.filter(l => l.entity?.toLowerCase().includes(searchTerm.toLowerCase()) || l.details?.toLowerCase().includes(searchTerm.toLowerCase()) || l.action?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -177,14 +177,15 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, onRef
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
+      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Registro de actividades del sistema</p></div>
-          <div className="flex items-center gap-3">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Auditoría</h2></div>
+          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué es la Bitácora" targetPrefix="bitacora-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Bitácora de Auditoría', description: 'La bitácora registra automáticamente todas las acciones del sistema: creaciones, ediciones, eliminaciones y subidas de archivos. Sirve para auditoría y seguimiento.' }, data: { title: 'Consulta', description: 'Usa la búsqueda y los filtros para encontrar acciones específicas por usuario, módulo o fecha.' }, actions: { title: 'Exportar', description: 'Puedes exportar el registro completo para auditorías externas o reportes.' } }} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar evento..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_LOGS', 'create') && (
               <Button
+                data-toolbar-role="primary"
                 onClick={() => setIsAddOpen(true)}
                 variant="default"
                 className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"

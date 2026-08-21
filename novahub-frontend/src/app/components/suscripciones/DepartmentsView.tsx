@@ -349,7 +349,6 @@ export function DepartmentsView({ tenantId, users, employees, onBack, onDataChan
           </Button>
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-2xl font-black uppercase italic tracking-tight"><Building2 className="size-6 shrink-0 text-primary" /> Departamentos</h2>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Crea los departamentos compartidos con Recursos Humanos y administra desde aquí sus usuarios, empleados y la condición de vendedores.</p>
           </div>
         </div>
         <Badge variant="outline" className="w-fit shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">{departments.length} creados</Badge>

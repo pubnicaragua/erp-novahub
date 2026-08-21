@@ -67,12 +67,9 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
           </div>
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest">Pérdidas de Inventario</h3>
-            <p className="text-[10px] text-muted-foreground">
-              Ajustes aprobados con merma neta. Cada pérdida se vincula a la cuenta contable por su código.
-            </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2" data-tour="inventory-losses-actions">
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="inventory-losses-actions">
           <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, almacén y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
           <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Desde" />
           <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Hasta" />

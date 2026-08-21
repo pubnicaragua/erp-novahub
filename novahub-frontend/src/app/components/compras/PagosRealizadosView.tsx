@@ -727,8 +727,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Desembolsos a proveedores</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2></div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
             <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos a proveedores" />
@@ -794,7 +794,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         />
       </div>
       <Dialog open={detailPayment !== null} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <Eye className="size-5 text-primary" /> Detalle del pago

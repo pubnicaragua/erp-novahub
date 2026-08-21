@@ -13,6 +13,7 @@ import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
@@ -270,8 +271,35 @@ function ImportPreviewPage({
   const warningRows = importData.filter((row) => !row._hasError && row._hasWarning).length;
   const issueRows = importData.filter((row) => row._hasError || row._hasWarning).length;
 
+  const renderMobileCard = (row: any, index: number) => {
+    const categoryExists = categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase());
+    const warehouseExists = !row.warehouse || warehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase());
+    return (
+      <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <ImportPreviewField label="Código *"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Categoría" className="sm:col-span-2">
+            {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
+          </ImportPreviewField>
+          <ImportPreviewField label="Minorista"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Mayorista"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Distribuidor"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Costo"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Stock inicial"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Stock mínimo"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Bodega" className="sm:col-span-2">
+            {warehouseExists ? <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={importPreviewFieldClass}><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger><SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent></Select>{canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
+          </ImportPreviewField>
+          <ImportPreviewField label="Imagen" className="sm:col-span-2"><div className="flex min-h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 text-xs"><span className="shrink-0">{row._imageStatus === 'matched' ? <ImageIcon className="size-4 text-emerald-500" /> : <ImageOff className="size-4 text-muted-foreground" />}</span><span className="min-w-0 break-words text-muted-foreground">{row._imageStatus === 'matched' ? 'Imagen vinculada' : row._imageStatus === 'missing' ? 'No se encontró imagen para este SKU' : 'Sin archivo de imágenes'}</span></div></ImportPreviewField>
+        </div>
+      </ImportPreviewMobileCard>
+    );
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-5">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden sm:gap-5">
       <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación inicial</p>
@@ -295,6 +323,7 @@ function ImportPreviewPage({
 
       <ImportReviewSummary total={importData.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
+      <div className="hidden min-h-0 flex-1 sm:flex">
       <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1320px]">
             <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
@@ -373,6 +402,17 @@ function ImportPreviewPage({
             </TableBody>
           </Table>
       </HorizontalTableScroller>
+      </div>
+
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de productos para revisar">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} registros</Badge>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+          {importData.length ? <div className="space-y-3">{importData.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+        </div>
+      </section>
 
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
@@ -2200,7 +2240,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
-            <p className="text-sm text-muted-foreground">{isServiceView ? 'Administra los servicios y el almacén al que están vinculados.' : 'Administra productos, existencias y distribución por almacén.'}</p>
           </div>
           <p className="text-xs font-medium text-muted-foreground">{warehouses.length} almacenes registrados</p>
         </div>
@@ -2349,7 +2388,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <div className="h-4 w-px shrink-0 bg-border/60" />
 
           {/* Acciones — todo en la misma fila */}
-          <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setShowTutorial(true)}>
+          <div className="erp-toolbar-actions">
+          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-1 size-3.5" /> Cómo
           </Button>
           {!isServiceView && canPerform('INVENTORY', 'edit') && !initialImportCompleted && products.length === 0 && (
@@ -2373,12 +2413,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
               <Plus className="size-3.5 mr-1" /> Nuevo
             </Button>
           )}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
               <Plus className="size-3.5 mr-1" /> Nuevo
             </Button>
           )}
@@ -2397,6 +2437,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <X className="size-3.5 mr-1" /> Limpiar
             </Button>
           )}
+          </div>
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
@@ -3008,7 +3049,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           setBulkImageProgress(0);
         }
       }}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-2xl">
           <DialogHeader data-tour="inventory-bulk-images-title">
             <DialogTitle className="flex items-center gap-2"><ImageIcon className="size-5 text-primary" /> Carga masiva de imágenes</DialogTitle>
             <DialogDescription>
@@ -3086,7 +3127,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
         }
       }}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[1100px] sm:!max-w-[1100px] max-h-[90vh] flex flex-col">
           <DialogHeader data-tour="inventory-import-title">
             <DialogTitle>Importar Productos</DialogTitle>
             <DialogDescription>
@@ -3396,7 +3437,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       />
 
       <Dialog open={expandedProductImage !== null} onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-5xl border-0 bg-transparent p-2 shadow-none">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-5xl border-0 bg-transparent p-2 shadow-none">
           <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
           {expandedProductImage && (
             <img

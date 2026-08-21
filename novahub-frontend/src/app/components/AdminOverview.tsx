@@ -64,7 +64,6 @@ export function AdminOverview() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter text-foreground sm:text-4xl">Console Master <span className="text-primary">Admin</span></h1>
-          <p className="text-muted-foreground/60 font-medium">Panel de control global del ecosistema NovaHub.</p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 gap-1.5 font-bold uppercase tracking-widest text-[10px]">

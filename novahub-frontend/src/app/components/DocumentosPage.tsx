@@ -60,9 +60,6 @@ export const DocumentosPage = ({ activeSubModule, isSidebarCollapsed}: Documento
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
                   Nova Cloud
                 </h1>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Almacenamiento y gestión documental en la nube
-                </p>
               </div>
             </div>
           </div>

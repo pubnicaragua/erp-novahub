@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserCircle, Plus, Search, Edit, Mail, Phone, Download, Filter } from 'lucide-react';
+import { UserCircle, Plus, Search, Edit, Mail, Phone, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -108,14 +108,13 @@ export function ClientesPage() {
   return (
     <div className="space-y-6 p-4 md:p-6" style={{ background: 'var(--role-surface)' }}>
       <CurrencyValuationBanner />
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-xl border shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="p-2.5 bg-primary/10 rounded-lg">
             <UserCircle className="size-6 text-primary" />
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Directorio de Clientes</h1>
-            <p className="text-sm text-muted-foreground">Gestiona la información y líneas de crédito de tus clientes</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">Directorio de Clientes</h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -156,7 +155,7 @@ export function ClientesPage() {
                       <Label htmlFor="razonSocial">Razón Social</Label>
                       <Input id="razonSocial" value={formData.razonSocial || ''} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} />
                     </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <div className="grid gap-2 col-span-2">
                         <Label htmlFor="ruc">RUC {formData.type === 'company' && <span className="text-destructive">*</span>}</Label>
                         <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} />
@@ -211,7 +210,6 @@ export function ClientesPage() {
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar por nombre, contacto o email..." className="pl-9 w-full bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
-        <Button variant="outline" className="gap-2 sm:w-auto w-full"><Filter className="size-4" /> Filtros Avanzados</Button>
       </div>
 
       <Card>

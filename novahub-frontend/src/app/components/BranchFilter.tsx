@@ -11,7 +11,7 @@ export function BranchFilter() {
     <div className="flex items-center gap-2">
       <Store className="size-4 text-muted-foreground shrink-0" />
       <Select value={selectedBranchId ?? ''} onValueChange={(v) => setSelectedBranchId(v || null)}>
-        <SelectTrigger className="w-[200px] h-8 text-xs">
+        <SelectTrigger className="w-full max-w-full sm:w-[200px] h-8 text-xs">
           <SelectValue placeholder="Todas las sucursales" />
         </SelectTrigger>
         <SelectContent>

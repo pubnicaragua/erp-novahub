@@ -104,7 +104,6 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter uppercase italic leading-none">Notificaciones</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Alertas, conversaciones y avisos del sistema</p>
           </div>
           <Button variant="outline" size="icon" className="size-11 rounded-xl shrink-0" onClick={() => setShowTour(true)}>
             <CircleHelp className="size-5" />

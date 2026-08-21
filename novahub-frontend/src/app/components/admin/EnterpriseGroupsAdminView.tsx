@@ -72,9 +72,6 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
             <h1 className="text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
               Grupos <span className="text-primary">empresariales</span>
             </h1>
-            <p className="mt-2 max-w-2xl text-sm font-medium text-muted-foreground/70">
-              Crea primero el grupo y administra dentro sus sucursales, soporte y métricas.
-            </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 md:justify-end">

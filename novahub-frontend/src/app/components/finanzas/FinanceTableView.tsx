@@ -7,7 +7,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import {
-  Plus, Trash2, Search, Filter, Download, Eye,
+  Plus, Trash2, Search, Download, Eye,
   CheckCircle2, Edit3, FileSpreadsheet, FileText, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
@@ -46,7 +46,6 @@ interface FinanceTableViewProps {
   onAdd: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   title: string;
-  subtitle?: string;
   loading?: boolean;
   canCreate?: boolean;
   canEdit?: boolean;
@@ -63,7 +62,6 @@ export function FinanceTableView({
   onAdd,
   onDelete,
   title,
-  subtitle,
   loading,
   canCreate = true,
   canEdit = true,
@@ -82,7 +80,6 @@ export function FinanceTableView({
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [showFilters, setShowFilters] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
@@ -487,20 +484,16 @@ export function FinanceTableView({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
           <h3 className="shrink-0 text-lg font-black uppercase tracking-tight text-foreground md:text-xl">{title}</h3>
-          {subtitle && <p className="max-w-md break-words text-xs leading-relaxed text-muted-foreground">{subtitle}</p>}
           <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hidden sm:inline-flex">LIVE SYNC</Badge>
         </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
+        <div className="erp-list-toolbar grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
           <div className="relative col-span-2 w-full sm:flex-1 lg:w-auto">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-10 w-full sm:w-56 md:w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" />
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={cn("flex w-full items-center justify-center gap-2 rounded-xl border px-4 h-10 text-[10px] font-black uppercase tracking-widest transition-colors sm:w-auto", showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border/50 bg-background/50 hover:bg-muted")}>
-            <Filter className="size-4" /> Filtros
-          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
+              <button data-toolbar-role="print" className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/50 bg-background/50 px-4 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-muted sm:w-auto"><Download className="size-4" /> Exportar</button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="size-4 mr-2 text-green-600" /> Excel (.xlsx)</DropdownMenuItem>
@@ -508,12 +501,12 @@ export function FinanceTableView({
             </DropdownMenuContent>
           </DropdownMenu>
           {canCreate && (
-            <button onClick={onAdd} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
+            <button onClick={onAdd} data-toolbar-role="primary" className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 h-10 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto shadow-xl shadow-primary/20 border border-primary/20"><Plus className="size-4" /> Nuevo Registro</button>
           )}
         </div>
       </div>
 
-      {showFilters && (
+      <div>
         <div className="grid grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/30 p-4 animate-in fade-in slide-in-from-top-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categoría</label>
@@ -533,7 +526,7 @@ export function FinanceTableView({
             </div>
           )}
         </div>
-      )}
+      </div>
 
       <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={o => { if (!o) setPendingDeleteId(null); }} title="¿Eliminar registro?" description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción no se puede deshacer." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} />
 
@@ -604,7 +597,7 @@ export function FinanceTableView({
       </Dialog>
 
       <Dialog open={Boolean(detailItem)} onOpenChange={(open) => !open && setDetailItem(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Eye className="size-5 text-primary" /> Desglose del registro</DialogTitle>
             <DialogDescription>{detailItem?.description || 'Detalle de los movimientos agrupados'}</DialogDescription>

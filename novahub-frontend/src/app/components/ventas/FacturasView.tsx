@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
   FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
@@ -13,9 +13,6 @@ import { invoicesService, paymentsService } from '../../services/ventas.service'
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import type { Invoice, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
 import { Combobox } from '../ui/Combobox';
@@ -26,7 +23,8 @@ import { CurrencySelector } from '../ui/CurrencySelector';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
@@ -916,19 +914,20 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     return !['PAID', 'PARTIAL', 'CANCELLED', 'CREDIT'].includes(status) && Number(invoice.amountPaid || 0) <= 0.01;
   };
 
-  const handleDownloadInvoicePdf = async (invoice: Invoice) => {
-    const pdfToastId = toast.loading('Generando PDF de la factura...');
+  const handleDownloadInvoicePdf = async (invoice: Invoice, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización de la factura...');
     try {
-      await generateEstimatePDF({
-        estimate: invoice,
+      await previewSalesTransactionPDF({
+        document: invoice,
         tenantName: user?.tenantName || 'Empresa',
         formatAmount: formatConvertedAmount as any,
         tenantLogo: themeConfig?.logo,
-        documentType: 'invoice' as any,
+        documentType: 'invoice',
+        format,
       });
-      toast.success('PDF descargado', { id: pdfToastId });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
     }
   };
 
@@ -937,43 +936,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (!amount || sourceCurrency === baseCurrency || sourceCurrency === displayCurrency) return 0;
     return convertCurrentAmount(amount, currency) - convertAmount(amount, currency, rate || globalRate);
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Facturas',
-      columns: [
-        { key: 'number', label: 'Nº Factura', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'dueDate', label: 'Vencimiento', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((invoice) => ({
-        number: invoice.number,
-        customerName: invoice.customer?.name || 'Varios',
-        date: invoice.date ? new Date(invoice.date).toLocaleDateString('es-NI') : '',
-        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('es-NI') : '',
-        total: Number(invoice.total || 0),
-        status: invoice.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Facturas',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-      logoUrl: themeConfig?.logo,
-    });
-  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
-
 
 
   const columns: ColumnDef<Invoice>[] = [
@@ -1658,11 +1620,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Control de Facturación</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 mt-1">{showValuationLegend ? `Gestión de recaudos masivos sin fricción · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Gestión de recaudos masivos sin fricción.'}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
@@ -1676,7 +1636,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             </div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_INVOICES', 'create') && (
-              <Button onClick={startNewInvoice} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={startNewInvoice} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Factura
               </Button>
             )}
@@ -1757,30 +1717,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         open={Boolean(detailInvoice)}
         onClose={() => setDetailInvoice(null)}
         onOpenInvoice={(invoice) => { setDetailInvoice(null); setEditingId(invoice.id); }}
-        onDownloadPdf={(invoice) => { void handleDownloadInvoicePdf(invoice); }}
-        onPrintInvoice={(invoice) => {
-          const html = generateTableHtml({
-            title: 'Factura',
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPrice', label: 'Precio Unit.', align: 'right' },
-              { key: 'total', label: 'Total', align: 'right' },
-            ],
-            rows: (invoice.items || []).map((item) => ({
-              description: item.description || '',
-              quantity: Number(item.quantity || 0),
-              unitPrice: `C$ ${formatSalesAmount(Number(item.unitPrice || 0))}`,
-              total: `C$ ${formatSalesAmount(Number(item.total || 0))}`,
-            })),
-          });
-          printContent(html, {
-            title: `Factura ${invoice.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(invoice, format) => { void handleDownloadInvoicePdf(invoice, format); }}
         getBalance={getInvoiceBalance}
         formatAmount={formatInvoiceAmount}
         formatDate={formatDateSafe}
@@ -1827,7 +1764,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </ConfirmDialog>
 
       <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) setCreditInvoice(null); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <Send className="size-5 text-violet-500" /> Enviar factura a crédito
@@ -1860,7 +1797,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       </Dialog>
 
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
               <CreditCard className="size-5 text-primary" /> Registrar pago de factura
@@ -1921,9 +1858,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <div className="flex items-end gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                        <select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value, bankAccountId: undefined, reference: '', cardCommissionPercent: event.target.value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: event.target.value === 'CARD' ? item.cardCommissionAmount : 0 } : item))} className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                          {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                        </select>
+                        <Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
+                          <SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                          <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                        </Select>
                       </div>
                       <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                     </div>

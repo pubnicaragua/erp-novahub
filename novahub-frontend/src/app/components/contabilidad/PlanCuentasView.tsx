@@ -753,11 +753,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Plan de Cuentas</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Catálogo de cuentas contables del sistema
-          </p>
         </div>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+        <div className="erp-toolbar-primary-group flex w-full flex-wrap gap-2 sm:w-auto">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <FileDown className="w-4 h-4 mr-1" /> Exportar
           </Button>
@@ -767,7 +764,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             </Button>
           )}
           {canPerform('ACCOUNTING_CHART', 'create') && (
-            <Button size="sm" onClick={() => openAddDialog()}>
+            <Button size="sm" data-toolbar-role="primary" onClick={() => openAddDialog()}>
               <Plus className="w-4 h-4 mr-1" /> Nueva Cuenta
             </Button>
           )}
@@ -775,7 +772,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </div>
 
       {/* Filtros */}
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-2">
         <div className="relative min-w-[min(100%,16rem)] max-w-sm flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -1076,7 +1073,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </div>
 
       <Dialog open={selectedTransaction !== null} onOpenChange={(open) => { if (!open) setSelectedTransaction(null); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 pr-8">
               <Activity className="size-5 text-primary" />
@@ -1138,7 +1135,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       </Dialog>
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
             <DialogDescription>Selecciona las columnas que quieres mantener visibles en la jerarquía de cuentas. Los cambios se reflejan inmediatamente.</DialogDescription>

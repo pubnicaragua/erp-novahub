@@ -104,7 +104,7 @@ export function PlatformQuotesPanel({ groups = [] }: { groups?: any[] }) {
   return <div className="space-y-5">
     <div className="rounded-3xl bg-slate-950 p-5 text-white shadow-lg sm:p-7">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div><p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300"><Sparkles className="size-3.5" /> Comercial de plataforma</p><h2 className="mt-2 text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Cotizaciones <span className="text-emerald-300">NOVA</span></h2><p className="mt-2 max-w-2xl text-sm text-slate-300">Genera propuestas profesionales para prospectos, grupos y empresas que todavía no existen como tenant.</p></div>
+        <div><p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-emerald-300"><Sparkles className="size-3.5" /> Comercial de plataforma</p><h2 className="mt-2 text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Cotizaciones <span className="text-emerald-300">NOVA</span></h2></div>
         <Button className="h-11 rounded-xl bg-emerald-500 px-5 text-white hover:bg-emerald-400" onClick={openNew}><Plus className="mr-2 size-4" /> Nueva cotización</Button>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-3"><Kpi label="Oportunidades" value={totals.total} /><Kpi label="Enviadas" value={totals.sent} /><Kpi label="Valor cotizado" value={money(totals.value, 'USD')} /></div>

@@ -34,7 +34,7 @@ export function ManagerUserEditorDialog({ user, open, saving = false, onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl rounded-3xl p-5 sm:p-7">
+      <DialogContent className="w-[calc(100vw-2rem)] !max-w-2xl rounded-3xl p-5 sm:p-7">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-black uppercase italic tracking-tight">
             <Pencil className="size-5 text-primary" /> Editar usuario de sucursal

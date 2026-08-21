@@ -273,9 +273,6 @@ export function RestaurantePage() {
                 <h1 className="flex flex-wrap items-center gap-x-3 text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
                   Restaurante <span className="text-primary">POS</span>
                 </h1>
-                <p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
-                  Salón, comandas, cocina y cobro conectado al ERP
-                </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">

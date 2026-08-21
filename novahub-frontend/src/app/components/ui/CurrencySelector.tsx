@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Currency } from '../../contexts/CurrencyContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 interface CurrencySelectorProps {
   value?: string;
@@ -37,15 +38,18 @@ export function CurrencySelector({
   return (
     <div className={className}>
       {!hideLabel && <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</label>}
-      <select
+      <Select
         value={selected}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value === 'USD' ? 'USD' : 'NIO')}
-        className="h-9 w-full max-w-full rounded-lg border border-border bg-background px-2 text-xs font-bold uppercase outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+        onValueChange={(nextValue) => onChange(nextValue === 'USD' ? 'USD' : 'NIO')}
       >
-        <option value="NIO">Córdoba (NIO)</option>
-        <option value="USD">Dólar (USD)</option>
-      </select>
+        <SelectTrigger size="sm" disabled={disabled} className="h-9 w-full max-w-full rounded-lg border-border bg-background px-2 text-xs font-bold uppercase">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="NIO">Córdoba (NIO)</SelectItem>
+          <SelectItem value="USD">Dólar (USD)</SelectItem>
+        </SelectContent>
+      </Select>
       {!hideLabel && <p className="mt-1 text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold text-foreground">{rateText}</span></p>}
     </div>
   );

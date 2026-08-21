@@ -44,7 +44,6 @@ export function PartnerDashboard({ onNavigate }: PartnerDashboardProps) {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black tracking-tighter text-foreground uppercase">Centro de <span className="text-primary italic">Partners</span></h1>
-          <p className="text-muted-foreground/60 font-medium">Gestiona la expansión y escalabilidad de tus clientes.</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" className="rounded-xl border-border/50 gap-2 font-bold uppercase text-[10px] tracking-widest shadow-sm" onClick={() => onNavigate?.('suscripciones')}>

@@ -1216,7 +1216,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <div className="rounded-xl bg-primary/15 p-2.5"><ShoppingCart className="size-5 text-primary" /></div>
           <div>
             <h2 className="text-base font-black uppercase tracking-tight">Facturación por Caja</h2>
-            <p className="text-xs text-muted-foreground">Venta rápida, cobro y registro contable en un mismo flujo.</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
@@ -1399,9 +1398,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   ))}
                 </div>
                 {catalogView === 'list' ? (
-                  <div className="overflow-hidden rounded-xl border border-border/50">
+                  <div className="overflow-x-auto rounded-xl border border-border/50">
                     <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full table-fixed text-xs">
+                      <table className="w-full min-w-[520px] table-fixed text-xs md:min-w-0">
                         <colgroup>
                           <col className="w-[18%]" />
                           <col className="w-[38%]" />
@@ -1566,8 +1565,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     No hay ítems agregados en esta caja{selectedRegister ? ` (${selectedRegister.code} - ${selectedRegister.name})` : ''}.
                   </p>
                 ) : (
-                  <div className="border border-border/50 rounded-xl overflow-hidden">
-                    <table className="w-full text-xs">
+                  <div className="border border-border/50 rounded-xl overflow-x-auto">
+                    <table className="w-full min-w-[760px] text-xs md:min-w-0">
                       <thead>
                         <tr className="bg-muted/30 border-b border-border/30">
                           <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>

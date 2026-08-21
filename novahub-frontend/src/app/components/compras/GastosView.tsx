@@ -902,8 +902,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Egresos operativos y administrativos</p></div>
-          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
+          <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
             <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
@@ -1059,7 +1059,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         />
 
         <Dialog open={Boolean(paymentExpense)} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
-          <DialogContent className="w-[calc(100%-2rem)] max-w-xl rounded-3xl">
+          <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
                 <CircleDollarSign className="size-5 text-primary" /> Registrar pago del gasto
@@ -1099,7 +1099,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         </Dialog>
 
         <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
-          <DialogContent className="sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,680px)] overflow-y-auto rounded-3xl">
             <DialogHeader data-tour="purchases-expense-modal-title">
               <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar gastos</DialogTitle>
               <DialogDescription>

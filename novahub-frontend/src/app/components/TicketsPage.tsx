@@ -113,9 +113,6 @@ export const TicketsPage = ({ activeSubModule, onSubModuleChange }: TicketsPageP
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
                   Soporte <span className="text-primary">& Ayuda</span>
                 </h1>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Mesa de ayuda y atención al cliente
-                </p>
               </div>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)}>

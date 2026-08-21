@@ -80,10 +80,6 @@ export const NovaCloudPlanesView = () => {
           <h2 className="text-3xl font-black uppercase tracking-tight">
             Almacenamiento en la Nube
           </h2>
-          <p className="text-sm text-muted-foreground/70 max-w-xl mx-auto font-medium">
-            Guardá, compartí y gestioná todos los archivos de tu empresa
-            en un solo lugar con planes escalables para cada necesidad.
-          </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">

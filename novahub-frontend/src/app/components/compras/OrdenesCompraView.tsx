@@ -25,6 +25,7 @@ import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -214,9 +215,40 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
     }
   };
 
+  const renderMobileCard = (row: PurchaseImportRow, index: number) => {
+    const tax = calcItemTax(row);
+    const withholding = calcItemWithholding(row);
+    const taxValue = String(row.taxType || 'GRAVADO').toUpperCase();
+    const withholdingValue = String(row.withholdingType || 'NONE').toUpperCase();
+    const matchingCategory = categoryOptions.find((category: any) => String(category.id) === String(row.categoryId)) || categoryOptions.find((category: any) => String(category.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase());
+    const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
+    const skuLinked = row._skuStatus === 'found' && row.skuResolution !== 'MANUAL';
+    return (
+      <ImportPreviewMobileCard index={index} title={row.description || row.sku} error={row._hasError ? row._errorMessage || row._skuMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <ImportPreviewField label="SKU"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`${importPreviewFieldClass} font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Stock actual"><div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-black text-primary">{row.currentStock ?? '—'}</div></ImportPreviewField>
+          <ImportPreviewField label="Aviso / vínculo" className="sm:col-span-2"><div className="space-y-2"><p className={`break-words text-xs ${row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}`}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</p>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo</option></select>}</div></ImportPreviewField>
+          <ImportPreviewField label="Descripción *" className="sm:col-span-2"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`${importPreviewFieldClass} ${!row.description ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><select aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`} value={categoryValue} onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} disabled={importing}><option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>{categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
+          <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Tipo IVA"><select value={taxValue} onChange={(event) => onRowUpdate(index, 'taxType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="">Seleccionar IVA</option>{taxOptions.filter((option) => option.isActive !== false).map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label={`Base IVA (${currencySymbol})`}><Input type="number" value={isTaxExempt(taxValue) ? 0 : tax.taxBase} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label="IVA %"><Input type="number" value={tax.taxRate} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Monto IVA (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-rose-500">{currencySymbol} {tax.taxAmount.toFixed(2)}</div></ImportPreviewField>
+          <ImportPreviewField label="Retención" className="sm:col-span-2"><select value={withholdingValue} onChange={(event) => onRowUpdate(index, 'withholdingType', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="NONE">Sin retención</option>{withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE').map((option) => <option key={option.code} value={option.code}>{option.name} ({option.rate}%)</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label={`Base ret. (${currencySymbol})`}><Input type="number" value={withholdingValue === 'NONE' ? 0 : withholding.withholdingBase} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label="Ret. %"><Input type="number" value={withholding.withholdingRate} readOnly className={`${importPreviewFieldClass} bg-muted/35 text-right text-muted-foreground`} /></ImportPreviewField>
+          <ImportPreviewField label={`Monto ret. (${currencySymbol})`}><div className="flex h-9 items-center justify-end rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-bold text-amber-600">{currencySymbol} {withholding.withholdingTotal.toFixed(2)}</div></ImportPreviewField>
+        </div>
+      </ImportPreviewMobileCard>
+    );
+  };
+
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
-      <div className="flex min-h-full flex-col gap-5">
+    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-5">
         <div className="flex flex-col gap-3 border-b border-border/50 pb-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Importación de ítems</p>
@@ -255,7 +287,8 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
-        <HorizontalTableScroller className="h-[clamp(500px,65vh,760px)] min-h-[500px] flex-none" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+        <div className="hidden min-h-0 flex-1 sm:flex">
+        <HorizontalTableScroller className="h-[clamp(500px,65vh,760px)] min-h-[500px] flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
           <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
               <TableRow>
@@ -329,6 +362,17 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
             </TableBody>
           </Table>
         </HorizontalTableScroller>
+        </div>
+
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Productos de la orden para revisar">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
+            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          </div>
+        </section>
 
         {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} /></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
@@ -2064,7 +2108,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           setImportModalOpen(open);
           if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
-          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
             <DialogHeader data-tour="purchases-order-import-title">
               <DialogTitle className="flex items-center gap-2"><FileText className="size-5" /> Cargar productos</DialogTitle>
               <DialogDescription>Selecciona un Excel o CSV. Los productos se agregarán a la orden solo después de revisar la previsualización.</DialogDescription>
@@ -2212,8 +2256,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Pedidos a proveedores</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <PurchaseViewTutorial view="orders" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes de compra" />
@@ -2347,7 +2391,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           setImportModalOpen(open);
           if (!open) { const orderCurrency = normalizePurchaseCurrency(localDoc?.currency || displayCurrency); setImportData([]); setImportFileName(''); setImportProgress(0); setImportCurrency(orderCurrency); setImportDataCurrency(orderCurrency); }
         }}>
-          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+          <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><FileText className="size-5" /> Cargar órdenes de compra</DialogTitle>
               <DialogDescription>Selecciona un archivo Excel o CSV. Todavía no se crearán órdenes hasta confirmar la previsualización.</DialogDescription>
@@ -2391,7 +2435,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               <DialogTitle>Importación completada</DialogTitle>
               <DialogDescription>Resumen de la carga de órdenes de compra.</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{importResults?.success || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Órdenes creadas</p></div>
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Filas omitidas</p></div>
               <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Órdenes con error</p></div>

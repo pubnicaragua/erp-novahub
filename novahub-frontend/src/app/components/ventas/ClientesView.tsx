@@ -26,6 +26,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -566,7 +567,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'phone', header: 'Teléfono', width: '130px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span> },
-    { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
+    { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
     { key: 'balance', header: 'Saldo deudor', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) > 0 ? 'text-destructive' : 'text-primary')}>{formatConvertedAmount(val || 0, baseCurrency)}</span> },
     { 
       key: 'status', 
@@ -606,8 +607,6 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'balance', label: 'Saldo deudor' },
     { key: 'status', label: 'Estado' },
   ];
-  const layoutLabel = layoutMode === 'table' ? 'Lista' : 'Tarjetas';
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs Section */}
@@ -620,12 +619,11 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
 
       {/* Main Content */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 py-2" data-tour="sales-list-actions">
-          <div>
-            <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Gestión integral Excel-like sin interrupciones.</p>
+        <div className="flex min-w-0 flex-col gap-3 py-2 lg:flex-row lg:items-center lg:justify-between" data-tour="sales-list-actions">
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-black uppercase tracking-tight text-foreground" data-tour="customers-title">Directorio de Clientes</h2>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input 
@@ -635,11 +633,16 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')} aria-label="Filtrar clientes por estado" className="h-10 min-w-0 max-w-full rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary">
-              <option value="ACTIVE">Activos</option>
-              <option value="INACTIVE">Inactivos</option>
-              <option value="ALL">Todos</option>
-            </select>
+            <Select value={statusFilter} onValueChange={(nextValue) => setStatusFilter(nextValue as 'ALL' | 'ACTIVE' | 'INACTIVE')}>
+              <SelectTrigger aria-label="Filtrar clientes por estado" className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="ACTIVE">Activos</SelectItem>
+                <SelectItem value="INACTIVE">Inactivos</SelectItem>
+                <SelectItem value="ALL">Todos</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               onClick={() => setShowTutorial(true)}
@@ -655,15 +658,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <span className="inline-grid shrink-0">
-              <span aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap rounded-xl px-3 pr-10 text-[10px] font-black uppercase tracking-widest">
-                {layoutLabel}
-              </span>
-              <select value={layoutMode} onChange={(e) => setLayoutMode(e.target.value as 'table' | 'cards')} aria-label="Elegir distribución" data-tour="customers-layout" className="col-start-1 row-start-1 h-10 w-full min-w-0 rounded-xl border border-border/50 bg-background/50 px-3 pr-10 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary">
-                <option value="table">Lista</option>
-                <option value="cards">Tarjetas</option>
-              </select>
-            </span>
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución" dataTour="customers-layout" />
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button
                 variant="outline"
@@ -677,6 +672,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button 
                 onClick={() => setCreateOpen(true)}
+                data-toolbar-role="primary"
                 data-tour="customers-new"
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20"
               >
@@ -778,7 +774,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
             <DialogDescription>Elige qué información quieres ver. La tabla se ajustará automáticamente al espacio disponible y actualizará la vista al instante.</DialogDescription>
@@ -818,7 +814,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El número de cliente se genera automáticamente.</p></div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
-                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><select value={newCustomer.type} onChange={(e) => setNewCustomer({ ...newCustomer, type: e.target.value as CustomerDraft['type'] })} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"><option value="individual">Particular</option><option value="company">Empresa</option></select></div>
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={newCustomer.type} onValueChange={(value) => setNewCustomer({ ...newCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={newCustomer.taxId} onChange={(e) => setNewCustomer({ ...newCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {String(newCustomer.type).toUpperCase() === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={newCustomer.ruc} onChange={(e) => setNewCustomer({ ...newCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
                 </div>
@@ -841,7 +837,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={newCustomer.fiscalRegime} onValueChange={(v) => setNewCustomer({ ...newCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={newCustomer.creditLimit} onChange={(e) => setNewCustomer({ ...newCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
                   <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={newCustomer.creditDays} onChange={(e) => setNewCustomer({ ...newCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
-                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><select value={newCustomer.priceListId} onChange={(e) => setNewCustomer({ ...newCustomer, priceListId: e.target.value })} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"><option value="">Sin lista asignada</option>{priceLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></div>
+                  <div className="space-y-1.5 sm:col-span-1"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={newCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setNewCustomer({ ...newCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
               </section>
             </div>
@@ -882,10 +878,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
               <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El código del cliente no se puede modificar.</p></div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={editCustomer.name} onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })} placeholder="Nombre del particular o empresa" className="h-11 rounded-xl" autoFocus /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><select value={editCustomer.type} onChange={(e) => setEditCustomer({ ...editCustomer, type: e.target.value as CustomerDraft['type'] })} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"><option value="individual">Particular</option><option value="company">Empresa</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={editCustomer.type} onValueChange={(value) => setEditCustomer({ ...editCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cédula</label><Input value={editCustomer.taxId} onChange={(e) => setEditCustomer({ ...editCustomer, taxId: e.target.value })} placeholder="001-010190-1000A" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {String(editCustomer.type).toUpperCase() === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={editCustomer.ruc} onChange={(e) => setEditCustomer({ ...editCustomer, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><select value={editCustomer.status} onChange={(e) => setEditCustomer({ ...editCustomer, status: e.target.value as CustomerDraft['status'] })} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><Select value={editCustomer.status} onValueChange={(value) => setEditCustomer({ ...editCustomer, status: value as CustomerDraft['status'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></div>
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
@@ -906,7 +902,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Régimen fiscal</label><Select value={editCustomer.fiscalRegime} onValueChange={(v) => setEditCustomer({ ...editCustomer, fiscalRegime: v })}><SelectTrigger className="h-11 rounded-xl text-sm"><SelectValue placeholder="Seleccionar régimen" /></SelectTrigger><SelectContent>{FISCAL_REGIMES.map((r) => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</label><Input type="number" min="0" value={editCustomer.creditLimit} onChange={(e) => setEditCustomer({ ...editCustomer, creditLimit: e.target.value })} placeholder="0.00" className="h-11 rounded-xl" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Plazo de crédito (días)</label><Input type="number" min="0" value={editCustomer.creditDays} onChange={(e) => setEditCustomer({ ...editCustomer, creditDays: e.target.value })} placeholder="0 = contado" className="h-11 rounded-xl" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><select value={editCustomer.priceListId} onChange={(e) => setEditCustomer({ ...editCustomer, priceListId: e.target.value })} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"><option value="">Sin lista asignada</option>{priceLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista de precios</label><Select value={editCustomer.priceListId || '__no_price_list__'} onValueChange={(value) => setEditCustomer({ ...editCustomer, priceListId: value === '__no_price_list__' ? '' : value })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__no_price_list__">Sin lista asignada</SelectItem>{priceLists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}</SelectContent></Select></div>
               </div>
             </section>
           </div>
@@ -918,7 +914,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       </Dialog>
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] overflow-y-auto rounded-3xl p-5 sm:p-6">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; los correos e identificaciones duplicadas se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>

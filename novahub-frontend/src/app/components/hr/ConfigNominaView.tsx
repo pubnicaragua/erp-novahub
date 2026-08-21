@@ -190,9 +190,6 @@ export function ConfigNominaView() {
             <Settings2 className="size-6 text-primary" />
             Configuración de Nómina
           </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            Define los porcentajes de deducciones, aportes patronales y provisiones
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2" data-tour="hr-payroll-config-actions">
           <Badge className={cn(

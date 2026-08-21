@@ -30,6 +30,7 @@ import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -452,9 +453,6 @@ export function DiarioView() {
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
             Libro <span className="text-primary">Diario</span>
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Registro cronológico de todos los asientos contables
-          </p>
         </div>
         <Button
           onClick={() => setImportOpen(true)}
@@ -1025,7 +1023,7 @@ export function DiarioView() {
                 <>
                   <ImportReviewSummary total={importRows.length} valid={validImportCount} skipped={invalidImportCount} entityLabel="asientos" />
 
-                  <div className="overflow-x-auto rounded-xl border border-border/60">
+                  <div className="hidden overflow-x-auto rounded-xl border border-border/60 sm:block">
                     <table className="w-full min-w-[820px] text-xs">
                       <thead className="bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                         <tr>
@@ -1074,6 +1072,26 @@ export function DiarioView() {
                       </tbody>
                     </table>
                   </div>
+
+                  <section className="space-y-3 sm:hidden" aria-label="Asientos importados para revisar">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
+                      <Badge variant="secondary" className="text-[10px]">{importRows.length} filas</Badge>
+                    </div>
+                    {importRows.map((row) => (
+                      <ImportPreviewMobileCard key={row.rowIndex} index={row.rowIndex} title={row.descripcion || row.codigo} error={row.valid ? undefined : row.errors.join(' · ')}>
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{row.codigo || '—'}</p></ImportPreviewField>
+                          <ImportPreviewField label="Fila"><p className="font-mono text-xs">{row.rowIndex + 2}</p></ImportPreviewField>
+                          <ImportPreviewField label="Descripción" className="col-span-2"><p className="break-words text-xs">{row.descripcion || '—'}</p></ImportPreviewField>
+                          <ImportPreviewField label="Débito"><p className="text-right text-xs tabular-nums text-emerald-600">{row.debito !== null && row.debito > 0 ? formatCurrency(row.debito) : '—'}</p></ImportPreviewField>
+                          <ImportPreviewField label="Crédito"><p className="text-right text-xs tabular-nums text-rose-500">{row.credito !== null && row.credito > 0 ? formatCurrency(row.credito) : '—'}</p></ImportPreviewField>
+                          <ImportPreviewField label="Fecha de corte"><p className="break-words font-mono text-xs">{row.cutoffLabel || '—'}</p></ImportPreviewField>
+                          <ImportPreviewField label="Referencia"><p className="break-words font-mono text-xs">{row.referencia || '—'}</p></ImportPreviewField>
+                        </div>
+                      </ImportPreviewMobileCard>
+                    ))}
+                  </section>
 
                   <div className="flex justify-end">
                     <Button onClick={handleImportAsientos} disabled={importing || validImportCount === 0} className="gap-1.5">

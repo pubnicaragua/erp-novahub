@@ -48,6 +48,7 @@ export function InventoryViewTutorial({
         type="button"
         variant="outline"
         onClick={() => setOpen(true)}
+        data-toolbar-role="help"
         title={label}
         className={compact
           ? `h-8 w-8 shrink-0 rounded-lg border-border/50 bg-background/50 p-0 text-muted-foreground ${className}`

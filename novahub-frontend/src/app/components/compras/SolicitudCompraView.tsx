@@ -470,7 +470,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
+      <div className="erp-list-toolbar flex flex-col sm:flex-row gap-3" data-tour="purchases-list-actions">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input placeholder="Buscar por número, solicitante, proveedor, bodega..." value={search} onChange={e => { setSearch(e.target.value); onSearchChange?.(e.target.value); }} className="pl-9" />

@@ -199,9 +199,6 @@ export function LibroMayorView() {
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
             Libro <span className="text-primary">Mayor</span>
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Movimientos detallados por cuenta contable con saldo corriente
-          </p>
         </div>
       </div>
 

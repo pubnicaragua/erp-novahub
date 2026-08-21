@@ -50,6 +50,7 @@ import {
   DEFAULT_ENTERPRISE_MODULES,
   ENTERPRISE_MODULE_OPTIONS,
 } from "../../constants/enterpriseModules";
+import { formatCurrencyDescriptor } from "../../utils/currency";
 
 type SetupMode = "create" | "edit";
 type SetupStep = "identity" | "units" | "warehouses" | "branches" | "summary";
@@ -142,6 +143,7 @@ export function EnterpriseGroupSetupView({
     slug: initialGroup?.slug || "",
     description: initialGroup?.description || "",
     logo: initialGroup?.logo || "",
+    consolidationCurrency: initialGroup?.consolidationCurrency || "NIO",
     enabledModules:
       Array.isArray(initialGroup?.enabledModules) &&
       initialGroup.enabledModules.length
@@ -232,6 +234,7 @@ export function EnterpriseGroupSetupView({
           slug: result.slug || current.slug,
           description: result.description || "",
           logo: result.logo || "",
+          consolidationCurrency: result.consolidationCurrency || "NIO",
           enabledModules:
             Array.isArray(result.enabledModules) && result.enabledModules.length
               ? result.enabledModules
@@ -252,6 +255,7 @@ export function EnterpriseGroupSetupView({
       slug: group.slug || "",
       description: group.description || "",
       logo: group.logo || "",
+      consolidationCurrency: group.consolidationCurrency || "NIO",
       enabledModules:
         Array.isArray(group.enabledModules) && group.enabledModules.length
           ? group.enabledModules
@@ -310,6 +314,10 @@ export function EnterpriseGroupSetupView({
   }, [branchForm.adminEmail]);
 
   const saveDraftIdentity = () => {
+    if (!canCreateGroup) {
+      toast.error("Completa los datos del grupo y del Manager antes de continuar");
+      return;
+    }
     const nextManager = {
       name: managerForm.name.trim(),
       email: normalizeEmail(managerForm.email),
@@ -322,6 +330,7 @@ export function EnterpriseGroupSetupView({
       name: groupForm.name.trim(),
       description: groupForm.description.trim() || null,
       logo: groupForm.logo || null,
+      consolidationCurrency: groupForm.consolidationCurrency,
       enabledModules: groupForm.enabledModules,
       businessUnits: current?.businessUnits || [],
       warehouses: current?.warehouses || [],
@@ -338,6 +347,7 @@ export function EnterpriseGroupSetupView({
         slug: groupForm.slug.trim(),
         description: groupForm.description.trim() || null,
         logo: await persistLogo(groupForm.logo, "groups", "group-logo.png") || null,
+        consolidationCurrency: groupForm.consolidationCurrency,
         enabledModules: enabledModules ?? groupForm.enabledModules,
       }),
     onSuccess: (updated) => {
@@ -859,6 +869,7 @@ export function EnterpriseGroupSetupView({
           name: groupForm.name.trim(),
           description: groupForm.description.trim() || undefined,
           logo: groupLogo || undefined,
+          consolidationCurrency: groupForm.consolidationCurrency,
           enabledModules: groupForm.enabledModules,
         },
         manager: {
@@ -1063,10 +1074,6 @@ export function EnterpriseGroupSetupView({
               <h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">
                 {group?.name || "Crear grupo empresarial"}
               </h1>
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                Define la jerarquía antes de operar: grupo → rubro → almacén
-                corporativo → sucursal → bodegas.
-              </p>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/50 px-4 py-3">
@@ -1453,7 +1460,7 @@ function ManagersEditStep({
           }
         }}
       >
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-3xl p-5 sm:p-7">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-md rounded-3xl p-5 sm:p-7">
           <DialogHeader>
             <DialogTitle className="font-black uppercase italic tracking-tight">
               Cambiar contraseña del Manager
@@ -1595,10 +1602,6 @@ function GroupConfigurationView({
               <h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">
                 {group.name}
               </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Administra la identidad, los módulos heredables y la estructura
-                operativa sin repetir el flujo de implementación inicial.
-              </p>
             </div>
           </div>
           <Badge className="w-fit shrink-0 rounded-xl px-3 py-2">
@@ -1648,6 +1651,25 @@ function GroupConfigurationView({
                     rows={4}
                     className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
+                </label>
+                <label className={labelClass}>
+                  Moneda de consolidación Manager
+                  <select
+                    value={groupForm.consolidationCurrency || "NIO"}
+                    onChange={(event) =>
+                      setGroupForm((current: any) => ({
+                        ...current,
+                        consolidationCurrency: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="NIO">{formatCurrencyDescriptor("NIO")}</option>
+                    <option value="USD">{formatCurrencyDescriptor("USD")}</option>
+                  </select>
+                  <span className="text-[10px] font-normal leading-relaxed text-muted-foreground">
+                    Define la moneda predeterminada para indicadores y reportes consolidados. Los importes originales de cada sucursal no se modifican.
+                  </span>
                 </label>
                 <Button
                   className="w-fit rounded-xl"
@@ -2010,6 +2032,25 @@ function IdentityStep({
                 className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
               />
             </label>
+            <label className={labelClass}>
+              Moneda de consolidación Manager
+              <select
+                value={groupForm.consolidationCurrency || "NIO"}
+                onChange={(event) =>
+                  setGroupForm((current: any) => ({
+                    ...current,
+                    consolidationCurrency: event.target.value,
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="NIO">{formatCurrencyDescriptor("NIO")}</option>
+                <option value="USD">{formatCurrencyDescriptor("USD")}</option>
+              </select>
+              <span className="text-[10px] leading-relaxed text-muted-foreground">
+                Se conservarán moneda, signo, importe original, tasa histórica y fuente de conversión en cada reporte.
+              </span>
+            </label>
           </div>
         </CardContent>
       </Card>
@@ -2120,14 +2161,6 @@ function IdentityStep({
         </CardContent>
       </Card>
       <div className="flex flex-wrap justify-end gap-3">
-        <Button
-          variant="outline"
-          className="rounded-xl"
-          onClick={onNext}
-          disabled={!group}
-        >
-          Continuar <ChevronRight className="ml-2 size-4" />
-        </Button>
         {mode === "create" && (!group || draft) ? (
           <Button
             className="rounded-xl"
@@ -2139,7 +2172,7 @@ function IdentityStep({
             ) : (
               <Save className="mr-2 size-4" />
             )}
-            {draft ? "Actualizar borrador" : "Guardar identidad y continuar"}
+            Continuar a rubros
           </Button>
         ) : !manager ? (
           <Button
@@ -2338,12 +2371,14 @@ function UnitsStep({
           </CardContent>
         </Card>
       </div>
-      <StepFooter
-        onNext={onNext}
-        nextLabel={
-          units.length ? "Continuar a sucursales" : "Continuar sin rubro"
-        }
-      />
+      {!editMode && (
+        <StepFooter
+          onNext={onNext}
+          nextLabel={
+            units.length ? "Continuar a sucursales" : "Continuar sin rubro"
+          }
+        />
+      )}
     </div>
   );
 }
@@ -2585,12 +2620,14 @@ function WarehousesStep({
           </div>
         </CardContent>
       </Card>
-      <StepFooter
-        onNext={onNext}
-        nextLabel={
-          warehouses.length ? "Continuar al resumen" : "Continuar sin almacén"
-        }
-      />
+      {!editMode && (
+        <StepFooter
+          onNext={onNext}
+          nextLabel={
+            warehouses.length ? "Continuar al resumen" : "Continuar sin almacén"
+          }
+        />
+      )}
     </div>
   );
 }
@@ -2922,12 +2959,14 @@ function BranchesStep({
           </div>
         </CardContent>
       </Card>
-      <StepFooter
-        onNext={onNext}
-        nextLabel={
-          branches.length ? "Continuar a almacenes" : "Continuar sin sucursales"
-        }
-      />
+      {!editMode && (
+        <StepFooter
+          onNext={onNext}
+          nextLabel={
+            branches.length ? "Continuar a almacenes" : "Continuar sin sucursales"
+          }
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
   Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, PackageCheck, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
+import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { salesOrdersService } from '../../services/ventas.service';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
@@ -17,7 +18,7 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -27,9 +28,7 @@ import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
@@ -246,19 +245,20 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     toast.success('¡Se abrió WhatsApp con la orden de venta preparada!', { id: preparingToastId });
   };
 
-  const handleExportPDF = async (order: SalesOrder) => {
-    const pdfToastId = toast.loading('Generando PDF de la orden de venta...');
+  const handleExportPDF = async (order: SalesOrder, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización de la orden de venta...');
     try {
-      await generateEstimatePDF({
-        estimate: { ...order, customer: customers.find((customer) => customer.id === order.customerId) || order.customer },
+      await previewSalesTransactionPDF({
+        document: { ...order, customer: customers.find((customer) => customer.id === order.customerId) || order.customer },
         tenantName: user?.tenantName || 'Empresa',
         formatAmount,
         tenantLogo: themeConfig?.logo,
         documentType: 'order',
+        format,
       });
-      toast.success('PDF descargado', { id: pdfToastId });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
     }
   };
 
@@ -341,40 +341,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const filteredData = colFilters.applyTo(statusOrdered, filterGetters);
   const distinctCustomers = [...new Map(filtered.map((o) => [o.customer?.name || 'Varios', o.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.customer?.name || 'Varios') === label).length }));
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Órdenes de Venta',
-      columns: [
-        { key: 'number', label: 'Nº Orden', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        customerName: item.customer?.name || 'Varios',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Órdenes de Venta',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-      logoUrl: themeConfig?.logo,
-    });
-  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName, themeConfig?.logo]);
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
@@ -1200,11 +1166,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Órdenes de Venta</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Órdenes confirmadas listas para preparación y facturación.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="orders" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as OrderStatusFilter)}>
               <SelectTrigger className="h-10 w-44 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest"><SelectValue placeholder="Estado" /></SelectTrigger>
@@ -1232,18 +1196,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <select
-              value={layoutMode}
-              onChange={(event) => setLayoutMode(event.target.value as 'table' | 'cards')}
-              aria-label="Elegir distribución de órdenes"
-              className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
-            >
-              <option value="table">Lista</option>
-              <option value="cards">Tarjetas</option>
-            </select>
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes" />
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_ORDERS', 'create') && (
-              <Button onClick={handleAddOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={handleAddOrder} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Orden
               </Button>
             )}
@@ -1324,36 +1280,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           setDetailOrder(null);
           setEditingId(detailOrder.id);
         }}
-        onDownloadPdf={() => { if (detailOrder) void handleExportPDF(detailOrder); }}
-        onPrintDocument={() => {
-          if (!detailOrder) return;
-          const document = buildOrderPanel(detailOrder);
-          const html = generateTableHtml({
-            title: document.title,
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
-              { key: 'totalLabel', label: 'Total', align: 'right' },
-            ],
-            rows: (document.lines || []).map((line) => ({
-              description: line.description || '',
-              quantity: Number(line.quantity || 0),
-              unitPriceLabel: line.unitPriceLabel || '',
-              totalLabel: line.totalLabel || '',
-            })),
-          });
-          printContent(html, {
-            title: `${document.title} ${document.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(format) => { if (detailOrder) void handleExportPDF(detailOrder, format); }}
       />
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
             <DialogDescription>Elige qué información quieres ver en la lista o en las tarjetas de órdenes de venta. Los cambios se reflejan inmediatamente.</DialogDescription>

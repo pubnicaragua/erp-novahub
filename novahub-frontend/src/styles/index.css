@@ -11,6 +11,120 @@ select.border-input {
   border-color: var(--border);
 }
 
+/* Selectores compactos de filtros y distribución. El ancho se ajusta al
+   texto más largo de sus opciones y la flecha queda dentro del control,
+   próxima a la etiqueta, sin ocupar una columna completa. */
+.erp-filter-select,
+[data-tour="sales-list-actions"] > select,
+[data-tour="purchases-list-actions"] > select,
+.manager-shell main [class*="xl:grid-cols-"] > label > select {
+  width: max-content !important;
+  min-width: 5.25rem;
+  max-width: 100%;
+  white-space: nowrap;
+  field-sizing: content;
+  margin-inline: .2rem;
+}
+
+select.erp-filter-select,
+[data-tour="sales-list-actions"] > select,
+[data-tour="purchases-list-actions"] > select,
+.manager-shell main [class*="xl:grid-cols-"] > label > select {
+  appearance: none;
+  padding-right: 1.65rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .55rem center;
+  background-size: .72rem .72rem;
+}
+
+select.erp-filter-select:focus-visible,
+[data-tour="sales-list-actions"] > select:focus-visible,
+[data-tour="purchases-list-actions"] > select:focus-visible,
+.manager-shell main [class*="xl:grid-cols-"] > label > select:focus-visible {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300a86b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Las cabeceras de los módulos consolidados ya comunican el contexto mediante
+   el título, las pestañas y los indicadores de alcance. Retirar el párrafo
+   descriptivo evita repetir una explicación antigua bajo el encabezado. */
+.sales-module > div:first-child h1 + p,
+.purchases-module > div:first-child h1 + p,
+.sales-module [data-tour="sales-list-title"] + p,
+.purchases-module [data-tour="purchases-list-title"] + p,
+.finance-module > div:first-child h1 + p,
+.accounting-module > div:first-child h1 + p {
+  display: none;
+}
+
+/* En compacto el contenido ya se presenta como tarjetas; mantener el
+   selector visible allí solo añade una opción que no puede usarse bien. */
+@media (max-width: 1279px) {
+  .erp-view-layout-select {
+    display: none !important;
+  }
+
+  /* Las vistas consolidadas de Manager usan botones de icono en vez de un
+     select, pero obedecen la misma regla: en compacto solo queda Tarjetas. */
+  [data-responsive-layout-toggle] > [data-layout="table"],
+  .manager-shell main [aria-label="Vista tabla"] {
+    display: none !important;
+  }
+}
+
+/* Guardrails comunes para formularios y overlays de cualquier módulo. */
+#root,
+[data-slot="dialog-content"],
+[data-slot="drawer-content"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-slot="dialog-content"] input,
+[data-slot="dialog-content"] select,
+[data-slot="dialog-content"] textarea,
+[data-slot="drawer-content"] input,
+[data-slot="drawer-content"] select,
+[data-slot="drawer-content"] textarea {
+  max-width: 100%;
+}
+
+[data-slot="dialog-footer"] > *,
+[data-slot="drawer-footer"] > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Mobile overlays must use the available viewport instead of inheriting a
+   desktop-oriented width from an individual view. Their own content keeps
+   the internal scroll, while footer actions remain reachable without
+   horizontal overflow. */
+@media (max-width: 639px) {
+  [data-slot="dialog-content"] {
+    width: calc(100% - 1rem) !important;
+    max-width: calc(100% - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
+    padding: 1rem !important;
+  }
+
+  [data-slot="drawer-content"][data-vaul-drawer-direction="left"],
+  [data-slot="drawer-content"][data-vaul-drawer-direction="right"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  [data-slot="dialog-footer"],
+  [data-slot="drawer-footer"] {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  [data-slot="dialog-footer"] > *,
+  [data-slot="drawer-footer"] > * {
+    width: 100%;
+  }
+}
+
 /* En una cabecera de tabla el texto de la columna ya da el contexto. */
 th .column-filter-menu-trigger,
 [role="columnheader"] .column-filter-menu-trigger {
@@ -34,6 +148,17 @@ th .column-filter-menu .column-sort-icon,
 th .column-filter-menu .column-filter-icon,
 [role="columnheader"] .column-filter-menu .column-filter-icon {
   display: none;
+}
+
+/* Las columnas densas pueden envolver texto largo, pero valores cortos como
+   "Contado" deben conservarse completos en una sola línea. */
+.sales-module [data-slot="table-cell"] .cell-nowrap,
+.purchases-module [data-slot="table-cell"] .cell-nowrap,
+.inventory-module [data-slot="table-cell"] .cell-nowrap,
+.finance-module [data-slot="table-cell"] .cell-nowrap,
+.accounting-module [data-slot="table-cell"] .cell-nowrap {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
 }
 
 
@@ -435,6 +560,206 @@ th .column-filter-menu .column-filter-icon,
 .finance-module {
   min-width: 0;
   overflow-x: hidden;
+}
+
+/*
+ * Shared list-toolbar contract.
+ *
+ * Desktop keeps each module's existing compact toolbar. On narrow screens the
+ * controls get an explicit information hierarchy instead of relying on flex
+ * wrapping: primary action, search, filters, then secondary actions. This is
+ * intentionally shared by Sales, Purchases, Inventory and HR list surfaces.
+ * Components that know their semantic role expose data-toolbar-role; the
+ * search field is detected by its direct input child so legacy toolbars can
+ * adopt the same behavior without changing their business logic.
+ */
+.erp-list-toolbar {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.erp-composite-toolbar {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.erp-toolbar-primary-group,
+.erp-toolbar-filter-group {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .inventory-products-toolbar {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.5rem !important;
+    overflow: visible !important;
+  }
+
+  .inventory-products-toolbar > * {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 !important;
+    order: 2;
+  }
+
+  .inventory-products-toolbar > .relative:has(> input) {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+
+  .inventory-products-toolbar > .relative:has(> input) > input {
+    width: 100% !important;
+  }
+
+  .inventory-products-toolbar > [data-slot="select-trigger"] {
+    width: 100% !important;
+  }
+
+  .inventory-products-toolbar > .h-4.w-px {
+    display: none;
+  }
+
+  .inventory-products-toolbar > .erp-toolbar-actions {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    order: 3;
+  }
+
+  .inventory-products-toolbar > .erp-toolbar-actions > * {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .inventory-products-toolbar > .erp-toolbar-actions > [data-toolbar-role="primary"] {
+    grid-column: 1 / -1;
+  }
+
+  .erp-composite-toolbar {
+    align-items: stretch;
+    display: flex !important;
+    flex-direction: column;
+    gap: 0.75rem !important;
+  }
+
+  .erp-composite-toolbar > .erp-toolbar-primary-group {
+    order: 1;
+    width: 100%;
+  }
+
+  .erp-composite-toolbar > .erp-toolbar-filter-group {
+    order: 2;
+    width: 100%;
+  }
+
+  .erp-toolbar-primary-group {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .erp-toolbar-primary-group > * {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .erp-toolbar-primary-group > [data-toolbar-role="primary"],
+  .erp-toolbar-primary-group > button[class~="bg-primary"] {
+    grid-column: 1 / -1;
+  }
+
+  .erp-toolbar-filter-group > .relative:has(> input) {
+    width: 100%;
+  }
+
+  .erp-toolbar-filter-group > .relative:has(> input) > input {
+    width: 100% !important;
+  }
+
+  .erp-list-toolbar {
+    display: grid !important;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.5rem !important;
+  }
+
+  .erp-list-toolbar > * {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 !important;
+    order: 4;
+  }
+
+  /* The CTA is deliberately first and easy to reach with one thumb. */
+  .erp-list-toolbar > [data-toolbar-role="primary"],
+  .erp-list-toolbar > button[class~="bg-primary"] {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+
+  /* Search gets the full row before the narrower filters. */
+  .erp-list-toolbar > .relative:has(> input) {
+    grid-column: 1 / -1;
+    order: 2;
+  }
+
+  .erp-list-toolbar > .relative:has(> input) > input {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="filters"] {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.5rem;
+    order: 3;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="filters"] > label,
+  .erp-list-toolbar > [data-toolbar-role="filters"] > label > input {
+    min-width: 0;
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="filters"] > button {
+    grid-column: 1 / -1;
+    width: max-content;
+    justify-self: start;
+  }
+
+  /* Native and Radix filters share the same row priority. */
+  .erp-list-toolbar > [data-slot="select-trigger"],
+  .erp-list-toolbar > select {
+    order: 3;
+    width: 100% !important;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="layout"] {
+    order: 5;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="help"],
+  .erp-list-toolbar > [data-toolbar-role="print"],
+  .erp-list-toolbar > [data-toolbar-role="alerts"] {
+    order: 4;
+  }
+
+  .erp-list-toolbar > [data-toolbar-role="primary"] {
+    white-space: normal;
+  }
 }
 
 .finance-module table {

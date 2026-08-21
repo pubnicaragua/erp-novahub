@@ -48,6 +48,7 @@ export function PrintButton({
       <Button
         variant={variant}
         size={size}
+        data-toolbar-role="print"
         className={cn('gap-1.5', className)}
         disabled={disabled}
         onClick={() => onPrint('letter')}
@@ -68,6 +69,7 @@ export function PrintButton({
         <Button
           variant={variant}
           size={size}
+          data-toolbar-role="print"
           className={cn('gap-1.5', className)}
           disabled={disabled}
         >

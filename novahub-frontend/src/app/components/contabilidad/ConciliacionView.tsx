@@ -527,9 +527,6 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Conciliación Bancaria</h2>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">
-            {reconciliations.length} conciliación(es) registrada(s)
-          </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:gap-3">
           <div className="relative col-span-2 sm:col-span-1">

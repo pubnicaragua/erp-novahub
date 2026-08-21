@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 
@@ -48,8 +49,6 @@ interface SupplierImportPreviewProps {
   onDone: () => void;
 }
 
-const fieldClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-xs';
-
 export function SupplierImportPreview({
   rows,
   fileName,
@@ -75,8 +74,30 @@ export function SupplierImportPreview({
     return () => window.clearTimeout(timer);
   }, [result, onDone]);
 
+  const renderMobileCard = (row: SupplierImportRow, index: number) => (
+    <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row.error} warning={row.warning}>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+        <ImportPreviewField label="Código" className="sm:col-span-2">
+          <Input className={importPreviewFieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} />
+        </ImportPreviewField>
+        <ImportPreviewField label="Nombre *" className="sm:col-span-2">
+          <Input className={importPreviewFieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} />
+        </ImportPreviewField>
+        <ImportPreviewField label="RUC / identificación"><Input className={importPreviewFieldClass} value={row.taxId} onChange={(event) => onRowUpdate(index, 'taxId', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Contacto"><Input className={importPreviewFieldClass} value={row.contactName} onChange={(event) => onRowUpdate(index, 'contactName', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Correo"><Input className={importPreviewFieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Teléfono"><Input className={importPreviewFieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Dirección" className="sm:col-span-2"><Input className={importPreviewFieldClass} value={row.address} onChange={(event) => onRowUpdate(index, 'address', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Ciudad"><Input className={importPreviewFieldClass} value={row.city} onChange={(event) => onRowUpdate(index, 'city', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="País"><Input className={importPreviewFieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Condiciones de pago" className="sm:col-span-2"><Input className={importPreviewFieldClass} value={row.paymentTerms} placeholder="Contado / 30 días" onChange={(event) => onRowUpdate(index, 'paymentTerms', event.target.value)} disabled={importing} /></ImportPreviewField>
+        <ImportPreviewField label="Estado" className="sm:col-span-2"><select className={importPreviewFieldClass} value={row.status} onChange={(event) => onRowUpdate(index, 'status', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></ImportPreviewField>
+      </div>
+    </ImportPreviewMobileCard>
+  );
+
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" data-tour="supplier-import-title">
           <div className="min-w-0">
@@ -94,7 +115,7 @@ export function SupplierImportPreview({
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="proveedores" />
 
-        <div className="min-h-0 flex-1" data-tour="supplier-import-data">
+        <div className="hidden min-h-0 flex-1 sm:flex" data-tour="supplier-import-data">
         <HorizontalTableScroller className="h-full" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
@@ -118,17 +139,17 @@ export function SupplierImportPreview({
               {rows.map((row, index) => (
                 <TableRow key={index} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
-                  <TableCell><Input className={fieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.taxId} onChange={(event) => onRowUpdate(index, 'taxId', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.contactName} onChange={(event) => onRowUpdate(index, 'contactName', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.address} onChange={(event) => onRowUpdate(index, 'address', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.city} onChange={(event) => onRowUpdate(index, 'city', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.paymentTerms} placeholder="Contado / 30 días" onChange={(event) => onRowUpdate(index, 'paymentTerms', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><select className={fieldClass} value={row.status} onChange={(event) => onRowUpdate(index, 'status', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.code} placeholder="Automático" onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.taxId} onChange={(event) => onRowUpdate(index, 'taxId', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.contactName} onChange={(event) => onRowUpdate(index, 'contactName', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.address} onChange={(event) => onRowUpdate(index, 'address', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.city} onChange={(event) => onRowUpdate(index, 'city', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.country} onChange={(event) => onRowUpdate(index, 'country', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><Input className={importPreviewFieldClass} value={row.paymentTerms} placeholder="Contado / 30 días" onChange={(event) => onRowUpdate(index, 'paymentTerms', event.target.value)} disabled={importing} /></TableCell>
+                  <TableCell><select className={importPreviewFieldClass} value={row.status} onChange={(event) => onRowUpdate(index, 'status', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></TableCell>
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
                 </TableRow>
               ))}
@@ -137,6 +158,16 @@ export function SupplierImportPreview({
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
         </HorizontalTableScroller>
         </div>
+
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de proveedores para revisar">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un proveedor por tarjeta</p></div>
+            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+            {rows.length ? <div className="space-y-3">{rows.map(renderMobileCard)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          </div>
+        </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4" data-tour="supplier-import-actions">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>
@@ -157,7 +188,7 @@ export function SupplierImportPreview({
       <ImportProgressOverlay open={importing} progress={progress} title="Importando proveedores" description="Validando y guardando los registros. No cierres esta ventana." />
 
       <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="!max-w-[min(92vw,520px)]">
           <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 duration-500"><CheckCircle2 className="size-12 animate-pulse" /></div><DialogTitle className="text-xl">Importación completada</DialogTitle><DialogDescription>Los proveedores válidos ya fueron registrados.</DialogDescription></div></DialogHeader>
           <div className="grid grid-cols-3 gap-2 text-center"><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-emerald-500">{result?.created || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Creados</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-amber-500">{result?.warnings.length || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Avisos</p></div><div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-rose-500">{result?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div></div>
           {(result?.errors.length || result?.warnings.length) ? <div className="max-h-32 overflow-auto rounded-xl border p-3 text-xs text-muted-foreground"><p className="font-bold text-foreground">Detalles</p>{[...(result?.errors || []), ...(result?.warnings || [])].slice(0, 8).map((item, index) => <p key={index} className="mt-1">• {item}</p>)}</div> : null}

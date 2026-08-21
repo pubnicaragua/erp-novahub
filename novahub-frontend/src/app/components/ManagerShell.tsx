@@ -40,6 +40,7 @@ import {
   FileText,
   ClipboardList,
   CalendarDays,
+  CircleDollarSign,
   Receipt,
   Repeat2,
   CreditCard,
@@ -56,6 +57,7 @@ import { safeGetItem, safeSetItem } from "../services/safe-storage";
 import { Button } from "./ui/button";
 import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
+import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -408,6 +410,8 @@ type ManagerShellProps = {
   onHrViewChange: (view: ManagerHrView) => void;
   selectedBranchId: string;
   onBranchChange: (branchId: string) => void;
+  reportCurrency: string;
+  onReportCurrencyChange: (currency: string) => void;
   allowedSections?: ManagerSection[];
 };
 
@@ -436,6 +440,8 @@ export function ManagerShell({
   onHrViewChange,
   selectedBranchId,
   onBranchChange,
+  reportCurrency,
+  onReportCurrencyChange,
   allowedSections,
 }: ManagerShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -671,6 +677,40 @@ export function ManagerShell({
                 </select>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {(section === "sales" || section === "purchases") && (
+                  <div className="hidden items-center gap-0.5 rounded-xl border border-border bg-background p-0.5 md:flex" title="Moneda de referencia de ventas">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onReportCurrencyChange(reportCurrency === "USD" ? "NIO" : "USD")}
+                      className="h-8 gap-2 rounded-lg px-2.5 hover:bg-muted"
+                      title={`Cambiar moneda de referencia · ${formatCurrencyDescriptor(reportCurrency)}`}
+                    >
+                      {reportCurrency === "USD" ? <CircleDollarSign className="size-4 text-emerald-500" /> : <Wallet className="size-4 text-orange-500" />}
+                      <span className="text-xs font-bold">{getCurrencyMetadata(reportCurrency).code}</span>
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Cambiar moneda de referencia" title="Cambiar moneda de referencia">
+                          <ChevronDown className="size-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64 rounded-xl border-border/60 p-2">
+                        <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de referencia</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => onReportCurrencyChange("NIO")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                          <Wallet className="size-4 text-orange-500" />
+                          <span className="flex-1">{formatCurrencyDescriptor("NIO")}</span>
+                          {reportCurrency === "NIO" && <span className="text-primary">Activo</span>}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onReportCurrencyChange("USD")} className="gap-2 rounded-lg p-2.5 text-xs font-bold">
+                          <CircleDollarSign className="size-4 text-emerald-500" />
+                          <span className="flex-1">{formatCurrencyDescriptor("USD")}</span>
+                          {reportCurrency === "USD" && <span className="text-primary">Activo</span>}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1109,9 +1149,6 @@ function ManagerThemeSettings({
         <h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">
           Configuración
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Personaliza únicamente la experiencia de la vista Manager.
-        </p>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="space-y-6">

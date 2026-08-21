@@ -154,11 +154,85 @@ export interface ManagerSalesModuleResponse {
   metrics: Record<string, any>;
 }
 
+export interface ManagerPdfDesign {
+  id?: string;
+  name?: string;
+  documentTypes?: string[];
+  settings?: Record<string, any>;
+  layoutZones?: Record<string, any> | null;
+  sourceType?: string;
+  engine?: string;
+  templateKey?: string | null;
+}
+
+export interface ManagerCustomerDetailResponse {
+  customer: any;
+  invoices: any[];
+  transactions: Array<{
+    id: string;
+    kind: string;
+    number?: string | null;
+    date?: string | null;
+    status?: string | null;
+    amount?: number;
+    currency?: string | null;
+    exchangeRate?: number;
+    reportAmount?: number | null;
+    reportCurrency?: string | null;
+    reportRate?: number | null;
+    reportRateLabel?: string | null;
+    reportRateSource?: string | null;
+    reportRateEffectiveAt?: string | null;
+    description?: string | null;
+  }>;
+  duplicateCustomers: Array<any>;
+}
+
+export interface ManagerCustomerTransactionsResponse {
+  customer: any;
+  transactions: ManagerCustomerDetailResponse['transactions'];
+}
+
+export interface ManagerQuoteDetailResponse {
+  quote: any & { pdfDesign?: ManagerPdfDesign | null };
+  history: any[];
+}
+
+export interface ManagerSalesDocumentDetailResponse {
+  document: any & { pdfDesign?: ManagerPdfDesign | null };
+  history: any[];
+}
+
+export interface ManagerSalesDeliveryDetailResponse {
+  delivery: any & { pdfDesign?: ManagerPdfDesign | null };
+  history: any[];
+}
+
+export interface ManagerSalesCashSessionDetailResponse {
+  session: any & { pdfDesign?: ManagerPdfDesign | null };
+  invoices: any[];
+  log: any[];
+  countAttempts: any[];
+  deficitCharges: any[];
+  history: any[];
+}
+
+export interface ManagerSalesPriceListDetailResponse {
+  priceList: any & { pdfDesign?: ManagerPdfDesign | null };
+  items: any[];
+  history: any[];
+}
+
 export interface ManagerPurchasesModuleResponse {
   view: string;
   data: any[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: Record<string, any>;
+}
+
+export interface ManagerPurchasesDocumentDetailResponse {
+  document: any & { pdfDesign?: ManagerPdfDesign | null };
+  history: any[];
 }
 
 export interface ManagerFinanceModuleResponse {
@@ -366,6 +440,7 @@ export const enterpriseGroupsService = {
       search?: string;
       dateFrom?: string;
       dateTo?: string;
+      reportCurrency?: string;
       page?: number;
       pageSize?: number;
       report?: boolean;
@@ -413,12 +488,57 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      reportCurrency?: string;
+      registerId?: string;
+      deliveryBranchId?: string;
+      paymentStatus?: string;
+      priceListMode?: 'lists' | 'prices';
     },
     signal?: AbortSignal,
   ) =>
     api.get<ManagerSalesModuleResponse>(
       `/enterprise-groups/manager/${groupId}/sales/module`,
       { params, signal },
+    ),
+  getPurchasesDocumentDetail: (groupId: string, entity: string, recordId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerPurchasesDocumentDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/purchases/documents/${entity}/${recordId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesCustomerDetail: (groupId: string, customerId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerCustomerDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/customers/${customerId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesCustomerTransactions: (groupId: string, customerId: string, reportCurrency?: string) =>
+    api.get<ManagerCustomerTransactionsResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/customers/${customerId}/transactions`,
+      { params: reportCurrency ? { reportCurrency } : undefined },
+    ),
+  getSalesQuoteDetail: (groupId: string, quoteId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerQuoteDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/quotes/${quoteId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesDocumentDetail: (groupId: string, entity: string, recordId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerSalesDocumentDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/documents/${entity}/${recordId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesDeliveryDetail: (groupId: string, deliveryId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerSalesDeliveryDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/deliveries/${deliveryId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesCashSessionDetail: (groupId: string, sessionId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerSalesCashSessionDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/cash-sessions/${sessionId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
+    ),
+  getSalesPriceListDetail: (groupId: string, priceListId: string, reportCurrency?: string, signal?: AbortSignal) =>
+    api.get<ManagerSalesPriceListDetailResponse>(
+      `/enterprise-groups/manager/${groupId}/sales/price-lists/${priceListId}`,
+      { params: reportCurrency ? { reportCurrency } : undefined, signal },
     ),
   getPurchasesModule: (
     groupId: string,
@@ -435,6 +555,7 @@ export const enterpriseGroupsService = {
       page?: number;
       pageSize?: number;
       report?: boolean;
+      reportCurrency?: string;
     },
     signal?: AbortSignal,
   ) =>
@@ -452,6 +573,7 @@ export const enterpriseGroupsService = {
       search?: string;
       dateFrom?: string;
       dateTo?: string;
+      reportCurrency?: string;
       page?: number;
       pageSize?: number;
       report?: boolean;

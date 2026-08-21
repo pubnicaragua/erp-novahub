@@ -270,7 +270,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             <option value="PAID">Pagado</option>
           </select>
         </div>
-        <div className="flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-payroll-actions">
           <Button variant="outline" size="sm" onClick={handleExportPDF}>
             <Download className="size-4 mr-2" />
             Descargar PDF
@@ -294,7 +294,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
             </label>
           </div>
           {canPerform('HR_PAYROLL', 'create') && (
-            <Button size="sm" onClick={handleProcessPayroll} className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
+            <Button size="sm" onClick={handleProcessPayroll} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 !text-primary-foreground" data-tour="nominas-process">
               <Calculator className="size-4 mr-2" />
               Procesar Nómina
             </Button>

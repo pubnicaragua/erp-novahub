@@ -49,7 +49,6 @@ import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 import { getPasswordError } from '../utils/accountValidation';
 import { playNotificationSound } from '../utils/notificationSound';
 import { useImpersonation } from '../contexts/ImpersonationContext';
-import { BrandLogo } from './BrandLogo';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -91,14 +90,6 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     : user?.isPlatformAdmin
       ? 'NovaHub Platform'
       : (user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'Nova Hub');
-  const workspaceLogo = isBranchManagerSession
-    ? (branch?.logo ?? user?.sessionBranding?.logo ?? user?.clientTenant?.logo)
-    : (user?.isPlatformAdmin ? null : (user?.sessionBranding?.logo ?? user?.clientTenant?.logo));
-  const workspaceKind: 'group' | 'branch' | 'platform' = isBranchManagerSession
-    ? 'branch'
-    : user?.isPlatformAdmin
-      ? 'platform'
-      : (user?.sessionBranding?.kind || (user?.clientTenant ? 'branch' : 'group'));
   const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
   const showSupervisorNotice = Boolean(
     isBranchManagerSession
@@ -401,15 +392,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
 
       {/* Search */}
       <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
-        {/* Tenancy Indicator */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/30 border border-border/50">
-          <BrandLogo
-            src={workspaceLogo}
-            alt={`Logo de ${workspaceName || 'tu espacio de trabajo'}`}
-            kind={workspaceKind}
-            className="size-6 rounded-md bg-primary/10 ring-0"
-            imageClassName="rounded-md"
-          />
+        {/* Tenancy Indicator: el logo vive únicamente en el Sidebar. */}
+        <div className="hidden min-w-0 items-center gap-2 rounded-full border border-border/50 bg-muted/30 px-3 py-1.5 sm:flex">
           <span className="max-w-[150px] truncate text-xs font-medium">{workspaceName}</span>
           {isBranchManagerSession
             ? <Badge className="border-amber-500/20 bg-amber-500/10 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400">Modo supervisor</Badge>

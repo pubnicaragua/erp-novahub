@@ -617,7 +617,6 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary">Nueva auditoría</p>
               <h2 className="truncate text-xl font-black uppercase tracking-tight sm:text-2xl">Acta de inspección · Inventario selectivo</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Registra el conteo físico y deja el respaldo de la inspección.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2" data-tour="inventory-audit-form-actions">
@@ -791,9 +790,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2" data-tour="inventory-audits-actions">
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="inventory-audits-actions">
         <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, almacenes y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
-        <Button onClick={() => setIsCreating(true)} className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+        <Button onClick={() => setIsCreating(true)} data-toolbar-role="primary" className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
           <Plus className="size-4" /> Nueva Auditoría
         </Button>
         </div>
@@ -942,7 +941,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       )}
 
       <Dialog open={!!detailAudit} onOpenChange={(open) => { if (!open) setDetailAudit(null); }}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl min-w-0 max-h-[85vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100vw-1rem)] !max-w-3xl min-w-0 max-h-[85vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader data-tour="inventory-audit-detail-title">
             <DialogTitle className="text-lg font-black uppercase tracking-tight">
               {detailAudit?.number} · Acta de Inspección

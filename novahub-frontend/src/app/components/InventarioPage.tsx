@@ -395,7 +395,6 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
               Inventario <span className="text-primary">de Mercancías</span>
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">Gestiona existencias, precios, almacenes y movimientos en un solo lugar.</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 {productItems.length} productos · {serviceItems.length} servicios · {data.warehouses.length} almacenes

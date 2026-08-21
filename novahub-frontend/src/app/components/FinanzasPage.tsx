@@ -594,7 +594,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
                     title="Ingresos"
-                    subtitle="Datos consolidados de ingresos. Los registros automáticos (Ventas) son solo lectura."
                     data={groupedIncomeRows.map((i: any) => ({ ...i, isPayment: !['Manual', 'manual', '', null, undefined].includes(i.source) }))}
                     columns={INCOME_COLUMNS}
                     onUpdate={handleUpdateIncome}
@@ -615,7 +614,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                   <FinanceTableView 
                     title="Gastos"
-                    subtitle="Datos consolidados de egresos. Los registros automáticos (Compras, Nómina) son solo lectura."
                     data={fExpenses.map((e: any) => ({ ...e, isPayment: !['Manual', 'manual', '', null, undefined].includes(e.source) }))}
                     columns={EXPENSE_COLUMNS}
                     onUpdate={handleUpdateExpense}

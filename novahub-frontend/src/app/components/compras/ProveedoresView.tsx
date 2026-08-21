@@ -459,9 +459,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Proveedores</h2>
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Directorio de proveedores y aliados</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
             <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de proveedores" />
@@ -552,7 +551,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       />
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(null); } setImportOpen(open); }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
           <DialogHeader data-tour="supplier-import-modal-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import-modal" /></DialogHeader>
           <div className="space-y-4" data-tour="supplier-import-modal-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código es opcional y se genera automáticamente si lo dejas vacío. Los códigos, correos e identificaciones repetidas se marcarán como errores. Podrás editar cada fila antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>

@@ -183,8 +183,8 @@ export function SuspendedSalesPanel({
                           {hold.notes && <p><span className="font-black uppercase tracking-wider text-[9px]">Observaciones:</span> <span className="font-bold text-foreground">{hold.notes}</span></p>}
                         </div>
                       </div>
-                      <div className="mt-3 overflow-hidden rounded-lg border border-border/40">
-                        <table className="w-full text-[11px]">
+                      <div className="mt-3 overflow-x-auto rounded-lg border border-border/40">
+                        <table className="w-full min-w-[520px] text-[11px] md:min-w-0">
                           <thead>
                             <tr className="bg-muted/30 border-b border-border/30">
                               <th className="px-3 py-1.5 text-left font-black uppercase tracking-widest text-[9px] text-muted-foreground">Producto</th>

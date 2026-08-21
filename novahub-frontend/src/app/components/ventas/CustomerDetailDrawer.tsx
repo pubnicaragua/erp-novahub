@@ -25,9 +25,9 @@ import {
   Activity,
   Link2,
   Copy,
+  Download,
   RefreshCcw,
   X,
-  FileDown,
   TrendingUp,
   Banknote,
 } from 'lucide-react';
@@ -71,11 +71,16 @@ import {
 } from '../../services/ventas.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { exportCustomerTransactionsExcel, exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { toast } from 'sonner';
 import type { Customer, Invoice } from '../../types';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -100,6 +105,15 @@ type RelatedTransaction = {
 const unwrapList = (response: any): any[] => {
   const value = response?.data?.data ?? response?.data ?? response;
   return Array.isArray(value) ? value : [];
+};
+
+const fetchAllCustomerRecords = async (fetcher: (filters: any) => Promise<any>, customerId: string) => {
+  const first = await fetcher({ customerId, page: 1, pageSize: 5000, report: true });
+  const totalPages = Math.max(1, Number(first?.meta?.totalPages || 1));
+  const remaining = totalPages > 1
+    ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => fetcher({ customerId, page: index + 2, pageSize: 5000, report: true })))
+    : [];
+  return [first, ...remaining].flatMap(unwrapList);
 };
 
 const getInvoiceStatusInfo = (status?: string) => {
@@ -169,6 +183,7 @@ export function CustomerDetailDrawer({
 }: CustomerDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -182,6 +197,7 @@ export function CustomerDetailDrawer({
   const [publicLinks, setPublicLinks] = useState<any[]>([]);
   const [publicLinksLoading, setPublicLinksLoading] = useState(false);
   const [creatingPortalLink, setCreatingPortalLink] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
 
   useEffect(() => {
     if (!customerId) {
@@ -246,15 +262,14 @@ export function CustomerDetailDrawer({
 
     setLoadingRelated(true);
     (async () => {
-      const filter = { customerId, pageSize: 50 } as any;
       const results = await Promise.allSettled([
-        estimatesService.getAll(filter),
-        salesOrdersService.getAll(filter),
-        invoicesService.getAll(filter),
-        paymentsService.getAll(filter),
-        recurringInvoicesService.getAll(filter),
-        salesReturnsService.getAll(filter),
-        creditNotesService.getAll(filter),
+        fetchAllCustomerRecords((filter) => estimatesService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => salesOrdersService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => invoicesService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => paymentsService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => recurringInvoicesService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => salesReturnsService.getAll(filter), customerId),
+        fetchAllCustomerRecords((filter) => creditNotesService.getAll(filter), customerId),
       ]);
       if (cancelled) return;
 
@@ -305,6 +320,31 @@ export function CustomerDetailDrawer({
   const creditLimit = Number(customer?.creditLimit ?? 0);
   const balance = Number(customer?.balance ?? 0);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
+
+  const downloadHistory = async (exportFormat: 'xlsx' | 'pdf') => {
+    if (!customer?.id) return;
+    setExportingHistory(true);
+    try {
+      if (!relatedTransactions.length) {
+        toast.info('Este cliente todavía no tiene transacciones para descargar.');
+        return;
+      }
+      const options = {
+        rows: relatedTransactions,
+        customerName: customer.name || 'Cliente',
+        branchName: customer.branchName,
+        tenantName: user?.tenantName || 'Empresa',
+        tenantLogo: themeConfig?.logo,
+        primaryColor: themeConfig?.colors?.primary,
+      };
+      if (exportFormat === 'pdf') await exportCustomerTransactionsPdf(options);
+      else await exportCustomerTransactionsExcel(options);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el historial del cliente.');
+    } finally {
+      setExportingHistory(false);
+    }
+  };
 
   const toBaseValue = (value: number, currency?: string, exchangeRate?: number) => {
     const amount = Number(value || 0);
@@ -610,7 +650,7 @@ export function CustomerDetailDrawer({
                       </h3>
                       <p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y demás operaciones relacionadas con este cliente.</p>
                     </div>
-                    <Badge variant="outline" className="shrink-0 text-[9px] font-black">{relatedTransactions.length}</Badge>
+                    <div className="flex items-center gap-2"><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-[10px] font-bold" disabled={loadingRelated || exportingHistory}>{exportingHistory ? <RefreshCcw className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Descargar historial</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48 rounded-xl p-1.5"><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => void downloadHistory('xlsx')}><FileText className="size-3.5 text-primary" /> Excel (.xlsx)</DropdownMenuItem><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => void downloadHistory('pdf')}><FileText className="size-3.5 text-primary" /> PDF (.pdf)</DropdownMenuItem></DropdownMenuContent></DropdownMenu><Badge variant="outline" className="shrink-0 text-[9px] font-black">{relatedTransactions.length}</Badge></div>
                   </div>
                   {loadingRelated ? (
                     <div className="mt-4 space-y-2">
@@ -736,18 +776,19 @@ interface InvoiceInlineDetailProps {
 
 function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: InvoiceInlineDetailProps) {
   const statusInfo = getInvoiceStatusInfo(invoice.status);
-  const handleDownloadPdf = async () => {
-    const pdfToastId = toast.loading('Generando PDF de la factura...');
+  const handleDownloadPdf = async (format: PdfDownloadFormat) => {
+    const previewToastId = toast.loading('Preparando la previsualización de la factura...');
     try {
-      await generateEstimatePDF({
-        estimate: invoice as any,
+      await previewSalesTransactionPDF({
+        document: invoice as any,
         tenantName: tenantName || 'Empresa',
         formatAmount: formatAmount as any,
-        documentType: 'invoice' as any,
+        documentType: 'invoice',
+        format,
       });
-      toast.success('PDF descargado', { id: pdfToastId });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo descargar el PDF', { id: pdfToastId });
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
     }
   };
   return (
@@ -761,9 +802,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{invoice.number}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" title="Descargar detalle de la factura en PDF" aria-label="Descargar detalle de la factura en PDF" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={handleDownloadPdf}>
-            <FileDown className="size-4" />
-          </Button>
+          <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />
           <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
             <X className="size-4" />
           </Button>

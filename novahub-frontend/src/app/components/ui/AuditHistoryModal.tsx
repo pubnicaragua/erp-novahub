@@ -15,6 +15,7 @@ interface AuditHistoryModalProps {
   entityId: string;
   title?: string;
   presentation?: 'dialog' | 'inline';
+  logs?: any[];
 }
 
 const actionColors: Record<string, string> = {
@@ -183,7 +184,7 @@ const detailValueLabels: Record<string, string> = {
   BULK_IMPORT: 'Importación masiva',
 };
 
-export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios', presentation = 'dialog' }: AuditHistoryModalProps) {
+export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios', presentation = 'dialog', logs: providedLogs }: AuditHistoryModalProps) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -201,6 +202,10 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
   };
 
   useEffect(() => {
+    if (providedLogs !== undefined) {
+      setLoading(false);
+      return;
+    }
     if (isOpen && entity && entityId) {
       const load = async () => {
         setLoading(true);
@@ -208,7 +213,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       };
       load();
     }
-  }, [isOpen, entity, entityId]);
+  }, [isOpen, entity, entityId, providedLogs]);
 
   const parseDetails = (details: string | null) => {
     if (!details) return null;
@@ -242,7 +247,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
-      ) : logs.length === 0 ? (
+      ) : (providedLogs ?? logs).length === 0 ? (
         <div className="text-center py-12 border border-dashed border-border/50 rounded-2xl bg-muted/10">
           <History className="size-8 mx-auto text-muted-foreground/20 mb-3" />
           <p className="text-xs font-bold text-muted-foreground">No hay registros de auditoría para este elemento.</p>
@@ -250,7 +255,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
       ) : (
         <ScrollArea className="h-[400px] pr-4">
           <div className="space-y-4">
-            {logs.map((log) => {
+            {(providedLogs ?? logs).map((log) => {
               const detailsObj = parseDetails(log.details);
               return (
                 <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">

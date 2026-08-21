@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
 } from 'lucide-react';
@@ -18,14 +18,12 @@ import { Combobox } from '../ui/Combobox';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { generateEstimatePDF } from '../../utils/pdfGenerator';
+import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { getMissingSalesPriceMessage } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -275,52 +273,20 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
-  const handleExportPDF = async (row: SalesReturn) => {
-    const pdfToastId = toast.loading('Generando PDF de la nota de crédito...');
+  const handleExportPDF = async (row: SalesReturn, format: PdfDownloadFormat = 'configured') => {
+    const previewToastId = toast.loading('Preparando la previsualización de la nota de crédito...');
     try {
       const tenantName = user?.tenantName || 'Mi Empresa';
-      await generateEstimatePDF({
-        estimate: { ...row, number: row.number, customer: row.customer },
+      await previewSalesTransactionPDF({
+        document: { ...row, number: row.number, customer: row.customer },
         tenantName,
         formatAmount: formatConvertedAmount,
         documentType: 'return',
+        format,
       });
-      toast.success('PDF generado exitosamente', { id: pdfToastId });
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al generar PDF', { id: pdfToastId }); }
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo abrir la previsualización', { id: previewToastId }); }
   };
-
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Notas de Crédito',
-      columns: [
-        { key: 'number', label: 'Nº Nota', align: 'left' },
-        { key: 'customerName', label: 'Cliente', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${formatSalesAmount(v)}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        customerName: item.customer?.name || 'Cliente',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-        'Fecha desde': dateFrom || 'Sin filtro',
-        'Fecha hasta': dateTo || 'Sin filtro',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Notas de Crédito',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, dateFrom, dateTo, printContent, user?.tenantName]);
 
   const buildReturnPanel = (row: SalesReturn): SalesDocumentPanelData => ({
     id: row.id,
@@ -543,17 +509,16 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Notas de Crédito</h2>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">Retornos totales o parciales, inventario y saldo a favor.</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            </div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="returns" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de notas de crédito" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_RETURNS', 'create') && (
-              <Button onClick={startNew} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
+              <Button onClick={startNew} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
                 <Plus className="size-4" /> Nueva Nota</Button>
             )}
           </div>
@@ -592,32 +557,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           setDetailReturn(null);
           startEdit(detailReturn.id);
         }}
-        onDownloadPdf={() => { if (detailReturn) void handleExportPDF(detailReturn); }}
-        onPrintDocument={() => {
-          if (!detailReturn) return;
-          const document = buildReturnPanel(detailReturn);
-          const html = generateTableHtml({
-            title: document.title,
-            columns: [
-              { key: 'description', label: 'Descripción', align: 'left' },
-              { key: 'quantity', label: 'Cantidad', align: 'center' },
-              { key: 'unitPriceLabel', label: 'Precio Unit.', align: 'right' },
-              { key: 'totalLabel', label: 'Total', align: 'right' },
-            ],
-            rows: (document.lines || []).map((line) => ({
-              description: line.description || '',
-              quantity: Number(line.quantity || 0),
-              unitPriceLabel: line.unitPriceLabel || '',
-              totalLabel: line.totalLabel || '',
-            })),
-          });
-          printContent(html, {
-            title: `${document.title} ${document.number || ''}`,
-            paperSize: 'letter',
-            companyName: user?.tenantName || 'Empresa',
-            logoUrl: themeConfig?.logo,
-          });
-        }}
+        onDownloadPdf={(format) => { if (detailReturn) void handleExportPDF(detailReturn, format); }}
       />
 
       <ConfirmDialog

@@ -1636,7 +1636,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
           {/* Role Edit Dialog */}
           <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-            <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] overflow-hidden p-0 rounded-3xl border-none flex flex-col">
+            <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[min(94vw,1200px)] max-h-[90vh] overflow-hidden p-0 rounded-3xl border-none flex flex-col">
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10 flex-shrink-0">
                 <div>
                   <DialogTitle className="text-lg font-black">{editingRole?.id ? 'Editar Rol' : 'Nuevo Rol'}</DialogTitle>
@@ -1670,7 +1670,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                 </div>
                 
                 <div className="flex-1 rounded-2xl border border-border/40 overflow-hidden flex flex-col min-h-0 relative">
-                  <div className="overflow-y-auto overflow-x-hidden flex-1" style={{ contain: 'paint' }}>
+                  <div className="min-w-0 flex-1 overflow-auto" style={{ contain: 'paint' }}>
                     <table className="w-max min-w-[1900px] text-sm">
                       <thead className="bg-muted/95 backdrop-blur-md sticky top-0 z-[50] shadow-sm border-b border-border/50">
                         <tr>

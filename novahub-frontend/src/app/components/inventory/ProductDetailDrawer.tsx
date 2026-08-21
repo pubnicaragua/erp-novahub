@@ -1058,7 +1058,7 @@ export function ProductDetailDrawer({
         </div>
         </Tabs>
         <Dialog open={expandedImageOpen} onOpenChange={setExpandedImageOpen}>
-          <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl border-0 bg-transparent p-2 shadow-none">
+          <DialogContent className="w-[calc(100vw-2rem)] !max-w-4xl border-0 bg-transparent p-2 shadow-none">
             <DialogTitle className="sr-only">Imagen del producto</DialogTitle>
             {product?.imageUrl && (
               <img

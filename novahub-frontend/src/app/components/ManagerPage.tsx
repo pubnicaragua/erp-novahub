@@ -78,6 +78,7 @@ export function ManagerPage() {
   const [transferToApprove, setTransferToApprove] = useState<any | null>(null);
   const [selectedBusinessUnitId, setSelectedBusinessUnitId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [managerReportCurrency, setManagerReportCurrency] = useState('');
   const [warehouseName, setWarehouseName] = useState('');
   const [warehouseLocation, setWarehouseLocation] = useState('');
   const [warehouseBusinessUnitId, setWarehouseBusinessUnitId] = useState('');
@@ -119,7 +120,7 @@ export function ManagerPage() {
     [group?.branches, selectedBusinessUnitId],
   );
   const allowedSections = useMemo(() => getAllowedManagerSections(group?.managerAccess), [group?.managerAccess]);
-  const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS'), [group?.managerAccess]);
+  const canEnterBranch = useMemo(() => Boolean(group?.managerAccess?.canEdit) || managerAccessAllows(group?.managerAccess, 'BRANCH_OPERATIONS') || managerAccessAllows(group?.managerAccess, 'MANAGER_SALES'), [group?.managerAccess]);
   const canEditBranchUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_USERS', 'edit'), [group?.managerAccess]);
   const canManageManagersFromUsers = useMemo(() => managerAccessAllowsAction(group?.managerAccess, 'MANAGER_MANAGERS', 'manage'), [group?.managerAccess]);
 
@@ -132,6 +133,10 @@ export function ManagerPage() {
     if (selectedBranchId && !branchOptions.some((branch) => branch.id === selectedBranchId)) setSelectedBranchId('');
     if (!allowedSections.includes(section) && allowedSections[0]) setSection(allowedSections[0]);
   }, [groupId, selectedBusinessUnitId, selectedBranchId, businessUnits, branchOptions, allowedSections, section]);
+
+  useEffect(() => {
+    setManagerReportCurrency('');
+  }, [groupId]);
 
   const overviewQuery = useTenantQuery(
     ['manager-overview', groupId, selectedBranchId || 'all'],
@@ -327,10 +332,12 @@ export function ManagerPage() {
       allowedSections={allowedSections}
       selectedBranchId={selectedBranchId}
       onBranchChange={setSelectedBranchId}
+      reportCurrency={managerReportCurrency || group?.consolidationCurrency || 'NIO'}
+      onReportCurrencyChange={setManagerReportCurrency}
     >
       <div className="min-w-0 space-y-6">
         {section !== 'inventory' && section !== 'sales' && section !== 'purchases' && section !== 'finances' && section !== 'accounting' && section !== 'reports' && section !== 'hr' && <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2><p className="mt-2 text-sm text-muted-foreground">Consolidado por grupo, rubro, sucursal y ubicación.</p></div>
+          <div className="min-w-0"><h2 className="truncate text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">{activeTitle}</h2></div>
           <Button variant="outline" className="w-fit shrink-0 rounded-xl" onClick={() => downloadCsv(`manager-${section}.csv`, (overview?.branches || []).map((branch) => ({ sucursal: branch.name, usuarios: branch._count.users, productos: branch._count.products, almacenes: branch._count.warehouses })))}><Download className="mr-2 size-4" /> Exportar Excel/CSV</Button>
         </div>}
 
@@ -340,9 +347,9 @@ export function ManagerPage() {
         {!loading && groupId && !allowedSections.includes(section) && <Card className="rounded-3xl border-dashed"><CardContent className="p-10 text-center text-muted-foreground">Este acceso Manager no tiene permisos para esta vista.</CardContent></Card>}
         {!loading && groupId && section === 'overview' && allowedSections.includes('overview') && <OverviewContent overview={overview} groupId={groupId} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
         {section === 'inventory' && allowedSections.includes('inventory') && <ManagerInventoryModule view={inventoryView} onViewChange={setInventoryView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} warehouses={scopedWarehouses} canCreateTransfers={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} corporateWarehouseContent={<WarehouseContent overview={overview} units={group?.businessUnits || []} name={warehouseName} location={warehouseLocation} businessUnitId={warehouseBusinessUnitId} branchIds={warehouseBranchIds} setName={setWarehouseName} setLocation={setWarehouseLocation} setBusinessUnitId={(value) => { setWarehouseBusinessUnitId(value); setWarehouseBranchIds([]); }} setBranchIds={setWarehouseBranchIds} onCreate={() => warehouseMutation.mutate()} creating={warehouseMutation.isPending} onSyncCatalog={(warehouseId) => syncWarehouseCatalogMutation.mutate(warehouseId)} syncingCatalogId={syncWarehouseCatalogMutation.isPending ? String(syncWarehouseCatalogMutation.variables || '') : ''} />} />}
-        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
-        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
-        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
+        {section === 'sales' && allowedSections.includes('sales') && <ManagerSalesModule view={salesView} onViewChange={setSalesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
+        {section === 'purchases' && allowedSections.includes('purchases') && <ManagerPurchasesModule view={purchasesView} onViewChange={setPurchasesView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} onEnterBranch={enterBranch} canEnterBranch={canEnterBranch} />}
+        {section === 'finances' && allowedSections.includes('finances') && <ManagerFinanceModule view={financeView} onViewChange={setFinanceView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} reportCurrency={managerReportCurrency} />}
         {section === 'accounting' && allowedSections.includes('accounting') && <ManagerAccountingModule view={accountingView} onViewChange={setAccountingView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}

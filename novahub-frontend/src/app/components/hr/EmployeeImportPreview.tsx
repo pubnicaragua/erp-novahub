@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { HRViewTutorial } from './HRViewTutorial';
 
@@ -73,8 +74,6 @@ type EmployeeImportPreviewProps = {
   onDone: () => void;
 };
 
-const fieldClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-xs';
-
 const contractOptions = [
   ['FULL_TIME', 'Tiempo completo'],
   ['PART_TIME', 'Medio tiempo'],
@@ -82,6 +81,8 @@ const contractOptions = [
   ['INTERN', 'Pasante'],
   ['TEMPORARY', 'Temporal'],
 ];
+
+const fieldClass = importPreviewFieldClass;
 
 export function EmployeeImportPreview({
   rows,
@@ -120,8 +121,50 @@ export function EmployeeImportPreview({
     return () => window.clearTimeout(timer);
   }, [result, onDone]);
 
+  const renderMobileCard = (row: EmployeeImportRow, index: number) => {
+    const rowPositions = positions.filter((position: any) => !row.departmentId || position.departmentId === row.departmentId);
+    return (
+      <ImportPreviewMobileCard index={index} title={[row.firstName, row.lastName].filter(Boolean).join(' ') || row.employeeNumber} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <ImportPreviewField label="N.º empleado *"><Input className={importPreviewFieldClass} value={row.employeeNumber} onChange={(event) => onRowUpdate(index, 'employeeNumber', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Cédula"><Input className={importPreviewFieldClass} value={row.nationalId} onChange={(event) => onRowUpdate(index, 'nationalId', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Nombres *"><Input className={importPreviewFieldClass} value={row.firstName} onChange={(event) => onRowUpdate(index, 'firstName', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Apellidos *"><Input className={importPreviewFieldClass} value={row.lastName} onChange={(event) => onRowUpdate(index, 'lastName', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Correo *" className="sm:col-span-2"><Input className={importPreviewFieldClass} type="email" value={row.email} onChange={(event) => onRowUpdate(index, 'email', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Teléfono"><Input className={importPreviewFieldClass} value={row.phone} onChange={(event) => onRowUpdate(index, 'phone', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Contratación *"><Input className={importPreviewFieldClass} type="date" value={row.hireDate} onChange={(event) => onRowUpdate(index, 'hireDate', event.target.value)} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Departamento *" className="sm:col-span-2">
+            <div className="flex min-w-0 items-center gap-1">
+              <select className={importPreviewFieldClass} value={row.departmentId || ''} onChange={(event) => onRowUpdate(index, 'departmentId', event.target.value)} disabled={importing}>
+                <option value="">{row.department ? `No encontrado: ${row.department}` : 'Seleccionar departamento'}</option>
+                {row.departmentId && !departments.some((department: any) => String(department.id) === String(row.departmentId)) && <option value={row.departmentId}>{row.department} (creado)</option>}
+                {departments.map((department: any) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+              {canCreateCatalogs && !row.departmentId && row.department && <Button type="button" size="icon" variant="outline" className="size-9 shrink-0 rounded-lg" title="Crear departamento" aria-label="Crear departamento" onClick={() => { setDepartmentRowIndex(index); setDepartmentName(row.department); }} disabled={importing}><Plus className="size-3.5" /></Button>}
+            </div>
+          </ImportPreviewField>
+          <ImportPreviewField label="Puesto *" className="sm:col-span-2">
+            <div className="flex min-w-0 items-center gap-1">
+              <select className={importPreviewFieldClass} value={row.positionId || ''} onChange={(event) => onRowUpdate(index, 'positionId', event.target.value)} disabled={importing || !row.departmentId}>
+                <option value="">{row.position ? `No encontrado: ${row.position}` : 'Seleccionar puesto'}</option>
+                {row.positionId && !positions.some((position: any) => String(position.id) === String(row.positionId)) && <option value={row.positionId}>{row.position} (creado)</option>}
+                {rowPositions.map((position: any) => <option key={position.id} value={position.id}>{position.title}</option>)}
+              </select>
+              {canCreateCatalogs && !row.positionId && row.position && row.departmentId && <Button type="button" size="icon" variant="outline" className="size-9 shrink-0 rounded-lg" title="Crear puesto" aria-label="Crear puesto" onClick={() => { setPositionRowIndex(index); setPositionTitle(row.position); setPositionDepartmentId(row.departmentId || ''); }} disabled={importing}><Plus className="size-3.5" /></Button>}
+            </div>
+          </ImportPreviewField>
+          <ImportPreviewField label="Tipo de contrato"><select className={importPreviewFieldClass} value={row.contractType} onChange={(event) => onRowUpdate(index, 'contractType', event.target.value)} disabled={importing}>{contractOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label="Salario *"><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.salary} onChange={(event) => onRowUpdate(index, 'salary', event.target.value === '' ? '' : Number(event.target.value))} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Moneda"><select className={importPreviewFieldClass} value={row.currency} onChange={(event) => onRowUpdate(index, 'currency', event.target.value)} disabled={importing}><option value="NIO">NIO</option><option value="USD">USD</option></select></ImportPreviewField>
+          <ImportPreviewField label="Estado"><select className={importPreviewFieldClass} value={row.employmentStatus} onChange={(event) => onRowUpdate(index, 'employmentStatus', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option><option value="ON_LEAVE">En ausencia</option><option value="TERMINATED">Terminado</option></select></ImportPreviewField>
+        </div>
+        {row._hasError && (!row.departmentId || !row.positionId) && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-muted-foreground">Corrige el catálogo o usa + para crearlo.</p>}
+      </ImportPreviewMobileCard>
+    );
+  };
+
   return (
-    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
+    <div className={`fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-4" data-tour="hr-employee-import-preview-title">
           <div className="min-w-0">
@@ -148,7 +191,7 @@ export function EmployeeImportPreview({
           <p><span className="font-bold text-foreground">Catálogos relacionados:</span> si un departamento o puesto no existe, puedes crearlo desde la columna de validación. El puesto se creará obligatoriamente dentro del departamento seleccionado.</p>
         </div>
 
-        <div className="min-h-0 flex-1" data-tour="hr-employee-import-preview-items">
+        <div className="hidden min-h-0 flex-1 sm:flex" data-tour="hr-employee-import-preview-items">
         <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '4050px', minWidth: '4050px', maxWidth: 'none' }} className="w-[4050px] min-w-[4050px]">
             <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
@@ -221,6 +264,16 @@ export function EmployeeImportPreview({
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
         </HorizontalTableScroller>
         </div>
+
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Registros de empleados para revisar">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
+            <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un empleado por tarjeta</p></div>
+            <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          </div>
+        </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4" data-tour="hr-employee-import-preview-actions">
           <Button variant="outline" onClick={onBack} disabled={importing}><ArrowLeft className="mr-2 size-4" /> Volver a la carga</Button>

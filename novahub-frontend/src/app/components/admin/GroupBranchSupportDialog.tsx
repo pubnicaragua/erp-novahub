@@ -155,7 +155,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="h-auto w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:w-[min(94vw,72rem)] sm:!max-w-[72rem] sm:p-7">
+        <DialogContent className="h-auto w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:w-[min(94vw,760px)] sm:!max-w-[760px] sm:p-7">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-black uppercase italic tracking-tight">
               <Users className="size-5 text-primary" /> Soporte de {branch.name}

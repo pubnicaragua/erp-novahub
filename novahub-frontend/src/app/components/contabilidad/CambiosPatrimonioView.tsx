@@ -120,9 +120,6 @@ export function CambiosPatrimonioView() {
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase italic">
             Cambios en el <span className="text-primary">Patrimonio</span>
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Estado de cambios en el patrimonio neto de la empresa
-          </p>
         </div>
       </div>
 

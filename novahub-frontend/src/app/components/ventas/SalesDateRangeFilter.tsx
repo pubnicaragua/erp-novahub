@@ -12,7 +12,7 @@ export function SalesDateRangeFilter({ dateFrom = '', dateTo = '', onChange }: S
   const hasFilters = Boolean(dateFrom || dateTo);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" data-toolbar-role="filters">
       <label className="relative flex h-10 items-center">
         <span className="pointer-events-none absolute -top-3 left-1 text-[9px] font-black uppercase tracking-widest text-foreground/75">Desde</span>
         <Input type="date" value={dateFrom} onChange={(event) => onChange(event.target.value, dateTo)} className="h-10 w-[170px] pr-10 text-foreground font-semibold [&::-webkit-calendar-picker-indicator]:opacity-0" aria-label="Fecha desde" />

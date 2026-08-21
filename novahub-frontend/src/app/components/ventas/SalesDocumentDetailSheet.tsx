@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { CalendarDays, Download, Eye, FileText, History, Printer, UserRound } from 'lucide-react';
+import { ArrowUpRight, Building2, CalendarDays, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -32,6 +34,7 @@ export interface SalesDocumentPanelData {
   lines?: SalesDocumentPanelLine[];
   notes?: string;
   reason?: string;
+  history?: any[];
 }
 
 interface SalesDocumentDetailSheetProps {
@@ -39,15 +42,25 @@ interface SalesDocumentDetailSheetProps {
   entity: string;
   open: boolean;
   onClose: () => void;
-  onOpenDocument: () => void;
-  onDownloadPdf: () => void;
-  onPrintDocument?: () => void;
+  onOpenDocument?: () => void;
+  onGoToBranch?: () => void;
+  onWhatsApp?: () => void;
+  hasWhatsApp?: boolean;
+  onDownloadPdf: (format: PdfDownloadFormat) => void;
 }
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Borrador',
   SENT: 'Enviada',
+  PENDING: 'Pendiente',
   PENDING_REVIEW: 'Pendiente de revisión',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  SUBMITTED: 'Enviada',
+  IN_REVIEW: 'En revisión',
+  IN_QUOTATION: 'En cotización',
+  RETURNED_FOR_CORRECTION: 'Devuelta para corrección',
+  CONVERTED_TO_ORDER: 'Convertida a orden',
+  CLOSED: 'Cerrada',
   CONFIRMED: 'Confirmada',
   IN_PROGRESS: 'En proceso',
   SHIPPED: 'Enviada',
@@ -58,12 +71,22 @@ const statusLabels: Record<string, string> = {
   APPROVED: 'Aprobada',
   PROCESSED: 'Aplicada',
   REJECTED: 'Rechazada',
+  WITH_INCIDENTS: 'Con incidencias',
   ISSUED: 'Emitida',
+  CREDIT: 'A crédito',
+  OVERDUE: 'Vencida',
   PARTIAL: 'Pago parcial',
   APPLIED: 'Aplicada',
   PAID: 'Pagada',
+  REFUNDED: 'Reembolsada',
   VOIDED: 'Anulada',
   CANCELLED: 'Cancelada',
+  INACTIVE: 'Inactiva',
+  ARCHIVED: 'Archivada',
+  SUCCESS: 'Exitosa',
+  FAILED: 'Fallida',
+  SKIPPED: 'Omitida',
+  POSTED: 'Registrada',
 };
 
 const statusClasses: Record<string, string> = {
@@ -94,8 +117,10 @@ export function SalesDocumentDetailSheet({
   open,
   onClose,
   onOpenDocument,
+  onGoToBranch,
+  onWhatsApp,
+  hasWhatsApp = true,
   onDownloadPdf,
-  onPrintDocument,
 }: SalesDocumentDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -146,15 +171,16 @@ export function SalesDocumentDetailSheet({
               </section>
 
               <section className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onOpenDocument}>
+                {onOpenDocument && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onOpenDocument}>
                   <Eye className="size-4 shrink-0 text-primary" /> Ver {document.title.toLowerCase()} completa
-                </Button>
-                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onDownloadPdf}>
-                  <Download className="size-4 shrink-0 text-primary" /> Descargar PDF
-                </Button>
-                <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onPrintDocument}>
-                  <Printer className="size-4 shrink-0 text-primary" /> Imprimir
-                </Button>
+                </Button>}
+                {onGoToBranch && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-primary hover:text-primary" onClick={() => { onClose(); onGoToBranch(); }}>
+                  <Building2 className="size-4 shrink-0" /> Ir a su sucursal <ArrowUpRight className="size-3.5 shrink-0" />
+                </Button>}
+                {onWhatsApp && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} title={hasWhatsApp ? 'Preparar mensaje en WhatsApp' : 'El cliente no tiene teléfono registrado'} onClick={onWhatsApp}>
+                  <MessageCircle className="size-4 shrink-0" /> WhatsApp
+                </Button>}
+                <PdfDownloadButton onDownload={onDownloadPdf} />
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">
@@ -201,6 +227,7 @@ export function SalesDocumentDetailSheet({
                 entityId={document.id}
                 title={`Historial de ${document.title.toLowerCase()}`}
                 presentation="inline"
+                logs={document.history}
               />
             </TabsContent>
           </Tabs>

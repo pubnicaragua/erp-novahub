@@ -1,0 +1,2 @@
+function g(r,i=!1){if(r==null||r==="")return"";const t=new Date(r);if(Number.isNaN(t.getTime()))return String(r);const n=String(t.getDate()).padStart(2,"0"),e=String(t.getMonth()+1).padStart(2,"0"),a=t.getFullYear();if(!i)return`${n}/${e}/${a}`;const o=String(t.getHours()).padStart(2,"0"),s=String(t.getMinutes()).padStart(2,"0");return`${n}/${e}/${a} ${o}:${s}`}export{g as f};
+//# sourceMappingURL=dateFormat-BGbFMfiM.js.map

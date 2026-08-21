@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Truck, Plus, Search, Edit, Star, Download, Filter, Phone, Mail, Building2 } from 'lucide-react';
+import { Truck, Plus, Search, Edit, Star, Download, Phone, Mail, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -103,14 +103,13 @@ export function ProveedoresPage() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <CurrencyValuationBanner />
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-card p-4 rounded-xl border shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="p-2.5 bg-blue-500/10 rounded-lg">
             <Truck className="size-6 text-blue-500" />
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Directorio de Proveedores</h1>
-            <p className="text-sm text-muted-foreground">Gestiona tus socios comerciales y calificación de cadena de suministro</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">Directorio de Proveedores</h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -195,7 +194,6 @@ export function ProveedoresPage() {
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar por nombre, contacto o categoría..." className="pl-9 w-full bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
-        <Button variant="outline" className="gap-2 sm:w-auto w-full"><Filter className="size-4" /> Filtros Avanzados</Button>
       </div>
 
       <Card>

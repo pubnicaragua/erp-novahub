@@ -4,6 +4,7 @@ import { Input } from './input'
 import { Label } from './label'
 import { ShieldAlert } from 'lucide-react'
 import { isTaxExempt } from '../../utils/taxUtils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 
 interface TaxCatalogEntry {
   id: string
@@ -33,24 +34,27 @@ export function TaxTypeSelect({ value, onChange, type, disabled }: TaxSelectorPr
     }).catch(() => {})
   }, [type])
 
+  const emptyValue = '__empty_tax_value__'
+  const selectedValue = value || (type === 'WITHHOLDING' ? 'NONE' : emptyValue)
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className="flex h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-foreground/65 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {type === 'TAX' && <option value="">Seleccionar IVA</option>}
-      {type === 'WITHHOLDING' && <option value="NONE">Sin retención</option>}
-      {value && value !== 'NONE' && !entries.some(entry => entry.isActive && entry.code === value) && (
-        <option value={value}>{value === 'GRAVADO' ? 'IVA gravado' : value}</option>
-      )}
-      {entries.filter(e => e.isActive).map(entry => (
-        <option key={entry.id} value={entry.code}>
-          {entry.name} ({entry.rate}%)
-        </option>
-      ))}
-    </select>
+    <Select value={selectedValue} onValueChange={(nextValue) => onChange(nextValue === emptyValue ? '' : nextValue)}>
+      <SelectTrigger size="sm" disabled={disabled} className="h-8 w-full min-w-0 rounded-lg border-border bg-transparent px-2 py-1 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {type === 'TAX' && <SelectItem value={emptyValue}>Seleccionar IVA</SelectItem>}
+        {type === 'WITHHOLDING' && <SelectItem value="NONE">Sin retención</SelectItem>}
+        {value && value !== 'NONE' && !entries.some(entry => entry.isActive && entry.code === value) && (
+          <SelectItem value={value}>{value === 'GRAVADO' ? 'IVA gravado' : value}</SelectItem>
+        )}
+        {entries.filter(e => e.isActive).map(entry => (
+          <SelectItem key={entry.id} value={entry.code}>
+            {entry.name} ({entry.rate}%)
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 

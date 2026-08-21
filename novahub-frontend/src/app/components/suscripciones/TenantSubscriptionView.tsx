@@ -462,7 +462,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <Zap className="size-10 text-primary fill-primary/20" />
              Mi Empresa
           </h1>
-           <p className="text-muted-foreground font-medium mt-2">Gestiona la suscripción, el equipo y la estructura de {tenant.name}.</p>
         </div>
         
         <div className="flex items-center gap-3">

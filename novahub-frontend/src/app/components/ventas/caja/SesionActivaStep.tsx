@@ -594,7 +594,7 @@ export function SesionActivaStep({
       </div>
 
       <Dialog open={isCloseAlertOpen} onOpenChange={(open) => { if (!open && !closing) setIsCloseAlertOpen(false); }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-lg overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] !max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>¿Cerrar Caja?</DialogTitle>
             <DialogDescription>

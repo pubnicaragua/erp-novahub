@@ -208,7 +208,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -221,12 +221,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Calendario y reuniones</p></div>
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Eventos</h2></div>
+          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Eventos" targetPrefix="eventos-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Eventos', description: 'Los eventos representan reuniones, conferencias, ferias o cualquier actividad programada. Puedes registrar costos e ingresos asociados para análisis financiero.' }, data: { title: 'Crear evento', description: 'Haz clic en "Nuevo Evento". Define título, ubicación, fechas de inicio/fin, y opcionalmente costos e ingresos.' }, actions: { title: 'Seguimiento', description: 'Edita en la tabla, revisa los KPIs de balance y exporta los datos.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_EVENTS', 'create') && (
-              <Button onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> Nuevo Evento</Button>
+              <Button data-toolbar-role="primary" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 bg-primary font-black uppercase text-[10px] tracking-widest text-primary-foreground hover:bg-primary/90"><Plus className="size-4" /> Nuevo Evento</Button>
             )}
           </div>
         </div>
@@ -241,7 +241,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader><DialogTitle className="font-black uppercase tracking-tight">Crear evento</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -262,7 +262,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, onRefre
       </Dialog>
 
       <Dialog open={Boolean(invitation)} onOpenChange={open => { if (!open) setInvitation(null); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-black uppercase tracking-tight"><Mail className="size-5 text-primary" /> Invitación lista</DialogTitle>
           </DialogHeader>

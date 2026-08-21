@@ -71,7 +71,7 @@ export function FinancePayablesView() {
         <Badge variant="outline" className="text-xs">{pending.length} facturas pendientes</Badge>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total por Pagar{valuationModeSuffix}</p>

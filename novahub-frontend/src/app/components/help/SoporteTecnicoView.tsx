@@ -137,10 +137,6 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
           <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Soporte <span className="text-primary">Técnico</span>
           </h1>
-          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <MessageSquareText className="size-4" />
-            Reporta incidencias o solicita asistencia a Nova
-          </p>
           </div>
         </div>
         <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs px-6 py-6 rounded-2xl shadow-lg shadow-primary/20 border-b-4 border-primary/50 active:border-b-0 active:translate-y-1 transition-all">

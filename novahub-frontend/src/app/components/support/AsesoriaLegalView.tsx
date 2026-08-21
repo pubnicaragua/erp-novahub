@@ -89,9 +89,6 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
               <h2 className="text-2xl font-black uppercase italic tracking-tight sm:text-3xl">
                 Asesoría <span className="text-primary">Legal</span>
               </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Gestioná trámites, contratos, consultas y recordatorios legales de la empresa en un solo lugar.
-              </p>
             </div>
           </div>
           <div className="flex size-20 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
@@ -227,7 +224,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
       </AnimatePresence>
 
       <Dialog open={showNewCase} onOpenChange={setShowNewCase}>
-        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
+        <DialogContent className="w-[95vw] !max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
           <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nuevo Caso Legal</DialogTitle>
             <button onClick={() => setShowNewCase(false)} className="size-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors">
@@ -244,7 +241,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
       </Dialog>
 
       <Dialog open={showNewReminder} onOpenChange={setShowNewReminder}>
-        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
+        <DialogContent className="w-[95vw] !max-w-md max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
           <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nuevo Recordatorio</DialogTitle>
             <button onClick={() => setShowNewReminder(false)} className="size-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors">
@@ -450,7 +447,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
       </CardContent>
 
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
-        <DialogContent className="w-[95vw] max-w-sm p-0 rounded-3xl border-none">
+        <DialogContent className="w-[95vw] !max-w-sm p-0 rounded-3xl border-none">
           <div className="p-4 sm:p-6 space-y-3">
             <DialogTitle className="text-lg font-black">Cambiar Estado</DialogTitle>
             {['PENDING', 'IN_PROGRESS', 'WAITING_DOCS', 'COMPLETED', 'CANCELLED'].map((s) => (

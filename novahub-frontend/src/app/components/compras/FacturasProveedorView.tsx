@@ -794,8 +794,8 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">{showValuationLegend ? `Cuentas por pagar · Vista ${valuationModeLabel.toLowerCase()} al tipo de cambio ${globalRate.toFixed(4)}.` : 'Cuentas por pagar.'}</p></div>
-          <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+          <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2></div>
+          <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="invoices" />
             <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas de proveedor" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

@@ -121,9 +121,6 @@ export function PeriodosView() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
         <div>
           <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Períodos Contables</h2>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mt-1">
-            {periods.length} período(s) registrado(s)
-          </p>
         </div>
         {canPerform('ACCOUNTING_PERIODS', 'create') && (
           <Button

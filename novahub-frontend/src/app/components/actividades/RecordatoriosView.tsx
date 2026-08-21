@@ -123,8 +123,8 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
   const filtered = data.filter(r => r.title?.toLowerCase().includes(searchTerm.toLowerCase()) || r.description?.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -135,14 +135,14 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
+      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black uppercase tracking-tight">Recordatorios</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Alertas programadas</p></div>
-          <div className="flex items-center gap-3">
+          <div><h2 className="text-xl font-black uppercase tracking-tight">Recordatorios</h2></div>
+          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son los Recordatorios" targetPrefix="recordatorios-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Recordatorios', description: 'Los recordatorios envían alertas automáticas en la fecha y hora que indiques. Pueden ser globales (para todo el equipo), departamentales o personales.' }, data: { title: 'Crear recordatorio', description: 'Haz clic en "Nuevo Aviso". Define el título, mensaje, fecha de envío y alcance (global/departamento/personal).' }, actions: { title: 'Gestionar', description: 'Revisa el estado (Pendiente/Enviado/Cancelado), edita o elimina avisos que ya no necesites.' } }} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_REMINDERS', 'create') && (
-              <Button variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
+              <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Aviso</Button>
             )}
           </div>
         </div>

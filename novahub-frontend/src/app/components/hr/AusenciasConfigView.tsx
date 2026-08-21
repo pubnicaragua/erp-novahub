@@ -198,9 +198,6 @@ export function AusenciasConfigView({ onRefresh }: { onRefresh?: () => void }) {
             <Settings2 className="size-6 text-primary" />
             Configuración de Tipos de Ausencia
           </h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            Define los tipos de ausencia, porcentajes de pago y reglas aplicables
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {canPerform('HR_LEAVES', 'create') && (

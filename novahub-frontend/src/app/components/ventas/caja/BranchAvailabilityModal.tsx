@@ -105,8 +105,8 @@ export function BranchAvailabilityModal({
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-xl border border-border/50">
-                <table className="w-full text-xs">
+              <div className="overflow-x-auto rounded-xl border border-border/50">
+                <table className="w-full min-w-[640px] text-xs md:min-w-0">
                   <thead>
                     <tr className="border-b border-border/30 bg-muted/30">
                       <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursal</th>

@@ -889,7 +889,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-wrap items-center gap-2" data-tour="hr-employees-actions">
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-employees-actions">
           <Button
             variant="outline"
             size="sm"
@@ -904,13 +904,14 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
             onChange={(event) => setViewMode(event.target.value as 'table' | 'cards')}
             aria-label="Elegir distribución"
             data-tour="empleados-layout"
+            data-toolbar-role="layout"
             className="h-10 w-32 rounded-xl border border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary"
           >
             <option value="table">Lista</option>
             <option value="cards">Tarjetas</option>
           </select>
           {canPerform('HR_EMPLOYEES', 'create') && (
-            <Button size="sm" onClick={openCreateEmployeeModal} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90" data-tour="empleados-add">
+            <Button size="sm" onClick={openCreateEmployeeModal} data-toolbar-role="primary" className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90" data-tour="empleados-add">
               <Plus className="size-4" />
               Agregar Empleado
             </Button>
@@ -1159,7 +1160,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       )}
 
       <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
           <DialogHeader data-tour="hr-columns-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle>
             <DialogDescription>Elige qué información quieres ver en la lista y en las tarjetas de empleados. Los cambios se reflejan inmediatamente.</DialogDescription>
@@ -1277,7 +1278,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       </Dialog>
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) setImportOpen(false); }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
           <DialogHeader data-tour="hr-employee-import-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar empleados</DialogTitle><DialogDescription>Carga una plantilla Excel, revisa la previsualización y confirma solo las filas válidas. Este proceso puede repetirse cuantas veces sea necesario.</DialogDescription><HRViewTutorial label="Cómo importar empleados" targetPrefix="hr-employee-import" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Descarga la plantilla, carga el archivo y revisa las filas detectadas.' }, actions: { description: 'Abre la previsualización para corregir incidencias y confirmar las filas válidas.' } }} /></DialogHeader>
           <div className="space-y-4" data-tour="hr-employee-import-data">
             <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">Usa nombres o códigos existentes para departamentos y puestos. Si falta alguno, podrás crearlo desde la previsualización. No se importa un vendedor individual: la condición de vendedor proviene del departamento.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadEmployeeTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>

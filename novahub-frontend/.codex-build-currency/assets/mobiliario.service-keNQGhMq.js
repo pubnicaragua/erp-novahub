@@ -1,0 +1,2 @@
+import{a as t}from"./index-C-MiAtUJ.js";const o={getAssets:(s,e)=>t.get("/company-assets",{params:s,signal:e}),getAsset:(s,e)=>t.get(`/company-assets/${s}`,{signal:e}),createAsset:s=>t.post("/company-assets",s),updateAsset:(s,e)=>t.put(`/company-assets/${s}`,e),deleteAsset:s=>t.delete(`/company-assets/${s}`),importAssets:s=>t.post("/company-assets/import",{items:s}),addAttachment:(s,e)=>t.post(`/company-assets/${s}/attachment`,e),removeAttachment:s=>t.delete(`/company-assets/${s}/attachment`)};export{o as m};
+//# sourceMappingURL=mobiliario.service-keNQGhMq.js.map

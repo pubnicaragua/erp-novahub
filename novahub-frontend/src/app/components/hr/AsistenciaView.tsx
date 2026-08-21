@@ -321,10 +321,10 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
               data-tour="asistencia-employee-selector"
             />
           </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto" data-tour="hr-attendance-actions">
+          <div className="erp-list-toolbar flex flex-wrap gap-2 w-full sm:w-auto" data-tour="hr-attendance-actions">
             {canPerform('HR_ATTENDANCE', 'create') && (
               <>
-                <Button onClick={handleClockIn} className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button onClick={handleClockIn} data-toolbar-role="primary" className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground">
                   <LogIn className="size-4 mr-2" />
                   Entrada
                 </Button>
@@ -518,7 +518,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
         </div>
       )}
       <Dialog open={importOpen && !importing} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,680px)] overflow-y-auto rounded-3xl">
           <DialogHeader data-tour="hr-attendance-import-title">
             <DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar asistencia</DialogTitle>
             <DialogDescription>

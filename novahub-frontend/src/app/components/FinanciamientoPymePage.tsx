@@ -217,7 +217,7 @@ export function FinanciamientoPymePage() {
       </AnimatePresence>
 
       <Dialog open={showWizard} onOpenChange={setShowWizard}>
-        <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 rounded-3xl border-none">
+        <DialogContent className="w-[95vw] !max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 rounded-3xl border-none">
           <div className="p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nueva Solicitud de Financiamiento</DialogTitle>
           </div>
@@ -280,7 +280,7 @@ function PaymentCalculator() {
               placeholder="Ingresá la tasa anual" className="h-11 rounded-xl" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
             { label: 'Cuota mensual', value: calc.monthly, color: 'text-primary' },
             { label: 'Total a pagar', value: calc.total, color: 'text-foreground' },

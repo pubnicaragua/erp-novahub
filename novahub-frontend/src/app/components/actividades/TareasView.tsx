@@ -177,7 +177,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
   return (
     <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <Card key={i} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -190,12 +190,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, onRefresh
 
       <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="flex min-w-0 flex-col gap-4 border-b border-border/50 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Gestión de tareas pendientes</p></div>
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <div className="min-w-0"><h2 className="text-xl font-black uppercase tracking-tight">Tareas</h2></div>
+          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <InventoryViewTutorial label="Qué son las Tareas" targetPrefix="tareas-tutorial" compact stepKeys={['title', 'data', 'actions']} copy={{ title: { title: 'Tareas', description: 'Las tareas te permiten crear, asignar y dar seguimiento a actividades pendientes. Cada tarea puede tener prioridad, fecha de vencimiento y un responsable. Al completarla, queda registrada en la bitácora.' }, data: { title: 'Crear y asignar', description: 'Haz clic en "Nueva Tarea" para crear una. Asigna un responsable, prioridad y fecha de vencimiento.' }, actions: { title: 'Gestionar', description: 'Edita directamente en la tabla, cambia el estado a "Completada" cuando termines, o elimina tareas obsoletas.' } }} />
             <div className="relative w-full sm:w-56"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('ACTIVITIES_TASKS', 'create') && (
-              <Button variant="default" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"><Plus className="size-4" /> Nueva Tarea</Button>
+              <Button data-toolbar-role="primary" variant="default" onClick={() => setIsAddOpen(true)} className="shrink-0 rounded-xl px-4 h-10 gap-2 font-black uppercase text-[10px] tracking-widest"><Plus className="size-4" /> Nueva Tarea</Button>
             )}
           </div>
         </div>

@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { UserPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { customersService } from '@/app/services/ventas.service';
@@ -100,15 +101,10 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
                 <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">
                   Tipo de cliente *
                 </Label>
-                <select
-                  value={form.type}
-                  onChange={e => handleUpdate('type', e.target.value)}
-                  disabled={isSaving}
-                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="INDIVIDUAL">Particular</option>
-                  <option value="COMPANY">Empresa</option>
-                </select>
+                <Select value={form.type} onValueChange={(value) => handleUpdate('type', value)}>
+                  <SelectTrigger disabled={isSaving} className="h-10 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="phone" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">

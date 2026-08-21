@@ -96,7 +96,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
       <UserRound className="size-3.5" /> <span className="hidden lg:inline">{managers.length ? `Managers (${managers.length})` : 'Agregar Manager'}</span>
     </Button>
     <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) resetManagerForm(); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl rounded-3xl p-5 sm:p-7">
+      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] rounded-3xl p-5 sm:p-7">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-black uppercase italic tracking-tight"><ShieldCheck className="size-5 text-primary" /> {managers.length ? 'Soporte de Managers' : 'Agregar Manager al grupo'}</DialogTitle>
           <DialogDescription>{managers.length ? `Administra el acceso global de los Managers de ${group?.name}.` : `Este grupo no tiene Manager asignado. Crea su acceso global para continuar con la configuración de ${group?.name}.`}</DialogDescription>
@@ -120,7 +120,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
       </DialogContent>
     </Dialog>
     <Dialog open={Boolean(selectedManager)} onOpenChange={(nextOpen) => { if (!nextOpen) { setSelectedManager(null); setPassword(''); } }}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-3xl p-5 sm:p-7">
+      <DialogContent className="w-[calc(100vw-2rem)] !max-w-md rounded-3xl p-5 sm:p-7">
         <DialogHeader><DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle><DialogDescription>Actualiza la contraseña de {selectedManager?.user?.name}.</DialogDescription></DialogHeader>
         <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
         <p className="text-xs text-muted-foreground">Debe cumplir la política de seguridad de NovaHub.</p>

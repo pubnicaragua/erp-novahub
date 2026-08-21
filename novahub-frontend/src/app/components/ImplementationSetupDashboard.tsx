@@ -144,9 +144,6 @@ export function ImplementationSetupDashboard({ summary, onRefresh, onNavigateToD
               <h1 className="text-3xl font-black uppercase italic leading-none tracking-[-0.04em] md:text-5xl">
                 Implementación <span className="text-primary">del ERP</span>
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Completa los datos base de los módulos habilitados para dejar NovaHub listo para operar. Cada objetivo abre el módulo real para cargar, revisar o corregir información en tiempo real.
-              </p>
             </div>
 
             <div className="flex flex-wrap gap-2 lg:justify-end">

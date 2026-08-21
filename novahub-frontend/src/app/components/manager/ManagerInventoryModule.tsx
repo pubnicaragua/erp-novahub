@@ -102,7 +102,6 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
         <div className="flex size-[66px] shrink-0 items-center justify-center rounded-xl bg-primary/10"><Boxes className="size-9 text-primary" /></div>
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-3xl font-black uppercase italic leading-none tracking-tighter sm:text-4xl">Inventario <span className="text-primary">de Mercancías</span></h1>
-          <p className="mt-2 text-sm text-muted-foreground">Consulta existencias, almacenes y movimientos separados por rubro, sucursal y alcance.</p>
           <div className="mt-2 flex items-center gap-2"><Badge className="border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursales · {branchWarehouseCount} bodegas · {corporateWarehouseCount} almacenes corporativos · vista Manager</Badge></div>
         </div>
       </div>
@@ -122,7 +121,6 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
 
     <div className="flex min-w-0 flex-col gap-1 px-1">
       <h2 className="text-2xl font-black uppercase italic leading-none tracking-tight">{activeViewLabel}</h2>
-      <p className="text-sm text-muted-foreground">Información del rubro seleccionado dentro del alcance autorizado.</p>
     </div>
 
     {view === 'corporateWarehouses' ? corporateWarehouseContent : view === 'adjustments' ? <ManagerInventoryAdjustmentsView groupId={groupId} businessUnitId={businessUnitId} branchId={branchId} branches={branches} warehouses={warehouses} embedded refreshKey={refreshKey} /> : <>

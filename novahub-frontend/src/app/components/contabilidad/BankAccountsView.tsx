@@ -364,7 +364,7 @@ export function BankAccountsView() {
       </Dialog>
 
       <Dialog open={Boolean(detailAccount)} onOpenChange={(open) => !open && setDetailAccount(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-4xl rounded-3xl">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-4xl rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight"><Landmark className="size-4 text-primary" /> Movimientos de la cuenta bancaria</DialogTitle>
             <DialogDescription>

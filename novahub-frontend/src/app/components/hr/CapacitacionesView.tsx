@@ -266,8 +266,8 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
       </div>
 
       {/* Toolbar */}
-      <div className={cn('flex flex-wrap items-center justify-between gap-3', showNewForm && 'hidden')} data-tour="hr-training-actions">
-        <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
+      <div className={cn('erp-composite-toolbar flex flex-wrap items-center justify-between gap-3', showNewForm && 'hidden')} data-tour="hr-training-actions">
+        <div className="erp-toolbar-filter-group flex min-w-0 flex-1 items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -300,12 +300,12 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
             sortOptions={[{ value: 'desc', label: 'Más próximas' }, { value: 'asc', label: 'Más lejanas' }]}
           />
         </div>
-        <div className="flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
+        <div className="erp-toolbar-primary-group flex w-full shrink-0 items-center justify-end gap-2 md:w-auto">
           {canPerform('HR_TRAINING', 'create') && (
             <Button onClick={() => {
               if (!showNewForm) setNewTraining((current) => ({ ...current, currency: displayCurrency }));
               setShowNewForm(!showNewForm);
-            }} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+            }} data-toolbar-role="primary" className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
               <Plus className="size-4" />
               Nueva Capacitación
             </Button>

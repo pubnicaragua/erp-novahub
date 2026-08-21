@@ -350,9 +350,6 @@ export function QaConsoleView() {
           <h1 className="flex items-center gap-2 text-2xl font-bold">
             <ShieldCheck className="size-6 text-primary" /> Validador ERP (Super Admin)
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Estado real de vistas, botones y flujos CRUD. % = pasos OK / total por check.
-          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleSync} disabled={syncing}>

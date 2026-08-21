@@ -152,13 +152,10 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
             <Building2 className="size-5 text-primary" />
             <h2 className="text-xl font-black uppercase tracking-tight">Departamentos</h2>
           </div>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Organiza las áreas de tu empresa y asigna uno o varios usuarios como jefes de cada departamento.
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2" data-tour="hr-departments-actions">
+        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="hr-departments-actions">
           {canCreate && (
-            <Button type="button" onClick={openCreate} className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+            <Button type="button" onClick={openCreate} data-toolbar-role="primary" className="h-10 shrink-0 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest !text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
               <Plus className="size-4" /> Nuevo departamento
             </Button>
           )}
@@ -232,7 +229,7 @@ export function DepartamentosView({ departments = [], users = [], onRefresh }: a
       )}
 
       <Dialog open={editorOpen} onOpenChange={(open) => { if (!saving) setEditorOpen(open); }}>
-        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-3xl p-0">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] !max-w-2xl overflow-y-auto rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-6 py-5" data-tour="hr-department-form-title">
             <DialogTitle className="flex items-center gap-2 text-xl font-black"><Building2 className="size-5 text-primary" /> {editingId ? 'Editar departamento' : 'Nuevo departamento'}</DialogTitle>
             <DialogDescription>Define los datos del área y selecciona uno o varios usuarios activos como jefes.</DialogDescription>

@@ -240,7 +240,6 @@ export function RHPage({ activeSubModule }: RHPageProps) {
           <Users className="size-6 text-primary" />
           Recursos Humanos
         </h1>
-        <p className="text-sm text-muted-foreground">Gestion de empleados, planillas y vacaciones</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

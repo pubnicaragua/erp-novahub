@@ -1,6 +1,7 @@
 import { Store } from 'lucide-react';
 import { useBranchScope } from '../../hooks/useBranchScope';
 import { cn } from './utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 
 interface Props {
   className?: string;
@@ -13,10 +14,10 @@ export function BranchScopeFilter({ className, showLabel = true, onChange }: Pro
 
   if (accessibleBranches.length <= 1) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setSelectedBranchId(val);
-    onChange?.(val);
+  const handleChange = (val: string) => {
+    const selectedValue = val === '__all_branches__' ? '' : val;
+    setSelectedBranchId(selectedValue);
+    onChange?.(selectedValue);
   };
 
   return (
@@ -26,16 +27,17 @@ export function BranchScopeFilter({ className, showLabel = true, onChange }: Pro
           <Store className="size-3.5" /> Sucursal
         </div>
       )}
-      <select
-        value={selectedBranchId}
-        onChange={handleChange}
-        className="h-9 rounded-xl border border-border/50 bg-background px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-      >
-        {!isRestricted && <option value="">Todas las sucursales</option>}
-        {accessibleBranches.map(b => (
-          <option key={b.id} value={b.id}>{b.name}</option>
-        ))}
-      </select>
+      <Select value={selectedBranchId || '__all_branches__'} onValueChange={handleChange}>
+        <SelectTrigger className="h-10 rounded-xl border-border/50 bg-background px-3 text-xs font-semibold">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align="end">
+          {!isRestricted && <SelectItem value="__all_branches__">Todas las sucursales</SelectItem>}
+          {accessibleBranches.map(b => (
+            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

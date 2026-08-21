@@ -18,6 +18,12 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './dialog';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import type { SalesPaginationControls } from '../../types';
+import { useCardsOnlyBelowTableBreakpoint } from './ViewLayoutSelect';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+
+const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
+const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
+const fromRadixSelectValue = (value: string) => value === EMPTY_SELECT_VALUE ? '' : value;
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -86,6 +92,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
 }: EditableDataTableProps<T>) {
   const isBulkCancel = bulkAction === 'cancel';
   const isEditingAllowed = canEdit ?? Boolean(onRowUpdate);
+  const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
+  const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
@@ -156,7 +164,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   }, [initialData]);
 
   useEffect(() => {
-    if (!showHorizontalControls || layoutMode === 'cards') return;
+    if (!showHorizontalControls || effectiveLayoutMode === 'cards') return;
     const element = tableScrollRef.current;
     if (!element) return;
     const scrollStateRef = { current: horizontalScroll };
@@ -179,7 +187,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       observer.disconnect();
       window.removeEventListener('resize', updateScrollState);
     };
-  }, [columns.length, data.length, horizontalScroll, layoutMode, showHorizontalControls, tableMinWidth]);
+  }, [columns.length, data.length, horizontalScroll, effectiveLayoutMode, showHorizontalControls, tableMinWidth]);
 
   const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
@@ -427,13 +435,13 @@ export function EditableDataTable<T extends { [key: string]: any }>({
 
       <div
         className={cn(
-          layoutMode === 'cards' ? 'hidden' : layoutMode === 'responsive' ? 'hidden xl:block' : 'block',
+          effectiveLayoutMode === 'cards' ? 'hidden' : effectiveLayoutMode === 'responsive' ? 'hidden xl:block' : 'block',
           'w-full min-w-0 max-w-full rounded-2xl border border-border/50 bg-card/30 backdrop-blur-sm'
         )}
         onMouseEnter={() => { pointerInsideTable.current = true; }}
         onMouseLeave={() => { pointerInsideTable.current = false; }}
       >
-        {showHorizontalControls && layoutMode !== 'cards' && (
+        {showHorizontalControls && effectiveLayoutMode !== 'cards' && (
           <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Desplazamiento horizontal</span>
             <div className="flex items-center gap-1">
@@ -477,10 +485,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   style={{ width: col.width }}
                   className="h-12 whitespace-nowrap align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60"
                 >
-                  {col.header}
-                  {isValidElement(col.headerExtra)
-                    ? cloneElement(col.headerExtra as React.ReactElement<{ compact?: boolean }>, { compact: true })
-                    : col.headerExtra}
+                  <span className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap">
+                    <span className="min-w-0 truncate">{col.header}</span>
+                    {isValidElement(col.headerExtra)
+                      ? cloneElement(col.headerExtra as React.ReactElement<{ compact?: boolean }>, { compact: true })
+                      : col.headerExtra}
+                  </span>
                 </TableHead>
               ))}
               <TableHead data-actions-column="true" className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[10px] font-black uppercase tracking-widest text-muted-foreground/60', actionsWidth)}>
@@ -547,21 +557,24 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             onClick={(event) => event.stopPropagation()}
                           >
                             {col.type === 'select' ? (
-                              <select
-                                value={editValue ?? ''}
-                                onChange={(e) => {
-                                  const newVal = e.target.value;
+                              <Select
+                                value={toRadixSelectValue(editValue)}
+                                onValueChange={(nextValue) => {
+                                  const newVal = fromRadixSelectValue(nextValue);
                                   setEditValue(newVal);
                                   // For select, we often want to save immediately
                                   handleSave(rowId, colKey, newVal);
                                 }}
-                                onBlur={() => handleSave(rowId, colKey)}
-                                className="h-full w-full bg-transparent border-none focus:ring-0 text-[13px] font-medium px-2 outline-none cursor-pointer"
                               >
-                                {col.options?.map(opt => (
-                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                              </select>
+                                <SelectTrigger size="sm" onBlur={() => handleSave(rowId, colKey)} className="h-full w-full rounded-none border-none bg-transparent px-2 text-[13px] font-medium shadow-none focus-visible:ring-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {col.options?.map(opt => (
+                                    <SelectItem key={opt.value} value={toRadixSelectValue(opt.value)}>{opt.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             ) : (
                               <Input
                                 ref={inputRef}
@@ -645,7 +658,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         </div>
       </div>
 
-      <div className={cn(layoutMode === 'table' ? 'hidden' : 'grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]', layoutMode === 'responsive' && 'xl:hidden')}>
+      <div className={cn(effectiveLayoutMode === 'table' ? 'hidden' : 'grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))]', effectiveLayoutMode === 'responsive' && 'xl:hidden')}>
         {data.map((row) => {
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);
@@ -719,21 +732,23 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       </div>
                       {isEditing ? (
                         col.type === 'select' ? (
-                          <select
-                            value={editValue ?? ''}
-                            onChange={(event) => {
-                              const newValue = event.target.value;
+                          <Select
+                            value={toRadixSelectValue(editValue)}
+                            onValueChange={(nextValue) => {
+                              const newValue = fromRadixSelectValue(nextValue);
                               setEditValue(newValue);
                               void handleSave(rowId, colKey, newValue);
                             }}
-                            onBlur={() => void handleSave(rowId, colKey)}
-                            onClick={(event) => event.stopPropagation()}
-                            className="h-9 w-full rounded-lg border border-primary bg-background px-2 text-sm font-medium text-foreground outline-none"
                           >
-                            {col.options?.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
+                            <SelectTrigger size="sm" onBlur={() => void handleSave(rowId, colKey)} onClick={(event) => event.stopPropagation()} className="h-9 w-full rounded-lg border-primary bg-background px-2 text-sm font-medium text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {col.options?.map((option) => (
+                                <SelectItem key={option.value} value={toRadixSelectValue(option.value)}>{option.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         ) : (
                           <Input
                             ref={inputRef}
@@ -783,14 +798,14 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs text-muted-foreground" data-tour="sales-list-pagination">
           <div className="flex items-center gap-2">
             <span>Mostrar</span>
-            <select
-              value={pagination.pageSize}
-              onChange={(event) => pagination.onPageSizeChange(Number(event.target.value) as SalesPaginationControls['pageSize'])}
-              className="h-8 rounded-lg border border-border/50 bg-background px-2 font-bold text-foreground outline-none"
-              aria-label="Registros por página"
-            >
-              {[50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}
-            </select>
+            <Select value={String(pagination.pageSize)} onValueChange={(nextValue) => pagination.onPageSizeChange(Number(nextValue) as SalesPaginationControls['pageSize'])}>
+              <SelectTrigger size="sm" className="h-8 w-auto rounded-lg border-border/50 bg-background px-2 font-bold text-foreground" aria-label="Registros por página">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {[50, 100, 200].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <span>por página</span>
             <span className="ml-2 rounded-lg border border-border/40 px-2 py-1">
               {pagination.total === 0 ? 0 : `${(pagination.page - 1) * pagination.pageSize + 1}-${Math.min(pagination.page * pagination.pageSize, pagination.total)}`} de {pagination.total}
@@ -807,7 +822,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       )}
 
       <Dialog open={mobileActionsRow !== null} onOpenChange={(open) => !open && setMobileActionsRow(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-3xl p-0">
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-sm rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-4">
             <DialogTitle className="text-base font-black">Acciones del registro</DialogTitle>
             <DialogDescription className="sr-only">Acciones disponibles para el registro seleccionado</DialogDescription>

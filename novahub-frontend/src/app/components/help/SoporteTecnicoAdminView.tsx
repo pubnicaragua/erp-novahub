@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
-  LifeBuoy, Search, X, Clock, CheckCircle2, Loader2, MessageSquareText,
+  LifeBuoy, Search, X, Clock, CheckCircle2, Loader2,
   ImagePlus, Eye, ChevronRight, Building2, Send, AlertTriangle, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -116,10 +116,6 @@ export function SoporteTecnicoAdminView({ activeSubModule, onSubModuleChange}: S
           <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
             Soporte <span className="text-primary">Técnico</span>
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium flex items-center gap-2">
-            <MessageSquareText className="size-4" />
-            Gestión de solicitudes de soporte de empresas
-          </p>
         </div>
         </div>
       </div>

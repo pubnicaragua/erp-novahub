@@ -154,8 +154,8 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <Card key={kpi.title} className="border-none bg-background/50 backdrop-blur-xl shadow-sm hover:shadow-md transition-all duration-300">
             <CardContent className="p-5 flex items-center gap-4">
@@ -171,15 +171,12 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
         ))}
       </div>
 
-      <Card className="border-none bg-background/50 backdrop-blur-xl shadow-sm">
+      <Card className="min-w-0 overflow-hidden border-none bg-background/50 backdrop-blur-xl shadow-sm">
         <div className="p-4 border-b border-border/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black uppercase tracking-tight">Base de Conocimiento</h2>
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
-              Procedimientos, guías y referencias internas
-            </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
@@ -190,7 +187,8 @@ export const KnowledgeBaseView: React.FC<KnowledgeBaseViewProps> = ({ data, load
               />
             </div>
             {canPerform('TICKETS', 'create') && (
-              <Button
+                <Button
+                  data-toolbar-role="primary"
                 onClick={handleAdd}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"
               >

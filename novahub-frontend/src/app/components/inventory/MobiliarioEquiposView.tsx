@@ -529,7 +529,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
             </SelectContent>
           </Select>
         </div>
-        <div className="lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2" data-tour="mobiliario-list-actions">
+        <div className="erp-list-toolbar lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2" data-tour="mobiliario-list-actions">
           <InventoryViewTutorial label="Cómo gestionar mobiliario" targetPrefix="mobiliario-list" copy={{ data: { description: 'Busca y filtra los activos por nombre, código, categoría, estado o sucursal.' }, actions: { description: 'Registra, importa, descarga la plantilla o actualiza los activos existentes.' } }} />
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar

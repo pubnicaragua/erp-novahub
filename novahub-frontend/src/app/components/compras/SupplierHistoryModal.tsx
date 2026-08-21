@@ -290,7 +290,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
 
             {showNewPrice && (
               <Card className="p-3 mb-3 border-dashed">
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
                   <Input placeholder="Descripción" value={newPrice.description} onChange={e => setNewPrice(p => ({ ...p, description: e.target.value }))} className="h-8 text-xs" />
                   <Input type="number" placeholder="Precio" value={newPrice.unitPrice || ''} onChange={e => setNewPrice(p => ({ ...p, unitPrice: Number(e.target.value) }))} className="h-8 text-xs" />
                   <select value={newPrice.currency} onChange={e => setNewPrice(p => ({ ...p, currency: e.target.value }))} className="h-8 rounded-md border border-input bg-background px-2 text-xs">

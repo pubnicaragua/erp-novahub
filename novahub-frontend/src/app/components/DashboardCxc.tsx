@@ -136,9 +136,6 @@ function DashboardCxc() {
             Cuentas por{' '}
             <span className="bg-primary text-primary-foreground px-3 py-1 rounded-md inline-block transform -rotate-2 shadow-lg font-semibold mx-1 border border-primary/50">Cobrar / Pagar</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-3 max-w-xl">
-            Antigüedad de saldos y checklist de cierre contable.
-          </p>
         </div>
       </div>
 

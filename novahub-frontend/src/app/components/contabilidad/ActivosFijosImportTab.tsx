@@ -12,6 +12,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { toast } from 'sonner';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
+import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -285,7 +286,7 @@ export function ActivosFijosImportTab() {
                 <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-red-600">
                   <AlertTriangle className="size-3.5" /> Errores por fila
                 </p>
-                <div className="max-h-56 overflow-y-auto rounded-xl border border-border/40">
+                <div className="hidden max-h-56 overflow-y-auto rounded-xl border border-border/40 sm:block">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                       <tr>
@@ -303,6 +304,13 @@ export function ActivosFijosImportTab() {
                     </tbody>
                   </table>
                 </div>
+                <section className="space-y-3 sm:hidden" aria-label="Errores de activos fijos para revisar">
+                  {(result.invalidRows || []).slice(0, 50).map((item: any, idx: number) => (
+                    <ImportPreviewMobileCard key={idx} index={item.rowIndex} title={`Fila ${item.rowIndex + 2}`} error={item.errors.join(' ')}>
+                      <p className="mt-3 break-words text-xs text-rose-600">{item.errors.join(' ')}</p>
+                    </ImportPreviewMobileCard>
+                  ))}
+                </section>
               </div>
             )}
           </CardContent>

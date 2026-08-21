@@ -105,6 +105,7 @@ export function SalesViewTutorial({ view, context = 'list', className }: { view:
         type="button"
         variant="outline"
         onClick={() => setOpen(true)}
+        data-toolbar-role="help"
         className={className || 'h-10 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest'}
         aria-label={buttonLabel}
       >

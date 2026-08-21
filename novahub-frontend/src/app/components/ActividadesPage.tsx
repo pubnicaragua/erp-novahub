@@ -90,9 +90,6 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange }: Activida
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tighter flex flex-wrap items-center gap-x-3 gap-y-1 uppercase italic leading-none">
                   Actividades
                 </h1>
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 mt-2">
-                  Gestión de tareas, eventos y registros
-                </p>
               </div>
             </div>
           </div>
