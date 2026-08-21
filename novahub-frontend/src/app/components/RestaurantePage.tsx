@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
+  Check,
   ChefHat,
   ClipboardList,
   Clock3,
   CreditCard,
+  Eye,
+  EyeOff,
   LayoutGrid,
+  Pencil,
   Plus,
   QrCode,
   RefreshCw,
@@ -31,6 +35,7 @@ import {
   restaurantService,
   type RestaurantKitchenTicket,
   type RestaurantMenuCategory,
+  type RestaurantMenuItem,
   type RestaurantOrder,
   type RestaurantSummary,
   type RestaurantTable,
@@ -323,7 +328,7 @@ export function RestaurantePage() {
                 </div>}
                 {tab === 'comandas' && <OrderBoard orders={orders} onSend={async (order) => { try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
                 {tab === 'cocina' && <KitchenBoard tickets={tickets} onStatus={updateKitchen} />}
-                {tab === 'carta' && <MenuBoard menu={menu} />}
+                {tab === 'carta' && <MenuBoard menu={menu} onSaved={() => loadData()} />}
                 {tab === 'reportes' && <ReportsBoard summary={summary} />}
               </motion.div>
             </AnimatePresence>
@@ -365,8 +370,78 @@ function KitchenBoard({ tickets, onStatus }: { tickets: RestaurantKitchenTicket[
   return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5"><p className="text-xs font-black uppercase tracking-widest text-primary">Kitchen display</p><h2 className="mt-1 text-2xl font-black">Centro de preparación</h2></div><div className="grid gap-4 lg:grid-cols-3">{columns.map((column) => <div key={column} className="min-h-64 rounded-2xl border border-border/50 bg-muted/20 p-3"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest text-muted-foreground">{kitchenStatus[column].label}</span><Badge variant="outline">{tickets.filter((ticket) => ticket.status === column).length}</Badge></div><div className="space-y-3">{tickets.filter((ticket) => ticket.status === column).map((ticket) => <div key={ticket.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex justify-between"><span className="font-black">{ticket.order.number}</span><span className="text-xs text-muted-foreground">{ticket.station}</span></div><p className="mt-1 text-xs text-muted-foreground">Mesa {ticket.order.table?.code || '—'}</p><div className="mt-3 space-y-1 text-sm">{ticket.items.map(({ item }) => <p key={item.description}>{Number(item.quantity)} × {item.description}</p>)}</div>{column === 'PENDING' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'IN_PREPARATION')}><Clock3 className="size-3" />Iniciar</Button>}{column === 'IN_PREPARATION' && <Button className="mt-4 w-full" size="sm" onClick={() => onStatus(ticket, 'READY')}>Marcar listo</Button>}{column === 'READY' && <Button className="mt-4 w-full" size="sm" variant="secondary" onClick={() => onStatus(ticket, 'SERVED')}>Entregar</Button>}</div>)}</div></div>)}</div></section>;
 }
 
-function MenuBoard({ menu }: { menu: RestaurantMenuCategory[] }) {
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Catálogo operativo</p><h2 className="mt-1 text-2xl font-black">Carta y estaciones</h2></div><Settings2 className="size-6 text-muted-foreground/40" /></div>{menu.length === 0 ? <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Configura categorías y platillos desde la administración de carta." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{menu.map((category) => <div key={category.id} className="rounded-2xl border border-border/60 p-4"><h3 className="font-black">{category.name}</h3><p className="mt-1 text-xs text-muted-foreground">{category.description || 'Sin descripción'}</p><div className="mt-4 space-y-2">{category.items.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl bg-muted/30 p-3"><div><p className="text-sm font-bold">{item.name}</p><p className="text-xs text-muted-foreground">{item.prepStation} · {item.productId ? 'Inventario vinculado' : 'Requiere vincular inventario'}</p></div><span className="font-black text-primary">{money(item.price, item.currency)}</span></div>)}</div></div>)}</div>}</section>;
+function MenuBoard({ menu, onSaved }: { menu: RestaurantMenuCategory[]; onSaved: () => Promise<void> }) {
+  const emptyForm = { categoryId: '', name: '', description: '', price: '', taxRate: '15', prepStation: 'KITCHEN' };
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryDescription, setCategoryDescription] = useState('');
+  const [itemForm, setItemForm] = useState(emptyForm);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!itemForm.categoryId && menu[0]) setItemForm((current) => ({ ...current, categoryId: menu[0].id }));
+  }, [itemForm.categoryId, menu]);
+
+  const saveCategory = async () => {
+    if (!categoryName.trim()) { toast.error('Escribe el nombre de la categoría.'); return; }
+    setSaving(true);
+    try {
+      await restaurantService.createCategory({ name: categoryName.trim(), description: categoryDescription.trim() || undefined });
+      setCategoryName(''); setCategoryDescription('');
+      toast.success('Categoría creada.'); await onSaved();
+    } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo crear la categoría.')); }
+    finally { setSaving(false); }
+  };
+
+  const saveItem = async () => {
+    const price = Number(itemForm.price);
+    if (!itemForm.categoryId || !itemForm.name.trim() || !Number.isFinite(price) || price < 0) {
+      toast.error('Completa categoría, nombre y un precio válido.'); return;
+    }
+    setSaving(true);
+    try {
+      if (editingItemId) {
+        await restaurantService.updateMenuItem(editingItemId, { name: itemForm.name.trim(), description: itemForm.description.trim() || null, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation });
+        toast.success('Platillo actualizado.');
+      } else {
+        await restaurantService.createMenuItem({ categoryId: itemForm.categoryId, name: itemForm.name.trim(), description: itemForm.description.trim() || undefined, price, taxRate: Number(itemForm.taxRate) || 0, prepStation: itemForm.prepStation });
+        toast.success('Platillo agregado a la carta.');
+      }
+      setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); setEditingItemId(null); await onSaved();
+    } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo guardar el platillo.')); }
+    finally { setSaving(false); }
+  };
+
+  const editItem = (categoryId: string, item: RestaurantMenuItem) => {
+    setEditingItemId(item.id);
+    setItemForm({ categoryId, name: item.name, description: item.description || '', price: String(item.price), taxRate: String(item.taxRate || 0), prepStation: item.prepStation || 'KITCHEN' });
+  };
+
+  const toggleItem = async (item: RestaurantMenuItem) => {
+    setSaving(true);
+    try { await restaurantService.updateMenuItem(item.id, { isAvailable: !item.isAvailable }); toast.success(item.isAvailable ? 'Platillo ocultado del menú público.' : 'Platillo publicado en el menú.'); await onSaved(); }
+    catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo cambiar la disponibilidad.')); }
+    finally { setSaving(false); }
+  };
+
+  return <section className="space-y-5">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Administración de carta</p><h2 className="mt-1 text-2xl font-black">Menú, precios y estaciones</h2><p className="mt-1 text-sm text-muted-foreground">Los platillos disponibles también aparecen en el enlace público de cada mesa.</p></div><Settings2 className="size-6 text-muted-foreground/40" /></div>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+      <div className="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        <div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva categoría</p><h3 className="mt-1 text-lg font-black">Organiza tu carta</h3></div>
+        <Input placeholder="Ej. Postres" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
+        <Input placeholder="Descripción (opcional)" value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} />
+        <Button className="w-full" onClick={saveCategory} disabled={saving}><Plus className="size-4" />Crear categoría</Button>
+        <div className="border-t border-border/60 pt-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Categorías activas</p><div className="mt-3 flex flex-wrap gap-2">{menu.map((category) => <Badge key={category.id} variant="outline" className="rounded-full">{category.name} · {category.items.length}</Badge>)}{!menu.length && <span className="text-sm text-muted-foreground">Aún no hay categorías.</span>}</div></div>
+      </div>
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-primary">{editingItemId ? 'Editar platillo' : 'Nuevo platillo'}</p><h3 className="mt-1 text-lg font-black">Contenido del menú</h3></div>{editingItemId && <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(null); setItemForm({ ...emptyForm, categoryId: itemForm.categoryId }); }}>Cancelar</Button>}</div>
+        <div className="grid gap-3 sm:grid-cols-2"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.categoryId} onChange={(event) => setItemForm({ ...itemForm, categoryId: event.target.value })}><option value="">Selecciona categoría</option>{menu.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Input placeholder="Nombre del platillo" value={itemForm.name} onChange={(event) => setItemForm({ ...itemForm, name: event.target.value })} /><Input placeholder="Descripción" value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} /><Input type="number" min="0" step="0.01" placeholder="Precio NIO" value={itemForm.price} onChange={(event) => setItemForm({ ...itemForm, price: event.target.value })} /><Input type="number" min="0" max="100" step="0.01" placeholder="Impuesto %" value={itemForm.taxRate} onChange={(event) => setItemForm({ ...itemForm, taxRate: event.target.value })} /><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={itemForm.prepStation} onChange={(event) => setItemForm({ ...itemForm, prepStation: event.target.value })}><option value="KITCHEN">Cocina</option><option value="GRILL">Parrilla</option><option value="FRYER">Freidora</option><option value="BAR">Bar</option></select></div>
+        <Button className="mt-4" onClick={saveItem} disabled={saving || !menu.length}><Check className="size-4" />{editingItemId ? 'Guardar cambios' : 'Agregar platillo'}</Button>
+      </div>
+    </div>
+    {!menu.length ? <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea una categoría y luego agrega tus primeros platillos." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{menu.map((category) => <div key={category.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{category.name}</h3><p className="mt-1 text-xs text-muted-foreground">{category.description || 'Sin descripción'}</p></div><Badge variant="outline">{category.items.length}</Badge></div><div className="mt-4 space-y-2">{category.items.map((item) => <div key={item.id} className="rounded-xl border border-border/50 bg-muted/20 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.prepStation} · {item.productId ? 'Inventario vinculado' : 'Sin inventario vinculado'}</p></div><span className="shrink-0 font-black text-primary">{money(item.price, item.currency)}</span></div><div className="mt-3 flex items-center justify-between gap-2"><Badge className={item.isAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground'}>{item.isAvailable ? 'Publicado' : 'Oculto'}</Badge><div className="flex gap-1"><Button variant="ghost" size="icon" className="size-8" onClick={() => editItem(category.id, item)} aria-label={`Editar ${item.name}`}><Pencil className="size-3.5" /></Button><Button variant="ghost" size="icon" className="size-8" onClick={() => void toggleItem(item)} disabled={saving} aria-label={item.isAvailable ? `Ocultar ${item.name}` : `Publicar ${item.name}`}>{item.isAvailable ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}</Button></div></div></div>)}</div></div>)}</div>}
+  </section>;
 }
 
 function ReportsBoard({ summary }: { summary: RestaurantSummary | null }) {

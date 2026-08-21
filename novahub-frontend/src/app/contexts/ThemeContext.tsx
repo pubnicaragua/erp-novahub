@@ -134,18 +134,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [activeTenantId]);
 
   useEffect(() => {
-    // Apply theme colors to CSS variables
+    // Apply brand colors while allowing the light/dark CSS variants to control
+    // the sidebar surface. Previously an inline --sidebar value from branding
+    // overrode .dark and left the sidebar white in dark mode.
     const root = document.documentElement;
+    const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
     Object.entries(themeConfig.colors).forEach(([key, value]) => {
+      if (sidebarKeys.has(key)) return;
       const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
       root.style.setProperty(cssVarName, value);
     });
-    root.style.setProperty('--sidebar-accent-foreground', getReadableForeground(themeConfig.colors.sidebarAccent));
+
+    const applySidebarVariant = () => {
+      const isDark = root.classList.contains('dark');
+      const sidebar = isDark ? 'oklch(0.16 0.01 155)' : themeConfig.colors.sidebar;
+      const foreground = isDark ? 'oklch(0.985 0 0)' : ensureReadableForeground(themeConfig.colors.sidebar, themeConfig.colors.sidebarForeground);
+      const primary = themeConfig.colors.sidebarPrimary;
+      const accent = isDark ? 'oklch(0.22 0.02 155)' : themeConfig.colors.sidebarAccent;
+      root.style.setProperty('--sidebar', sidebar);
+      root.style.setProperty('--sidebar-foreground', foreground);
+      root.style.setProperty('--sidebar-primary', primary);
+      root.style.setProperty('--sidebar-accent', accent);
+      root.style.setProperty('--sidebar-accent-foreground', getReadableForeground(accent));
+    };
+
+    applySidebarVariant();
+    const observer = new MutationObserver(applySidebarVariant);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
     if (themeConfig.tenantId === activeTenantId) {
       safeSetItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
     }
+    return () => observer.disconnect();
   }, [themeConfig, activeTenantId]);
 
   useEffect(() => {
