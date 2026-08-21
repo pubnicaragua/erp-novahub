@@ -13,6 +13,8 @@ import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
 import { TrialExtensionRequestsPanel } from '../suscripciones/TrialExtensionRequestsPanel';
 import { PlatformQuotesPanel } from './PlatformQuotesPanel';
 
+const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
+
 function formatStorage(value: unknown) {
   const bytes = Number(value || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -32,15 +34,15 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
   const data = query.data;
   const totalGroupUsers = (data?.groups || []).reduce((total: number, group: any) => total + Number(group.userCount || 0), 0);
   const filteredGroups = useMemo(() => {
-    const term = searchTerm.trim().toLocaleLowerCase();
+    const term = normalizeSearchValue(searchTerm);
     if (!term) return data?.groups || [];
     return (data?.groups || []).filter((group: any) => {
       const haystack = [
-        group.name,
-        group.description,
-        ...(group.businessUnits || []).map((unit: any) => unit.name),
-        ...(group.branches || []).map((branch: any) => branch.name),
-      ].filter(Boolean).join(' ').toLocaleLowerCase();
+        group?.name,
+        group?.description,
+        ...(Array.isArray(group?.businessUnits) ? group.businessUnits : []).map((unit: any) => unit?.name),
+        ...(Array.isArray(group?.branches) ? group.branches : []).map((branch: any) => branch?.name),
+      ].map((value) => String(value ?? '')).join(' ').toLocaleLowerCase();
       return haystack.includes(term);
     });
   }, [data?.groups, searchTerm]);
@@ -183,8 +185,16 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
 function LegacyUsersPanel({ data, loading, onExtend }: { data?: { cutoff: string; totalUsers: number; totalTenants: number; tenants: any[] }; loading: boolean; onExtend: (tenantId: string) => Promise<void> }) {
   const [term, setTerm] = useState('');
   const tenants = useMemo(() => {
-    const normalized = term.trim().toLocaleLowerCase();
-    return (data?.tenants || []).filter((tenant: any) => !normalized || [tenant.name, tenant.slug, tenant.enterpriseGroup?.name, ...(tenant.users || []).map((user: any) => `${user.name} ${user.email}`)].join(' ').toLocaleLowerCase().includes(normalized));
+    const normalized = normalizeSearchValue(term);
+    return (Array.isArray(data?.tenants) ? data.tenants : []).filter((tenant: any) => {
+      const haystack = [
+        tenant?.name,
+        tenant?.slug,
+        tenant?.enterpriseGroup?.name,
+        ...(Array.isArray(tenant?.users) ? tenant.users : []).flatMap((user: any) => [user?.name, user?.email]),
+      ].map((value) => String(value ?? '')).join(' ').toLocaleLowerCase();
+      return !normalized || haystack.includes(normalized);
+    });
   }, [data?.tenants, term]);
   return (
     <Card className="rounded-3xl border-border/60 shadow-sm">
@@ -203,6 +213,7 @@ function LegacyUsersPanel({ data, loading, onExtend }: { data?: { cutoff: string
 function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWorkspace: () => void; onChanged: () => void }) {
   const units = group.businessUnits || [];
   const warehouses = group.warehouses || [];
+  const branches = Array.isArray(group.branches) ? group.branches : [];
   return (
     <Card className="rounded-3xl border-border/60 bg-card/60 shadow-sm transition-shadow hover:shadow-md">
       <CardHeader className="p-6 pb-4">
@@ -222,10 +233,10 @@ function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWo
           <Metric icon={Warehouse} label="Almacenes" value={warehouses.length} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><GitBranch className="size-4 text-primary" /> Rubros</p><div className="space-y-2">{units.slice(0, 4).map((unit: any) => <div key={unit.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{unit.name}</span><Badge variant="outline" className="shrink-0 text-[10px]">{group.branches.filter((branch: any) => branch.businessUnitId === unit.id).length} suc.</Badge></div>)}{!units.length && <p className="text-xs text-muted-foreground">Configura los rubros desde el flujo avanzado.</p>}{units.length > 4 && <p className="text-xs text-primary">+{units.length - 4} rubros más</p>}</div></div>
+          <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><GitBranch className="size-4 text-primary" /> Rubros</p><div className="space-y-2">{units.slice(0, 4).map((unit: any) => <div key={unit.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{unit.name}</span><Badge variant="outline" className="shrink-0 text-[10px]">{branches.filter((branch: any) => branch.businessUnitId === unit.id).length} suc.</Badge></div>)}{!units.length && <p className="text-xs text-muted-foreground">Configura los rubros desde el flujo avanzado.</p>}{units.length > 4 && <p className="text-xs text-primary">+{units.length - 4} rubros más</p>}</div></div>
           <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-4 text-primary" /> Almacenes corporativos</p><div className="space-y-2">{warehouses.slice(0, 4).map((warehouse: any) => <div key={warehouse.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{warehouse.name}</span><span className="shrink-0 text-[10px] text-muted-foreground">{units.find((unit: any) => unit.id === warehouse.businessUnitId)?.name || 'Rubro pendiente'}</span></div>)}{!warehouses.length && <p className="text-xs text-muted-foreground">Aún no hay almacenes fuera de las sucursales.</p>}{warehouses.length > 4 && <p className="text-xs text-primary">+{warehouses.length - 4} almacenes más</p>}</div></div>
         </div>
-        <div className="space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales y soporte</p>{(group.branches || []).slice(0, 5).map((branch: any) => <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><div className="flex min-w-0 items-center gap-3"><Building2 className="size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="truncate font-semibold">{branch.name}</p><p className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{units.find((unit: any) => unit.id === branch.businessUnitId)?.name || getBusinessTypeLabel(branch.industry, branch.subIndustry)} · {branch._count?.users || 0} usuarios</p></div></div><GroupBranchSupportDialog branch={branch} onChanged={onChanged} /></div>)}{!group.branches?.length && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}{group.branches?.length > 5 && <p className="text-xs text-primary">+{group.branches.length - 5} sucursales más. Abre Configurar para verlas.</p>}</div>
+        <div className="space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales y soporte</p>{branches.slice(0, 5).map((branch: any) => <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><div className="flex min-w-0 items-center gap-3"><Building2 className="size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="truncate font-semibold">{branch.name}</p><p className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{units.find((unit: any) => unit.id === branch.businessUnitId)?.name || getBusinessTypeLabel(branch.industry, branch.subIndustry)} · {branch._count?.users || 0} usuarios</p></div></div><GroupBranchSupportDialog branch={branch} onChanged={onChanged} /></div>)}{!branches.length && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}{branches.length > 5 && <p className="text-xs text-primary">+{branches.length - 5} sucursales más. Abre Configurar para verlas.</p>}</div>
       </CardContent>
     </Card>
   );

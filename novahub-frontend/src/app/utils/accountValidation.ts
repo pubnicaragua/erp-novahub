@@ -12,20 +12,21 @@ export const passwordRules = [
   { label: '1 carácter especial', test: (value: string) => /[^a-zA-Z0-9\s]/.test(value) },
 ];
 
-export function getPasswordError(value: string, required = true): string | null {
-  if (!value) return required ? 'La contraseña es obligatoria' : null;
-  const failed = passwordRules.find(rule => !rule.test(value));
+export function getPasswordError(value: unknown, required = true): string | null {
+  const normalizedValue = String(value ?? '');
+  if (!normalizedValue) return required ? 'La contraseña es obligatoria' : null;
+  const failed = passwordRules.find(rule => !rule.test(normalizedValue));
   return failed ? `La contraseña debe incluir: ${failed.label.toLowerCase()}` : null;
 }
 
-export function isValidPassword(value: string, required = true) {
+export function isValidPassword(value: unknown, required = true) {
   return getPasswordError(value, required) === null;
 }
 
-export function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
+export function normalizeEmail(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase();
 }
 
-export function isValidEmail(value: string) {
+export function isValidEmail(value?: string | null) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
 }

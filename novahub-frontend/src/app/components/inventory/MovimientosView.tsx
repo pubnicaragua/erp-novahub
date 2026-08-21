@@ -132,13 +132,14 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   const handleExport = () => {
     try {
       const csvContent = [
-        ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Cantidad', 'Referencia'].join(','),
+        ['Fecha', 'Tipo', 'Producto', 'Almacén', 'Cantidad', 'Usuario', 'Referencia'].join(','),
         ...filteredData.map(m => [
           formatDateEs(m.date),
           m.type,
           `"${m.product?.name || ''}"`,
           `"${m.warehouse?.name || ''}"`,
           m.quantity,
+          `"${m.user?.name || m.userName || ''}"`,
           `"${m.reference || ''}"`
         ].join(','))
       ].join('\n');
@@ -184,21 +185,25 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
               {(warehouses || []).map((w: any) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             <Input
+              id="movement-date-from"
               type="date"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); onDateChange?.(e.target.value, dateTo); }}
-              className="h-9 w-full sm:w-32 text-xs"
-              placeholder="Desde"
+              aria-label="Fecha desde"
+              title="Fecha desde"
+              className="inventory-date-filter h-10 w-full rounded-xl px-3 text-xs font-medium sm:w-36"
             />
             <span className="text-muted-foreground text-xs">–</span>
             <Input
+              id="movement-date-to"
               type="date"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); onDateChange?.(dateFrom, e.target.value); }}
-              className="h-9 w-full sm:w-32 text-xs"
-              placeholder="Hasta"
+              aria-label="Fecha hasta"
+              title="Fecha hasta"
+              className="inventory-date-filter h-10 w-full rounded-xl px-3 text-xs font-medium sm:w-36"
             />
           </div>
         </div>
@@ -269,7 +274,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
                     {move.resultingQty != null ? Number(move.resultingQty) : '—'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {move.userId ? move.userId.slice(0, 8) : '—'}
+                    {move.user?.name || move.userName || '—'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</TableCell>
                 </TableRow>
@@ -294,4 +299,3 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
     </Card>
   );
 }
-

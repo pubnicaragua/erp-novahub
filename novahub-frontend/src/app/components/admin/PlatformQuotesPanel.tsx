@@ -46,6 +46,8 @@ const emptyDraft = (): DraftQuote => ({
   items: defaultItems.map((item) => ({ ...item })),
 });
 
+const safeTrim = (value: unknown) => String(value ?? '').trim();
+
 function money(value: number, currency: string) {
   return new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: 2 }).format(Number(value || 0));
 }
@@ -75,13 +77,13 @@ export function PlatformQuotesPanel({ groups = [] }: { groups?: any[] }) {
   const openEdit = (quote: PlatformQuote) => {
     setEditingId(quote.id);
     setDraft({
-      prospectCompany: quote.prospectCompany, prospectName: quote.prospectName, prospectEmail: quote.prospectEmail || '', prospectPhone: quote.prospectPhone || '', country: quote.country || '', currency: quote.currency,
+      prospectCompany: safeTrim(quote.prospectCompany), prospectName: safeTrim(quote.prospectName), prospectEmail: safeTrim(quote.prospectEmail), prospectPhone: safeTrim(quote.prospectPhone), country: safeTrim(quote.country), currency: quote.currency,
       validDays: quote.validUntil ? Math.max(1, Math.ceil((new Date(quote.validUntil).getTime() - Date.now()) / 86400000)) : 15, enterpriseGroupId: quote.enterpriseGroup?.id || '', clientTenantId: quote.clientTenant?.id || '', discountAmount: quote.discountAmount, taxRate: quote.taxRate, notes: quote.notes || '',
-      items: quote.items.map((item) => ({ section: item.section, description: item.description, detail: item.detail || '', periodicity: item.periodicity || '', quantity: item.quantity, unitPrice: item.unitPrice, isOptional: item.isOptional })),
+      items: (Array.isArray(quote.items) ? quote.items : []).map((item) => ({ section: safeTrim(item.section), description: safeTrim(item.description), detail: safeTrim(item.detail), periodicity: safeTrim(item.periodicity), quantity: item.quantity, unitPrice: item.unitPrice, isOptional: Boolean(item.isOptional) })),
     });
   };
   const save = async () => {
-    if (!draft?.prospectCompany.trim() || !draft.prospectName.trim()) { toast.error('Indica la empresa y el contacto prospecto.'); return; }
+    if (!safeTrim(draft?.prospectCompany) || !safeTrim(draft?.prospectName)) { toast.error('Indica la empresa y el contacto prospecto.'); return; }
     if (!draft.items.length) { toast.error('Agrega al menos un concepto.'); return; }
     const payload = { ...draft, validUntil: new Date(Date.now() + Math.max(1, Number(draft.validDays || 15)) * 86400000).toISOString(), items: draft.items.map((item) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice) })) };
     try {

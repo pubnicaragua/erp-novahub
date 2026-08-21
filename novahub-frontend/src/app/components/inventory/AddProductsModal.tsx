@@ -229,15 +229,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
       }
     }
     if (draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
-      toast.error('Debes seleccionar un almacén para el producto');
+      toast.error('Debes seleccionar una Bodega para el producto');
       return;
     }
     if (draftProduct.isVariable && !draftProduct.initialWarehouseId) {
-      toast.error('Debes seleccionar un almacén para el producto');
+      toast.error('Debes seleccionar una Bodega para el producto');
       return;
     }
     if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
-      toast.error('Debes seleccionar el almacén del servicio');
+      toast.error('Debes seleccionar la Bodega del servicio');
       return;
     }
 
@@ -280,15 +280,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
         }
       }
       if (!draftProduct.isVariable && draftProduct.itemType === 'PRODUCT' && !draftProduct.initialWarehouseId) {
-        toast.error('Debes seleccionar un almacén para el producto');
+        toast.error('Debes seleccionar una Bodega para el producto');
         return;
       }
       if (draftProduct.isVariable && !draftProduct.initialWarehouseId) {
-        toast.error('Debes seleccionar un almacén para el producto');
+        toast.error('Debes seleccionar una Bodega para el producto');
         return;
       }
       if (draftProduct.itemType === 'SERVICE' && !draftProduct.initialWarehouseId) {
-        toast.error('Debes seleccionar el almacén del servicio');
+        toast.error('Debes seleccionar la Bodega del servicio');
         return;
       }
       listToSave.push(draftProduct);
@@ -383,7 +383,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
             label={catalogItemType === 'SERVICE' ? 'Cómo crear servicio' : 'Cómo crear producto'}
             targetPrefix="inventory-product-add"
             stepKeys={['title', 'data', 'items', 'actions']}
-            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, almacén y stock inicial.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
+            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, Bodegas y stock inicial.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
           />
         </DialogHeader>
 
@@ -569,7 +569,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 !draftProduct.isVariable ? (
                 <>
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén (Stock Inicial)</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega (Stock Inicial)</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
                       <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega para ingreso" /></SelectTrigger>
                       <SelectContent>
@@ -591,7 +591,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 ) : (
                 <>
                   <div className="sm:col-span-2 md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén *</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega *</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
                       <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Bodega del producto" /></SelectTrigger>
                       <SelectContent>
@@ -609,9 +609,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
               ) : (
                 <>
                   <div className="sm:col-span-2 md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Almacén vinculado *</label>
+                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Bodega vinculada *</label>
                     <Select value={draftProduct.initialWarehouseId} onValueChange={v => handleUpdateDraft('initialWarehouseId', v)}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                       <SelectContent>
                         {effectiveWarehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                       </SelectContent>

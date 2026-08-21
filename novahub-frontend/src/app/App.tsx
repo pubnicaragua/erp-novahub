@@ -49,7 +49,12 @@ function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(
 
 const OverviewDashboard = lazyWithChunkRecovery(() => import('./components/OverviewDashboard').then(m => ({ default: m.OverviewDashboard })), 'dashboard');
 const PartnerDashboard = lazyWithChunkRecovery(() => import('./components/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })), 'partner');
-const InventarioPage = lazyWithChunkRecovery(() => import('./components/InventarioPage').then(m => ({ default: m.InventarioPage })), 'inventario');
+const InventarioPage = lazyWithChunkRecovery(async () => {
+  const module = await import('./components/InventarioPage');
+  const component = (module as any).default || module.InventarioPage;
+  if (!component) throw new Error('El módulo de Inventario no exportó un componente válido.');
+  return { default: component };
+}, 'inventario');
 const VentasPage = lazyWithChunkRecovery(() => import('./components/VentasPage').then(m => ({ default: m.VentasPage })), 'ventas');
 const RestaurantePage = lazyWithChunkRecovery(() => import('./components/RestaurantePage').then(m => ({ default: m.RestaurantePage })), 'restaurante');
 const ComprasPage = lazyWithChunkRecovery(() => import('./components/ComprasPage').then(m => ({ default: m.ComprasPage })), 'compras');
