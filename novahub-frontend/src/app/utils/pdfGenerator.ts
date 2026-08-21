@@ -6,6 +6,35 @@ import { sanitizeHtml2CanvasOklch } from './export-utils';
 
 type PdfRgb = [number, number, number];
 
+// The NovaHub mark is currently rendered as an inline SVG in the application
+// shell (see components/NovaHubLogo.tsx), not served as a standalone image.
+// Keep a PDF-safe lockup here so commercial documents always carry the brand
+// even when a tenant has not uploaded a custom logo yet.
+const NOVAHUB_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="100" viewBox="0 0 360 100"><rect width="100" height="100" rx="22" fill="#0A0A0A"/><rect x="22" y="20" width="12" height="60" rx="4" fill="#fff"/><rect x="66" y="20" width="12" height="60" rx="4" fill="#fff"/><path d="M22 20h56v15H34z" fill="#fff"/><path d="M28 22l44 36v14L28 36z" fill="#22C55E"/><path d="M66 65h12v15H66z" fill="#fff"/><text x="122" y="58" fill="#0f172a" font-family="Arial,sans-serif" font-size="38" font-weight="800">Nova<tspan fill="#16a34a">Hub</tspan></text><text x="124" y="78" fill="#64748b" font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing="3">ERP PLATFORM</text></svg>`;
+const NOVAHUB_LOGO_DATA_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(NOVAHUB_LOGO_SVG)}`;
+
+async function getNovaHubLogoPng(): Promise<string> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return NOVAHUB_LOGO_DATA_URL;
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 200;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(NOVAHUB_LOGO_DATA_URL);
+        return;
+      }
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => resolve(NOVAHUB_LOGO_DATA_URL);
+    image.src = NOVAHUB_LOGO_DATA_URL;
+  });
+}
+
 function pdfHexToRgb(value: unknown, fallback: PdfRgb): PdfRgb {
   if (typeof value !== 'string') return fallback;
   const hex = value.replace('#', '').trim();
@@ -90,24 +119,24 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   };
   const items = Array.isArray(estimate.items) ? estimate.items : [];
   const rows = (items.length ? items : [{ description: 'Sin productos', quantity: 0, unitPrice: 0, total: 0 }]).map((item: any, index: number) => `<div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 5 : 8}px;border-top:${tableBorder};border-radius:${tableLayout === 'cards' ? 4 : 0}px;background:${['striped', 'ledger', 'accent'].includes(tableLayout) && index % 2 ? '#f8fafc' : '#fff'};"><span>${escapeHtml(item.description || item.name || 'Producto')}</span><span>${escapeHtml(item.quantity || 0)}</span><span>${escapeHtml(formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate))}</span><strong style="color:${tableLayout === 'accent' ? primary : text}">${escapeHtml(formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate))}</strong></div>`).join('');
-  const headerBackground = bannerHeader ? primary : '#fff';
+  const headerBackground = bannerHeader ? primary : '#f7fbf9';
   const headerBorder = bannerHeader ? 'none' : `1px solid ${line}`;
-  const logoSource = design.logoUrl || tenantLogo;
-  const logo = logoSource ? `<img src="${escapeHtml(logoSource)}" style="position:absolute;left:${design.logoPosition === 'right' ? '78%' : design.logoPosition === 'center' ? '42%' : '8%'};top:5%;width:${Math.min(Number(design.logoSize) || 34, 70) / 2}%;max-height:9%;object-fit:contain;" />` : '';
+  const logoSource = design.logoUrl || tenantLogo || NOVAHUB_LOGO_DATA_URL;
+  const logo = `<img src="${escapeHtml(logoSource)}" alt="NovaHub" style="position:absolute;left:${design.logoPosition === 'right' ? '78%' : design.logoPosition === 'center' ? '42%' : '8%'};top:4.5%;width:${Math.min(Number(design.logoSize) || 42, 78) / 2}%;max-height:10%;object-fit:contain;" />`;
   const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
-    <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.1;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
-    ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`)}
+    <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-top:6px solid ${primary};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.06;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
+    ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`, 'font-size:1.18em;letter-spacing:.01em;')}
     ${zone('slogan', `<span style="opacity:.75">${escapeHtml(values.slogan)}</span>`, 'font-size:.78em;')}
     ${zone('fiscal', `<span style="opacity:.75;white-space:pre-line">${escapeHtml(values.fiscal)}</span>`, 'font-size:.72em;')}
-    ${zone('documentTitle', `<strong>${escapeHtml(values.documentTitle)}</strong>`, `text-align:right;font-size:1.35em;font-weight:800;`)}
+    ${zone('documentTitle', `<strong>${escapeHtml(values.documentTitle)}</strong>`, `text-align:right;font-size:1.55em;letter-spacing:.08em;font-weight:800;color:${bannerHeader ? '#fff' : primary};`)}
     ${zone('documentNumber', `Nº: ${escapeHtml(values.documentNumber)}`, 'text-align:right;font-size:.82em;')}
     ${zone('date', `Fecha: ${escapeHtml(values.date)}`, 'text-align:right;font-size:.82em;')}
-    ${zone('customer', `<strong style="display:block;color:${primary};font-size:.78em;text-transform:uppercase;">Preparado para</strong><span>${escapeHtml(values.customer)}</span>`)}
+    ${zone('customer', `<strong style="display:block;color:${primary};font-size:.78em;letter-spacing:.12em;text-transform:uppercase;">Preparado para</strong><span style="display:block;margin-top:4px;font-size:1.12em;font-weight:700;">${escapeHtml(values.customer)}</span>`)}
     ${zone('address', escapeHtml(values.address), 'font-size:.78em;opacity:.75;')}
     ${zone('phone', escapeHtml(values.phone), 'font-size:.78em;opacity:.75;')}
     ${zone('email', escapeHtml(values.email), 'font-size:.78em;opacity:.75;')}
-    ${zone('items', `<div style="overflow:hidden;border:${tableBorder};border-radius:${tableLayout === 'cards' ? 0 : 5}px;font-size:.78em;"><div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 6 : 9}px;background:${tableHeaderBackground};color:${tableHeaderColor};font-weight:700;"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span></div>${rows}</div>`, 'padding:0;')}
-    ${zone('totals', `<div style="font-size:.78em;text-align:right;"><div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:4px;color:${primary};font-weight:700;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`)}
+    ${zone('items', `<div style="overflow:hidden;border:${tableBorder};border-radius:${tableLayout === 'cards' ? 0 : 6}px;font-size:.78em;box-shadow:0 2px 10px rgba(15,23,42,.04);"><div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 6 : 10}px;background:${tableHeaderBackground};color:${tableHeaderColor};font-size:.92em;letter-spacing:.06em;text-transform:uppercase;font-weight:700;"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span></div>${rows}</div>`, 'padding:0;')}
+    ${zone('totals', `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:7px;margin-top:6px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`)}
     ${zone('legal', escapeHtml(values.legal).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('terms', escapeHtml(values.terms).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('notes', escapeHtml(values.notes).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
@@ -161,8 +190,9 @@ interface PDFGeneratorParams {
 
 export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, tenantLogo, documentType = 'estimate', save = true, designOverride }: PDFGeneratorParams): Promise<{ doc: jsPDF | null; blob: Blob }> => {
   const savedDesign = designOverride || await pdfDocumentDesignService.active(getPdfTemplateTarget(documentType).key).catch(() => null);
+  const resolvedTenantLogo = tenantLogo || await getNovaHubLogoPng();
   if (savedDesign?.engine === 'HTML_TEMPLATE' || savedDesign?.sourceType === 'UPLOADED_PDF') {
-    return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, save });
+    return generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo: resolvedTenantLogo, documentType, save });
   }
   // Las plantillas cargadas se exportan con el mismo motor HTML-estructurado
   // que la vista previa. El PDF original queda como referencia, no como fondo
@@ -173,8 +203,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const doc = new jsPDF({ orientation, unit: 'mm', format });
   
   // 1. Configuraciones iniciales y estilos base
-  const primaryColor = pdfHexToRgb(design.primaryColor, [16, 185, 129]);
-  const textColor = pdfHexToRgb(design.textColor, [51, 65, 85]);
+  const primaryColor = pdfHexToRgb(design.primaryColor, [15, 118, 110]);
+  const textColor = pdfHexToRgb(design.textColor, [30, 41, 59]);
   const lineColor = pdfHexToRgb(design.lineColor, [226, 232, 240]);
   const margin = Math.max(8, Math.min(28, Number(design.margins) || 14));
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -188,9 +218,9 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const baseFontSize = Math.max(7, Math.min(13, Number(design.fontSize) || 9));
   const companyDisplayName = design.showCompanyName === false ? '' : (design.companyName || tenantName || 'Nuestra Empresa');
   const logoPosition = design.logoPosition || 'left';
-  const logoWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 30));
+  const logoWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 42));
   const logoHeight = logoWidth * 0.5;
-  const designLogo = design.logoUrl || tenantLogo;
+  const designLogo = design.logoUrl || resolvedTenantLogo;
   const headerLayout = design.headerLayout || 'split';
   const tableLayout = design.tableLayout || 'standard';
   const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
@@ -222,32 +252,29 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.rect(0, headerHeight - 5, pageWidth, 5, 'F');
   }
   
-  // 2. Head - Top Left (Logo y Nombre de la Institución/Tenant)
-  let titleY = 25;
+  // 2. Encabezado: marca a la izquierda y ficha documental a la derecha.
   const logoX = logoPosition === 'center' ? (pageWidth - logoWidth) / 2 : logoPosition === 'right' ? rightEdge - logoWidth : margin;
+  const logoY = isBannerHeader ? 13 : 15;
+  const identityX = logoPosition === 'left' ? logoX + logoWidth + 6 : logoPosition === 'right' ? rightEdge : logoX;
+  const identityAlign = logoPosition === 'right' ? 'right' : 'left';
   if (designLogo) {
     try {
-      doc.addImage(designLogo, 'PNG', logoX, 15, logoWidth, logoHeight);
-      titleY = 15 + logoHeight + 8;
-      doc.setFontSize(14); // Texto más pequeño si existe un logo
+      doc.addImage(designLogo, 'PNG', logoX, logoY, logoWidth, logoHeight);
     } catch (error) {
       console.warn('No se pudo incrustar el logo en el PDF', error);
-      doc.setFontSize(22);
     }
-  } else {
-    doc.setFontSize(22);
   }
   doc.setTextColor(companyHeaderColor[0], companyHeaderColor[1], companyHeaderColor[2]);
   doc.setFont(fontName, 'bold');
-  // Representación del Nombre de la Empresa en el encabezado izquierdo
-  if (companyDisplayName) doc.text(companyDisplayName, logoPosition === 'right' ? rightEdge : margin, titleY, { align: logoPosition === 'right' ? 'right' : 'left' });
+  doc.setFontSize(designLogo ? 14 : 18);
+  if (companyDisplayName) doc.text(companyDisplayName, identityX, logoY + 8, { align: identityAlign as any });
   
   // Subtítulo / Identificadores de Empresa
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
   doc.setFont(fontName, 'normal');
-  if (design.slogan) doc.text(String(design.slogan), margin, titleY + 5);
-  if (design.fiscalInfo) doc.text(String(design.fiscalInfo), margin, titleY + 10);
+  if (design.slogan) doc.text(String(design.slogan), identityX, logoY + 14, { align: identityAlign as any });
+  if (design.fiscalInfo) doc.text(String(design.fiscalInfo), identityX, logoY + 19, { align: identityAlign as any });
   let docTypeStr = 'Cotización de Venta';
   if (documentType === 'order') docTypeStr = 'Orden de Venta';
   else if (documentType === 'invoice') docTypeStr = 'Factura';
@@ -255,10 +282,10 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') docTypeStr = 'Comprobante de Pago';
   else if (documentType === 'return') docTypeStr = 'Nota de Crédito';
   else if (documentType === 'credit-note') docTypeStr = 'Crédito';
-  doc.text(docTypeStr, margin, titleY + (design.slogan || design.fiscalInfo ? 15 : 7));
+  doc.text(docTypeStr, identityX, logoY + (design.slogan || design.fiscalInfo ? 25 : 20), { align: identityAlign as any });
   
   // 3. Head - Top Right (Info de la Cotización)
-  doc.setFontSize(18);
+  doc.setFontSize(17);
   doc.setTextColor(headerTextColor[0], headerTextColor[1], headerTextColor[2]);
   doc.setFont(fontName, 'bold');
   let titleStr = 'COTIZACIÓN';
@@ -268,17 +295,18 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') titleStr = 'PAGO RECIBIDO';
   else if (documentType === 'return') titleStr = 'NOTA DE CRÉDITO';
   else if (documentType === 'credit-note') titleStr = 'CRÉDITO';
-  doc.text(titleStr, rightEdge, 25, { align: 'right' });
+  doc.text(titleStr, rightEdge, 22, { align: 'right' });
   
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   doc.setFont(fontName, 'normal');
-  doc.text(`Nº: ${estimate.number || 'N/A'}`, rightEdge, headerLayout === 'compact' ? 28 : 32, { align: 'right' });
-  doc.text(`Fecha: ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 34 : 38, { align: 'right' });
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text(`Nº ${estimate.number || 'N/A'}`, rightEdge, headerLayout === 'compact' ? 29 : 29, { align: 'right' });
+  doc.text(`Fecha  ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 35 : 35, { align: 'right' });
   
   if (documentType === 'order') {
-    doc.text(`Entrega: ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 40 : 44, { align: 'right' });
+    doc.text(`Entrega  ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 41 : 41, { align: 'right' });
   } else {
-    doc.text(`Validez: ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 40 : 44, { align: 'right' });
+    doc.text(`Válida hasta  ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 41 : 41, { align: 'right' });
   }
 
   // 4. Separador
@@ -290,22 +318,31 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.setLineDashPattern([], 0);
   }
 
-  // 5. Cliente Info
-  doc.setFontSize(headerLayout === 'compact' ? 10 : 11);
+  // 5. Tarjeta de cliente: una jerarquía clara antes del detalle.
+  const customerBoxY = headerLayout === 'compact' ? 49 : 58;
+  const customerBoxH = headerLayout === 'compact' ? 23 : 27;
+  doc.setFillColor(247, 251, 249);
+  doc.setDrawColor(...lineColor);
+  doc.roundedRect(margin, customerBoxY, pageWidth - (margin * 2), customerBoxH, 2.5, 2.5, 'FD');
+  doc.setFontSize(7.5);
   doc.setFont(fontName, 'bold');
-  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Preparado para:', margin, headerLayout === 'compact' ? 54 : 62);
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text('PREPARADO PARA', margin + 6, customerBoxY + 7);
   
   doc.setFontSize(10);
   doc.setFont(fontName, 'normal');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   const clienteNombre = estimate.customer?.name || 'Cliente sin registrar';
   const clienteEmail = estimate.customer?.email || '';
   const clienteTelf = estimate.customer?.phone || '';
   
-  const customerY = headerLayout === 'compact' ? 60 : 68;
-  doc.text(clienteNombre, margin, customerY);
-  if (clienteEmail) doc.text(clienteEmail, margin, customerY + 5);
-  if (clienteTelf) doc.text(clienteTelf, margin, customerY + 10);
+  const customerY = customerBoxY + 14;
+  doc.setFont(fontName, 'bold');
+  doc.text(clienteNombre, margin + 6, customerY);
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(8);
+  const contact = [clienteEmail, clienteTelf].filter(Boolean).join('  ·  ');
+  if (contact) doc.text(contact, rightEdge - 6, customerY, { align: 'right' });
 
   // 6. Configuración de ítems (Tabla)
   const tableData = (estimate.items || []).map((item: any) => [
@@ -318,16 +355,17 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const tableTheme = tableLayout === 'striped' || tableLayout === 'ledger' ? 'striped' : tableLayout === 'minimal' ? 'plain' : 'grid';
   const lightTableHeader = tableLayout === 'minimal';
   autoTable(doc, {
-    startY: headerLayout === 'compact' ? 78 : 90,
+    startY: headerLayout === 'compact' ? 79 : 92,
     head: [['Descripción', 'Cantidad', 'Precio U.', 'Total']],
     body: tableData,
     theme: tableTheme,
     headStyles: {
       fillColor: lightTableHeader ? [248, 250, 252] : primaryColor,
       textColor: lightTableHeader ? textColor : 255,
-      fontSize: baseFontSize + 1,
+      fontSize: baseFontSize,
       fontStyle: 'bold',
-      halign: 'center'
+      halign: 'center',
+      cellPadding: 4,
     },
     bodyStyles: {
       textColor: textColor,
@@ -339,7 +377,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       2: { cellWidth: 35, halign: 'right' },
       3: { cellWidth: 35, halign: 'right' }
     },
-    styles: { overflow: 'linebreak', cellPadding: tableLayout === 'compact' ? 2.5 : tableLayout === 'cards' ? 4 : 5, lineWidth: tableLayout === 'minimal' ? 0 : 0.2, lineColor },
+    styles: { overflow: 'linebreak', cellPadding: tableLayout === 'compact' ? 2.5 : tableLayout === 'cards' ? 4 : 4.5, lineWidth: tableLayout === 'minimal' ? 0 : 0.15, lineColor },
     tableLineWidth: tableLayout === 'minimal' ? 0 : 0.2,
     tableLineColor: lineColor,
     alternateRowStyles: tableLayout === 'striped' || tableLayout === 'ledger' || tableLayout === 'accent' ? { fillColor: [248, 250, 252] } : undefined,
@@ -347,10 +385,16 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
 
   // 7. Resumen Financiero
   const finalY = (doc as any).lastAutoTable.finalY || 90;
-  
   const rightX = rightEdge;
-  const labelX = 140;
-  let currentY = finalY + 10;
+  const summaryX = Math.max(margin + 82, rightEdge - 72);
+  const summaryTop = finalY + 7;
+  const summaryRows = 2 + (Number(estimate.discountAmount) > 0 ? 1 : 0) + (Number(estimate.taxAmount) > 0 ? 1 : 0) + (Number((estimate as any).irAmount || 0) > 0 ? 1 : 0);
+  const summaryHeight = summaryRows * 6 + 14;
+  doc.setFillColor(247, 251, 249);
+  doc.setDrawColor(...lineColor);
+  doc.roundedRect(summaryX - 6, summaryTop, rightEdge - summaryX + 12, summaryHeight, 2.5, 2.5, 'FD');
+  const labelX = summaryX;
+  let currentY = summaryTop + 8;
   
   doc.setFontSize(10);
   
@@ -385,13 +429,13 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   
   // Total Line
   doc.setDrawColor(...lineColor);
-  if (design.separator !== 'none') doc.line(labelX, currentY - 3, rightX, currentY - 3);
+  if (design.separator !== 'none') doc.line(labelX - 2, currentY - 3, rightX, currentY - 3);
   
   // Total
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text('TOTAL:', labelX, currentY + 3);
+  doc.text('TOTAL', labelX, currentY + 3);
   doc.text(formatAmount(Number(estimate.total), estimate.currency, estimate.exchangeRate), rightX, currentY + 3, { align: 'right' });
 
   // 8. Notas
