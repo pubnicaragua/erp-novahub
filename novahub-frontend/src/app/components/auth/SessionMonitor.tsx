@@ -3,8 +3,11 @@ import { ShieldAlert } from 'lucide-react';
 import { api } from '../../services/api';
 
 const GRACE_SECONDS = 20;
-const ACTIVE_CHECK_MS = 15_000;
-const BACKGROUND_CHECK_MS = 60_000;
+// The backend starts the 20-second grace window when the second login is
+// committed. Poll frequently enough that another machine sees that state
+// almost immediately, while the server remains the source of truth.
+const ACTIVE_CHECK_MS = 1_000;
+const BACKGROUND_CHECK_MS = 15_000;
 
 export function SessionMonitor() {
   const [warning, setWarning] = useState(false);
@@ -21,11 +24,17 @@ export function SessionMonitor() {
         if (cancelled) return;
         if (res && res.valid === false && res.warning) {
           if (!deadlineRef.current) {
-            deadlineRef.current = Date.now() + GRACE_SECONDS * 1000;
+            const expires = Number(res.expires);
+            const remainingSeconds = Number.isFinite(expires)
+              ? Math.max(1, Math.ceil(expires))
+              : GRACE_SECONDS;
+            deadlineRef.current = Date.now() + remainingSeconds * 1000;
+            setSeconds(remainingSeconds);
             setWarning(true);
           }
         } else {
           deadlineRef.current = 0;
+          kickedRef.current = false;
           setWarning(false);
         }
       } catch {
@@ -44,11 +53,16 @@ export function SessionMonitor() {
 
     check();
     schedule();
-    document.addEventListener('visibilitychange', schedule);
+    const handleVisibilityChange = () => {
+      schedule();
+      if (document.visibilityState === 'visible') void check();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', schedule);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

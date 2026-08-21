@@ -1,11 +1,13 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { Eye, ImagePlus, KeyRound, Loader2, Pencil, Save, Users } from 'lucide-react';
+import { Eye, KeyRound, Loader2, Pencil, Save, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { tenantsService } from '../../services/tenants.service';
+import { storageService } from '../../services/storage.service';
 import { getPasswordError, isValidEmail } from '../../utils/accountValidation';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeOption } from '../../constants/businessTypes';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { BrandLogo } from '../BrandLogo';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
 const safeTrim = (value: unknown) => String(value ?? '').trim();
@@ -61,21 +63,45 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
     return () => { cancelled = true; };
   }, [open, branch.id, branch.industry, branch.logo, branch.name, branch.slug]);
 
-  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleLogoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Selecciona un archivo de imagen válido');
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const inferredMime = extension === 'jpg' || extension === 'jpeg'
+      ? 'image/jpeg'
+      : extension === 'png'
+        ? 'image/png'
+        : extension === 'webp'
+          ? 'image/webp'
+          : extension === 'gif'
+            ? 'image/gif'
+            : extension === 'avif'
+              ? 'image/avif'
+              : file.type;
+    const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif']);
+    if (!allowedMimeTypes.has(inferredMime)) {
+      toast.error('Usa un logo PNG, JPG, WEBP, GIF o AVIF');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
       toast.error('El logo no debe superar 2 MB');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setDetailsForm((current) => ({ ...current, logo: String(reader.result || '') }));
-    reader.readAsDataURL(file);
-    event.currentTarget.value = '';
+    try {
+      const normalizedFile = file.type === inferredMime
+        ? file
+        : new File([file], file.name, { type: inferredMime });
+      const uploaded = await storageService.uploadFile('tenant-branding', normalizedFile, {
+        folder: 'branches',
+        scopeId: branch.id,
+      });
+      setDetailsForm((current) => ({ ...current, logo: uploaded.url }));
+      toast.success('Logo cargado en el almacenamiento');
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo cargar el logo');
+    } finally {
+      event.currentTarget.value = '';
+    }
   };
 
   const saveDetails = async () => {
@@ -172,11 +198,9 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
                 <div className="space-y-2 sm:col-span-2">
                   <p className="text-xs font-bold text-muted-foreground">Logo de la sucursal</p>
                   <label className="flex min-h-28 cursor-pointer items-center gap-4 rounded-2xl border border-dashed border-primary/35 bg-primary/[0.03] p-3 transition hover:border-primary hover:bg-primary/[0.07]">
-                    <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-background">
-                      {detailsForm.logo ? <img src={detailsForm.logo} alt={`Logo de ${detailsForm.name || 'la sucursal'}`} className="size-full object-contain p-2" /> : <ImagePlus className="size-6 text-primary" />}
-                    </div>
+                    <BrandLogo src={detailsForm.logo} alt={`Logo de ${detailsForm.name || 'la sucursal'}`} kind="branch" className="size-20 rounded-xl border border-border/60 bg-background ring-0" imageClassName="rounded-xl p-2" />
                     <span className="text-xs font-semibold text-muted-foreground">Cargar o reemplazar logo propio de esta sucursal</span>
-                    <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" className="hidden" onChange={handleLogoChange} />
                   </label>
                   <p className="text-[11px] text-muted-foreground">No hereda automáticamente el logo del grupo empresarial.</p>
                 </div>

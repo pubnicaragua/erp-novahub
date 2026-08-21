@@ -43,8 +43,22 @@ const supabase = supabaseUrl && supabaseAnonKey
 const storageUrlCache = new Map<string, { value: string; expiresAt: number } | Promise<string>>();
 const STORAGE_URL_CACHE_TTL_MS = 5 * 60_000;
 
+export function clearStorageUrlCache() {
+  storageUrlCache.clear();
+}
+
 function getUploadMimeType(file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase();
+  if (file.type && file.type !== 'application/octet-stream') return file.type;
+  const imageMimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    avif: 'image/avif',
+  };
+  if (extension && imageMimeTypes[extension]) return imageMimeTypes[extension];
   if (extension === 'pdf') return 'application/pdf';
   if (extension === 'html' || extension === 'htm') return 'text/html';
   return file.type || 'application/octet-stream';

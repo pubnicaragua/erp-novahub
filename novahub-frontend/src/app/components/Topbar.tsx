@@ -12,13 +12,13 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Wallet,
-  Building2,
   CircleDollarSign,
   ShoppingCart,
   ChevronDown,
   Check,
   Clock3,
-  TrendingUp
+  TrendingUp,
+  ArrowLeft,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -48,6 +48,8 @@ import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 import { getPasswordError } from '../utils/accountValidation';
 import { playNotificationSound } from '../utils/notificationSound';
+import { useImpersonation } from '../contexts/ImpersonationContext';
+import { BrandLogo } from './BrandLogo';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -82,6 +84,33 @@ function getAvatarInitials(name?: string) {
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
+  const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
+  const isBranchManagerSession = Boolean(isImpersonating && branch);
+  const workspaceName = isBranchManagerSession
+    ? branch?.name
+    : user?.isPlatformAdmin
+      ? 'NovaHub Platform'
+      : (user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'Nova Hub');
+  const workspaceLogo = isBranchManagerSession
+    ? (branch?.logo ?? user?.sessionBranding?.logo ?? user?.clientTenant?.logo)
+    : (user?.isPlatformAdmin ? null : (user?.sessionBranding?.logo ?? user?.clientTenant?.logo));
+  const workspaceKind: 'group' | 'branch' | 'platform' = isBranchManagerSession
+    ? 'branch'
+    : user?.isPlatformAdmin
+      ? 'platform'
+      : (user?.sessionBranding?.kind || (user?.clientTenant ? 'branch' : 'group'));
+  const [dismissedSupervisorBranchId, setDismissedSupervisorBranchId] = useState<string | null>(null);
+  const showSupervisorNotice = Boolean(
+    isBranchManagerSession
+    && branch?.id
+    && dismissedSupervisorBranchId !== branch.id,
+  );
+
+  useEffect(() => {
+    if (!isBranchManagerSession || !branch?.id) return;
+    const timeout = window.setTimeout(() => setDismissedSupervisorBranchId(branch.id), 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [isBranchManagerSession, branch?.id]);
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
   const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
   const notificationIdsRef = useRef<Set<string> | null>(null);
@@ -326,6 +355,27 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   return (
     <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <TrialCountdownBanner />
+      {showSupervisorNotice && branch && (
+        <div
+          role="status"
+          aria-label={`Modo supervisor en ${branch.name}`}
+          className="flex min-h-10 items-center justify-between gap-3 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 sm:px-4 lg:px-6"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">Modo supervisor</span>
+            <span className="truncate">Trabajando en <strong>{branch.name}</strong> como {manager?.name || user?.name}</span>
+          </div>
+          <button
+            type="button"
+            onClick={exitBranch}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors hover:bg-amber-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Volver al panel</span>
+            <span className="sm:hidden">Volver</span>
+          </button>
+        </div>
+      )}
       <header className="flex h-16 min-w-0 items-center gap-2 border-b border-border bg-background/95 px-3 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6" >
       {/* Menu Toggle (Mobile) */}
       <Button
@@ -353,9 +403,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-4">
         {/* Tenancy Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/30 border border-border/50">
-          <Building2 className="size-3.5 text-primary" />
-          <span className="text-xs font-medium truncate max-w-[120px]">{user?.isPlatformAdmin ? 'NovaHub Platform' : (user?.tenantName || 'Nova Hub')}</span>
-          {getRoleBadge(user?.role || '')}
+          <BrandLogo
+            src={workspaceLogo}
+            alt={`Logo de ${workspaceName || 'tu espacio de trabajo'}`}
+            kind={workspaceKind}
+            className="size-6 rounded-md bg-primary/10 ring-0"
+            imageClassName="rounded-md"
+          />
+          <span className="max-w-[150px] truncate text-xs font-medium">{workspaceName}</span>
+          {isBranchManagerSession
+            ? <Badge className="border-amber-500/20 bg-amber-500/10 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400">Modo supervisor</Badge>
+            : getRoleBadge(user?.role || '')}
         </div>
 
         <div className="relative min-w-0 w-12 shrink-0 transition-[width] duration-200 focus-within:w-48 sm:w-[min(32vw,20rem)] sm:focus-within:w-[min(32vw,20rem)] lg:w-full lg:max-w-sm" ref={searchRef}>
@@ -644,10 +702,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               </DropdownMenuItem>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
-              <LogOut className="mr-2 size-4 text-rose-500" />
-              <span>Cerrar Sesión</span>
-            </DropdownMenuItem>
+            {isBranchManagerSession ? (
+              <DropdownMenuItem onClick={exitBranch} className="gap-2 text-amber-700 focus:text-amber-700 dark:text-amber-400 dark:focus:text-amber-400">
+                <ArrowLeft className="size-4" />
+                <span>Volver al panel anterior</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-500/10 transition-colors">
+                <LogOut className="mr-2 size-4 text-rose-500" />
+                <span>Cerrar Sesión</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -744,8 +744,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               </CardHeader>
               <CardContent className="space-y-2 p-4">
             {users.map((u) => {
-              const isCurrentUser = currentUser?.id === u.id;
-              return <div key={u.id} className={cn('space-y-3 rounded-lg bg-muted/20 px-4 py-3 transition-colors', isCurrentUser ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'hover:bg-muted/40')}>
+               const isCurrentUser = currentUser?.id === u.id;
+               const normalizedRole = String(u.role || '').toUpperCase();
+               const normalizedUserType = String(u.userType || '').toUpperCase();
+               const isManager = normalizedUserType === 'MANAGER' || normalizedRole === 'MANAGER';
+               const isAdmin = !isManager && (normalizedUserType === 'ADMIN' || normalizedRole === 'ADMIN');
+               const isCollaborator = !isManager && !isAdmin;
+               return <div key={u.id} className={cn('space-y-3 rounded-lg bg-muted/20 px-4 py-3 transition-colors', isCurrentUser ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : 'hover:bg-muted/40')}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl font-black text-lg', isCurrentUser ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary')}>
@@ -767,9 +772,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-[52px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</span>
-                    <Select value={u.role?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE'} onValueChange={async (val) => {
+                   {isManager ? <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">Manager · Accesos Manager</Badge> : <div className="flex items-center gap-1.5">
+                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Tipo</span>
+                     <Select value={isAdmin ? 'ADMIN' : 'EMPLOYEE'} onValueChange={async (val) => {
                       try {
                         await tenantsService.updateUser(tenant.id, u.id, { role: val });
                         if (val === 'ADMIN') await tenantsService.updateUser(tenant.id, u.id, { customRoleId: null } as any);
@@ -779,10 +784,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     }} disabled={!canEditUsers}>
                       <SelectTrigger className="h-8 w-[122px] bg-primary/5 text-[10px] font-bold uppercase"><SelectValue /></SelectTrigger>
                       <SelectContent>{SYSTEM_ROLE_OPTIONS.map(r => <SelectItem key={r.value} value={r.value} className="text-[10px] font-bold uppercase">{r.label}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
+                     </Select>
+                   </div>}
 
-                  {canManageRoles && u.role?.toUpperCase() !== 'ADMIN' && <div className="flex items-center gap-1.5">
+                   {canManageRoles && isCollaborator && <div className="flex items-center gap-1.5">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rol</span>
                     <Select value={u.customRoleId || 'none'} onValueChange={(val) => handleUpdateCustomRole(u.id, val)}>
                       <SelectTrigger className="h-8 w-[132px] bg-purple-500/5 text-[10px] font-bold uppercase text-purple-600"><SelectValue placeholder="Ninguno" /></SelectTrigger>
@@ -790,7 +795,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                     </Select>
                   </div>}
 
-                  {canEditUsers && u.role?.toUpperCase() !== 'ADMIN' && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
+                   {canEditUsers && !isAdmin && !isManager && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
                   {canEditEmployees && (u.employee ? <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title="Desvincular empleado"><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title="Vincular empleado"><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
                   {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>

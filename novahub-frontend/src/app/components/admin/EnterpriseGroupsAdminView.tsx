@@ -12,6 +12,7 @@ import { GroupManagerSupportDialog } from './GroupManagerSupportDialog';
 import { EnterpriseGroupSetupView } from './EnterpriseGroupSetupView';
 import { TrialExtensionRequestsPanel } from '../suscripciones/TrialExtensionRequestsPanel';
 import { PlatformQuotesPanel } from './PlatformQuotesPanel';
+import { BrandLogo } from '../BrandLogo';
 
 const normalizeSearchValue = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase();
 
@@ -154,7 +155,8 @@ export function EnterpriseGroupsAdminView({ embedded = false }: { embedded?: boo
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2 p-6 pt-3">
             {data.unassignedBranches.map((branch: any) => (
-              <Badge key={branch.id} variant="outline" className="px-3 py-2">
+              <Badge key={branch.id} variant="outline" className="flex items-center gap-2 px-3 py-2">
+                <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-6 rounded-lg bg-muted/50 ring-0" />
                 {branch.name}
               </Badge>
             ))}
@@ -219,7 +221,10 @@ function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWo
       <CardHeader className="p-6 pb-4">
         <div className="flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
-            <CardTitle className="flex min-w-0 items-center gap-2 text-lg font-black"><Building2 className="size-5 shrink-0 text-primary" /><span className="truncate">{group.name}</span></CardTitle>
+            <CardTitle className="flex min-w-0 items-center gap-3 text-lg font-black">
+              <BrandLogo src={group.logo} alt={`Logo de ${group.name}`} className="size-12 rounded-xl bg-primary/10" imageClassName="rounded-xl" />
+              <span className="truncate">{group.name}</span>
+            </CardTitle>
             <p className="mt-2 truncate text-xs text-muted-foreground">Catálogo por rubro · inventario compartido dentro del rubro</p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2"><GroupManagerSupportDialog group={group} onChanged={onChanged} /><Button className="rounded-xl" onClick={onOpenWorkspace}><GitBranch className="mr-2 size-4" /> Configurar</Button></div>
@@ -236,7 +241,7 @@ function GroupCard({ group, onOpenWorkspace, onChanged }: { group: any; onOpenWo
           <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><GitBranch className="size-4 text-primary" /> Rubros</p><div className="space-y-2">{units.slice(0, 4).map((unit: any) => <div key={unit.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{unit.name}</span><Badge variant="outline" className="shrink-0 text-[10px]">{branches.filter((branch: any) => branch.businessUnitId === unit.id).length} suc.</Badge></div>)}{!units.length && <p className="text-xs text-muted-foreground">Configura los rubros desde el flujo avanzado.</p>}{units.length > 4 && <p className="text-xs text-primary">+{units.length - 4} rubros más</p>}</div></div>
           <div className="rounded-2xl border border-border/60 bg-muted/15 p-4"><p className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><Warehouse className="size-4 text-primary" /> Almacenes corporativos</p><div className="space-y-2">{warehouses.slice(0, 4).map((warehouse: any) => <div key={warehouse.id} className="flex items-center justify-between gap-2 text-sm"><span className="truncate font-semibold">{warehouse.name}</span><span className="shrink-0 text-[10px] text-muted-foreground">{units.find((unit: any) => unit.id === warehouse.businessUnitId)?.name || 'Rubro pendiente'}</span></div>)}{!warehouses.length && <p className="text-xs text-muted-foreground">Aún no hay almacenes fuera de las sucursales.</p>}{warehouses.length > 4 && <p className="text-xs text-primary">+{warehouses.length - 4} almacenes más</p>}</div></div>
         </div>
-        <div className="space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales y soporte</p>{branches.slice(0, 5).map((branch: any) => <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><div className="flex min-w-0 items-center gap-3"><Building2 className="size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="truncate font-semibold">{branch.name}</p><p className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{units.find((unit: any) => unit.id === branch.businessUnitId)?.name || getBusinessTypeLabel(branch.industry, branch.subIndustry)} · {branch._count?.users || 0} usuarios</p></div></div><GroupBranchSupportDialog branch={branch} onChanged={onChanged} /></div>)}{!branches.length && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}{branches.length > 5 && <p className="text-xs text-primary">+{branches.length - 5} sucursales más. Abre Configurar para verlas.</p>}</div>
+        <div className="space-y-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursales y soporte</p>{branches.slice(0, 5).map((branch: any) => <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/50 p-3 text-sm"><div className="flex min-w-0 items-center gap-3"><BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-9 rounded-xl bg-primary/10" imageClassName="rounded-xl" /><div className="min-w-0"><p className="truncate font-semibold">{branch.name}</p><p className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{units.find((unit: any) => unit.id === branch.businessUnitId)?.name || getBusinessTypeLabel(branch.industry, branch.subIndustry)} · {branch._count?.users || 0} usuarios</p></div></div><GroupBranchSupportDialog branch={branch} onChanged={onChanged} /></div>)}{!branches.length && <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">Este grupo todavía no tiene sucursales.</p>}{branches.length > 5 && <p className="text-xs text-primary">+{branches.length - 5} sucursales más. Abre Configurar para verlas.</p>}</div>
       </CardContent>
     </Card>
   );

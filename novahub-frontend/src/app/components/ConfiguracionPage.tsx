@@ -786,37 +786,50 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (!canEditBranding) return;
     const file = e.target.files?.[0];
     if (!file) return;
-    setLogoFile(file);
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const inferredMime = extension === 'jpg' || extension === 'jpeg'
+      ? 'image/jpeg'
+      : extension === 'png'
+        ? 'image/png'
+        : extension === 'webp'
+          ? 'image/webp'
+          : extension === 'gif'
+            ? 'image/gif'
+            : extension === 'avif'
+              ? 'image/avif'
+              : file.type;
+    const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif']);
+    if (!allowedMimeTypes.has(inferredMime)) {
+      toast.error('Usa un logo PNG, JPG, WEBP, GIF o AVIF');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('El logo no debe superar 2 MB');
+      return;
+    }
+    const normalizedFile = file.type === inferredMime
+      ? file
+      : new File([file], file.name, { type: inferredMime });
+    setLogoFile(normalizedFile);
     const reader = new FileReader();
     reader.onloadend = () => setLogoPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(normalizedFile);
+    e.currentTarget.value = '';
   };
 
   const handleLogoSave = async () => {
     if (!canEditBranding || !logoFile) return;
     setLogoUploading(true);
     try {
-      let logoUrl: string;
-      if (user?.tenantId) {
-        logoUrl = await uploadLogoToStorage(logoFile, user.tenantId);
-      } else {
-        logoUrl = logoPreview || '';
-      }
+      if (!user?.tenantId) throw new Error('No hay una sucursal activa para guardar el logo');
+      const logoUrl = await uploadLogoToStorage(logoFile, user.tenantId);
       updateConfig({ logo: logoUrl });
       await brandingService.update({ logo: logoUrl });
       await refetchConfiguration();
       toast.success('Logo guardado en Supabase Storage âœ“');
     } catch (error) {
       console.error('Logo upload error:', error);
-      // Fallback to base64 if storage fails
-      if (logoPreview) {
-        updateConfig({ logo: logoPreview });
-        await brandingService.update({ logo: logoPreview }).catch(() => { });
-        await refetchConfiguration();
-        toast.success('Logo aplicado localmente');
-      } else {
-        toast.error('Error al subir el logo');
-      }
+      toast.error(error instanceof Error ? error.message : 'Error al subir el logo');
     } finally {
       setLogoUploading(false);
     }

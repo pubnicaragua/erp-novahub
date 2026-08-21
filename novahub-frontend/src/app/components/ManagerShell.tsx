@@ -54,7 +54,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { type ManagerGroup } from "../services/enterprise-groups.service";
 import { safeGetItem, safeSetItem } from "../services/safe-storage";
 import { Button } from "./ui/button";
-import { NovaHubLogo } from "./NovaHubLogo";
+import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
 import {
   DropdownMenu,
@@ -447,6 +447,9 @@ export function ManagerShell({
   );
   const { user, logout } = useAuth();
   const { theme, setTheme } = useManagerTheme();
+  const managerBranding = user?.sessionBranding?.kind === "group" ? user.sessionBranding : undefined;
+  const displayGroupName = group?.name || managerBranding?.name || "Grupo empresarial";
+  const displayGroupLogo = group?.logo ?? managerBranding?.logo ?? null;
   const visibleSections = allowedSections
     ? MANAGER_SECTIONS.filter((item) => allowedSections.includes(item.id))
     : MANAGER_SECTIONS;
@@ -569,8 +572,8 @@ export function ManagerShell({
           onSectionClick={handleSectionClick}
           expandedSection={expandedSection}
           onClose={() => setSidebarOpen(false)}
-          groupName={group?.name}
-          groupLogo={group?.logo}
+          groupName={displayGroupName}
+          groupLogo={displayGroupLogo}
           sections={visibleSections}
           inventoryView={inventoryView}
           onInventoryViewChange={onInventoryViewChange}
@@ -590,7 +593,7 @@ export function ManagerShell({
         <div
           className={cn(
             "flex h-screen min-h-0 min-w-0 flex-col transition-[padding] duration-300",
-            sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]",
+            sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[270px]",
           )}
         >
           <header className="shrink-0 border-b border-border/60 bg-card/90 backdrop-blur-xl">
@@ -627,12 +630,9 @@ export function ManagerShell({
                 )}
               </Button>
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="hidden size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:flex">
-                  <Building2 className="size-5" />
-                </div>
                 <div className="min-w-0">
                   <p className="truncate text-base font-black uppercase tracking-tight">
-                    {group?.name || "Grupo empresarial"}
+                    {displayGroupName}
                   </p>
                 </div>
               </div>
@@ -849,27 +849,23 @@ function ManagerSidebar({
                 title={groupName || "Grupo empresarial"}
                 aria-label={groupName || "Grupo empresarial"}
               >
-                {groupLogo ? (
-                  <img
-                    src={groupLogo}
-                    alt={`Logo de ${groupName || "grupo empresarial"}`}
-                    className="size-9 rounded-xl object-contain"
-                  />
-                ) : (
-                  <NovaHubLogo size={36} />
-                )}
+                <BrandLogo
+                  src={groupLogo}
+                  alt={`Logo de ${groupName || "grupo empresarial"}`}
+                  kind={groupLogo ? "group" : "platform"}
+                  className="size-9 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0"
+                  imageClassName="rounded-xl"
+                />
               </div>
             ) : (
               <div className="flex min-w-0 items-center gap-3">
-                {groupLogo ? (
-                  <img
-                    src={groupLogo}
-                    alt={`Logo de ${groupName || "grupo empresarial"}`}
-                    className="size-10 shrink-0 rounded-xl object-contain"
-                  />
-                ) : (
-                  <NovaHubLogo size={38} />
-                )}
+                <BrandLogo
+                  src={groupLogo}
+                  alt={`Logo de ${groupName || "grupo empresarial"}`}
+                  kind={groupLogo ? "group" : "platform"}
+                  className="size-10 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0"
+                  imageClassName="rounded-xl"
+                />
                 <div className="flex min-w-0 flex-col items-start overflow-hidden leading-none">
                   <span className="max-w-[150px] truncate text-sm font-black tracking-tight text-sidebar-foreground">
                     {groupName || "Grupo empresarial"}

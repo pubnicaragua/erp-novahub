@@ -21,6 +21,12 @@ const idempotentInFlight = new Map<string, Promise<unknown>>();
 // the request settles.
 const getInFlight = new Map<string, Promise<unknown>>();
 
+/** Clear promises that could otherwise be reused across an auth boundary. */
+export function clearRequestCaches() {
+  idempotentInFlight.clear();
+  getInFlight.clear();
+}
+
 export function createIdempotencyKey(prefix = 'nh'): string {
   const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -227,6 +233,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         ...getAuthHeaders(),
         ...headers,
       },
+      cache: 'no-store',
       body: body ? JSON.stringify(body) : undefined,
       signal,
   };

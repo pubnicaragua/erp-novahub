@@ -74,6 +74,26 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true';
   });
 
+  useEffect(() => {
+    // These values are session state, not a source of truth for another
+    // tenant/user. Reset the in-memory copy whenever the identity changes;
+    // AuthContext clears the persisted values before the next login.
+    const syncSessionCurrency = () => {
+      const savedCurrency = (localStorage.getItem(STORAGE_CURRENCY_KEY) || '').toUpperCase();
+      const savedBaseCurrency = (localStorage.getItem(STORAGE_BASE_CURRENCY_KEY) || '').toUpperCase();
+      const savedLockedCurrency = (localStorage.getItem(STORAGE_LOCKED_DISPLAY_CURRENCY_KEY) || '').toUpperCase();
+      setCurrencyState(savedCurrency === 'USD' ? 'USD' : 'NIO');
+      setBaseCurrency(savedBaseCurrency === 'USD' ? 'USD' : 'NIO');
+      setLockedDisplayCurrency(savedLockedCurrency === 'USD' ? 'USD' : 'NIO');
+      setCurrencyInteractionEnabled(localStorage.getItem(STORAGE_CURRENCY_SWITCH_ENABLED_KEY) !== 'false');
+      setValuationModeState(localStorage.getItem(STORAGE_VALUATION_MODE_KEY) === 'CURRENT' ? 'CURRENT' : 'HISTORICAL');
+      setShowValuationLegendState(localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true');
+      setExchangeRate(36.5);
+    };
+    const timer = window.setTimeout(syncSessionCurrency, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTenantId, user?.id, user?.userType]);
+
   const normalizeDisplayCurrency = (value?: string): DisplayCurrency => {
     return (value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO';
   };

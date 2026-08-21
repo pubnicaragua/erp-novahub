@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
@@ -112,7 +112,9 @@ function readStoredTheme(tenantId: string): ThemeConfig {
         },
       };
     }
-  } catch { }
+  } catch {
+    return createDefaultTheme(tenantId);
+  }
 
   return createDefaultTheme(tenantId);
 }
@@ -124,14 +126,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return readStoredTheme(user?.tenantId || 'default');
   });
 
+  const updateTheme = useCallback((colors: Partial<BrandColors>) => {
+    setThemeConfig(prev => ({
+      ...prev,
+      colors: (() => {
+        const nextColors = { ...prev.colors, ...colors };
+        return {
+          ...nextColors,
+          primaryForeground: defaultColors.primaryForeground,
+          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
+        };
+      })(),
+    }));
+  }, []);
+
+  const updateConfig = useCallback((config: Partial<Omit<ThemeConfig, 'colors'>>) => {
+    setThemeConfig(prev => ({
+      ...prev,
+      ...config,
+    }));
+  }, []);
+
   useEffect(() => {
     // Cada empresa mantiene su propio tema. Esto evita reutilizar el color de la
-    // empresa anterior mientras se cambia de usuario o contexto.
-    setThemeConfig((current) => {
-      if (current.tenantId === activeTenantId) return current;
-      return readStoredTheme(activeTenantId);
-    });
-  }, [activeTenantId]);
+    // empresa anterior mientras se cambia de usuario o contexto. El id del
+    // usuario también forma parte de la dependencia para que dos sesiones
+    // distintas en el mismo tenant no compartan estado visual en memoria.
+    const syncSessionTheme = () => {
+      setThemeConfig(() => (!user ? createDefaultTheme('default') : readStoredTheme(activeTenantId)));
+    };
+    const timer = window.setTimeout(syncSessionTheme, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTenantId, user?.id, user?.userType]);
 
   useEffect(() => {
     // Apply brand colors while allowing the light/dark CSS variants to control
@@ -221,29 +248,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       });
 
     return () => { cancelled = true; };
-  }, [user, activeTenantId]);
-
-  const updateTheme = (colors: Partial<BrandColors>) => {
-    setThemeConfig(prev => ({
-      ...prev,
-      colors: (() => {
-        const nextColors = { ...prev.colors, ...colors };
-        return {
-          ...nextColors,
-          primaryForeground: defaultColors.primaryForeground,
-          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
-          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
-        };
-      })(),
-    }));
-  };
-
-  const updateConfig = (config: Partial<Omit<ThemeConfig, 'colors'>>) => {
-    setThemeConfig(prev => ({
-      ...prev,
-      ...config,
-    }));
-  };
+  }, [user, activeTenantId, updateTheme, updateConfig]);
 
   const resetTheme = () => {
     setThemeConfig(createDefaultTheme(activeTenantId));

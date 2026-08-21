@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
@@ -7,6 +7,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
 import { LoginPage } from './components/LoginPage';
+import { BrandLogoLoader } from './components/BrandLogo';
 import { RegisterTenantPage } from './components/auth/RegisterTenantPage';
 import LandingPage from './components/LandingPage';
 import { TrialExpiredPage } from './components/auth/TrialExpiredPage';
@@ -111,7 +112,6 @@ const ErrorBoundaryFallback = () => (
 
 function DashboardLayout() {
   const { hasAccess, sessionStartVersion, user } = useAuth();
-  const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   useIncomingNotificationAlert();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeModule, setActiveModule] = useState<Module | 'overview'>(() => {
@@ -327,17 +327,6 @@ function DashboardLayout() {
         onOverview={handleOverview}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {isImpersonating && branch && (
-          <div className="flex items-center justify-between gap-3 bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">Modo Supervisor</span>
-              <span className="truncate">Trabajando en <strong>{branch.name}</strong> como {manager?.name}</span>
-            </div>
-            <button onClick={exitBranch} className="shrink-0 rounded-lg bg-amber-500/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/25 transition-colors">
-              Volver al Panel
-            </button>
-          </div>
-        )}
         <Topbar
           onMenuClick={() => setSidebarOpen(true)}
           onNavigate={handleNavigate}
@@ -359,11 +348,30 @@ function DashboardLayout() {
 }
 
 function AppContent() {
-  const { isAuthenticated, login, logout, user } = useAuth();
-  const { isImpersonating } = useImpersonation();
+  const { isAuthenticated, login, logout, user, sessionStartVersion } = useAuth();
+  const { isImpersonating, branch } = useImpersonation();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
+  const [showingSessionBranding, setShowingSessionBranding] = useState(false);
+  const lastSessionStartVersion = useRef(0);
+
+  useEffect(() => {
+    if (!sessionStartVersion || sessionStartVersion === lastSessionStartVersion.current) return;
+    lastSessionStartVersion.current = sessionStartVersion;
+    setShowingSessionBranding(true);
+    const timer = window.setTimeout(() => setShowingSessionBranding(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [sessionStartVersion]);
+
+  // Never carry transient session guards from one identity into another.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setTrialExpired(false);
+      setSessionClosed(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [sessionStartVersion, user?.id, user?.clientTenantId, user?.userType]);
 
   // Redirección forzosa por expiración de trial/suscripción.
   // Se valida contra `clientTenant.expiresAt` (datos del servidor vía /auth/profile),
@@ -461,6 +469,19 @@ function AppContent() {
     );
   }
 
+  if (showingSessionBranding) {
+    const isBranchManagerBranding = Boolean(isImpersonating && branch);
+    const isPlatformBranding = Boolean(user?.isPlatformAdmin) && !isBranchManagerBranding;
+    return (
+      <BrandLogoLoader
+        logo={isBranchManagerBranding ? branch?.logo : isPlatformBranding ? null : (user?.sessionBranding?.logo ?? user?.clientTenant?.logo)}
+        title={isBranchManagerBranding ? branch?.name || 'Sucursal' : isPlatformBranding ? 'NovaHub Platform' : (user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP')}
+        kind={isBranchManagerBranding ? 'branch' : isPlatformBranding ? 'platform' : (user?.sessionBranding?.kind || (user?.clientTenant ? 'branch' : 'group'))}
+        description="Preparando tu espacio de trabajo…"
+      />
+    );
+  }
+
   return (
     <>
       {sessionClosed && (
@@ -482,8 +503,8 @@ function AppContent() {
         />
       )}
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
-        <Suspense fallback={<PageLoader />}><ManagerPage /></Suspense>
-      ) : <DashboardLayout />}
+        <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
+      ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}
       <SessionMonitor />
       <Toaster position="top-right" />
     </>

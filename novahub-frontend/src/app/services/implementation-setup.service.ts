@@ -70,6 +70,10 @@ const STEP_VALIDATION_TIMEOUT_MS = 10000;
 const SUMMARY_CACHE_TTL_MS = 45000;
 let cachedSummary: { value: ImplementationSetupSummary; createdAt: number; moduleKey: string } | null = null;
 
+export function clearImplementationSetupCache() {
+  cachedSummary = null;
+}
+
 export function rememberImplementationTourContext(context: Omit<ImplementationTourContext, 'createdAt'>) {
   try {
     sessionStorage.setItem(IMPLEMENTATION_TOUR_STORAGE_KEY, JSON.stringify({

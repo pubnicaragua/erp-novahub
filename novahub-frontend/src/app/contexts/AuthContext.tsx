@@ -1,11 +1,61 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { api } from '../services/api';
+import { api, clearRequestCaches } from '../services/api';
 import { isLegacyAuthToken, storeAuthToken } from '../services/auth-token';
 import { subscriptionsService } from '../services/subscriptions.service';
+import { queryClient } from '../services/query-client';
+import { clearSessionCache } from '../services/session-cache';
+import { clearImplementationSetupCache } from '../services/implementation-setup.service';
+import { clearStorageUrlCache } from '../services/storage.service';
+import { BrandLogoLoader } from '../components/BrandLogo';
 import { SIDEBAR_PERMISSION_PARENT_ALIASES, SIDEBAR_PERMISSION_MODULE_IDS } from '../utils/sidebarPermissions';
 
 export type Role = 'superadmin' | 'admin' | 'partner' | 'manager' | 'employee' | 'viewer';
 export type UserType = 'admin' | 'collaborator' | 'manager';
+
+const SESSION_BRANDING_KEY = 'nh-session-branding';
+
+function rememberSessionBranding(payload: any) {
+  const apiUser = payload?.user || payload?.data || payload || {};
+  const normalizedRole = String(apiUser?.role || '').toLowerCase();
+  const normalizedUserType = String(apiUser?.userType || '').toLowerCase();
+  const isDetachedPlatformAdmin = !apiUser?.clientTenantId
+    && (['superadmin', 'super_admin', 'partner', 'platform_admin'].includes(normalizedRole)
+      || (normalizedUserType === 'admin' && normalizedRole !== 'manager'));
+  const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const branding = isDetachedPlatformAdmin
+    ? { kind: 'platform', name: 'NovaHub Platform', logo: null }
+    : hasActiveTenantBranding
+      ? { kind: 'branch', name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+      : (apiUser?.sessionBranding || {});
+  const logo = branding.logo ?? apiUser?.clientTenant?.logo ?? '';
+  const name = branding.name || apiUser?.clientTenant?.name || '';
+  if (!logo && !name) {
+    localStorage.removeItem(SESSION_BRANDING_KEY);
+    return;
+  }
+  localStorage.setItem(SESSION_BRANDING_KEY, JSON.stringify({
+    logo,
+    name: name || 'NovaHub ERP',
+    kind: branding.kind || (apiUser?.clientTenant ? 'branch' : 'group'),
+  }));
+}
+
+function getRememberedSessionBranding() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SESSION_BRANDING_KEY) || 'null');
+    const impersonation = JSON.parse(localStorage.getItem('nh-impersonation-state') || 'null');
+    if (impersonation?.branch?.name) {
+      return {
+        logo: impersonation.branch.logo ?? parsed?.logo ?? null,
+        name: impersonation.branch.name,
+        kind: 'branch',
+      };
+    }
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 export type Module =
   | 'dashboard'
@@ -127,6 +177,12 @@ export interface User {
     plan?: string;
     logo?: string;
   } | null;
+  /** Marca correspondiente al contexto que se está preparando (grupo o sucursal). */
+  sessionBranding?: {
+    kind?: 'group' | 'branch' | 'platform';
+    name?: string;
+    logo?: string | null;
+  };
 }
 
 /**
@@ -143,6 +199,9 @@ const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
 ]);
 
 const TENANT_PERMISSION_SUBSCRIPTION_ALIASES: Record<string, string[]> = {
+  // Ventas incluye facturación y caja; la API de Caja conserva RETAIL_POS
+  // como permiso canónico, por lo que ambos módulos deben ser equivalentes.
+  RETAIL_POS: ['RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
   FINANCIAL_ACCOUNTS: ['FINANCIAL_ACCOUNTS', 'FINANCIAL_BANK', 'FINANCIAL_DASHBOARD', 'FINANCIAL_BALANCE'],
   FINANCIAL_INCOMES: ['FINANCIAL_INCOMES', 'FINANCIAL_RECEIVABLES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
   FINANCIAL_RECEIVABLES: ['FINANCIAL_RECEIVABLES', 'FINANCIAL_INCOMES', 'FINANCIAL_DASHBOARD', 'FINANCIAL_ANALYSIS', 'FINANCIAL_BALANCE'],
@@ -178,6 +237,18 @@ export interface BranchInfo {
   name: string;
   code: string;
   location?: string;
+}
+
+function clearClientSessionState(options: { preserveAuthToken?: boolean; preserveImpersonation?: boolean; preserveSessionBranding?: boolean } = {}) {
+  void queryClient.cancelQueries();
+  queryClient.clear();
+  clearRequestCaches();
+  clearImplementationSetupCache();
+  clearStorageUrlCache();
+  clearSessionCache(options);
+  if (typeof window !== 'undefined' && !options.preserveAuthToken) {
+    window.dispatchEvent(new CustomEvent('auth-session-reset'));
+  }
 }
 
 interface AuthContextType {
@@ -318,7 +389,20 @@ const createUserObject = (apiPayload: any): User => {
   const role = userType === 'manager' ? 'manager' : normalizeRole(apiUser?.role);
   
   // Platform Admins: SuperAdmin, Partner, or DEV admin
-  const isPlatformAdmin = ['superadmin', 'partner'].includes(role);
+  // Las cuentas de plataforma históricas pueden llegar como ADMIN después
+  // de la normalización de roles. La separación real es que no tienen
+  // clientTenantId; los Managers quedan fuera porque su userType es MANAGER.
+  const isPlatformAdmin = ['superadmin', 'partner'].includes(role)
+    || (!apiUser.clientTenantId && userType === 'admin' && role !== 'manager');
+
+  const hasActiveTenantBranding = Boolean(apiUser?.clientTenantId && apiUser?.clientTenant);
+  const sessionBranding = isPlatformAdmin
+    ? { kind: 'platform' as const, name: 'NovaHub Platform', logo: null }
+    : hasActiveTenantBranding
+      ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+      : apiUser.sessionBranding || (apiUser.clientTenant
+        ? { kind: 'branch' as const, name: apiUser.clientTenant.name, logo: apiUser.clientTenant.logo || null }
+        : undefined);
   
   const moduleEnumMapInverse: Record<string, string> = {
     'SALES': 'ventas',
@@ -462,6 +546,7 @@ const createUserObject = (apiPayload: any): User => {
     managerMode: Boolean(apiUser.managerMode),
     managerCanEdit: Boolean(apiUser.managerCanEdit),
     branchIds: apiUser.branchIds || apiUser.branchAccess?.map((b: any) => b.id) || undefined,
+    sessionBranding,
     clientTenant: apiUser.clientTenant
       ? {
           name: apiUser.clientTenant.name,
@@ -481,7 +566,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userBranches, setUserBranches] = useState<BranchInfo[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const remembered = isLoading ? getRememberedSessionBranding() : {};
+    const workspaceName = user?.sessionBranding?.name
+      || user?.clientTenant?.name
+      || user?.tenantName
+      || remembered.name
+      || 'NovaHub ERP';
+    document.title = workspaceName;
+  }, [isLoading, user?.sessionBranding?.name, user?.clientTenant?.name, user?.tenantName]);
+
+  React.useEffect(() => {
+    const handleExternalLogout = (event: StorageEvent) => {
+      if (event.key !== 'nh-auth-token' || event.newValue !== null) return;
+      clearClientSessionState();
+      resetNavigationState();
+      setUser(null);
+      setUserBranches([]);
+      setSelectedBranchId(null);
+    };
+
+    window.addEventListener('storage', handleExternalLogout);
+    return () => window.removeEventListener('storage', handleExternalLogout);
+  }, []);
+
   const fetchBranches = useCallback(async () => {
+    setUserBranches([]);
+    setSelectedBranchId(null);
     try {
       const res = await api.get<any>('/auth/me/branches');
       const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
@@ -492,6 +603,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {
       setUserBranches([]);
+      setSelectedBranchId(null);
     }
   }, []);
 
@@ -501,6 +613,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     const restoreSession = async () => {
       try {
+        // A hard refresh can leave persisted UI/cache state from a previous
+        // identity. Keep only the token long enough to validate it again.
+        clearClientSessionState({ preserveAuthToken: true, preserveImpersonation: true, preserveSessionBranding: true });
+        setUserBranches([]);
+        setSelectedBranchId(null);
         const token = localStorage.getItem('nh-auth-token');
         if (!token) {
           setIsLoading(false);
@@ -515,6 +632,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           const me = await api.get<any>('/auth/profile');
+          rememberSessionBranding(me);
           setUser(createUserObject(me));
           fetchBranches();
         } catch {
@@ -528,6 +646,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
           storeAuthToken(response.access_token);
+          rememberSessionBranding(response.user);
           setUser(createUserObject(response.user));
           fetchBranches();
         }
@@ -803,11 +922,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
+      // Do not let a new login reuse any in-memory query, request or local
+      // tenant state from the previous identity.
+      clearClientSessionState();
+      setUser(null);
+      setUserBranches([]);
+      setSelectedBranchId(null);
       const response = await api.post<{ access_token: string; user: any }>('/auth/login', { email, password });
 
       resetNavigationState();
       setSessionStartVersion((version) => version + 1);
       storeAuthToken(response.access_token);
+      rememberSessionBranding(response.user);
       setUser(createUserObject(response.user));
       fetchBranches();
     } catch (error: any) {
@@ -816,17 +942,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchBranches]);
 
   const setSession = useCallback((token: string, userData: any) => {
+    clearClientSessionState();
+    setUser(null);
+    setUserBranches([]);
+    setSelectedBranchId(null);
     resetNavigationState();
     setSessionStartVersion((version) => version + 1);
     storeAuthToken(token);
+    rememberSessionBranding(userData);
     setUser(createUserObject(userData));
     fetchBranches();
   }, [fetchBranches]);
 
   const logout = useCallback(() => {
+    clearClientSessionState();
     resetNavigationState();
     setUser(null);
+    setUserBranches([]);
+    setSelectedBranchId(null);
     localStorage.removeItem('nh-auth-token');
+    localStorage.removeItem(SESSION_BRANDING_KEY);
     localStorage.removeItem('erp-active-module');
     localStorage.removeItem('erp-active-submodule');
   }, []);
@@ -837,8 +972,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
+      // This development-only identity switch must follow the same cache
+      // boundary as a normal login, while keeping the current token long
+      // enough to authorize the switch-context request.
+      clearClientSessionState({ preserveAuthToken: true });
       const response = await api.post<{ access_token: string; user: any }>('/auth/switch-context', { userId });
+      window.dispatchEvent(new CustomEvent('auth-session-reset'));
       storeAuthToken(response.access_token);
+      rememberSessionBranding(response.user);
+      setSessionStartVersion((version) => version + 1);
       localStorage.removeItem('erp-active-module');
       localStorage.removeItem('erp-active-submodule');
       
@@ -863,12 +1005,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
       {isLoading ? (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="flex flex-col items-center gap-4">
-            <div className="size-12 border-4 border-muted border-t-primary rounded-full animate-spin" />
-            <p className="text-sm text-muted-foreground font-medium">Cargando sesión...</p>
-          </div>
-        </div>
+        <BrandLogoLoader
+          logo={getRememberedSessionBranding().logo}
+          title={getRememberedSessionBranding().name || 'NovaHub ERP'}
+          kind={getRememberedSessionBranding().kind || 'group'}
+          description="Cargando tu sesión segura…"
+        />
       ) : (
         children
       )}

@@ -28,6 +28,7 @@ import type { ManagerReportsView } from './manager/manager-reports.types';
 import { ManagerHRModule } from './manager/ManagerHRModule';
 import type { ManagerHrView } from './manager/manager-hr.types';
 import { ManagerUserEditorDialog } from './manager/ManagerUserEditorDialog';
+import { BrandLogo } from './BrandLogo';
 import { InventoryDetailPanel } from './inventory/InventoryDetailPanel';
 import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermissionsToState, managerStateToPermissions, type ManagerPermissionLevel, type ManagerPermissionState } from '../constants/managerPermissions';
 import { getBusinessTypeLabel } from '../constants/businessTypes';
@@ -461,7 +462,7 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/80 via-primary/30 to-transparent opacity-70" />
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">{branch.logo ? <img src={branch.logo} alt="" className="size-full object-cover" /> : <Building2 className="size-5" />}</div>
+                    <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-11 rounded-2xl" imageClassName="rounded-2xl" />
                     <div className="min-w-0"><h3 className="truncate text-base font-black tracking-tight">{branch.name}</h3><p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground"><Sparkles className="size-3 shrink-0 text-primary" />{businessType}</p></div>
                   </div>
                   <Badge variant={isActive ? 'default' : 'secondary'} className="shrink-0 rounded-full text-[10px]">{isActive ? 'Activa' : 'Inactiva'}</Badge>

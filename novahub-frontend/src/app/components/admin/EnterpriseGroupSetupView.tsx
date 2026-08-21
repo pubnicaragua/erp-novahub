@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -27,9 +27,11 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { enterpriseGroupsService } from "../../services/enterprise-groups.service";
+import { storageService } from "../../services/storage.service";
 import { authService } from "../../services/auth.service";
 import { GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
 import { GroupBranchSupportDialog } from "./GroupBranchSupportDialog";
+import { BrandLogo } from "../BrandLogo";
 import {
   Dialog,
   DialogContent,
@@ -94,6 +96,28 @@ const steps: Array<{
 const inputClass =
   "mt-2 h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
 const labelClass = "space-y-1 text-xs font-bold text-muted-foreground";
+
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+]);
+
+function dataUrlToFile(dataUrl: string, fileName: string) {
+  const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) return null;
+  const mimeType = match[1].toLowerCase();
+  if (!LOGO_MIME_TYPES.has(mimeType)) return null;
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new File([bytes], fileName, { type: mimeType });
+}
 
 export function EnterpriseGroupSetupView({
   mode,
@@ -167,6 +191,20 @@ export function EnterpriseGroupSetupView({
     null,
   );
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const onboardingLogoScope = useRef(`onboarding-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+  const persistLogo = async (value: string | null | undefined, folder: string, fileName: string) => {
+    if (!value || !value.startsWith("data:")) return value || "";
+    const file = dataUrlToFile(value, fileName);
+    if (!file || file.size > LOGO_MAX_BYTES) {
+      throw new Error("El logo debe ser PNG, JPG, WEBP, GIF o AVIF y no superar 2 MB");
+    }
+    const uploaded = await storageService.uploadFile("tenant-branding", file, {
+      folder,
+      scopeId: group?.id || onboardingLogoScope.current,
+    });
+    return uploaded.url;
+  };
 
   const refreshGroup = async (groupId = group?.id) => {
     if (!groupId) return;
@@ -294,12 +332,12 @@ export function EnterpriseGroupSetupView({
   };
 
   const updateGroupMutation = useMutation({
-    mutationFn: (enabledModules?: string[]) =>
+    mutationFn: async (enabledModules?: string[]) =>
       enterpriseGroupsService.updatePlatformGroup(group.id, {
         name: groupForm.name.trim(),
         slug: groupForm.slug.trim(),
         description: groupForm.description.trim() || null,
-        logo: groupForm.logo || null,
+        logo: await persistLogo(groupForm.logo, "groups", "group-logo.png") || null,
         enabledModules: enabledModules ?? groupForm.enabledModules,
       }),
     onSuccess: (updated) => {
@@ -314,7 +352,7 @@ export function EnterpriseGroupSetupView({
     const currentModules = Array.isArray(group?.enabledModules)
       ? group.enabledModules.map((module: string) => String(module).toUpperCase())
       : [];
-    const nextModules = groupForm.enabledModules.map((module) => String(module).toUpperCase());
+    const nextModules = groupForm.enabledModules.map((module: string) => String(module).toUpperCase());
     const removedModules = currentModules.filter((module: string) => !nextModules.includes(module));
     if (mode === "edit" && removedModules.length) {
       setPendingModuleSelection(nextModules);
@@ -457,8 +495,13 @@ export function EnterpriseGroupSetupView({
   });
 
   const updateBranchMutation = useMutation({
-    mutationFn: ({ branchId, body }: { branchId: string; body: any }) =>
-      enterpriseGroupsService.updatePlatformBranch(group.id, branchId, body),
+    mutationFn: async ({ branchId, body }: { branchId: string; body: any }) =>
+      enterpriseGroupsService.updatePlatformBranch(group.id, branchId, {
+        ...body,
+        ...(body.logo !== undefined
+          ? { logo: await persistLogo(body.logo, "branches", `branch-${branchId}.png`) || null }
+          : {}),
+      }),
     onSuccess: async () => {
       await refreshGroup();
       setEditingBranchId(null);
@@ -802,12 +845,20 @@ export function EnterpriseGroupSetupView({
   };
 
   const commitOnboardingMutation = useMutation({
-    mutationFn: () =>
-      enterpriseGroupsService.commitPlatformOnboarding({
+    mutationFn: async () => {
+      const groupLogo = await persistLogo(groupForm.logo, "groups", "group-logo.png");
+      const persistedBranches = await Promise.all(
+        branches.map(async (branch: any, index: number) => ({
+          ...branch,
+          logo: await persistLogo(branch.logo, "branches", `branch-${index + 1}.png`),
+        })),
+      );
+
+      return enterpriseGroupsService.commitPlatformOnboarding({
         group: {
           name: groupForm.name.trim(),
           description: groupForm.description.trim() || undefined,
-          logo: groupForm.logo || undefined,
+          logo: groupLogo || undefined,
           enabledModules: groupForm.enabledModules,
         },
         manager: {
@@ -832,7 +883,7 @@ export function EnterpriseGroupSetupView({
             )
             .filter((index: number) => index >= 0),
         })),
-        branches: branches.map((branch: any) => ({
+        branches: persistedBranches.map((branch: any) => ({
           name: branch.name,
           logo: branch.logo || undefined,
           industry: branch.industry,
@@ -847,7 +898,8 @@ export function EnterpriseGroupSetupView({
           enabledModules:
             branch.moduleMode === "CUSTOM" ? branch.enabledModules : undefined,
         })),
-      }),
+      });
+    },
     onSuccess: () => {
       onChanged();
       toast.success("Grupo empresarial configurado correctamente");
@@ -1824,17 +1876,32 @@ function LogoPicker({
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Selecciona un archivo de imagen válido");
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+    const inferredMime = extension === "jpg" || extension === "jpeg"
+      ? "image/jpeg"
+      : extension === "png"
+        ? "image/png"
+        : extension === "webp"
+          ? "image/webp"
+          : extension === "gif"
+            ? "image/gif"
+            : extension === "avif"
+              ? "image/avif"
+              : file.type;
+    if (!LOGO_MIME_TYPES.has(inferredMime)) {
+      toast.error("Usa un logo PNG, JPG, WEBP, GIF o AVIF");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > LOGO_MAX_BYTES) {
       toast.error("El logo no debe superar 2 MB");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => onChange(String(reader.result || ""));
-    reader.readAsDataURL(file);
+    const normalizedFile = file.type === inferredMime
+      ? file
+      : new File([file], file.name, { type: inferredMime });
+    reader.readAsDataURL(normalizedFile);
     event.currentTarget.value = "";
   };
 
@@ -1858,7 +1925,7 @@ function LogoPicker({
         )}
         <input
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
           className="hidden"
           onChange={handleChange}
         />
@@ -2573,8 +2640,10 @@ function BranchesStep({
               key={branch.id}
               className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="min-w-0">
-                <p className="font-black">{branch.name}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-11 rounded-xl bg-primary/10" imageClassName="rounded-xl" />
+                <div className="min-w-0">
+                <p className="truncate font-black">{branch.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {units.find((unit: any) => unit.id === branch.businessUnitId)
                     ?.name || "Rubro pendiente de normalizar"}{" "}
@@ -2583,6 +2652,7 @@ function BranchesStep({
                     ? "módulos personalizados"
                     : "módulos heredados del rubro"}
                 </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">
@@ -2955,9 +3025,12 @@ function SummaryStep({
         <CardContent className="p-6 sm:p-8">
           <div className="rounded-3xl border border-primary/20 bg-primary/[0.04] p-5 sm:p-7">
             <div className="flex items-center gap-3">
-              <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                <Building2 className="size-6" />
-              </div>
+              <BrandLogo
+                src={group?.logo}
+                alt={`Logo de ${group?.name || "grupo empresarial"}`}
+                className="size-12 rounded-2xl bg-primary text-primary-foreground ring-0"
+                imageClassName="rounded-2xl"
+              />
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-primary">
                   Grupo empresarial
@@ -2988,6 +3061,16 @@ function SummaryStep({
                 value={branches.length}
               />
             </div>
+            {!!branches.length && (
+              <div className="mt-5 flex min-w-0 flex-wrap gap-2 border-t border-border/60 pt-4">
+                {branches.map((branch: any) => (
+                  <div key={branch.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-2.5 py-2">
+                    <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-7 rounded-lg bg-primary/10 ring-0" imageClassName="rounded-lg" />
+                    <span className="max-w-40 truncate text-xs font-bold">{branch.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-5">
             {steps.map((item, index) => (

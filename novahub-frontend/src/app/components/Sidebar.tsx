@@ -71,7 +71,7 @@ import {
 import { cn } from './ui/utils';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { NovaHubLogo } from './NovaHubLogo';
+import { BrandLogo } from './BrandLogo';
 import { NovaSuiteIcon } from './ui/NovaIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
@@ -360,6 +360,15 @@ export const PLATFORM_SIDEBAR_MODULE_ORDER: Array<Module | 'overview'> = platfor
 export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen, isCollapsed, onClose, onOverview }: SidebarProps) {
   const { hasAccess, canPerform, user } = useAuth();
   const { themeConfig } = useTheme();
+  const workspaceName = user?.isPlatformAdmin
+    ? 'NovaHub Platform'
+    : (user?.sessionBranding?.name || user?.clientTenant?.name || themeConfig.tenantName || 'ERP Platform');
+  const workspaceLogo = user?.isPlatformAdmin
+    ? null
+    : (user?.sessionBranding?.logo ?? user?.clientTenant?.logo ?? themeConfig.logo);
+  const workspaceKind: 'group' | 'branch' | 'platform' = user?.isPlatformAdmin
+    ? 'platform'
+    : (user?.sessionBranding?.kind || (user?.clientTenant ? 'branch' : 'group'));
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(activeModule && activeModule !== 'overview' ? [activeModule] : []));
 
   const [prevActiveModule, setPrevActiveModule] = useState(activeModule);
@@ -519,18 +528,20 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           {/* Logo */}
           <div className={cn("flex h-16 items-center border-b border-sidebar-border px-3 overflow-visible", isCollapsed ? "justify-center" : "justify-between")}>
             <div className="flex items-center gap-3">
-              {themeConfig.logo ? (
-                <img src={themeConfig.logo} alt="Company Logo" className="size-9 shrink-0 object-contain transition-all" />
-              ) : (
-                <NovaHubLogo size={isCollapsed ? 36 : 38} />
-              )}
+              <BrandLogo
+                src={workspaceLogo}
+                alt={`Logo de ${workspaceName}`}
+                kind={workspaceKind}
+                className="size-9 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0 transition-all"
+                imageClassName="rounded-xl"
+              />
               {!isCollapsed && (
                 <div className="flex flex-col items-start leading-none overflow-hidden">
                   <span className="text-sm font-black tracking-tight text-sidebar-foreground truncate max-w-[130px]">
-                    Nova<span className="text-primary">Hub</span>
+                    {workspaceName}
                   </span>
                   <span className="text-[10px] text-sidebar-foreground/50 tracking-widest uppercase mt-0.5 truncate max-w-[130px]">
-                    {user?.isPlatformAdmin ? 'NovaHub Platform' : (themeConfig.tenantName || 'ERP Platform')}
+                    {user?.isPlatformAdmin ? 'NovaHub Platform' : user?.managerMode ? 'Modo supervisor' : 'NovaHub ERP'}
                   </span>
                 </div>
               )}
