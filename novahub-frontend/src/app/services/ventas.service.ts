@@ -52,6 +52,8 @@ export const invoicesService = {
   update: (id: string, data: Partial<Invoice>) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
   sendToCredit: (id: string, data: { dueDate?: string }, idempotencyKey?: string) =>
     api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),
+  sendToCash: (id: string, data?: { notes?: string }) =>
+    api.post<any>(`/sales/invoices/${id}/send-to-cash`, data || {}),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<Invoice, 'id' | 'number' | 'status'> }>(`/sales/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
   cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),

@@ -266,10 +266,20 @@ function ImportPreviewPage({
   onBack,
 }: ImportPreviewPageProps) {
   useImportPreviewLayout();
+  const previewPageSize = 50;
+  const [previewPage, setPreviewPage] = useState(1);
   const validRows = importData.filter((row) => !row._hasError).length;
   const errorRows = importData.filter((row) => row._hasError).length;
   const warningRows = importData.filter((row) => !row._hasError && row._hasWarning).length;
   const issueRows = importData.filter((row) => row._hasError || row._hasWarning).length;
+  const previewPageCount = Math.max(1, Math.ceil(importData.length / previewPageSize));
+  const safePreviewPage = Math.min(previewPage, previewPageCount);
+  const previewStart = (safePreviewPage - 1) * previewPageSize;
+  const previewRows = useMemo(() => importData.slice(previewStart, previewStart + previewPageSize), [importData, previewStart]);
+
+  useEffect(() => {
+    if (previewPage > previewPageCount) setPreviewPage(previewPageCount);
+  }, [previewPage, previewPageCount]);
 
   const renderMobileCard = (row: any, index: number) => {
     const categoryExists = categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase());
@@ -345,7 +355,9 @@ function ImportPreviewPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {importData.map((row, index) => (
+              {previewRows.map((row, localIndex) => {
+                const index = previewStart + localIndex;
+                return (
                 <TableRow key={index} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
@@ -398,7 +410,8 @@ function ImportPreviewPage({
                   </TableCell>
                   <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
       </HorizontalTableScroller>
@@ -410,9 +423,20 @@ function ImportPreviewPage({
           <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} registros</Badge>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-          {importData.length ? <div className="space-y-3">{importData.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          {importData.length ? <div className="space-y-3">{previewRows.map((row, localIndex) => { const index = previewStart + localIndex; return <div key={index}>{renderMobileCard(row, index)}</div>; })}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
         </div>
       </section>
+
+      {importData.length > previewPageSize && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">Mostrando {previewStart + 1}–{Math.min(previewStart + previewPageSize, importData.length)} de {importData.length} registros</span>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setPreviewPage((current) => Math.max(1, current - 1))} disabled={safePreviewPage === 1}>Anterior</Button>
+            <span className="min-w-20 text-center font-semibold">Página {safePreviewPage} / {previewPageCount}</span>
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setPreviewPage((current) => Math.min(previewPageCount, current + 1))} disabled={safePreviewPage === previewPageCount}>Siguiente</Button>
+          </div>
+        </div>
+      )}
 
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">

@@ -183,6 +183,43 @@ export interface PosPaymentLine {
   cardCommissionAccountId?: string;
 }
 
+export type InvoiceCashQueueStatus = 'PENDING' | 'CLAIMED' | 'PAID' | 'CANCELLED';
+export interface InvoiceCashQueue {
+  id: string;
+  status: InvoiceCashQueueStatus;
+  invoiceId: string;
+  registerId?: string | null;
+  sessionId?: string | null;
+  requestedById?: string | null;
+  claimedById?: string | null;
+  claimedAt?: string | null;
+  paidAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  invoice: {
+    id: string;
+    number: string;
+    status: string;
+    total: number;
+    balance: number;
+    currency: 'NIO' | 'USD';
+    customerId?: string | null;
+    customCustomerName?: string | null;
+    customer?: { id: string; name: string; phone?: string | null } | null;
+    items?: Array<{ id: string; description: string; quantity: number; unitPrice: number; total: number }>;
+  };
+  requestedBy?: { id: string; name: string } | null;
+  claimedBy?: { id: string; name: string } | null;
+  register?: { id: string; code: string; name: string } | null;
+}
+
+export interface InvoiceCashQueueResponse {
+  items: InvoiceCashQueue[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ==================== VENTAS SUSPENDIDAS / RESERVADAS ====================
 
 export type PosHoldStatus = 'SUSPENDED' | 'READY' | 'DELIVERED' | 'CANCELLED';
@@ -473,6 +510,18 @@ export const cajaService = {
     const res = await api.get<any>('/caja/invoices/recent', { params });
     return res?.data !== undefined ? res.data : res;
   },
+
+  getInvoiceCashQueue: (filters?: { status?: string; search?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+    api.get<InvoiceCashQueueResponse>('/caja/invoice-cash-queue', { params: filters as any, signal }),
+
+  claimInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string }) =>
+    api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/claim`, dto),
+
+  releaseInvoiceCashQueue: (id: string) =>
+    api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/release`, {}),
+
+  payInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string; payments: PosPaymentLine[] }, idempotencyKey?: string) =>
+    api.idempotentPatch<{ queue: InvoiceCashQueue; payment: any }>(`/caja/invoice-cash-queue/${id}/pay`, dto, idempotencyKey),
 
   // --- Ventas suspendidas / reservadas (entrega inter-sucursal) ---
 

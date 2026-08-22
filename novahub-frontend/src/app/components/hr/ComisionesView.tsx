@@ -19,6 +19,11 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente',
   EARNED: 'Devengada',
   PAID_IN_PAYROLL: 'Pagada en nómina',
+  PAID: 'Pagada',
+  PARTIAL: 'Parcial',
+  OVERDUE: 'Vencida',
+  CREDIT: 'A crédito',
+  CANCELLED: 'Anulada',
 };
 const STATUS_TONES: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-500 border-amber-500/20',
@@ -28,6 +33,13 @@ const STATUS_TONES: Record<string, string> = {
 
 const fmt = (value: number, currency: string) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency, minimumFractionDigits: 2 }).format(value || 0);
+
+const formatCommissionDate = (value: string | Date | undefined) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+};
 
 export function ComisionesView() {
   const { canPerform } = useAuth();
@@ -93,24 +105,38 @@ export function ComisionesView() {
         return;
       }
 
-      const rows: string[][] = [
-        ['Vendedor', 'Código', 'Departamento', 'Factura', 'Fecha', 'Cliente', 'Total venta (base)', 'Tipo', 'Tasa/Monto', 'Comisión (base)', 'Estado', 'Nómina'],
-      ];
+      const headers = ['Vendedor', 'Fecha', 'Marca', 'Codigo', 'Cantidad', 'Precio1', 'Total P1', 'Precio Venta', 'Total Venta', 'Diferencia', 'Tipo Precio', 'Factura', 'Cliente', 'Forma de Pago', 'Forma de Pago Detallada', 'Estado'];
+      const rows: unknown[][] = [headers];
+      let lastSeller = '';
       for (const item of items) {
-        rows.push([
-          item.seller?.name || '',
-          item.seller?.employeeNumber || '',
-          item.seller?.department || '',
-          item.invoice?.number || '',
-          item.invoice?.date ? formatDateEs(item.invoice.date) : '',
-          item.invoice?.customer || '',
-          String(item.invoice?.totalBase ?? ''),
-          item.commissionType,
-          String(item.commissionType === 'PERCENTAGE' ? item.rate + '%' : item.amount),
-          String(item.amountBase),
-          item.status,
-          item.payroll?.periodStart ? `${formatDateEs(item.payroll.periodStart)} - ${formatDateEs(item.payroll.periodEnd)}` : '',
-        ]);
+        const lines = Array.isArray(item.invoice?.commissionLines) && item.invoice.commissionLines.length
+          ? item.invoice.commissionLines
+          : [{ seller: item.seller?.name || '', date: item.invoice?.date, brand: '—', code: '—', quantity: 1, price1: Number(item.invoice?.total || 0), totalP1: Number(item.invoice?.total || 0), salePrice: Number(item.invoice?.total || 0), totalSale: Number(item.invoice?.total || 0), difference: 0, priceType: 'Precio Normal', invoiceNumber: item.invoice?.number || '', customer: item.invoice?.customer || 'Cliente General', paymentForm: 'Contado', paymentDetail: 'Pendiente', status: item.invoice?.status || item.status, currency: item.invoice?.currency || baseCurrency }];
+        for (const line of lines) {
+          const seller = line.seller || item.seller?.name || '';
+          if (seller !== lastSeller) {
+            rows.push([seller, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+            lastSeller = seller;
+          }
+          rows.push([
+            seller,
+            formatCommissionDate(line.date),
+            line.brand || '—',
+            line.code || '—',
+            Number(line.quantity || 0),
+            Number(line.price1 || 0),
+            Number(line.totalP1 || 0),
+            Number(line.salePrice || 0),
+            Number(line.totalSale || 0),
+            Number(line.difference || 0),
+            line.priceType || 'Precio Normal',
+            line.invoiceNumber || item.invoice?.number || '',
+            line.customer || item.invoice?.customer || 'Cliente General',
+            line.paymentForm || 'Contado',
+            line.paymentDetail || 'Pendiente',
+            STATUS_LABELS[line.status] || line.status || '',
+          ]);
+        }
       }
       const summaryRows: string[][] = [
         ['Vendedor', 'Código', 'Departamento', 'Facturas', 'Ventas (base)', 'Comisiones (base)', 'Pendiente (base)', 'Devengada (base)', 'Pagada (base)'],
@@ -130,9 +156,17 @@ export function ComisionesView() {
       const detailSheet = XLSX.utils.aoa_to_sheet(rows);
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
       detailSheet['!cols'] = [
-        { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 13 }, { wch: 28 },
-        { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
+        { wch: 24 }, { wch: 19 }, { wch: 18 }, { wch: 22 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 16 },
+        { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 26 }, { wch: 18 },
       ];
+      for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+        const isGroupRow = rows[rowIndex].slice(1).every((value) => value === '');
+        if (isGroupRow) continue;
+        for (const columnIndex of [4, 5, 6, 7, 8, 9]) {
+          const cell = detailSheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
+          if (cell && typeof cell.v === 'number') cell.z = '#,##0.00';
+        }
+      }
       summarySheet['!cols'] = [
         { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 18 },
         { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 },

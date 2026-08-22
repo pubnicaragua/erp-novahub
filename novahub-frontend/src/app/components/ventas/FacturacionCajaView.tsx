@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Calculator, Plus, Trash2, Loader2, Receipt, Search,
   CreditCard, Clock, CircleHelp, ShoppingCart, List, LayoutGrid,
-  UserPlus, AlertCircle, Coins, Settings2, Store
+  UserPlus, AlertCircle, Coins, Settings2, Store, BellRing, RefreshCw, CheckCircle2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -35,6 +35,7 @@ import {
   type BranchProductAvailability,
   type CreatePosHoldDto,
   type PosHoldItemInput,
+  type InvoiceCashQueue,
 } from '../../services/caja.service';
 import { VariantPickerModal } from './VariantPickerModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
@@ -387,6 +388,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
   const [companyName, setCompanyName] = useState('Empresa');
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
+  const [cashQueue, setCashQueue] = useState<InvoiceCashQueue[]>([]);
+  const [cashQueueLoading, setCashQueueLoading] = useState(false);
+  const [queueInvoice, setQueueInvoice] = useState<InvoiceCashQueue | null>(null);
+  const [queuePayments, setQueuePayments] = useState<PosPaymentLine[]>([]);
+  const [queueSubmitting, setQueueSubmitting] = useState(false);
 
   const paymentLineRate = (currency: PaymentCurrency) => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: PosPaymentLine['method'], amount = 0, currency: PaymentCurrency = displayCurrency): PosPaymentLine => ({
@@ -395,6 +401,67 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     currency,
     exchangeRate: paymentLineRate(currency),
   });
+
+  const loadCashQueue = useCallback(async () => {
+    if (!user?.tenantId) return;
+    setCashQueueLoading(true);
+    try {
+      const response = await cajaService.getInvoiceCashQueue({ status: 'PENDING,CLAIMED', page: 1, pageSize: 50 });
+      setCashQueue((response as any)?.data?.items || response?.items || []);
+    } catch {
+      // La cola no debe bloquear la facturación POS si una consulta puntual falla.
+    } finally {
+      setCashQueueLoading(false);
+    }
+  }, [user?.tenantId]);
+
+  useEffect(() => {
+    void loadCashQueue();
+    const timer = window.setInterval(() => void loadCashQueue(), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadCashQueue]);
+
+  const handleClaimCashQueue = async (queue: InvoiceCashQueue) => {
+    if (!selectedRegisterId || !activeSession) {
+      toast.error('Apertura una sesión de caja para tomar la factura.');
+      onNavigateToControlCaja?.(selectedRegisterId);
+      return;
+    }
+    try {
+      const response = await cajaService.claimInvoiceCashQueue(queue.id, { registerId: selectedRegisterId, sessionId: activeSession.id });
+      const claimed = (response as any)?.data || response;
+      const invoice = claimed?.invoice ? claimed : queue;
+      setQueueInvoice(invoice);
+      setQueuePayments([paymentLine('CASH', Number(invoice.invoice.balance || 0), invoice.invoice.currency)]);
+      await loadCashQueue();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'La factura ya fue tomada o no se pudo reservar en esta caja.'));
+      void loadCashQueue();
+    }
+  };
+
+  const submitCashQueuePayment = async () => {
+    if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmitting) return;
+    const invoiceCurrency = queueInvoice.invoice.currency;
+    const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(activeSession.exchangeRateUSD || globalRate || 1);
+    const totalBase = toBaseAmount(Number(queueInvoice.invoice.balance || 0), invoiceCurrency, invoiceRate);
+    const paidBase = queuePayments.reduce((sum, payment) => sum + toBaseAmount(Number(payment.amount || 0), payment.currency || invoiceCurrency, (payment.currency || invoiceCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1)), 0);
+    if (paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
+    if (queuePayments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) { toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque.'); return; }
+    if (queuePayments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) { toast.error('Selecciona el banco para cada pago con tarjeta, transferencia o cheque.'); return; }
+    setQueueSubmitting(true);
+    try {
+      await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, payments: queuePayments }, createIdempotencyKey('invoice-cash-queue'));
+      toast.success(`Factura ${queueInvoice.invoice.number} cobrada en caja.`);
+      setQueueInvoice(null);
+      setQueuePayments([]);
+      await Promise.all([loadCashQueue(), queryClient.invalidateQueries({ queryKey: ['sales'] }), queryClient.invalidateQueries({ queryKey: ['finance'] }), queryClient.invalidateQueries({ queryKey: ['accounting'] })]);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'No se pudo registrar el cobro de la factura.'));
+    } finally {
+      setQueueSubmitting(false);
+    }
+  };
 
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
@@ -1234,6 +1301,47 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         </div>
       </div>
 
+      <Card className="overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.07] via-card to-primary/[0.04] shadow-sm">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/15 p-2.5 text-emerald-600"><BellRing className="size-5" /></div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-tight">Facturas enviadas a caja</h3>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Toma una factura pendiente y cobra su saldo desde esta sesión.</p>
+              </div>
+              <Badge className="border-none bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{cashQueue.length}</Badge>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
+              <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
+            </Button>
+          </div>
+          {cashQueue.length > 0 ? (
+            <div className="mt-4 grid gap-2 lg:grid-cols-2">
+              {cashQueue.map((queue) => {
+                const customer = queue.invoice.customer?.name || queue.invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
+                const isMine = queue.status === 'CLAIMED' && queue.claimedById === user?.id;
+                return (
+                  <div key={queue.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/80 p-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2"><span className="font-black">{queue.invoice.number}</span><Badge variant="outline" className="text-[9px]">{queue.status === 'PENDING' ? 'Pendiente' : isMine ? 'Tomada por mí' : `Tomada por ${queue.claimedBy?.name || 'otro cajero'}`}</Badge></div>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{customer}</p>
+                      <p className="mt-1 font-mono text-sm font-black text-primary">{queue.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queue.invoice.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)}><CheckCircle2 className="mr-1.5 size-4" /> Tomar factura</Button>}
+                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(queue.invoice.balance || 0), queue.invoice.currency)]); }}>Cobrar ahora</Button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed border-border/60 px-3 py-3 text-xs text-muted-foreground">No hay facturas pendientes enviadas a caja.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {isRegisterDisabled ? (
         <div className="flex flex-col items-center justify-center py-24 px-4 text-center border-2 border-dashed border-border/50 rounded-2xl bg-muted/10">
           <div className="size-24 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
@@ -1928,6 +2036,38 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
             })()}
             <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); }}>Cancelar</Button><Button onClick={() => void submitPayment()} disabled={submitting || payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim()) || payments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)}>{submitting ? <Loader2 className="size-4 animate-spin" /> : holdCreateDto ? 'Cobrar venta' : 'Confirmar y emitir'}</Button></div>
 
+          </div>
+        </div>
+      )}
+      {queueInvoice && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
+          <div className="w-full max-w-2xl rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">Factura {queueInvoice.invoice.number}</h2><p className="mt-1 text-sm text-muted-foreground">{queueInvoice.invoice.customer?.name || queueInvoice.invoice.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
+              <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); } }} aria-label="Cerrar cobro">×</Button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-primary/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-xl font-black text-primary">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.balance || 0))}</p></div>
+              <div className="rounded-xl border border-border/50 bg-muted/20 p-3 sm:col-span-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja operativa</p><p className="mt-1 text-sm font-bold">{selectedRegister?.code} · {selectedRegister?.name}</p><p className="text-[11px] text-muted-foreground">Sesión abierta y lista para registrar el pago.</p></div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {queuePayments.map((payment, index) => (
+                <div key={`${payment.method}-${index}`} className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                  <div className="grid gap-2 sm:grid-cols-[1fr_9rem_9rem_auto]">
+                    <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem></SelectContent>
+                    </Select>
+                    <CurrencySelector value={payment.currency || queueInvoice.invoice.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || queueInvoice.invoice.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} />
+                    <Input type="number" min="0" step="0.01" value={payment.amount || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} placeholder="Monto" />
+                    <Button type="button" variant="ghost" disabled={queuePayments.length === 1} onClick={() => setQueuePayments((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</Button>
+                  </div>
+                  {requiresPaymentReference(payment.method) && <Input className="mt-2" placeholder="Referencia obligatoria" value={payment.reference || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
+                  {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, queueInvoice.invoice.currency)])}>+ Agregar pago mixto</Button>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border/50 pt-4"><Button type="button" variant="outline" onClick={() => { setQueueInvoice(null); setQueuePayments([]); }} disabled={queueSubmitting}>Cancelar</Button><Button type="button" onClick={() => void submitCashQueuePayment()} disabled={queueSubmitting}>{queueSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar cobro'}</Button></div>
           </div>
         </div>
       )}

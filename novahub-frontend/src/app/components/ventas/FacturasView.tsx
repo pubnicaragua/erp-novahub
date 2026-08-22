@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Loader2
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -180,6 +180,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
+  const [cashSendingInvoiceId, setCashSendingInvoiceId] = useState<string | null>(null);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
@@ -539,6 +540,29 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error(Array.isArray(message) ? message[0] : message, { id: creditToastId });
     } finally {
       setCreditLoading(false);
+    }
+  };
+
+  const handleSendInvoiceToCash = async (invoice: Invoice) => {
+    if (!invoice.id) return;
+    if (!canPerform('SALES_INVOICES', 'approve')) {
+      toast.error('No tienes permiso para enviar facturas a caja');
+      return;
+    }
+    if (['PAID', 'CANCELLED'].includes(String(invoice.status || '').toUpperCase()) || getInvoiceBalance(invoice) <= 0.01) {
+      toast.error('La factura no tiene saldo pendiente para enviar a caja');
+      return;
+    }
+    setCashSendingInvoiceId(invoice.id);
+    try {
+      await invoicesService.sendToCash(invoice.id);
+      toast.success(`Factura ${invoice.number} enviada a la cola de caja`);
+      onRefresh();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'No se pudo enviar la factura a caja';
+      toast.error(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setCashSendingInvoiceId(null);
     }
   };
 
@@ -1147,6 +1171,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     Enviar a crédito
                   </Button>
                 )}
+                {!isInvoiceLocked && canPerform('SALES_INVOICES', 'approve') && getInvoiceBalance(localDoc as Invoice) > 0.01 && (
+                  <Button variant="outline" className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-black uppercase text-[10px] tracking-widest px-4"
+                    onClick={() => void handleSendInvoiceToCash(localDoc as Invoice)} disabled={cashSendingInvoiceId === localDoc.id || accountingBlocked}>
+                    <Send className="mr-2 size-4" /> {cashSendingInvoiceId === localDoc.id ? 'Enviando...' : 'Enviar a caja'}
+                  </Button>
+                )}
                 {canRegisterPayment && (
                   <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => openInvoicePayment(localDoc as Invoice)}>
@@ -1688,6 +1718,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 getInvoiceBalance(row) > 0.01 && (
                 <Button type="button" title="Enviar saldo a crédito" aria-label={`Enviar saldo a crédito de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-violet-500 hover:bg-violet-500/10 transition-colors" onClick={() => openInvoiceCredit(row)}>
                   <Send className="size-4" />
+                </Button>
+              )}
+              {canPerform('SALES_INVOICES', 'approve') &&
+                !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
+                getInvoiceBalance(row) > 0.01 && (
+                <Button type="button" title="Enviar factura a caja" aria-label={`Enviar factura ${row.number} a caja`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 transition-colors" onClick={() => void handleSendInvoiceToCash(row)} disabled={cashSendingInvoiceId === row.id}>
+                  {cashSendingInvoiceId === row.id ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 </Button>
               )}
               {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
