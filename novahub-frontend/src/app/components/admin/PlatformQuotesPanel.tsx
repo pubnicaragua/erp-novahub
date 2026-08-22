@@ -84,6 +84,7 @@ export function PlatformQuotesPanel({ groups = [] }: { groups?: any[] }) {
     });
   };
   const save = async () => {
+    if (!draft) return;
     if (!safeTrim(draft?.prospectCompany) || !safeTrim(draft?.prospectName)) { toast.error('Indica la empresa y el contacto prospecto.'); return; }
     if (!draft.items.length) { toast.error('Agrega al menos un concepto.'); return; }
     const payload = { ...draft, validUntil: new Date(Date.now() + Math.max(1, Number(draft.validDays || 15)) * 86400000).toISOString(), items: draft.items.map((item) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice) })) };

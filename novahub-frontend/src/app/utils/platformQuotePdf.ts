@@ -138,7 +138,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote) {
     headStyles: { fillColor: brandBlack, textColor: 255, fontStyle: 'bold', halign: 'center', cellPadding: 3.1 },
     columnStyles: { 0: { cellWidth: 46 }, 1: { cellWidth: 27, halign: 'right' }, 2: { cellWidth: 27, halign: 'center' }, 3: { cellWidth: 'auto' }, 4: { cellWidth: 29, halign: 'right' } },
     didParseCell: (data) => {
-      if (data.section !== 'body' || data.column.index !== 2 || data.row.raw?.length === 1) return;
+      if (data.section !== 'body' || data.column.index !== 2 || (Array.isArray(data.row.raw) && data.row.raw.length === 1)) return;
       const value = String(data.cell.raw || '').toLowerCase();
       data.cell.styles.fontStyle = 'bold';
       data.cell.styles.textColor = value.includes('mens') ? [21, 128, 61] : value.includes('anual') ? [30, 64, 175] : slate;

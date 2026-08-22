@@ -6,6 +6,7 @@ import { authService } from '../../services/auth.service';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../../utils/accountValidation';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { PasswordRequirements } from '../PasswordRequirements';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
 export function GroupManagerSupportDialog({ group, onChanged }: { group: any; onChanged?: () => void | Promise<void> }) {
@@ -113,7 +114,8 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
           <div className="grid gap-4 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:grid-cols-2 sm:p-5">
             <label className="space-y-1 text-xs font-bold text-muted-foreground">Nombre completo<input value={managerForm.name} onChange={(event) => setManagerForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nombre del responsable" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></label>
             <label className="space-y-1 text-xs font-bold text-muted-foreground">Correo de acceso<input type="email" value={managerForm.email} onChange={(event) => setManagerForm((current) => ({ ...current, email: event.target.value }))} placeholder="manager@grupo.com" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /><span className={`mt-1 block text-[11px] font-normal ${managerEmailStatus === 'taken' ? 'text-destructive' : managerEmailStatus === 'available' ? 'text-emerald-600' : 'text-muted-foreground'}`}>{managerEmailStatus === 'checking' ? 'Verificando disponibilidad…' : managerEmailStatus === 'taken' ? 'Este correo ya está registrado en otra cuenta' : managerEmailStatus === 'available' ? 'Correo disponible' : managerEmailStatus === 'error' ? 'No se pudo verificar el correo; intenta nuevamente' : 'Debe ser un correo válido y único'}</span></label>
-            <label className="space-y-1 text-xs font-bold text-muted-foreground sm:col-span-2">Contraseña inicial<input type="password" value={managerForm.password} onChange={(event) => setManagerForm((current) => ({ ...current, password: event.target.value }))} placeholder="Contraseña segura" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /><span className="mt-1 block text-[11px] font-normal">{getPasswordError(managerForm.password) || 'Debe cumplir la política de seguridad de NovaHub.'}</span></label>
+            <label className="space-y-1 text-xs font-bold text-muted-foreground sm:col-span-2">Contraseña inicial<input type="password" value={managerForm.password} onChange={(event) => setManagerForm((current) => ({ ...current, password: event.target.value }))} placeholder="Contraseña segura" className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></label>
+            <PasswordRequirements value={managerForm.password} className="sm:col-span-2" />
           </div>
           <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cancelar</Button><Button className="rounded-xl" disabled={saving || managerEmailStatus !== 'available' || Boolean(getPasswordError(managerForm.password)) || !managerForm.name.trim()} onClick={createMissingManager}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : <><ShieldCheck className="mr-2 size-4" />Crear Manager</>}</Button></DialogFooter>
         </>}
@@ -123,7 +125,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
       <DialogContent className="w-[calc(100vw-2rem)] !max-w-md rounded-3xl p-5 sm:p-7">
         <DialogHeader><DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle><DialogDescription>Actualiza la contraseña de {selectedManager?.user?.name}.</DialogDescription></DialogHeader>
         <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
-        <p className="text-xs text-muted-foreground">Debe cumplir la política de seguridad de NovaHub.</p>
+        <PasswordRequirements value={password} />
         <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setSelectedManager(null)}>Cancelar</Button><Button className="rounded-xl" disabled={saving || Boolean(getPasswordError(password))} onClick={savePassword}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : 'Guardar contraseña'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>

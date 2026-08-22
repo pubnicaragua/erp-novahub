@@ -8,6 +8,7 @@ import { BUSINESS_TYPE_OPTIONS, getBusinessTypeOption } from '../../constants/bu
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { BrandLogo } from '../BrandLogo';
+import { PasswordRequirements } from '../PasswordRequirements';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
 const safeTrim = (value: unknown) => String(value ?? '').trim();
@@ -245,7 +246,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
             <DialogDescription>Actualiza la contraseña de {passwordUser?.name} desde el soporte de la sucursal.</DialogDescription>
           </DialogHeader>
           <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
-          <p className="text-xs text-muted-foreground">Debe cumplir la política de seguridad de NovaHub.</p>
+          <PasswordRequirements value={newPassword} />
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)}>Cancelar</Button>
             <Button className="rounded-xl" disabled={savingPassword || !!getPasswordError(newPassword)} onClick={savePassword}>{savingPassword ? 'Guardando…' : 'Guardar contraseña'}</Button>

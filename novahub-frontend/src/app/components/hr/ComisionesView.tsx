@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BadgeDollarSign, Download, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -35,12 +37,20 @@ export function ComisionesView() {
   const [status, setStatus] = useState('ALL');
   const [sellerId, setSellerId] = useState('ALL');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+
+  const commissionFilters = {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+    ...(status !== 'ALL' ? { status } : {}),
+    ...(sellerId !== 'ALL' ? { sellerId } : {}),
+  };
 
   const query = useQuery({
     queryKey: ['hr', 'comisiones', { from, to, status, sellerId }],
     queryFn: ({ signal }) =>
       hrService.getCommissionReport(
-        { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(status !== 'ALL' ? { status } : {}), ...(sellerId !== 'ALL' ? { sellerId } : {}), pageSize: 500 },
+        { ...commissionFilters, page: 1, pageSize: 500 },
         signal,
       ),
     enabled: canViewHr,
@@ -62,34 +72,80 @@ export function ComisionesView() {
     });
   };
 
-  const downloadCsv = () => {
-    const rows: string[][] = [
-      ['Vendedor', 'Código', 'Departamento', 'Factura', 'Fecha', 'Cliente', 'Total venta (base)', 'Tipo', 'Tasa/%,Monto', 'Comisión (base)', 'Estado', 'Nómina'],
-    ];
-    for (const item of report?.items || []) {
-      rows.push([
-        item.seller?.name || '',
-        item.seller?.employeeNumber || '',
-        item.seller?.department || '',
-        item.invoice?.number || '',
-        item.invoice?.date ? formatDateEs(item.invoice.date) : '',
-        item.invoice?.customer || '',
-        String(item.invoice?.totalBase ?? ''),
-        item.commissionType,
-        String(item.commissionType === 'PERCENTAGE' ? item.rate + '%' : item.amount),
-        String(item.amountBase),
-        item.status,
-        item.payroll?.periodStart ? `${formatDateEs(item.payroll.periodStart)} - ${formatDateEs(item.payroll.periodEnd)}` : '',
-      ]);
+  const downloadCsv = async () => {
+    if (!report || query.isLoading || query.isError || exporting) return;
+    setExporting(true);
+    try {
+      const pageSize = 500;
+      const total = Number(report.total || report.items?.length || 0);
+      const pageCount = Math.max(1, Math.ceil(total / pageSize));
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
+          hrService.getCommissionReport({ ...commissionFilters, page: index + 2, pageSize }),
+        ),
+      );
+      const items = [
+        ...(report.items || []),
+        ...remainingPages.flatMap((page: any) => page?.items || []),
+      ];
+      if (!items.length) {
+        toast.info('No hay comisiones para exportar con los filtros seleccionados');
+        return;
+      }
+
+      const rows: string[][] = [
+        ['Vendedor', 'Código', 'Departamento', 'Factura', 'Fecha', 'Cliente', 'Total venta (base)', 'Tipo', 'Tasa/Monto', 'Comisión (base)', 'Estado', 'Nómina'],
+      ];
+      for (const item of items) {
+        rows.push([
+          item.seller?.name || '',
+          item.seller?.employeeNumber || '',
+          item.seller?.department || '',
+          item.invoice?.number || '',
+          item.invoice?.date ? formatDateEs(item.invoice.date) : '',
+          item.invoice?.customer || '',
+          String(item.invoice?.totalBase ?? ''),
+          item.commissionType,
+          String(item.commissionType === 'PERCENTAGE' ? item.rate + '%' : item.amount),
+          String(item.amountBase),
+          item.status,
+          item.payroll?.periodStart ? `${formatDateEs(item.payroll.periodStart)} - ${formatDateEs(item.payroll.periodEnd)}` : '',
+        ]);
+      }
+      const summaryRows: string[][] = [
+        ['Vendedor', 'Código', 'Departamento', 'Facturas', 'Ventas (base)', 'Comisiones (base)', 'Pendiente (base)', 'Devengada (base)', 'Pagada (base)'],
+        ...(report.sellers || []).map((seller: any) => [
+          seller.seller?.name || '',
+          seller.seller?.employeeNumber || '',
+          seller.seller?.department || '',
+          String(seller.invoiceCount ?? 0),
+          String(seller.salesBase ?? 0),
+          String(seller.commissionBase ?? 0),
+          String(seller.pendingBase ?? 0),
+          String(seller.earnedBase ?? 0),
+          String(seller.paidBase ?? 0),
+        ]),
+      ];
+      const workbook = XLSX.utils.book_new();
+      const detailSheet = XLSX.utils.aoa_to_sheet(rows);
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      detailSheet['!cols'] = [
+        { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 13 }, { wch: 28 },
+        { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
+      ];
+      summarySheet['!cols'] = [
+        { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 18 },
+        { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalle');
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
+      XLSX.writeFile(workbook, `reporte-comisiones-${from || 'inicio'}-${to || 'hoy'}.xlsx`);
+      toast.success(`Reporte Excel de comisiones descargado (${items.length} registro(s))`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo preparar el reporte de comisiones');
+    } finally {
+      setExporting(false);
     }
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte-comisiones-${from || 'inicio'}-${to || 'hoy'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -133,8 +189,8 @@ export function ComisionesView() {
             </Select>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={downloadCsv} className="gap-2 h-9">
-          <Download className="size-4" /> Exportar CSV
+        <Button variant="outline" size="sm" onClick={downloadCsv} disabled={exporting || query.isLoading || query.isError} className="gap-2 h-9">
+          <Download className="size-4" /> {exporting ? 'Preparando…' : 'Exportar Excel'}
         </Button>
       </div>
 

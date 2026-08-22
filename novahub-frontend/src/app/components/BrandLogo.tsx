@@ -57,6 +57,7 @@ export function BrandLogo({
         'flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10',
         className,
       )}
+      style={showImage ? { backgroundColor: '#ffffff' } : undefined}
       title={alt}
       aria-label={alt}
     >

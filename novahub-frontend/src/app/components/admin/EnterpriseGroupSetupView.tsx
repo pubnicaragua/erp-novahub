@@ -31,6 +31,7 @@ import { storageService } from "../../services/storage.service";
 import { authService } from "../../services/auth.service";
 import { GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
 import { GroupBranchSupportDialog } from "./GroupBranchSupportDialog";
+import { PasswordRequirements } from "../PasswordRequirements";
 import { BrandLogo } from "../BrandLogo";
 import {
   Dialog,
@@ -1481,9 +1482,7 @@ function ManagersEditStep({
                 className={inputClass}
               />
             </label>
-            <p className="text-xs text-muted-foreground">
-              {getPasswordError(password) || "Debe cumplir la política de seguridad de NovaHub."}
-            </p>
+            <PasswordRequirements value={password} />
           </div>
           <DialogFooter>
             <Button
@@ -2151,11 +2150,8 @@ function IdentityStep({
                   placeholder="Contraseña segura"
                   className={inputClass}
                 />
-                <span className="mt-1 block text-[11px] font-normal">
-                  {getPasswordError(managerForm.password) ||
-                    "Debe cumplir la política de seguridad de NovaHub."}
-                </span>
               </label>
+              <PasswordRequirements value={managerForm.password} className="sm:col-span-2" />
             </>
           )}
         </CardContent>
@@ -2893,11 +2889,8 @@ function BranchesStep({
                 placeholder="Contraseña segura"
                 className={inputClass}
               />
-              <span className="mt-1 block text-[11px] font-normal">
-                {getPasswordError(form.adminPassword) ||
-                  "La política se valida también en el backend."}
-              </span>
             </label>
+            <PasswordRequirements value={form.adminPassword} className="sm:col-span-2" />
           </div>
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
             <label className={labelClass}>

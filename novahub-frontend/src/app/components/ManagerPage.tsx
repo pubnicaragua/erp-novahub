@@ -14,6 +14,7 @@ import { useImpersonation } from '../contexts/ImpersonationContext';
 import { enterpriseGroupsService, type ManagerInventoryModuleResponse, type ManagerOverview } from '../services/enterprise-groups.service';
 import { MANAGER_SECTIONS, ManagerShell, type ManagerSection } from './ManagerShell';
 import { ManagerInventoryModule } from './manager/ManagerInventoryModule';
+import { SharedInventoryImportCard, type SharedInventoryImportRow } from './manager/SharedInventoryImportCard';
 import type { ManagerInventoryView } from './manager/manager-inventory.types';
 import { ManagerSalesModule } from './manager/ManagerSalesModule';
 import type { ManagerSalesView } from './manager/manager-sales.types';
@@ -250,7 +251,18 @@ export function ManagerPage() {
         costPrice: row.costPrice ?? row.costo ?? row.costo_unitario ?? row.Costo,
       })),
     }),
-    onSuccess: (result: any) => { setInventoryImportRows([]); setInventoryImportFileName(''); inventoryQuery.refetch(); overviewQuery.refetch(); toast.success(`Inventario aplicado a ${result.stockUpdated} ubicación(es)`); },
+    onSuccess: (result: any) => {
+      setInventoryImportSourceBranchId('');
+      setInventoryImportBranchIds([]);
+      setInventoryImportRows([]);
+      setInventoryImportFileName('');
+      setInventoryImportPriceMode('SAME');
+      setInventoryPricesByBranch({});
+      void inventoryQuery.refetch();
+      void overviewQuery.refetch();
+      void sharedCatalogQuery.refetch();
+      toast.success(`Inventario aplicado a ${result.stockUpdated || 0} ubicación(es) y ${result.productsCreated || 0} espejo(s) creado(s)`);
+    },
     onError: (error: Error) => toast.error(error.message),
   });
   const accountingImportMutation = useMutation({
@@ -354,7 +366,7 @@ export function ManagerPage() {
         {section === 'reports' && allowedSections.includes('reports') && <ManagerReportsModule view={reportView} onViewChange={setReportView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'hr' && allowedSections.includes('hr') && <ManagerHRModule view={hrView} onViewChange={setHrView} groupId={groupId} businessUnitId={selectedBusinessUnitId || undefined} branchId={selectedBranchId || undefined} branches={branchOptions} />}
         {section === 'users' && <UsersContent data={usersQuery.data || []} loading={usersQuery.isLoading} error={usersQuery.error} canEditUsers={canEditBranchUsers} canManageManagers={canManageManagersFromUsers} onEditUser={setEditingBranchUser} onToggleUser={(user) => { if (window.confirm(`${user.isActive ? '¿Inhabilitar' : '¿Habilitar'} a ${user.name || 'este usuario'}?`)) branchUserMutation.mutate({ userId: user.id, payload: { isActive: !user.isActive } }); }} togglingUserId={branchUserMutation.isPending ? String((branchUserMutation.variables as any)?.userId || '') : ''} onCreateManager={() => { resetManagerForm(); setSection('managers'); toast.info('Formulario de acceso Manager listo para configurar'); }} />}
-        {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} />}
+        {section === 'catalog' && <CatalogContent data={sharedCatalogQuery.data || []} loading={sharedCatalogQuery.isLoading} branchOptions={branchOptions} sourceBranchId={catalogSourceBranchId} setSourceBranchId={setCatalogSourceBranchId} search={catalogSearch} setSearch={setCatalogSearch} products={catalogProducts} productsLoading={branchProductsQuery.isLoading} selectedProductIds={catalogProductIds} setSelectedProductIds={setCatalogProductIds} targetBranchIds={catalogTargetBranchIds} setTargetBranchIds={setCatalogTargetBranchIds} onShare={() => shareCatalogMutation.mutate()} sharing={shareCatalogMutation.isPending} onUnshare={unshareMutation.mutate} unsharing={unshareMutation.isPending} onSync={syncMutation.mutate} syncing={syncMutation.isPending} inventoryImportSourceBranchId={inventoryImportSourceBranchId} setInventoryImportSourceBranchId={setInventoryImportSourceBranchId} inventoryImportBranchIds={inventoryImportBranchIds} setInventoryImportBranchIds={setInventoryImportBranchIds} inventoryImportRows={inventoryImportRows} setInventoryImportRows={setInventoryImportRows} inventoryImportFileName={inventoryImportFileName} setInventoryImportFileName={setInventoryImportFileName} inventoryImportPriceMode={inventoryImportPriceMode} setInventoryImportPriceMode={setInventoryImportPriceMode} inventoryPricesByBranch={inventoryPricesByBranch} setInventoryPricesByBranch={setInventoryPricesByBranch} onInventoryImport={() => inventoryImportMutation.mutate()} inventoryImporting={inventoryImportMutation.isPending} />}
         {section === 'consolidated' && <ConsolidatedContent trialBalance={consolidatedTrialBalance.data} profitLoss={consolidatedProfitLoss.data} balanceSheet={consolidatedBalanceSheet.data} branchComparison={consolidatedBranchComparison.data} loading={consolidatedTrialBalance.isLoading || consolidatedProfitLoss.isLoading} dateFrom={consDateFrom} setDateFrom={setConsDateFrom} dateTo={consDateTo} setDateTo={setConsDateTo} />}
         {section === 'transfers' && <TransfersContent data={transfersQuery.data || []} loading={transfersQuery.isLoading} canApprove={managerAccessAllowsAction(group?.managerAccess, 'MANAGER_TRANSFERS', 'create')} approvingId={approveTransferMutation.isPending ? String(approveTransferMutation.variables || '') : ''} onApprove={setTransferToApprove} />}
         {section === 'managers' && <ManagersContent data={managersQuery.data || []} branches={branchOptions} canEditOwner={Boolean(!group?.managerAccess || group.managerAccess.isOwner)} editingManagerId={editingManagerId} name={managerName} email={managerEmail} password={managerPassword} branchIds={managerBranchIds} canManageManagers={managerCanManageManagers} canEdit={managerCanEdit} permissionState={managerPermissionState} setEditingManagerId={setEditingManagerId} setName={setManagerName} setEmail={setManagerEmail} setPassword={setManagerPassword} setBranchIds={setManagerBranchIds} setCanManageManagers={setManagerCanManageManagers} setCanEdit={setManagerCanEdit} setPermissionState={setManagerPermissionState} onReset={resetManagerForm} onSave={() => managerMutation.mutate()} saving={managerMutation.isPending} onPassword={(userId, password) => managerPasswordMutation.mutate({ userId, password })} resettingPassword={managerPasswordMutation.isPending} onRevoke={(userId) => revokeManagerMutation.mutate(userId)} revoking={revokeManagerMutation.isPending} />}
@@ -631,12 +643,19 @@ function ConsolidatedContent({ trialBalance, profitLoss, balanceSheet, branchCom
   </div>;
 }
 
-function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourceBranchId, search, setSearch, products, productsLoading, selectedProductIds, setSelectedProductIds, targetBranchIds, setTargetBranchIds, onShare, sharing, onUnshare, unsharing, onSync, syncing }: {
-  data: any[]; loading: boolean; branchOptions: Array<{ id: string; name: string }>;
+function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourceBranchId, search, setSearch, products, productsLoading, selectedProductIds, setSelectedProductIds, targetBranchIds, setTargetBranchIds, onShare, sharing, onUnshare, unsharing, onSync, syncing, inventoryImportSourceBranchId, setInventoryImportSourceBranchId, inventoryImportBranchIds, setInventoryImportBranchIds, inventoryImportRows, setInventoryImportRows, inventoryImportFileName, setInventoryImportFileName, inventoryImportPriceMode, setInventoryImportPriceMode, inventoryPricesByBranch, setInventoryPricesByBranch, onInventoryImport, inventoryImporting }: {
+  data: any[]; loading: boolean; branchOptions: Array<{ id: string; name: string; businessUnitId?: string | null }>;
   sourceBranchId: string; setSourceBranchId: (value: string) => void; search: string; setSearch: (value: string) => void;
   products: any[]; productsLoading: boolean; selectedProductIds: string[]; setSelectedProductIds: (value: string[]) => void;
   targetBranchIds: string[]; setTargetBranchIds: (value: string[]) => void; onShare: () => void; sharing: boolean;
   onUnshare: (mirrorIds: string[]) => void; unsharing: boolean; onSync: (productId: string) => void; syncing: boolean;
+  inventoryImportSourceBranchId: string; setInventoryImportSourceBranchId: (value: string) => void;
+  inventoryImportBranchIds: string[]; setInventoryImportBranchIds: (value: string[]) => void;
+  inventoryImportRows: SharedInventoryImportRow[]; setInventoryImportRows: (value: SharedInventoryImportRow[]) => void;
+  inventoryImportFileName: string; setInventoryImportFileName: (value: string) => void;
+  inventoryImportPriceMode: 'SAME' | 'BY_BRANCH'; setInventoryImportPriceMode: (value: 'SAME' | 'BY_BRANCH') => void;
+  inventoryPricesByBranch: Record<string, Record<string, string>>; setInventoryPricesByBranch: (value: Record<string, Record<string, string>>) => void;
+  onInventoryImport: () => void; inventoryImporting: boolean;
 }) {
   const toggleProduct = (id: string) => setSelectedProductIds(selectedProductIds.includes(id) ? selectedProductIds.filter((value) => value !== id) : [...selectedProductIds, id]);
   const toggleTarget = (id: string) => setTargetBranchIds(targetBranchIds.includes(id) ? targetBranchIds.filter((value) => value !== id) : [...targetBranchIds, id]);
@@ -685,6 +704,24 @@ function CatalogContent({ data, loading, branchOptions, sourceBranchId, setSourc
         </div>}
       </CardContent>
     </Card>
+
+    <SharedInventoryImportCard
+      branches={branchOptions}
+      sourceBranchId={inventoryImportSourceBranchId}
+      setSourceBranchId={setInventoryImportSourceBranchId}
+      branchIds={inventoryImportBranchIds}
+      setBranchIds={setInventoryImportBranchIds}
+      rows={inventoryImportRows}
+      setRows={setInventoryImportRows}
+      fileName={inventoryImportFileName}
+      setFileName={setInventoryImportFileName}
+      priceMode={inventoryImportPriceMode}
+      setPriceMode={setInventoryImportPriceMode}
+      pricesByBranch={inventoryPricesByBranch}
+      setPricesByBranch={setInventoryPricesByBranch}
+      onImport={onInventoryImport}
+      importing={inventoryImporting}
+    />
   </div>;
 }
 
