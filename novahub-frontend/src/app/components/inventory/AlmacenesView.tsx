@@ -46,7 +46,7 @@ const ALMACEN_TOUR_STEPS: GuidedTourStep[] = [
     target: '[data-tour="almacenes-title"]',
     title: 'Bodegas de la sucursal',
     description: 'Gestiona las bodegas operativas de esta sucursal. Cada bodega conserva su inventario y puede tener su propia cuenta contable.',
-    tip: 'Los almacenes corporativos se administran desde la vista Manager.',
+    tip: 'Las bodegas corporativas se administran desde la vista Manager.',
     placement: 'bottom',
   },
   {
@@ -475,7 +475,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
             {warehouses.length} bodegas operativas
           </p>
         </div>
-        <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <WarehouseSupplyPanel />
           <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="order-1 h-10 min-w-0 w-full rounded-xl px-3 sm:order-none sm:w-auto">
             <CircleHelp className="size-3.5 mr-1" /> Cómo gestionar bodegas
@@ -611,7 +611,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                       <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Bodega seleccionada</p>
                       <h3 className="mt-1 truncate text-lg font-black tracking-tight" title={detailWarehouse.name}>{detailWarehouse.name}</h3>
                     </div>
-                    <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Almacén'}</Badge>
+                    <Badge variant="outline" className="shrink-0">{WAREHOUSE_TYPES.find((t) => t.value === detailWarehouse.type)?.label || detailWarehouse.type || 'Bodega'}</Badge>
                   </div>
                 </div>
                 <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-4">
@@ -845,4 +845,3 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
   </>
   );
 }
-

@@ -240,6 +240,12 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     queryFn: ({ signal }) => inventoryService.getAudits({ page: pageFor('auditorias').page, pageSize: pageFor('auditorias').pageSize, search: searchFor('auditorias'), warehouseId: scopeWarehouseParam }, signal),
     enabled: Boolean(user) && canReadInventory && activeTab === 'auditorias',
   });
+  const pendingAuditsForAdjustmentsQuery = useQuery({
+    ...commonQueryOptions,
+    queryKey: ['inventory', 'pending-audits-for-adjustments', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getAudits({ page: 1, pageSize: 5000, report: true, status: 'PENDING', warehouseId: scopeWarehouseParam }, signal),
+    enabled: Boolean(user) && canReadInventory && activeTab === 'ajustes',
+  });
   const seriesQuery = useQuery({
     ...commonQueryOptions,
     queryKey: ['inventory', 'series', tenantKey, activeTab],
@@ -291,6 +297,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     ...(transfersQuery.isEnabled ? [transfersQuery] : []),
     ...(adjustmentsQuery.isEnabled ? [adjustmentsQuery] : []),
     ...(auditsQuery.isEnabled ? [auditsQuery] : []),
+    ...(pendingAuditsForAdjustmentsQuery.isEnabled ? [pendingAuditsForAdjustmentsQuery] : []),
     ...(seriesQuery.isEnabled ? [seriesQuery] : []),
     ...(movementsQuery.isEnabled ? [movementsQuery] : []),
   ];
@@ -397,7 +404,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                {productItems.length} productos · {serviceItems.length} servicios · {data.warehouses.length} almacenes
+                {productItems.length} productos · {serviceItems.length} servicios · {data.warehouses.length} bodegas
               </Badge>
             </div>
           </div>
@@ -504,7 +511,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <div className="mb-5 w-full overflow-x-auto custom-scrollbar">
                     <TabsList className="flex h-auto w-max gap-1.5 rounded-2xl border border-border/40 bg-muted/20 p-1.5">
                       <TabsTrigger value="branch" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Package className="size-4" />Productos de la sucursal</TabsTrigger>
-                      <TabsTrigger value="linkedWarehouses" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Warehouse className="size-4" />Productos de los almacenes</TabsTrigger>
+                      <TabsTrigger value="linkedWarehouses" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Warehouse className="size-4" />Productos de las bodegas</TabsTrigger>
                     </TabsList>
                   </div>
                   <TabsContent value="branch" className="m-0">
@@ -605,6 +612,10 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     series={data.series}
                     branches={accessibleBranches}
                     selectedBranchId={selectedBranchId}
+                    onGoToConfig={() => {
+                      setActiveTab('configuracion');
+                      onSubModuleChange?.('configuracion');
+                    }}
                     onRefresh={() => fetchData()}
                     pagination={transfersPagination}
                     onSearchChange={(value) => updateSearch('transferencias', value)}
@@ -623,6 +634,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                     warehouses={scopedWarehouses}
                     products={productItems}
                     series={data.series}
+                    auditsForAdjustment={toList(pendingAuditsForAdjustmentsQuery.data).filter((audit: any) => inScope(audit.warehouseId))}
                     onRefresh={() => fetchData()}
                     pagination={adjustmentsPagination}
                     onSearchChange={(value) => updateSearch('ajustes', value)}

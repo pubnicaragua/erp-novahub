@@ -106,6 +106,9 @@ export interface ManagerInventoryAdjustmentRow {
   status: string;
   reason: string;
   notes?: string | null;
+  auditGenerated?: boolean;
+  auditId?: string | null;
+  auditNumber?: string | null;
   branchId: string;
   branchName?: string | null;
   businessUnitId?: string | null;
@@ -451,6 +454,8 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/manager/${groupId}/adjustments`,
       { params, signal },
     ),
+  approveInventoryAdjustment: (groupId: string, adjustmentId: string) =>
+    api.patch<any>(`/enterprise-groups/manager/${groupId}/adjustments/${adjustmentId}/approve`, {}),
   getInventoryModule: (
     groupId: string,
     params: {

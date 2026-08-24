@@ -66,6 +66,7 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { toast } from 'sonner';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 
 // ============================================================================
 // Tipos del componente
@@ -91,6 +92,33 @@ type TabKey = 'general' | 'stock' | 'kardex' | 'series' | 'historial';
 // ============================================================================
 // Helpers
 // ============================================================================
+
+const MOVEMENT_REFERENCE_LABELS: Record<string, string> = {
+  PURCHASE_RECEIPT: 'Recepción de compra',
+  SALE: 'Venta',
+  SALE_RETURN: 'Devolución de venta',
+  INVENTORY_ADJUSTMENT: 'Ajuste de inventario',
+  TRANSFER: 'Transferencia',
+  PURCHASE: 'Compra',
+  STOCK_INITIAL: 'Stock inicial',
+  SALES_ORDER: 'Orden de venta',
+  SUPPLIER_INVOICE: 'Factura de compra',
+};
+
+function formatKardexReference(reference: string | null | undefined): { label: string; full: string } {
+  const raw = String(reference || '').trim();
+  if (!raw) return { label: '—', full: '' };
+
+  const parts = raw.split(':');
+  if (parts.length > 1) {
+    const type = parts[0].toUpperCase();
+    const label = MOVEMENT_REFERENCE_LABELS[type] || type;
+    const shortId = parts[1]?.slice(0, 8);
+    return { label: shortId ? `${label} · ${shortId}` : label, full: raw };
+  }
+
+  return { label: raw, full: raw };
+}
 
 /**
  * Devuelve el color semántico para un tipo de movimiento.
@@ -900,6 +928,7 @@ export function ProductDetailDrawer({
                             const meta = getMovementBadge(move.type);
                             const Icon = meta.icon;
                             const date = move.createdAt || move.date;
+                            const reference = formatKardexReference(move.reference);
                             const warehouseName =
                               move.warehouse?.name ||
                               warehouses.find((w: any) => w.id === (move.warehouseId || move.warehouse?.id))?.name ||
@@ -942,8 +971,8 @@ export function ProductDetailDrawer({
                                     <span className="text-muted-foreground">-</span>
                                   )}
                                 </TableCell>
-                                <TableCell className="text-xs font-mono text-muted-foreground">
-                                  {move.reference || '—'}
+                                <TableCell className="max-w-[220px] text-xs font-mono text-muted-foreground" title={reference.full || undefined}>
+                                  <span className="block truncate">{reference.label}</span>
                                 </TableCell>
                                 <TableCell className="text-xs">{warehouseName}</TableCell>
                                 <TableCell>
@@ -1021,19 +1050,26 @@ export function ProductDetailDrawer({
 
                 {/* ============================ TAB: HISTORIAL ============================ */}
                 <TabsContent value="historial" className="mt-0">
-                  <Card className="p-8 gap-3 flex flex-col items-center text-center">
-                    <div className="size-14 rounded-full bg-muted/40 flex items-center justify-center">
-                      <Clock className="size-7 text-muted-foreground" />
+                  <Card className="p-4 gap-0">
+                    <div className="flex items-start gap-3">
+                      <div className="size-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Clock className="size-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-bold">Historial de auditoría</p>
+                        <p className="text-xs text-muted-foreground">
+                          Creaciones, ediciones y cambios de estado registrados para este producto.
+                        </p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-bold">Historial de auditoría</p>
-                      <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                        El historial de auditoría se mostrará aquí cuando esté disponible el módulo de auditoría.
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] uppercase tracking-widest mt-2">
-                      Próximamente
-                    </Badge>
+                    <AuditHistoryModal
+                      isOpen={activeTab === 'historial'}
+                      onClose={() => setActiveTab('general')}
+                      entity="PRODUCT"
+                      entityId={String(product.id || productId)}
+                      title="Historial del producto"
+                      presentation="inline"
+                    />
                   </Card>
                 </TabsContent>
               </>

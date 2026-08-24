@@ -497,12 +497,16 @@ th .column-filter-menu .column-filter-icon,
   cursor: pointer;
 }
 
-/* Productos y Servicios usan la misma escala de 40px que las acciones de
-   Almacenes. La barra solo conserva desplazamiento en pantallas estrechas. */
-.inventory-products-toolbar > button,
-.inventory-products-toolbar > label,
+/* Productos y Servicios comparten la escala de filtros de las demás vistas:
+   filtros compactos y acciones con altura de 40px. */
 .inventory-products-toolbar > div > input,
 .inventory-products-toolbar [data-slot="select-trigger"] {
+  min-height: 2.25rem !important;
+  height: 2.25rem !important;
+}
+
+.inventory-products-toolbar > button,
+.inventory-products-toolbar > label {
   min-height: 2.5rem !important;
   height: 2.5rem !important;
 }

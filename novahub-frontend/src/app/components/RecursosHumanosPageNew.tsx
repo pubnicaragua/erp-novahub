@@ -13,12 +13,16 @@ import {
   Plus,
   Search,
   CheckCircle2,
-  XCircle
+  XCircle,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 export function RecursosHumanosPageNew() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [data, setData] = useState<any>({
     employees: [],
     departments: [],
@@ -30,6 +34,7 @@ export function RecursosHumanosPageNew() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [employeesRes, departmentsRes, payrollsRes, leaveRequestsRes] = await Promise.all<any>([
         hrService.getEmployees(),
         hrService.getDepartments(),
@@ -43,9 +48,10 @@ export function RecursosHumanosPageNew() {
         payrolls: payrollsRes.data || [],
         leaveRequests: leaveRequestsRes.data || [],
       });
-    } catch (error) {
-      console.error('Error fetching HR data:', error);
-      toast.error('Error al cargar datos de Recursos Humanos');
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'Error al cargar datos de Recursos Humanos';
+      setLoadError(Array.isArray(message) ? message[0] : message);
+      toast.error(Array.isArray(message) ? message[0] : message);
     } finally {
       setLoading(false);
     }
@@ -56,7 +62,6 @@ export function RecursosHumanosPageNew() {
   }, []);
 
   const activeEmployees = data.employees.filter((e: any) => e.employmentStatus === 'ACTIVE').length;
-  const onLeave = data.leaveRequests.filter((l: any) => l.status === 'APPROVED').length;
   const pendingLeaves = data.leaveRequests.filter((l: any) => l.status === 'PENDING').length;
   const totalPayroll = data.payrolls.reduce((sum: number, p: any) => sum + Number(p.netPay || 0), 0);
 
@@ -115,8 +120,24 @@ export function RecursosHumanosPageNew() {
     );
   }
 
+  if (loadError && data.employees.length === 0 && data.departments.length === 0) {
+    return (
+      <div className="flex min-h-[600px] items-center justify-center p-6">
+        <Alert variant="destructive" className="max-w-2xl border-red-500/30 bg-red-500/5">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
+      {loadError && <Alert variant="destructive" className="border-red-500/30 bg-red-500/5"><AlertTriangle className="size-4" /><AlertTitle>Los datos podrían estar desactualizados</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchData} className="gap-2"><RefreshCw className="size-3.5" /> Reintentar</Button></AlertDescription></Alert>}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

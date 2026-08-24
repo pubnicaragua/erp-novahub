@@ -2336,11 +2336,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       {/* ─── Barra de herramientas: filtros + acciones en UNA sola línea ─── */}
       <div className="inventory-products-toolbar mb-4 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1" data-tour="inventory-products-filters">
           {/* Búsqueda */}
-          <div className="relative w-48 shrink-0">
+          <div className="relative w-full shrink-0 sm:w-44">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
             <Input
               placeholder="Buscar..."
-              className="h-10 rounded-xl pl-8 text-xs"
+              className="h-9 rounded-xl pl-8"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
@@ -2354,13 +2354,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
             selected={warehouseFilters}
             onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-            className="h-10 rounded-xl border border-input px-3 text-xs"
+            className="h-9 rounded-xl border border-input px-3 !text-sm !font-normal"
           />
 
           {/* Selects compactos */}
           {!isServiceView && (
             <Select value={effectiveProductStatusFilter} onValueChange={(value) => { const nextValue = value as ProductStatusFilter; setLocalProductStatusFilter(nextValue); onProductStatusFilterChange?.(nextValue); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Estado"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-auto shrink-0 rounded-xl border border-input px-3" aria-label="Estado"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Estado</SelectItem>
                 <SelectItem value="ACTIVE">Activos</SelectItem>
@@ -2370,7 +2370,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-auto shrink-0 rounded-xl border border-input px-3"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Disponibilidad</SelectItem>
                 <SelectItem value="available">Disponibles</SelectItem>
@@ -2380,7 +2380,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveUnitFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalUnitFilter(v); onUnitChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Unidad"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-auto shrink-0 rounded-xl border border-input px-3" aria-label="Unidad"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Unidad</SelectItem>
                 {UNIT_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
@@ -2389,7 +2389,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Impuesto"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-auto shrink-0 rounded-xl border border-input px-3" aria-label="Impuesto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Impuesto</SelectItem>
                 {TAX_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
@@ -2398,7 +2398,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); onStockStatusChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Stock"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 w-auto shrink-0 rounded-xl border border-input px-3" aria-label="Stock"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Stock</SelectItem>
                 <SelectItem value="available">Con stock</SelectItem>
@@ -2413,36 +2413,36 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
           {/* Acciones — todo en la misma fila */}
           <div className="erp-toolbar-actions">
-          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setShowTutorial(true)}>
+          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-1 size-3.5" /> Cómo
           </Button>
           {!isServiceView && canPerform('INVENTORY', 'edit') && !initialImportCompleted && products.length === 0 && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 px-3 text-xs text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
               <Upload className="mr-1 size-3.5" /> Importar productos
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
               <ImageIcon className="mr-1 size-3.5" /> Imágenes
             </Button>
           )}
           {!isServiceView && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
               <PackageSearch className="size-3.5 mr-1" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
               <Barcode className="mr-1 size-3.5" /> Etiquetas
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
               <Plus className="size-3.5 mr-1" /> Nuevo
             </Button>
           )}
           {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
               <Plus className="size-3.5 mr-1" /> Nuevo
             </Button>
           )}
@@ -2451,11 +2451,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           {!selectedBranchId && !isServiceView && (
             <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-xl border border-input px-3" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
               <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-3.5" />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Todos alm.</span>
+              <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">Todos alm.</span>
             </label>
           )}
           {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
-            <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs text-muted-foreground" onClick={() => {
+            <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" onClick={() => {
               setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
             }}>
               <X className="size-3.5 mr-1" /> Limpiar

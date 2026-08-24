@@ -133,7 +133,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <SelectContent>
               <SelectItem value="hoy">Hoy</SelectItem>
               <SelectItem value="ultima-semana">Últimos 7 días</SelectItem>
-              <SelectItem value="ultimo-mes">Últimos 30 días</SelectItem>
+              <SelectItem value="ultimo-mes">Mes actual</SelectItem>
               <SelectItem value="ultimo-trimestre">Último Trimestre</SelectItem>
               <SelectItem value="ultimo-año">Último Año</SelectItem>
               <SelectItem value="todo">Histórico completo</SelectItem>

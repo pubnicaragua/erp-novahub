@@ -9,6 +9,7 @@ import {
 import { Button } from './button';
 import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from './utils';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface ConfirmDialogProps {
   loading?: boolean;
   disabled?: boolean;
   closeOnConfirm?: boolean;
+  contentClassName?: string;
   children?: React.ReactNode;
 }
 
@@ -55,6 +57,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   loading = false,
   disabled = false,
   closeOnConfirm = true,
+  contentClassName,
   children,
 }) => {
   const config = variantConfig[variant];
@@ -70,15 +73,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden border-border/50 bg-background/95 backdrop-blur-xl">
+      <DialogContent className={cn('w-[calc(100%-2rem)] !max-w-[420px] p-0 overflow-hidden border-border/50 bg-background/95 backdrop-blur-xl', contentClassName)}>
         <div className="flex flex-col items-center text-center px-6 pt-8 pb-4">
           <AnimatePresence>
             {open && (
               <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                exit={{ scale: 0, rotate: 180 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
                 className={`p-4 rounded-full ${config.iconBg} mb-4`}
               >
                 <AlertTriangle className={`size-8 ${config.iconColor}`} />

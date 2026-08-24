@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -73,61 +73,61 @@ function toDate(value: unknown): Date | null {
 function getRangeDates(range: string) {
   const now = new Date();
   const start = new Date(now);
+  const end = new Date(now);
   const prevStart = new Date(now);
   const prevEnd = new Date(now);
 
   switch (range) {
     case 'hoy':
       start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
       prevStart.setDate(now.getDate() - 1); prevStart.setHours(0, 0, 0, 0);
       prevEnd.setDate(now.getDate() - 1); prevEnd.setHours(23, 59, 59, 999);
       break;
     case 'ultima-semana':
       start.setDate(now.getDate() - 7);
+      end.setHours(23, 59, 59, 999);
       prevStart.setDate(now.getDate() - 14);
       prevEnd.setDate(now.getDate() - 7);
       break;
-    case 'ultimo-mes':
-      start.setMonth(now.getMonth() - 1);
-      prevStart.setMonth(now.getMonth() - 2);
-      prevEnd.setMonth(now.getMonth() - 1);
+    case 'ultimo-mes': {
+      // Nómina mensual se agrupa por mes calendario, no por una ventana móvil
+      // que deje fuera el inicio o incluya días del mes siguiente.
+      start.setDate(1);
+      end.setMonth(now.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+      prevStart.setMonth(now.getMonth() - 1, 1);
+      prevEnd.setMonth(now.getMonth(), 0);
       break;
+    }
     case 'ultimo-trimestre':
       start.setMonth(now.getMonth() - 3);
+      end.setHours(23, 59, 59, 999);
       prevStart.setMonth(now.getMonth() - 6);
       prevEnd.setMonth(now.getMonth() - 3);
       break;
     case 'ultimo-año':
       start.setFullYear(now.getFullYear() - 1);
+      end.setHours(23, 59, 59, 999);
       prevStart.setFullYear(now.getFullYear() - 2);
       prevEnd.setFullYear(now.getFullYear() - 1);
       break;
     default:
-      return { start: new Date(0), prevStart: null, prevEnd: null };
+      return { start: new Date(0), end: null, prevStart: null, prevEnd: null };
   }
   start.setHours(0, 0, 0, 0);
+  if (range !== 'ultimo-mes') end.setHours(23, 59, 59, 999);
   prevStart.setHours(0, 0, 0, 0);
   prevEnd.setHours(23, 59, 59, 999);
-  return { start, prevStart, prevEnd };
+  return { start, end, prevStart, prevEnd };
 }
 
 function isDateInRange(value: unknown, range: string): boolean {
   const date = toDate(value);
   if (!date) return false;
-  const now = new Date();
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
-  const start = new Date(now);
-  switch (range) {
-    case 'hoy': return date >= startToday;
-    case 'ultima-semana': start.setDate(now.getDate() - 7); break;
-    case 'ultimo-mes': start.setMonth(now.getMonth() - 1); break;
-    case 'ultimo-trimestre': start.setMonth(now.getMonth() - 3); break;
-    case 'ultimo-año': start.setFullYear(now.getFullYear() - 1); break;
-    default: return true;
-  }
-  start.setHours(0, 0, 0, 0);
-  return date >= start;
+  if (range === 'todo') return true;
+  const { start, end } = getRangeDates(range);
+  return date >= start && (!end || date <= end);
 }
 
 function isDateInWindow(value: unknown, startMs: number, endMs: number): boolean {
@@ -135,6 +135,15 @@ function isDateInWindow(value: unknown, startMs: number, endMs: number): boolean
   if (!date) return false;
   const t = date.getTime();
   return t >= startMs && t <= endMs;
+}
+
+function isPayrollInWindow(payroll: any, startMs: number, endMs: number): boolean {
+  const periodStart = toDate(payroll.periodStart);
+  const periodEnd = toDate(payroll.periodEnd);
+  if (periodStart && periodEnd) {
+    return periodStart.getTime() <= endMs && periodEnd.getTime() >= startMs;
+  }
+  return isDateInWindow(payroll.periodEnd || payroll.paymentDate || payroll.createdAt, startMs, endMs);
 }
 
 function fmtTenure(months: number): string {
@@ -152,7 +161,7 @@ function fmtTenure(months: number): string {
 }
 
 function nextAnniversary(hireDate: Date, now: Date): { label: string; days: number } {
-  let next = new Date(hireDate);
+  const next = new Date(hireDate);
   next.setFullYear(now.getFullYear());
   if (next.getTime() < now.getTime()) next.setFullYear(now.getFullYear() + 1);
   const days = Math.max(0, Math.round((next.getTime() - now.getTime()) / 86400000));
@@ -292,7 +301,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   };
 
   const now = useMemo(() => new Date(), []);
-  const { start: currentStart, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
+  const { start: currentStart, end: currentEnd, prevStart, prevEnd } = useMemo(() => getRangeDates(dateRange), [dateRange]);
   const prevWin = useMemo(() => prevStart && prevEnd ? { startMs: prevStart.getTime(), endMs: prevEnd.getTime() } : null, [prevStart, prevEnd]);
 
   const empName = (e: any) => `${e?.firstName || ''} ${e?.lastName || ''}`.trim() || 'Sin nombre';
@@ -424,14 +433,15 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   };
 
   const fPay = useMemo(() => fPayrolls.filter(p => {
-    const d = toDate(p.periodEnd || p.paymentDate || p.createdAt);
-    return d && d >= currentStart;
-  }), [fPayrolls, currentStart]);
+    const startMs = currentStart.getTime();
+    const endMs = currentEnd?.getTime() ?? Number.POSITIVE_INFINITY;
+    return isPayrollInWindow(p, startMs, endMs);
+  }), [fPayrolls, currentStart, currentEnd]);
 
   const payrollTotals = useMemo(() => sumTotals(fPay), [fPay]);
   const costoPorColaborador = payrollTotals.empleados > 0 ? payrollTotals.total / payrollTotals.empleados : 0;
 
-  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isDateInWindow(p.periodEnd || p.paymentDate || p.createdAt, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
+  const prevPayrollTotals = useMemo(() => prevWin ? sumTotals(fPayrolls.filter(p => isPayrollInWindow(p, prevWin.startMs, prevWin.endMs))) : sumTotals([]), [fPayrolls, prevWin]);
   const prevCostoPorColaborador = prevPayrollTotals.empleados > 0 ? prevPayrollTotals.total / prevPayrollTotals.empleados : 0;
 
   const costoPorEmp = useMemo(() => {
@@ -455,8 +465,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     const map = new Map<string, number>();
     if (prevWin) {
       for (const p of fPayrolls) {
-        const t = toDate(p.periodEnd || p.paymentDate || p.createdAt)?.getTime() || 0;
-        if (t < prevWin.startMs || t > prevWin.endMs) continue;
+        if (!isPayrollInWindow(p, prevWin.startMs, prevWin.endMs)) continue;
         const emp = p.employeeId ? employeesById.get(p.employeeId) : null;
         const dept = emp ? empDept(emp) : 'Sin departamento';
         map.set(dept, (map.get(dept) || 0) + employerCost(p));
@@ -505,7 +514,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   const estimated = attStats.total === 0;
   const attendanceRate = attStats.rate ?? (() => {
     const missed = approvedLeaves.filter(l => l.leaveType !== 'VACATION').reduce((a, l) => a + Number(l.days || 0), 0);
-    const spanDays = Math.max(1, Math.round((now.getTime() - currentStart.getTime()) / 86400000));
+    const spanDays = Math.max(1, Math.round(((currentEnd?.getTime() ?? now.getTime()) - currentStart.getTime()) / 86400000) + 1);
     const potential = activeEmployees.length * spanDays;
     return potential > 0 ? Math.max(0, (1 - missed / potential) * 100) : 100;
   })();
@@ -520,7 +529,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   }, [approvedLeaves]);
 
   const ausentismoDias = approvedLeaves.reduce((a, l) => a + Number(l.days || 0), 0) + attStats.absent;
-  const spanDias = Math.max(1, Math.round((now.getTime() - currentStart.getTime()) / 86400000));
+  const spanDias = Math.max(1, Math.round(((currentEnd?.getTime() ?? now.getTime()) - currentStart.getTime()) / 86400000) + 1);
   const ausentismoRate = activeEmployees.length > 0 ? (ausentismoDias / (activeEmployees.length * spanDias)) * 100 : 0;
   const prevAusentismoDias = useMemo(() => prevWin ? (fLeaves.filter(l => l.status === 'APPROVED' && isDateInWindow(l.startDate, prevWin.startMs, prevWin.endMs)).reduce((a, l) => a + Number(l.days || 0), 0) + prevAttStats.absent) : 0, [fLeaves, prevWin, prevAttStats]);
 
@@ -567,8 +576,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
     const prevByKey = new Map<string, number>();
     if (prevWin) {
       for (const p of fPayrolls) {
+        if (!isPayrollInWindow(p, prevWin.startMs, prevWin.endMs)) continue;
         const t = toDate(p.periodEnd || p.paymentDate || p.createdAt)?.getTime() || 0;
-        if (t < prevWin.startMs || t > prevWin.endMs) continue;
         for (const b of buckets) {
           if (t >= b.startMs && t <= b.endMs) {
             prevByKey.set(b.key, (prevByKey.get(b.key) || 0) + employerCost(p));
@@ -593,7 +602,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
       }
       return { key: b.key, label: b.label, salario, variables: horasExtra + comisiones + prestaciones, cargas, total, prev: prevByKey.get(b.key) ?? null };
     });
-  }, [fPay, fPayrolls, currentStart, now, prevWin]);
+  }, [fPay, fPayrolls, currentStart, currentEnd, now, prevWin]);
 
   // ── Movimientos ──
   const movBuckets = useMemo(() => {
@@ -1032,7 +1041,9 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
             });
             doc.addImage(canvas.toDataURL('image/png'), 'PNG', marginX, currentY, contentWidth, height, undefined, 'FAST');
             currentY += height + 5;
-          } catch {}
+          } catch {
+            // El gráfico es opcional para la exportación; conserva el resto del reporte.
+          }
         };
 
         await capture('hr-evolution-chart', 80);
@@ -2061,5 +2072,3 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
   );
 });
 HRReportTab.displayName = 'HRReportTab';
-
-

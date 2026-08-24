@@ -2,6 +2,7 @@ import { cn } from './ui/utils';
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { motion } from 'motion/react';
 import {
@@ -16,6 +17,8 @@ import {
   Settings2,
   Building2,
   BadgePercent,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +36,7 @@ import { BeneficiosView } from './hr/BeneficiosView';
 import { ConfigNominaView } from './hr/ConfigNominaView';
 import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 interface RecursosHumanosPageProps {
   activeSubModule?: string;
@@ -191,6 +195,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     stats: hrQuery.data?.stats || null,
   }), [hrQuery.data]);
   const loading = hrQuery.isLoading;
+  const queryError = hrQuery.error as any;
+  const errorMessage = queryError?.response?.data?.message || queryError?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
   const refreshData = () => queryClient.invalidateQueries({ queryKey: ['hr'] });
 
 
@@ -267,7 +273,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           transition={{ delay: 0.1 }}
           className="mt-6 min-h-[600px]"
         >
-          {loading ? (
+          {loading && !hrQuery.data ? (
             <div className="flex items-center justify-center h-96">
               <div className="flex flex-col items-center gap-4">
                 <div className="relative">
@@ -277,8 +283,33 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
                 <p className="text-sm font-bold text-muted-foreground tracking-wide">Cargando datos de RH...</p>
               </div>
             </div>
+          ) : hrQuery.isError && !hrQuery.data ? (
+            <div className="mx-auto flex min-h-[380px] max-w-2xl items-center justify-center px-4">
+              <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+                <AlertTriangle className="size-4" />
+                <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
+                <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                  <span>{Array.isArray(errorMessage) ? errorMessage[0] : errorMessage}</span>
+                  <Button variant="outline" size="sm" onClick={() => hrQuery.refetch()} className="gap-2">
+                    <RefreshCw className="size-3.5" /> Reintentar
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </div>
           ) : (
             <>
+              {hrQuery.isError && (
+                <Alert variant="destructive" className="mb-4 border-red-500/30 bg-red-500/5">
+                  <AlertTriangle className="size-4" />
+                  <AlertTitle>Los datos podrían estar desactualizados</AlertTitle>
+                  <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                    <span>{Array.isArray(errorMessage) ? errorMessage[0] : errorMessage}</span>
+                    <Button variant="outline" size="sm" onClick={() => hrQuery.refetch()} className="gap-2">
+                      <RefreshCw className="size-3.5" /> Reintentar
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
               <TabsContent value="dashboard" className="m-0">
                 <DashboardHRView
                   stats={data.stats}

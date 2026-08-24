@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, Eye, Paperclip, Upload, UserCheck, Warehouse as WarehouseIcon, X, ChevronLeft,
-  Play, PauseCircle, CheckCircle2, RotateCcw, XCircle,
+  PauseCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, Layers3, AlertTriangle, Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -94,6 +94,17 @@ function auditParticipantNames(audit: any, role: ParticipantRole): string {
   return getAuditParticipants(audit, role).map((participant) => participant.name).join(', ');
 }
 
+function normalizeAuditItems(value: unknown): any[] {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(value) ? value : [];
+}
+
 function AuditParticipantPicker({
   selected,
   users,
@@ -160,6 +171,9 @@ function toLocalDateTime(value: Date): string {
 }
 
 const ACCEPTED_ACTA = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp';
+const BULK_ALL_CATEGORIES = '__all_categories__';
+const BULK_UNCATEGORIZED = '__uncategorized__';
+const MAX_AUDIT_ITEMS = 500;
 
 function warehouseParentId(warehouse: any): string | null {
   return warehouse?.parentId || warehouse?.parent?.id || null;
@@ -213,6 +227,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [workflowLoading, setWorkflowLoading] = useState<string | null>(null);
   const [comparisonAudit, setComparisonAudit] = useState<any | null>(null);
+  const [comparisonTargetStatus, setComparisonTargetStatus] = useState<'CLOSED' | 'APPROVED'>('CLOSED');
   const [theoreticalItems, setTheoreticalItems] = useState<any[]>([]);
   const [loadingTheoretical, setLoadingTheoretical] = useState(false);
   const [form, setForm] = useState({
@@ -228,6 +243,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   });
   const [actaFile, setActaFile] = useState<File | null>(null);
   const [items, setItems] = useState<AuditItemDraft[]>([]);
+  const [bulkCategoryId, setBulkCategoryId] = useState(BULK_ALL_CATEGORIES);
 
   const warehouseById = useMemo(() => new Map(warehouses.map((warehouse: any) => [String(warehouse.id), warehouse])), [warehouses]);
   const selectedWarehouseFamilyIds = useMemo(
@@ -277,8 +293,20 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         code: p.code,
         name: p.name,
         stock: productStockForWarehouses(p, selectedWarehouseFamilySet),
+        categoryId: p.categoryId || p.category?.id || BULK_UNCATEGORIZED,
+        categoryName: p.category?.name || 'Sin categoría',
       }));
   }, [form.warehouseId, products, selectedWarehouseFamilySet]);
+
+  const productCategoryOptions = useMemo(() => {
+    const categories = new Map<string, string>();
+    productOptions.forEach((product) => {
+      categories.set(String(product.categoryId || BULK_UNCATEGORIZED), product.categoryName || 'Sin categoría');
+    });
+    return Array.from(categories.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [productOptions]);
 
   const totalContado = items.reduce((acc, item) => acc + (Number.isFinite(item.countedStock) ? item.countedStock : 0), 0);
   const totalDiferencia = items.reduce((acc, item) => acc + (Number.isFinite(item.difference) ? item.difference : 0), 0);
@@ -295,6 +323,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     }).length;
 
     updateForm({ warehouseId });
+    setBulkCategoryId(BULK_ALL_CATEGORIES);
     setItems((current) => current.map((item) => {
       if (!item.productId) return item;
       const product = products.find((candidate: any) => candidate.id === item.productId);
@@ -306,7 +335,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       return { ...item, systemStock: nextSystemStock, countedStock: nextCountedStock, difference: nextCountedStock - nextSystemStock };
     }));
     if (invalidItems > 0) {
-      toast.info('Se limpiaron los productos que no pertenecen al nuevo alcance del almacén.');
+      toast.info('Se limpiaron los productos que no pertenecen al nuevo alcance de la bodega.');
     }
   };
 
@@ -368,8 +397,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const addItem = () => {
-    if (!form.warehouseId) { toast.info('Selecciona un almacén antes de agregar productos'); return; }
-    if (items.length >= 50) { toast.error('Máximo 50 productos por acta'); return; }
+    if (!form.warehouseId) { toast.info('Selecciona una bodega antes de agregar productos'); return; }
+    if (items.length >= MAX_AUDIT_ITEMS) { toast.error(`Máximo ${MAX_AUDIT_ITEMS} productos por acta`); return; }
     setItems((current) => [...current, {
       key: `item-${Date.now()}-${current.length}`,
       productId: '',
@@ -383,6 +412,50 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const removeItem = (key: string) => {
     setItems((current) => current.filter((item) => item.key !== key));
+  };
+
+  const makeAuditItem = (product: { id: string; code?: string; name?: string; stock?: number }, index: number): AuditItemDraft => ({
+    key: `item-${Date.now()}-${index}-${product.id}`,
+    productId: product.id,
+    code: product.code || '',
+    name: product.name || '',
+    systemStock: Number(product.stock || 0),
+    countedStock: Number(product.stock || 0),
+    difference: 0,
+  });
+
+  const addProductsInBulk = (selectedProducts: typeof productOptions, sourceLabel: string) => {
+    if (!form.warehouseId) {
+      toast.info('Selecciona una bodega antes de cargar productos');
+      return;
+    }
+    const existingIds = new Set(items.map((item) => item.productId).filter(Boolean));
+    const newProducts = selectedProducts.filter((product) => !existingIds.has(product.id));
+    if (newProducts.length === 0) {
+      toast.info('Los productos seleccionados ya están en el acta');
+      return;
+    }
+    const availableSlots = Math.max(0, MAX_AUDIT_ITEMS - items.length);
+    const productsToAdd = newProducts.slice(0, availableSlots);
+    if (productsToAdd.length === 0) {
+      toast.error(`Máximo ${MAX_AUDIT_ITEMS} productos por acta`);
+      return;
+    }
+    setItems((current) => [...current, ...productsToAdd.map((product, index) => makeAuditItem(product, current.length + index))]);
+    const skipped = newProducts.length - productsToAdd.length;
+    toast.success(`${productsToAdd.length} productos agregados ${sourceLabel}${skipped > 0 ? `. Se omitieron ${skipped} por el límite del acta` : ''}`);
+  };
+
+  const addAllProducts = () => addProductsInBulk(productOptions, 'al acta');
+
+  const addProductsByCategory = () => {
+    if (bulkCategoryId === BULK_ALL_CATEGORIES) {
+      addAllProducts();
+      return;
+    }
+    const category = productCategoryOptions.find((option) => option.id === bulkCategoryId);
+    const categoryProducts = productOptions.filter((product) => product.categoryId === bulkCategoryId);
+    addProductsInBulk(categoryProducts, `de la categoría “${category?.name || 'seleccionada'}”`);
   };
 
   const selectProduct = (key: string, productId: string) => {
@@ -419,12 +492,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const auditStatusLabel = (status?: string): string => {
     const s = String(status || 'OPEN').toUpperCase();
     const labels: Record<string, string> = {
+      PENDING: 'PENDIENTE',
       OPEN: 'ABIERTO',
       IN_PROGRESS: 'EN CONTEO',
       CLOSED: 'CERRADO',
       APPROVED: 'APROBADO',
       CANCELLED: 'CANCELADO',
       REOPENED: 'REABIERTO',
+      COMPLETED: 'ABIERTO',
     };
     return labels[s] || s;
   };
@@ -432,12 +507,14 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const auditStatusBadgeClass = (status?: string): string => {
     const s = String(status || 'OPEN').toUpperCase();
     const classes: Record<string, string> = {
+      PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
       OPEN: 'bg-gray-100 text-gray-700 border-gray-200',
       IN_PROGRESS: 'bg-blue-100 text-blue-700 border-blue-200',
       CLOSED: 'bg-orange-100 text-orange-700 border-orange-200',
       APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
       CANCELLED: 'bg-red-100 text-red-700 border-red-200',
       REOPENED: 'bg-purple-100 text-purple-700 border-purple-200',
+      COMPLETED: 'bg-gray-100 text-gray-700 border-gray-200',
     };
     return classes[s] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
@@ -453,18 +530,20 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     const label = labels[targetStatus] || targetStatus;
     if (!window.confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} del acta ${audit.number}?`)) return;
 
-    // When closing, show comparison table first
-    if (targetStatus === 'CLOSED' && audit.snapshotAt) {
+    // Before closing or approving, show the physical-vs-theoretical
+    // comparison so the user can see exactly what will be adjusted.
+    if ((targetStatus === 'CLOSED' || targetStatus === 'APPROVED') && audit.snapshotAt) {
+      setComparisonAudit(audit);
+      setComparisonTargetStatus(targetStatus as 'CLOSED' | 'APPROVED');
+      setLoadingTheoretical(true);
       try {
-        setLoadingTheoretical(true);
         const items = await inventoryService.getAuditTheoretical(audit.id);
-        setTheoreticalItems(items || []);
+        setTheoreticalItems(Array.isArray(items) ? items : normalizeAuditItems(items));
       } catch {
-        setTheoreticalItems(Array.isArray(audit.items) ? audit.items : []);
+        setTheoreticalItems(normalizeAuditItems(audit.items));
       } finally {
         setLoadingTheoretical(false);
       }
-      setComparisonAudit(audit);
       return;
     }
 
@@ -488,13 +567,17 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if (!comparisonAudit) return;
     try {
       setWorkflowLoading(comparisonAudit.id);
-      // First close
-      await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      // When the dialog was opened from IN_PROGRESS, close first. If the act
+      // was already CLOSED, approve directly.
+      if (comparisonAudit.status !== 'CLOSED') {
+        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      }
       // Then approve
       await inventoryService.approveAudit(comparisonAudit.id);
       toast.success(`Acta ${comparisonAudit.number}: diferencias aprobadas, ajuste generado`);
       setComparisonAudit(null);
       setTheoreticalItems([]);
+      setComparisonTargetStatus('CLOSED');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo aprobar las diferencias');
@@ -507,10 +590,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     if (!comparisonAudit) return;
     try {
       setWorkflowLoading(comparisonAudit.id);
-      await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      if (comparisonAudit.status !== 'CLOSED') {
+        await inventoryService.changeAuditStatus(comparisonAudit.id, 'CLOSED');
+      }
       toast.success(`Acta ${comparisonAudit.number}: conteo cerrado`);
       setComparisonAudit(null);
       setTheoreticalItems([]);
+      setComparisonTargetStatus('CLOSED');
       onRefresh();
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo cerrar el conteo');
@@ -533,6 +619,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     });
     setActaFile(null);
     setItems([]);
+    setBulkCategoryId(BULK_ALL_CATEGORIES);
   };
 
   const closeCreateView = () => {
@@ -542,7 +629,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const handleSave = async () => {
     if (!form.auditDate) { toast.error('Indica la fecha y hora de la inspección'); return; }
-    if (!form.warehouseId) { toast.error('Selecciona el almacén de la inspección'); return; }
+    if (!form.warehouseId) { toast.error('Selecciona la bodega de la inspección'); return; }
     if (form.supervisors.length === 0) { toast.error('Indica al menos un encargado del proceso'); return; }
     if (itemsWithProduct.length === 0) { toast.error('Agrega al menos un producto al acta'); return; }
     if (actaFile && !new RegExp(`\\.(pdf|xlsx|xls|png|jpe?g|webp)$`, 'i').test(actaFile.name)) {
@@ -578,7 +665,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           difference: item.countedStock - item.systemStock,
         })),
       });
-      toast.success('Acta de inspección registrada');
+      toast.success('Acta registrada como pendiente. Genera el ajuste desde el tab Ajustes.');
       setIsCreating(false);
       resetForm();
       onRefresh();
@@ -605,6 +692,100 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   };
 
   const fmtQty = (n: number) => Number(n || 0).toLocaleString('es-NI', { maximumFractionDigits: 2 });
+  const detailAuditItems = normalizeAuditItems(detailAudit?.items).map((item: any) => {
+    const systemStock = Number(item.originalSystemStock ?? item.systemStock ?? item.snapshotStock ?? item.theoreticalStock ?? 0);
+    const countedStock = Number(item.countedStock ?? 0);
+    return {
+      ...item,
+      systemStock,
+      countedStock,
+      // Recalculate from the preserved values so old actas with a stale or
+      // zero `difference` field still show the real result of the inspection.
+      difference: countedStock - systemStock,
+    };
+  });
+  const detailAuditApproved = String(detailAudit?.status || '').toUpperCase() === 'APPROVED';
+  const comparisonItems = useMemo(() => {
+    const source = theoreticalItems.length > 0 ? theoreticalItems : normalizeAuditItems(comparisonAudit?.items);
+    return source.map((item: any) => {
+      const theoreticalStock = Number(item.theoreticalStock ?? item.systemStock ?? item.snapshotStock ?? 0);
+      const countedStock = Number(item.countedStock ?? 0);
+      const difference = Number.isFinite(Number(item.difference))
+        ? Number(item.difference)
+        : countedStock - theoreticalStock;
+      return { ...item, theoreticalStock, countedStock, difference };
+    });
+  }, [comparisonAudit, theoreticalItems]);
+  const comparisonDifferences = comparisonItems.filter((item: any) => item.difference !== 0);
+  const comparisonShortages = comparisonDifferences.filter((item: any) => item.difference < 0);
+  const comparisonSurpluses = comparisonDifferences.filter((item: any) => item.difference > 0);
+  const closeComparisonDialog = () => {
+    if (workflowLoading) return;
+    setComparisonAudit(null);
+    setTheoreticalItems([]);
+    setComparisonTargetStatus('CLOSED');
+  };
+
+  const closeWithoutApproval = async () => {
+    if (comparisonTargetStatus === 'APPROVED') {
+      closeComparisonDialog();
+      return;
+    }
+    await confirmCloseOnly();
+  };
+
+  const renderAuditActions = (audit: any, mobile = false) => (
+    <div className={cn('flex items-center gap-1', mobile ? 'flex-wrap justify-start' : 'justify-end')}>
+      {(audit.status === 'OPEN' || audit.status === 'COMPLETED') && (
+        <Button
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-red-50 hover:text-red-600"
+            disabled={workflowLoading === audit.id}
+            onClick={() => handleWorkflow(audit, 'CANCELLED')}
+            title="Cancelar" aria-label="Cancelar auditoría"
+          >
+            <XCircle className="size-4" />
+        </Button>
+      )}
+      {audit.status === 'IN_PROGRESS' && (
+        <Button
+          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-orange-50 hover:text-orange-600"
+          disabled={workflowLoading === audit.id}
+          onClick={() => handleWorkflow(audit, 'CLOSED')}
+          title="Cerrar conteo" aria-label="Cerrar conteo"
+        >
+          <PauseCircle className="size-4" />
+        </Button>
+      )}
+      {audit.status === 'CLOSED' && (
+        <>
+          <Button
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
+            disabled={workflowLoading === audit.id}
+            onClick={() => handleWorkflow(audit, 'APPROVED')}
+            title="Aprobar diferencias" aria-label="Aprobar diferencias"
+          >
+            <CheckCircle2 className="size-4" />
+          </Button>
+          <Button
+            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-purple-50 hover:text-purple-600"
+            disabled={workflowLoading === audit.id}
+            onClick={() => handleWorkflow(audit, 'REOPENED')}
+            title="Reabrir" aria-label="Reabrir auditoría"
+          >
+            <RotateCcw className="size-4" />
+          </Button>
+        </>
+      )}
+      <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle" aria-label="Ver detalle">
+        <Eye className="size-4" />
+      </Button>
+      {(audit.status === 'PENDING' || audit.status === 'OPEN' || audit.status === 'COMPLETED' || audit.status === 'CANCELLED') && (
+        <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar" aria-label="Eliminar auditoría">
+          <Trash2 className="size-4" />
+        </Button>
+      )}
+    </div>
+  );
 
   if (isCreating) {
     return (
@@ -619,10 +800,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
               <h2 className="truncate text-xl font-black uppercase tracking-tight sm:text-2xl">Acta de inspección · Inventario selectivo</h2>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2" data-tour="inventory-audit-form-actions">
-            <InventoryViewTutorial label="Cómo registrar auditoría" targetPrefix="inventory-audit-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Define fecha, almacén, encargado, usuario de bodega, respaldo y observaciones.' }, items: { description: 'Agrega productos y registra el stock contado para calcular diferencias.' }, actions: { description: 'Registra el acta cuando los responsables y el conteo estén completos.' } }} />
-            <Button variant="outline" onClick={closeCreateView} className="rounded-xl text-xs font-bold">Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving || !canSave} className="gap-2 rounded-xl bg-primary text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-audit-form-actions">
+            <InventoryViewTutorial label="Cómo registrar auditoría" targetPrefix="inventory-audit-form" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Define fecha, bodega, encargado, usuario de bodega, respaldo y observaciones.' }, items: { description: 'Agrega productos y registra el stock contado para calcular diferencias.' }, actions: { description: 'Registra el acta cuando los responsables y el conteo estén completos.' } }} />
+            <Button variant="outline" onClick={closeCreateView} className="w-full rounded-xl text-xs font-bold sm:w-auto">Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving || !canSave} className="w-full gap-2 rounded-xl bg-primary text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
               {saving ? 'Registrando...' : 'Registrar acta'}
             </Button>
           </div>
@@ -636,7 +817,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-widest">Datos de la inspección</h3>
-                <p className="text-xs text-muted-foreground">Completa los responsables, el almacén y las observaciones.</p>
+                <p className="text-xs text-muted-foreground">Completa los responsables, la bodega y las observaciones.</p>
               </div>
             </div>
 
@@ -646,9 +827,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <Input type="datetime-local" value={form.auditDate} onChange={(e) => updateForm({ auditDate: e.target.value })} className="h-10 text-xs" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacén</Label>
+                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bodega</Label>
                 <Select value={form.warehouseId} onValueChange={handleWarehouseChange}>
-                  <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="Seleccionar almacén" /></SelectTrigger>
+                  <SelectTrigger className="h-10 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
                   <SelectContent>
                     {warehouses.map((w: any) => <SelectItem key={w.id} value={w.id} className="max-w-full text-xs">{warehouseLabel(w)}</SelectItem>)}
                   </SelectContent>
@@ -657,7 +838,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
                     {selectedWarehouseFamilyIds.length > 1
                       ? <>Alcance compartido: <span className="font-semibold text-foreground">{selectedWarehouseFamilyNames.join(', ')}</span>. Se suman padre e hijos para esta inspección.</>
-                      : 'Este almacén no tiene almacenes padre o hijos relacionados.'}
+                      : 'Esta bodega no tiene bodegas padre o hijas relacionadas.'}
                   </p>
                 )}
               </div>
@@ -725,6 +906,38 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 </Button>
               </div>
               <div className="min-w-0 space-y-3 p-3">
+                <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <ListPlus className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest">Carga masiva</p>
+                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Agrega de una vez todos los productos disponibles o solo los de una categoría.</p>
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-9 gap-1.5 text-[10px]" onClick={addAllProducts}>
+                        <ListPlus className="size-3.5" /> Todos ({productOptions.length})
+                      </Button>
+                      <div className="flex min-w-0 gap-2">
+                        <Select value={bulkCategoryId} onValueChange={setBulkCategoryId} disabled={!form.warehouseId || productCategoryOptions.length === 0}>
+                          <SelectTrigger className="h-9 min-w-0 flex-1 text-[10px] sm:w-48 sm:flex-none"><Layers3 className="mr-1.5 size-3.5 shrink-0" /><SelectValue placeholder="Por categoría" /></SelectTrigger>
+                          <SelectContent className="max-w-[calc(100vw-2rem)]">
+                            <SelectItem value={BULK_ALL_CATEGORIES} className="text-[10px]">Todas las categorías</SelectItem>
+                            {productCategoryOptions.map((category) => (
+                              <SelectItem key={category.id} value={category.id} className="max-w-full truncate text-[10px]">{category.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-9 shrink-0 gap-1.5 text-[10px]" onClick={addProductsByCategory}>
+                          <Plus className="size-3.5" /> Agregar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-3 md:hidden">
                   {items.map((item) => (
                     <div key={item.key} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
@@ -732,7 +945,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Producto</Label>
                           <Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}>
-                            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona un almacén'} /></SelectTrigger>
+                            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona una bodega'} /></SelectTrigger>
                             <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
                               {productOptions.length > 0 ? productOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_mobile__" disabled className="text-[10px]">No hay productos en este alcance</SelectItem>}
                             </SelectContent>
@@ -756,7 +969,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                     <TableBody>
                       {items.map((item) => (
                         <TableRow key={item.key}>
-                          <TableCell className="min-w-[220px]"><Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona un almacén'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptions.length > 0 ? productOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay productos en este alcance</SelectItem>}</SelectContent></Select></TableCell>
+                          <TableCell className="min-w-[220px]"><Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptions.length > 0 ? productOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay productos en este alcance</SelectItem>}</SelectContent></Select></TableCell>
                           <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
                           <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
                           <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
@@ -790,17 +1003,68 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             </p>
           </div>
         </div>
-        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="inventory-audits-actions">
-        <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, almacenes y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
-        <Button onClick={() => setIsCreating(true)} data-toolbar-role="primary" className="h-10 gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
-          <Plus className="size-4" /> Nueva Auditoría
-        </Button>
+        <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-audits-actions">
+          <InventoryViewTutorial label="Cómo gestionar auditorías" targetPrefix="inventory-audits" copy={{ data: { description: 'Consulta las actas, inspecciones, responsables, bodegas y productos revisados.' }, actions: { description: 'Crea una nueva auditoría o abre el detalle de un acta existente.' } }} />
+          <Button onClick={() => setIsCreating(true)} data-toolbar-role="primary" className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
+            <Plus className="size-4" /> Nueva Auditoría
+          </Button>
         </div>
       </div>
 
       <Card className="rounded-2xl border-border/50" data-tour="inventory-audits-data">
         <CardContent className="p-0">
-          <Table>
+          <div className="space-y-3 p-3 lg:hidden">
+            {audits.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">No hay actas de inspección registradas.</div>
+            ) : audits.map((audit) => {
+              const itemCount = normalizeAuditItems(audit.items).length;
+              const warehouse = warehouses.find((w: any) => w.id === audit.warehouseId);
+              return (
+                <div key={audit.id} className="min-w-0 rounded-2xl border border-border/50 bg-card p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs font-bold">{audit.number}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {audit.auditDate ? new Date(audit.auditDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={`shrink-0 text-[9px] font-bold ${auditStatusBadgeClass(audit.status)}`}>
+                      {auditStatusLabel(audit.status)}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Encargado</p>
+                      <p className="mt-1 break-words font-medium">{auditParticipantNames(audit, 'supervisor') || '—'}</p>
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Usuario bodega</p>
+                      <p className="mt-1 break-words font-medium">{auditParticipantNames(audit, 'stockKeeper') || '—'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Bodega</p>
+                      <p className="mt-1 truncate font-medium">{warehouse?.name || '—'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Productos</p>
+                      <p className="mt-1 font-mono font-bold">{itemCount}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+                    {audit.actaUri ? (
+                      <Button variant="outline" size="sm" className="h-8 max-w-full gap-1.5 rounded-lg text-[10px] text-primary" onClick={() => openActa(audit.actaUri)}>
+                        <Paperclip className="size-3.5 shrink-0" /> <span className="max-w-[180px] truncate">{audit.actaFileName || 'Acta adjunta'}</span>
+                      </Button>
+                    ) : <span className="text-[10px] text-muted-foreground/50">Sin acta adjunta</span>}
+                    {renderAuditActions(audit, true)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto lg:block">
+          <Table className="min-w-[1080px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Acta</TableHead>
@@ -808,7 +1072,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha y hora</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Encargado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Usuario Bodega</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
+                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Productos</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Acta adjunta</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Acción</TableHead>
@@ -816,9 +1080,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             </TableHeader>
             <TableBody>
               {audits.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-10 text-center text-xs text-muted-foreground">No hay actas de inspección registradas.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">No hay actas de inspección registradas.</TableCell></TableRow>
               ) : audits.map((audit) => {
-                const itemCount = Array.isArray(audit.items) ? audit.items.length : 0;
+                const itemCount = normalizeAuditItems(audit.items).length;
                 const warehouse = warehouses.find((w: any) => w.id === audit.warehouseId);
                 return (
                 <TableRow key={audit.id}>
@@ -836,93 +1100,25 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <TableCell className="max-w-[240px] text-xs" title={auditParticipantNames(audit, 'supervisor')}>{auditParticipantNames(audit, 'supervisor') || '—'}</TableCell>
                   <TableCell className="max-w-[240px] text-xs" title={auditParticipantNames(audit, 'stockKeeper')}>{auditParticipantNames(audit, 'stockKeeper') || '—'}</TableCell>
                   <TableCell className="text-xs">{warehouse?.name || audit.warehouseId ? (warehouse?.name || '—') : '—'}</TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">{itemCount}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="w-20 text-right text-xs tabular-nums">
+                    <Badge variant="outline" className="text-[9px] font-bold">{itemCount}</Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[230px] text-right">
                     {audit.actaUri ? (
-                      <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-lg text-primary" onClick={() => openActa(audit.actaUri)}>
-                        <Paperclip className="size-3.5" /> {audit.actaFileName || 'Acta'}
+                      <Button variant="ghost" size="sm" className="h-7 max-w-[230px] gap-1.5 rounded-lg text-primary" onClick={() => openActa(audit.actaUri)}>
+                        <Paperclip className="size-3.5 shrink-0" /> <span className="truncate">{audit.actaFileName || 'Acta'}</span>
                       </Button>
                     ) : <span className="text-[10px] text-muted-foreground/50">Sin adjunto</span>}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {/* Workflow buttons */}
-                      {audit.status === 'OPEN' && (
-                        <>
-                          <Button
-                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
-                            disabled={workflowLoading === audit.id}
-                            onClick={() => handleWorkflow(audit, 'IN_PROGRESS')}
-                            title="Iniciar conteo"
-                          >
-                            <Play className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-red-50 hover:text-red-600"
-                            disabled={workflowLoading === audit.id}
-                            onClick={() => handleWorkflow(audit, 'CANCELLED')}
-                            title="Cancelar"
-                          >
-                            <XCircle className="size-4" />
-                          </Button>
-                        </>
-                      )}
-                      {audit.status === 'IN_PROGRESS' && (
-                        <Button
-                          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-orange-50 hover:text-orange-600"
-                          disabled={workflowLoading === audit.id}
-                          onClick={() => handleWorkflow(audit, 'CLOSED')}
-                          title="Cerrar conteo"
-                        >
-                          <PauseCircle className="size-4" />
-                        </Button>
-                      )}
-                      {audit.status === 'CLOSED' && (
-                        <>
-                          <Button
-                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-50 hover:text-emerald-600"
-                            disabled={workflowLoading === audit.id}
-                            onClick={() => handleWorkflow(audit, 'APPROVED')}
-                            title="Aprobar diferencias"
-                          >
-                            <CheckCircle2 className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-purple-50 hover:text-purple-600"
-                            disabled={workflowLoading === audit.id}
-                            onClick={() => handleWorkflow(audit, 'REOPENED')}
-                            title="Reabrir"
-                          >
-                            <RotateCcw className="size-4" />
-                          </Button>
-                        </>
-                      )}
-                      {audit.status === 'REOPENED' && (
-                        <Button
-                          variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
-                          disabled={workflowLoading === audit.id}
-                          onClick={() => handleWorkflow(audit, 'IN_PROGRESS')}
-                          title="Reanudar"
-                        >
-                          <Play className="size-4" />
-                        </Button>
-                      )}
-                      {/* View + Delete always available */}
-                      <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailAudit(audit)} title="Ver detalle">
-                        <Eye className="size-4" />
-                      </Button>
-                      {(audit.status === 'OPEN' || audit.status === 'CANCELLED') && (
-                        <Button variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" disabled={deletingId === audit.id} onClick={() => handleDelete(audit)} title="Eliminar">
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
+                  <TableCell className="w-[110px] text-right">
+                    {renderAuditActions(audit)}
                   </TableCell>
                 </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -940,6 +1136,118 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
         </div>
       )}
 
+      <Dialog open={!!comparisonAudit} onOpenChange={(open) => { if (!open) closeComparisonDialog(); }}>
+        <DialogContent className="w-[calc(100vw-1rem)] !max-w-4xl min-w-0 max-h-[90vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+              <AlertTriangle className="size-5 text-amber-500" />
+              Revisar diferencias de {comparisonAudit?.number || 'auditoría'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Compara el stock teórico con el conteo físico antes de cerrar y aplicar cualquier ajuste.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingTheoretical ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-4 animate-spin text-primary" /> Calculando stock teórico...
+            </div>
+          ) : (
+            <div className="min-w-0 space-y-4">
+              <div className={cn(
+                'flex min-w-0 gap-3 rounded-xl border p-3 text-xs',
+                comparisonDifferences.length > 0
+                  ? 'border-amber-300 bg-amber-50 text-amber-950'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-950',
+              )}>
+                {comparisonDifferences.length > 0 ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
+                <div className="min-w-0">
+                  <p className="font-bold">
+                    {comparisonDifferences.length > 0
+                      ? `Se detectaron ${comparisonDifferences.length} producto(s) con diferencia.`
+                      : 'No hay diferencias entre el conteo físico y el stock teórico.'}
+                  </p>
+                  <p className="mt-1 leading-relaxed opacity-80">
+                    {comparisonDifferences.length > 0
+                      ? 'Al confirmar, los faltantes se restarán del stock y los sobrantes se sumarán. Cerrar sin aprobar no modifica existencias.'
+                      : 'Puedes aprobar el acta para dejar constancia. No se generará ningún movimiento de ajuste.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos revisados</p>
+                  <p className="mt-1 text-lg font-black tabular-nums">{comparisonItems.length}</p>
+                </div>
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes · se restan</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-red-700">
+                    {fmtQty(comparisonShortages.reduce((total, item) => total + Math.abs(item.difference), 0))}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes · se suman</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-emerald-700">
+                    {fmtQty(comparisonSurpluses.reduce((total, item) => total + item.difference, 0))}
+                  </p>
+                </div>
+              </div>
+
+              <div className="min-w-0 overflow-x-auto rounded-xl border border-border/50">
+                <Table className="min-w-[680px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead>
+                      <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock teórico</TableHead>
+                      <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Físico</TableHead>
+                      <TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-widest">Resultado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comparisonItems.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-xs text-muted-foreground">No hay productos para comparar.</TableCell></TableRow>
+                    ) : comparisonItems.map((item: any, index: number) => (
+                      <TableRow key={`${item.productId || item.code || 'item'}-${index}`}>
+                        <TableCell>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}</p>
+                            <p className="font-mono text-[10px] text-muted-foreground">{item.code || '—'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">{fmtQty(item.theoreticalStock)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">{fmtQty(item.countedStock)}</TableCell>
+                        <TableCell className={cn('text-right font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>
+                          {item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}
+                        </TableCell>
+                        <TableCell>
+                          {item.difference < 0 ? <Badge variant="outline" className="border-red-200 bg-red-50 text-[9px] font-bold text-red-700">Faltante · restar {fmtQty(Math.abs(item.difference))}</Badge>
+                            : item.difference > 0 ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[9px] font-bold text-emerald-700">Sobrante · sumar {fmtQty(item.difference)}</Badge>
+                              : <Badge variant="outline" className="text-[9px] font-bold text-muted-foreground">Sin diferencia</Badge>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-border/40 pt-4 sm:flex-row sm:items-center sm:justify-end">
+                <Button variant="outline" onClick={closeWithoutApproval} disabled={Boolean(workflowLoading)} className="text-xs">
+                  {comparisonTargetStatus === 'APPROVED' ? 'Volver' : 'Cerrar sin aprobar'}
+                </Button>
+                <Button onClick={confirmCloseAndApprove} disabled={Boolean(workflowLoading)} className="gap-2 bg-primary text-xs text-primary-foreground hover:bg-primary/90">
+                  {workflowLoading ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                  {comparisonDifferences.length > 0
+                    ? (comparisonTargetStatus === 'APPROVED' ? 'Aprobar y aplicar ajuste' : 'Cerrar y aplicar ajuste')
+                    : 'Aprobar auditoría'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!detailAudit} onOpenChange={(open) => { if (!open) setDetailAudit(null); }}>
         <DialogContent className="w-[calc(100vw-1rem)] !max-w-3xl min-w-0 max-h-[85vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader data-tour="inventory-audit-detail-title">
@@ -949,7 +1257,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
             <DialogDescription className="text-xs">
               {detailAudit?.auditDate ? new Date(detailAudit.auditDate).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' }) : ''}
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo consultar auditoría" targetPrefix="inventory-audit-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa responsables, almacén, respaldo, observaciones, stock del sistema y diferencias encontradas.' } }} />
+            <InventoryViewTutorial label="Cómo consultar auditoría" targetPrefix="inventory-audit-detail" stepKeys={['title', 'data']} copy={{ data: { description: 'Revisa responsables, bodega, respaldo, observaciones, stock del sistema y diferencias encontradas.' } }} />
           </DialogHeader>
           <div className="min-w-0 space-y-4" data-tour="inventory-audit-detail-data">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -962,7 +1270,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <p className="mt-0.5 break-words text-xs font-bold">{auditParticipantNames(detailAudit, 'stockKeeper') || '—'}</p>
               </div>
               <div className="rounded-xl bg-muted/30 p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacén</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bodega</p>
                 <p className="mt-0.5 text-xs font-bold">{warehouses.find((w: any) => w.id === detailAudit?.warehouseId)?.name || '—'}</p>
               </div>
             </div>
@@ -977,20 +1285,30 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 <Paperclip className="size-4" /> Acta digital: {detailAudit.actaFileName || 'descargar'}
               </Button>
             )}
-            {Array.isArray(detailAudit?.items) && detailAudit.items.length > 0 && (
+            {detailAuditApproved && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+                <p className="font-bold text-foreground">Trazabilidad del ajuste</p>
+                <p className="mt-1 leading-relaxed text-muted-foreground">
+                  El stock sistema, el conteo físico y la diferencia corresponden al momento de la auditoría. El stock final muestra el resultado después de aplicar el ajuste.
+                </p>
+                {detailAudit?.adjustmentId && <p className="mt-1 font-mono text-[10px] text-primary">Ajuste generado: {detailAudit.adjustmentId}</p>}
+              </div>
+            )}
+            {detailAuditItems.length > 0 && (
               <div className="min-w-0 overflow-x-auto rounded-xl border border-border/40">
-                <Table containerClassName="overflow-x-auto" className="min-w-[620px]">
+                <Table containerClassName="overflow-x-auto" className="min-w-[740px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest">Código</TableHead>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase tracking-widest text-right">Stock sistema</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-widest text-right">Stock sistema original</TableHead>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest text-right">Contado</TableHead>
                       <TableHead className="text-[9px] font-black uppercase tracking-widest text-right">Diferencia</TableHead>
+                      <TableHead className="text-[9px] font-black uppercase tracking-widest text-right">Stock final</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {detailAudit.items.map((item: any, index: number) => (
+                    {detailAuditItems.map((item: any, index: number) => (
                       <TableRow key={index}>
                         <TableCell className="font-mono text-[10px]">{item.code}</TableCell>
                         <TableCell className="text-xs">{item.name}</TableCell>
@@ -998,6 +1316,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         <TableCell className="text-right font-mono text-[10px]">{fmtQty(item.countedStock)}</TableCell>
                         <TableCell className={cn('text-right font-mono text-[10px] font-bold', Number(item.difference) < 0 ? 'text-red-600' : Number(item.difference) > 0 ? 'text-emerald-600' : '')}>
                           {Number(item.difference) > 0 ? '+' : ''}{fmtQty(item.difference)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-[10px] font-bold text-primary">
+                          {detailAuditApproved ? fmtQty(item.adjustedStock ?? item.countedStock) : '—'}
                         </TableCell>
                       </TableRow>
                     ))}
