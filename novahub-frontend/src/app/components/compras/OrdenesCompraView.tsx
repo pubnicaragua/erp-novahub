@@ -64,7 +64,7 @@ interface Props {
   onApprovedToReceipt?: (receipt?: any) => void;
 }
 
-const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 type PurchaseImportRow = {
@@ -1361,7 +1361,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       for (const file of evidenceFiles) {
         const isImage = file.type.startsWith('image/');
         if (isImage && file.size > MAX_EVIDENCE_IMAGE_BYTES) {
-          toast.error(`La imagen "${file.name}" es muy pesada. Máximo 2MB`, { id: saveToastId });
+          toast.error(`La imagen original "${file.name}" es muy pesada. Máximo 10 MB`, { id: saveToastId });
           return;
         }
         if (!isImage && file.size > MAX_EVIDENCE_FILE_BYTES) {
@@ -1805,7 +1805,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     }}
                     className="h-8 text-xs"
                   />
-                  <p className="mt-1 text-[10px] text-muted-foreground">Imágenes max 2MB. Otros archivos max 10MB.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales max 10 MB; se optimizan. Otros archivos max 10 MB.</p>
                   {evidenceFiles.length > 0 && (
                     <div className="mt-2 space-y-1.5">
                       {evidenceFiles.map((file, i) => (

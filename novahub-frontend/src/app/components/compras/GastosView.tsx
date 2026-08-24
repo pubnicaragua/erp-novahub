@@ -65,7 +65,7 @@ const paymentMethodOptions = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
 ] as const;
-const MAX_EVIDENCE_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
 
 const statusOpts = [
@@ -577,7 +577,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     if (evidenceFile) {
       const isImage = evidenceFile.type.startsWith('image/');
       if (isImage && evidenceFile.size > MAX_EVIDENCE_IMAGE_BYTES) {
-        return toast.error('La imagen es muy pesada. Máximo 2MB');
+        return toast.error('La imagen original es muy pesada. Máximo 10 MB');
       }
       if (!isImage && evidenceFile.size > MAX_EVIDENCE_FILE_BYTES) {
         return toast.error('El archivo es muy pesado. Máximo 10MB');
@@ -779,7 +779,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
                       className="h-8 text-xs"
                     />
-                    <p className="mt-1 text-[10px] text-muted-foreground">Imágenes max 2MB. Otros archivos max 10MB.</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales max 10 MB; se optimizan. Otros archivos max 10 MB.</p>
                     {(evidenceFile || localDoc.evidenceFileName) && (
                       <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-primary">
                         <FileText className="size-3" />

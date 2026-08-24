@@ -28,6 +28,7 @@ import { Badge } from "../ui/badge";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { enterpriseGroupsService } from "../../services/enterprise-groups.service";
 import { storageService } from "../../services/storage.service";
+import { optimizeImageFile } from "../../utils/image-optimization";
 import { authService } from "../../services/auth.service";
 import { GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
 import { GroupBranchSupportDialog } from "./GroupBranchSupportDialog";
@@ -1894,9 +1895,10 @@ function LogoPicker({
   alt?: string;
   helpText?: string;
 }) {
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    event.currentTarget.value = "";
     const extension = file.name.split(".").pop()?.toLowerCase() || "";
     const inferredMime = extension === "jpg" || extension === "jpeg"
       ? "image/jpeg"
@@ -1913,17 +1915,20 @@ function LogoPicker({
       toast.error("Usa un logo PNG, JPG, WEBP, GIF o AVIF");
       return;
     }
-    if (file.size > LOGO_MAX_BYTES) {
-      toast.error("El logo no debe superar 2 MB");
-      return;
+    try {
+      const normalizedFile = file.type === inferredMime
+        ? file
+        : new File([file], file.name, { type: inferredMime });
+      const optimizedFile = await optimizeImageFile(normalizedFile, {
+        maxOutputBytes: LOGO_MAX_BYTES,
+        maxDimension: 1600,
+      });
+      const reader = new FileReader();
+      reader.onload = () => onChange(String(reader.result || ""));
+      reader.readAsDataURL(optimizedFile);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo optimizar el logo");
     }
-    const reader = new FileReader();
-    reader.onload = () => onChange(String(reader.result || ""));
-    const normalizedFile = file.type === inferredMime
-      ? file
-      : new File([file], file.name, { type: inferredMime });
-    reader.readAsDataURL(normalizedFile);
-    event.currentTarget.value = "";
   };
 
   return (
@@ -1976,7 +1981,6 @@ function IdentityStep({
   onCreate,
   onCreateManager,
   onUpdate,
-  onNext,
 }: any) {
   return (
     <div className="space-y-6">

@@ -343,7 +343,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       const extension = file.name.toLowerCase().split('.').pop() || '';
       const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
       if (!isImage && !isDocument) throw new Error(`El archivo ${file.name} debe ser una imagen o un documento compatible.`);
-      const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
+      const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) throw new Error(`El archivo ${file.name} supera el límite permitido.`);
 
       const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `pagos/${paymentId}` });
@@ -381,7 +381,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       const extension = file.name.toLowerCase().split('.').pop() || '';
       const isImage = file.type.startsWith('image/');
       const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
-      const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
+      const maxSize = 10 * 1024 * 1024;
       if (!isImage && !isDocument) return toast.error(`El archivo ${file.name} debe ser una imagen o un documento compatible`);
       if (file.size > maxSize) return toast.error(`El archivo ${file.name} supera el límite permitido`);
     }

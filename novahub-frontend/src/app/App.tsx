@@ -21,6 +21,7 @@ import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMe
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
+import { readPersistedDarkMode } from './utils/theme-mode';
 
 function recoverFromChunk(moduleName: string) {
   const now = Date.now();
@@ -426,12 +427,7 @@ function AppContent() {
   }, [sessionClosed, logout]);
 
   useEffect(() => {
-    const isDark = safeGetItem('erp-theme-mode') === 'light' ? false : true;
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', readPersistedDarkMode());
   }, []);
 
   if (location.pathname.startsWith('/public/document/')) return <PublicAccessPage mode="document" />;

@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { api, apiRequest } from './api';
+import {
+  MAX_OPTIMIZED_IMAGE_BYTES,
+  MAX_SOURCE_IMAGE_BYTES,
+  optimizeImageFile,
+} from '../utils/image-optimization';
 
 export type StoragePurpose =
   | 'tenant-branding'
@@ -71,13 +76,21 @@ export const storageService = {
     options: { folder?: string; scopeId?: string } = {},
   ): Promise<UploadedFile> {
     const mimeType = getUploadMimeType(file);
-    const uploadFile = file.type === mimeType
+    const normalizedFile = file.type === mimeType
       ? file
       : new File([file], file.name, { type: mimeType });
+    const uploadFile = mimeType.startsWith('image/')
+      ? await optimizeImageFile(normalizedFile, {
+          maxInputBytes: MAX_SOURCE_IMAGE_BYTES,
+          maxOutputBytes: MAX_OPTIMIZED_IMAGE_BYTES,
+          maxDimension: purpose === 'tenant-branding' || purpose === 'user-avatar' ? 1600 : 2048,
+        })
+      : normalizedFile;
+    const uploadMimeType = getUploadMimeType(uploadFile);
     const prepared = await api.post<PreparedUpload>(`/storage/uploads/${purpose}`, {
-      fileName: file.name,
-      mimeType,
-      size: file.size,
+      fileName: uploadFile.name,
+      mimeType: uploadMimeType,
+      size: uploadFile.size,
       folder: options.folder,
       scopeId: options.scopeId,
     });
@@ -115,7 +128,7 @@ export const storageService = {
       const { error } = await supabase.storage
         .from(prepared.bucket)
         .uploadToSignedUrl(prepared.path, prepared.token, uploadFile, {
-          contentType: mimeType,
+          contentType: uploadMimeType,
           cacheControl: '3600',
         });
       if (error) {

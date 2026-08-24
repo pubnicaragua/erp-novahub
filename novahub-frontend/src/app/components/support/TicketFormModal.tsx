@@ -191,7 +191,7 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
                 <label className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-muted-foreground">
                   <ImagePlus className="size-3.5 text-primary" /> Evidencias
                 </label>
-                <p className="mt-1 text-[10px] text-muted-foreground">Hasta 2 imágenes JPG, PNG, WEBP o GIF de 5 MB cada una.</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">Hasta 2 imágenes JPG, PNG, WEBP o GIF de 10 MB originales; se optimizan antes de guardarse.</p>
               </div>
               {evidenceFiles.length < MAX_EVIDENCE_FILES && (
                 <label className="relative inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 text-[10px] font-black uppercase text-primary hover:bg-primary/15">

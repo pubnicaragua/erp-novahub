@@ -38,7 +38,7 @@ import { useAuth, type Module } from '../contexts/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { navigateToNotification } from '../utils/notificationNavigation';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { safeSetItem } from '../services/safe-storage';
+import { persistThemeMode, readPersistedDarkMode } from '../utils/theme-mode';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
@@ -71,7 +71,7 @@ let requestedDarkMode: boolean | null = null;
 let themeChangeVersion = 0;
 
 function getSavedDarkMode() {
-  return localStorage.getItem('erp-theme-mode') !== 'light';
+  return readPersistedDarkMode();
 }
 
 function getAvatarInitials(name?: string) {
@@ -238,8 +238,8 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     const observer = new MutationObserver(syncFromRoot);
 
     const syncFromStorage = (event: StorageEvent) => {
-      if (event.key !== 'erp-theme-mode') return;
-      const nextDark = event.newValue !== 'light';
+      if (event.key !== 'erp-theme-mode' && event.key !== 'novahub:manager-theme') return;
+      const nextDark = readPersistedDarkMode();
       root.classList.toggle('dark', nextDark);
       setIsDark(nextDark);
     };
@@ -267,7 +267,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       // clic. Si ya existe una intención más reciente, no debe sobrescribirla.
       if (requestVersion !== themeChangeVersion) return;
       root.classList.toggle('dark', nextDark);
-      safeSetItem('erp-theme-mode', nextDark ? 'dark' : 'light');
+      persistThemeMode(nextDark);
       flushSync(() => setIsDark(nextDark));
       requestedDarkMode = null;
     };

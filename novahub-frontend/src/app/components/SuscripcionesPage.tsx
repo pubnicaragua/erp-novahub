@@ -64,6 +64,7 @@ import { Textarea } from './ui/textarea';
 import type { Submodule } from '../types/modules';
 import { SIDEBAR_PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { storageService } from '../services/storage.service';
+import { optimizeImageFile } from '../utils/image-optimization';
 import { authService } from '../services/auth.service';
 import { TenantSubscriptionView } from './suscripciones/TenantSubscriptionView';
 import { getPasswordError, isValidEmail, normalizeEmail } from '../utils/accountValidation';
@@ -773,18 +774,26 @@ export function SuscripcionesPage() {
                       type="file" 
                       accept="image/*"
                       className="bg-muted/10 border-border/50 h-11 rounded-xl file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-emerald-700 file:text-white hover:file:bg-emerald-800"
-                      onChange={e => {
+                      onChange={async e => {
                         const file = e.target.files?.[0];
-                        if (file) {
-                          setLogoFile(file);
+                        e.currentTarget.value = '';
+                        if (!file) return;
+                        try {
+                          const optimizedFile = await optimizeImageFile(file, {
+                            maxOutputBytes: 1.5 * 1024 * 1024,
+                            maxDimension: 1600,
+                          });
+                          setLogoFile(optimizedFile);
                           const reader = new FileReader();
                           reader.onloadend = () => setLogoPreview(reader.result as string);
-                          reader.readAsDataURL(file);
+                          reader.readAsDataURL(optimizedFile);
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : 'No se pudo optimizar el logo');
                         }
                       }}
                     />
                   </div>
-                  <p className="text-[9px] text-muted-foreground ml-1">PNG, JPG o WEBP - Máx. 2MB</p>
+                  <p className="text-[9px] text-muted-foreground ml-1">Imágenes originales hasta 10 MB; se optimizan antes de guardarse.</p>
                 </div>
               </div>
               <DialogFooter className="gap-3">

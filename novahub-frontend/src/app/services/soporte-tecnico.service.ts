@@ -2,7 +2,7 @@ import { api } from './api';
 import { resolveStorageReferences, storageService } from './storage.service';
 
 export const MAX_EVIDENCE_FILES = 2;
-export const MAX_EVIDENCE_FILE_SIZE = 5 * 1024 * 1024;
+export const MAX_EVIDENCE_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EVIDENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export function validateEvidenceFile(file: File): void {
@@ -10,7 +10,7 @@ export function validateEvidenceFile(file: File): void {
     throw new Error(`No se puede adjuntar “${file.name}”: usa una imagen JPG, PNG, WEBP o GIF.`);
   }
   if (file.size > MAX_EVIDENCE_FILE_SIZE) {
-    throw new Error(`No se puede adjuntar “${file.name}”: el tamaño máximo es 5 MB.`);
+    throw new Error(`No se puede adjuntar “${file.name}”: la imagen original no puede superar 10 MB.`);
   }
   if (file.size === 0) {
     throw new Error(`No se puede adjuntar “${file.name}”: el archivo está vacío.`);

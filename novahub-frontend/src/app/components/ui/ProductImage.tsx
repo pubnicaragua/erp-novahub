@@ -10,7 +10,7 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/gif",
   "image/avif",
 ];
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 interface ProductThumbnailProps {
   src?: string | null;
@@ -98,7 +98,7 @@ export function ProductImagePicker({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast.error("La imagen no puede superar los 5 MB");
+      toast.error("La imagen original no puede superar los 10 MB");
       return;
     }
     onSelect(file);

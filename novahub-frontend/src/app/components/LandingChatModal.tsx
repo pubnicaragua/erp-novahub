@@ -172,7 +172,7 @@ export function LandingChatModal() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-4 z-50 flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border border-[#d1fae5] bg-white shadow-2xl lg:bottom-28 lg:right-8"
+            className="fixed bottom-24 inset-x-4 z-50 flex h-[520px] flex-col overflow-hidden rounded-2xl border border-[#d1fae5] bg-white shadow-2xl lg:bottom-28 lg:right-8 lg:left-auto lg:w-[380px]"
           >
             {/* Header */}
             <div className="flex items-center justify-between bg-gradient-to-r from-[#22c55e] to-[#16a34a] px-5 py-4">

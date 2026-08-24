@@ -39,6 +39,7 @@ import { useTenantQuery, asList } from '../hooks/useTenantQuery';
 import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, type PermissionMatrixAction } from '../utils/permissions';
 import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
+import { optimizeImageFile } from '../utils/image-optimization';
 
 export const normalizePermissions = (perms: any): any[] => {
   if (Array.isArray(perms)) return perms;
@@ -803,18 +804,22 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       toast.error('Usa un logo PNG, JPG, WEBP, GIF o AVIF');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('El logo no debe superar 2 MB');
-      return;
-    }
-    const normalizedFile = file.type === inferredMime
-      ? file
-      : new File([file], file.name, { type: inferredMime });
-    setLogoFile(normalizedFile);
-    const reader = new FileReader();
-    reader.onloadend = () => setLogoPreview(reader.result as string);
-    reader.readAsDataURL(normalizedFile);
     e.currentTarget.value = '';
+    try {
+      const normalizedFile = file.type === inferredMime
+        ? file
+        : new File([file], file.name, { type: inferredMime });
+      const optimizedFile = await optimizeImageFile(normalizedFile, {
+        maxOutputBytes: 1.5 * 1024 * 1024,
+        maxDimension: 1600,
+      });
+      setLogoFile(optimizedFile);
+      const reader = new FileReader();
+      reader.onloadend = () => setLogoPreview(reader.result as string);
+      reader.readAsDataURL(optimizedFile);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo optimizar el logo');
+    }
   };
 
   const handleLogoSave = async () => {
@@ -1301,7 +1306,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Upload className="size-10 opacity-30" />
                         <p className="text-xs font-bold">Click para subir logo</p>
-                        <p className="text-[10px] opacity-60">PNG, SVG, JPG · Max 2MB</p>
+                        <p className="text-[10px] opacity-60">PNG, JPG, WEBP · originales hasta 10 MB; se optimizan</p>
                       </div>
                     )}
                   </div>

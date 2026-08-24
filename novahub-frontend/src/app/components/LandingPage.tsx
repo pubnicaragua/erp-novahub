@@ -316,7 +316,7 @@ function ProductWindow() {
 /* ──────────── SCROLLING BANNER ──────────── */
 
 function ScrollingBanner() {
-  const items = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Restaurant POS', 'Reportes', 'Compras', 'Personas'];
+  const items = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Restaurant POS', 'Reportes', 'Compras', 'Recursos Humanos'];
   return (
     <div className="relative overflow-hidden border-t border-[#d1fae5] bg-[#f0fdf4] pt-5">
       <motion.div className="flex w-max whitespace-nowrap" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 45, repeat: Infinity, ease: 'linear' }}>

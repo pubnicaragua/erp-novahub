@@ -192,7 +192,7 @@ async function uploadReceiptPaymentEvidence(files: File[], invoiceId: string, pa
     const extension = file.name.toLowerCase().split('.').pop() || '';
     const isImage = file.type.startsWith('image/');
     const isDocument = ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(extension) || file.type === 'application/pdf';
-    const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxSize = 10 * 1024 * 1024;
     if (!isImage && !isDocument) throw new Error(`El archivo ${file.name} debe ser una imagen o un documento compatible.`);
     if (file.size > maxSize) throw new Error(`El archivo ${file.name} supera el límite permitido.`);
     const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `pagos/${paymentId}` });
@@ -369,7 +369,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Vencimiento</p><Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
                 </div>
-                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
+                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen original hasta 10 MB; se optimiza. PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
                 <Button onClick={handleRegisterInvoice} disabled={invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando evidencia...' : 'Registrar evidencia y continuar'}</Button>
               </div>
             ) : (
@@ -405,7 +405,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                   <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0), baseCurrency)}</span></div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)} · Efectivo no requiere referencia.</p>
                 </div>
-                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen hasta 2 MB; documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
+                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales hasta 10 MB; se optimizan. Documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
               </div>
             )}
@@ -748,7 +748,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const isImage = file.type.startsWith('image/');
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
       if (!isImage && !isPdf) throw new Error(`"${file.name}" no es una imagen ni un PDF.`);
-      if (isImage && file.size > 2 * 1024 * 1024) throw new Error(`La imagen "${file.name}" supera el límite de 2 MB.`);
+      if (isImage && file.size > 10 * 1024 * 1024) throw new Error(`La imagen original "${file.name}" supera el límite de 10 MB.`);
       if (isPdf && file.size > 10 * 1024 * 1024) throw new Error(`El PDF "${file.name}" supera el límite de 10 MB.`);
       const evidence = await storageService.uploadFile('purchase-evidence', file, { folder: `recepciones/${draft.receiptId}` });
       uploaded.push({

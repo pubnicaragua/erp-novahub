@@ -54,6 +54,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { type ManagerGroup } from "../services/enterprise-groups.service";
 import { safeGetItem, safeSetItem } from "../services/safe-storage";
+import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
 import { Button } from "./ui/button";
 import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
@@ -334,12 +335,18 @@ function readManagerTheme(): ManagerThemeState {
       saved?.preset && saved.preset in MANAGER_THEME_PRESETS
         ? saved.preset
         : "emerald";
+    const globalMode = safeGetItem("erp-theme-mode");
+    const mode = globalMode === "light" || globalMode === "dark"
+      ? globalMode
+      : saved?.mode === "light" || saved?.mode === "dark"
+        ? saved.mode
+        : readPersistedDarkMode() ? "dark" : "light";
     return {
-      mode: saved?.mode === "light" ? "light" : "dark",
+      mode,
       preset: preset as ManagerThemeState["preset"],
     };
   } catch {
-    return { mode: "dark", preset: "emerald" };
+    return { mode: readPersistedDarkMode() ? "dark" : "light", preset: "emerald" };
   }
 }
 
@@ -359,7 +366,6 @@ function useManagerTheme() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const previousDark = root.classList.contains("dark");
     const previousVariables = Object.fromEntries(
       MANAGER_THEME_VARIABLES.map((name) => [
         name,
@@ -368,7 +374,7 @@ function useManagerTheme() {
     );
     applyManagerTheme(theme);
     return () => {
-      root.classList.toggle("dark", previousDark);
+      root.classList.toggle("dark", readPersistedDarkMode());
       MANAGER_THEME_VARIABLES.forEach((name) => {
         const value = previousVariables[name];
         if (value) root.style.setProperty(name, value);
@@ -380,6 +386,7 @@ function useManagerTheme() {
   useEffect(() => {
     applyManagerTheme(theme);
     safeSetItem(MANAGER_THEME_KEY, JSON.stringify(theme));
+    persistThemeMode(theme.mode === "dark");
   }, [theme]);
 
   return { theme, setTheme };

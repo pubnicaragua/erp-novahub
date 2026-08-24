@@ -84,10 +84,6 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
       toast.error('Usa un logo PNG, JPG, WEBP, GIF o AVIF');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('El logo no debe superar 2 MB');
-      return;
-    }
     try {
       const normalizedFile = file.type === inferredMime
         ? file
