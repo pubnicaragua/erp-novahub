@@ -1,294 +1,147 @@
-import { useState, useEffect } from 'react';
-import { motion, useScroll, useTransform } from 'motion/react';
-import { Check, Shield, Clock, Database, Lock, Users, ArrowRight, Zap, Globe, Mail, Download, Calculator, Package, BarChart3, ShoppingCart, Receipt, Briefcase, Headphones, BookOpen, Settings, ChevronDown, Star } from 'lucide-react';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useScroll, useTransform } from 'motion/react';
+import {
+  ArrowRight,
+  BarChart3,
+  Calculator,
+  Check,
+  CircleDollarSign,
+  FileText,
+  Headphones,
+  LockKeyhole,
+  Menu,
+  Package,
+  Receipt,
+  ShieldCheck,
+  ShoppingCart,
+  Store,
+  Users,
+  X,
+  Zap,
+} from 'lucide-react';
+import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png';
+import { NovaHubLogo } from './NovaHubLogo';
 
 const EXCHANGE_RATE = 36.5;
+const ease = [0.22, 1, 0.36, 1] as const;
 
-const fadeIn = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } } };
-const fadeInLeft = { hidden: { opacity: 0, x: -40 }, visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } } };
-const fadeInRight = { hidden: { opacity: 0, x: 40 }, visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } } };
-const stagger = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.07 } } };
-const scaleIn = { hidden: { opacity: 0, scale: 0.9 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } } };
-const popIn = { hidden: { opacity: 0, scale: 0.5, rotate: -5 }, visible: { opacity: 1, scale: 1, rotate: 0, transition: { duration: 0.5, type: 'spring', stiffness: 200 } } };
+const NAV_LINKS = [
+  { label: 'Producto', href: '#producto' },
+  { label: 'Cómo funciona', href: '#proceso' },
+  { label: 'Giros', href: '#giros' },
+  { label: 'Precios', href: '#precios' },
+  { label: 'Confianza', href: '#confianza' },
+] as const;
 
-const BASE_MODULES = [
-  { name: 'Inventario', icon: Package, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { name: 'Ventas', icon: Receipt, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  { name: 'Compras', icon: ShoppingCart, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { name: 'Caja', icon: BarChart3, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-  { name: 'Finanzas', icon: Calculator, color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
-  { name: 'Reportes', icon: BarChart3, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-  { name: 'Actividades', icon: Briefcase, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-  { name: 'Herramientas', icon: Settings, color: 'text-slate-500', bg: 'bg-slate-500/10' },
-  { name: 'Tickets', icon: Headphones, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-  { name: 'Conocimiento', icon: BookOpen, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+const MODULES = [
+  { title: 'Ventas', body: 'Cotizaciones, facturas, anticipos, créditos y seguimiento de clientes.', icon: Receipt },
+  { title: 'Inventario', body: 'Productos, bodegas, costos, existencias y transferencias entre sucursales.', icon: Package },
+  { title: 'Compras', body: 'Proveedores, órdenes de compra, recepción y control del margen.', icon: ShoppingCart },
+  { title: 'Caja y POS', body: 'Cobros, cierres de caja, tickets y operación por responsable.', icon: Store },
+  { title: 'Contabilidad', body: 'Plan de cuentas, asientos, balances y trazabilidad completa.', icon: Calculator },
+  { title: 'Reportes', body: 'Dashboard ejecutivo con métricas en tiempo real para tomar decisiones.', icon: BarChart3 },
+  { title: 'Personas', body: 'Usuarios, roles, permisos, sucursales y control de acceso.', icon: Users },
+  { title: 'Soporte', body: 'Tickets, evidencias, base de conocimiento y seguimiento.', icon: Headphones },
 ];
 
-const EXTRA_MODULES = [
-  { name: 'Contabilidad', icon: Calculator, priceUsd: 100, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { name: 'Recursos Humanos', icon: Users, priceUsd: 85, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+const INDUSTRIES = [
+  { title: 'Comercio y retail', body: 'Productos, cajas, compras, promociones e inventario por sucursal.' },
+  { title: 'Restaurantes y POS', body: 'Mesas, comandas, cocina, menú digital y pedidos por QR.' },
+  { title: 'Distribución', body: 'Bodegas, rutas, precios, crédito y control de entregas.' },
+  { title: 'Servicios profesionales', body: 'Clientes, proyectos, horas, tareas y facturación.' },
+  { title: 'Empresas multisucursal', body: 'Grupos, rubros, permisos y operación consolidada.' },
+  { title: 'Empresas en crecimiento', body: 'Procesos ordenados sin cambiar de sistema cada año.' },
 ];
 
-const SECURITY = [
-  { icon: Database, title: 'Servidores AWS', desc: 'Infraestructura dedicada en Amazon Web Services con servidores aislados por cliente.', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { icon: Lock, title: 'Cifrado Total', desc: 'TLS 1.3 en transito, AES-256 en reposo. Tus datos viajan y se almacenan cifrados.', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  { icon: Clock, title: 'Backups Semanales', desc: 'Copias automaticas cada 7 dias con retencion de 30 dias. Restauracion garantizada.', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { icon: Shield, title: 'Confidencialidad', desc: 'Contrato legal. Datos aislados por tenant. Cero filtraciones bajo responsabilidad.', color: 'text-rose-500', bg: 'bg-rose-500/10' },
+const PROCESS_STEPS = [
+  { kicker: 'Captura', title: 'Una venta deja de ser un dato aislado.', body: 'Cotizas, vendes o facturas una vez. El cliente, el producto y el responsable quedan registrados con contexto.' },
+  { kicker: 'Movimiento', title: 'Inventario y caja siguen el movimiento.', body: 'Existencias, pagos, créditos y cierres se actualizan alrededor del documento, no en hojas separadas.' },
+  { kicker: 'Control', title: 'Cada persona ve lo que necesita hacer.', body: 'Roles, permisos, sucursales y trazabilidad convierten la operación diaria en un proceso controlable.' },
+  { kicker: 'Decisión', title: 'La gerencia deja de adivinar.', body: 'Reportes, contabilidad y métricas muestran qué se vendió, qué falta, qué se cobró y dónde está el margen.' },
 ];
 
-function WaveDivider({ flip = false, color = 'fill-muted/20' }: { flip?: boolean; color?: string }) {
+const PRICES = [
+  {
+    title: 'Base',
+    value: 600,
+    period: '/año',
+    note: '10 módulos incluidos con 5 usuarios',
+    features: ['Inventario', 'Ventas', 'Compras', 'Caja', 'Finanzas', 'Reportes', 'Actividades', 'Herramientas', 'Tickets', 'Conocimiento'],
+    featured: false,
+    cta: 'Comenzar',
+  },
+  {
+    title: 'Contabilidad',
+    value: 100,
+    period: '/mes',
+    note: 'Contabilidad completa para tu empresa',
+    features: ['Plan de cuentas', 'Asientos contables', 'Balance general', 'Estado de resultados', 'Conciliación bancaria', 'Reportes fiscales', 'IVA / IR automático', 'Cuentas por pagar/cobrar'],
+    featured: true,
+    cta: 'Agregar módulo',
+  },
+  {
+    title: 'RRHH',
+    value: 85,
+    period: '/mes',
+    note: 'Gestión completa de Recursos Humanos',
+    features: ['Nómina Nicaragua (INSS/IR)', 'Control de asistencia', 'Vacaciones y permisos', 'Evaluaciones de desempeño', 'Capacitaciones', 'KPIs y métricas', 'Dashboard RRHH', 'Empleados y departamentos'],
+    featured: false,
+    cta: 'Agregar módulo',
+  },
+];
+
+function formatPrice(value: number, currency: 'USD' | 'NIO') {
+  return currency === 'NIO' ? `C$${(value * EXCHANGE_RATE).toLocaleString('es-NI')}` : `$${value.toLocaleString('en-US')}`;
+}
+
+/* ──────────── REUSABLE ──────────── */
+
+function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; delay?: number; className?: string }) {
   return (
-    <div className={`w-full overflow-hidden leading-[0] ${flip ? 'rotate-180' : ''}`}>
-      <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="w-full h-16 md:h-24">
-        <path d="M0,60 C150,120 350,0 600,60 C850,120 1050,0 1200,60 L1200,120 L0,120 Z" className={color} />
-      </svg>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.7, delay, ease }}
+      className={className}
+    >
+      {children}
+    </motion.div>
   );
 }
 
-function FloatingBlob({ className }: { className: string }) {
-  return <div className={`absolute rounded-full blur-[100px] pointer-events-none animate-pulse ${className}`} style={{ animationDuration: '4s' }} />;
+function Kicker({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-4 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-[#22c55e]">
+      <span className="h-px w-8 bg-[#22c55e]" />
+      {children}
+    </p>
+  );
 }
 
-function formatPrice(usd: number, currency: 'USD' | 'NIO') {
-  if (currency === 'NIO') return `C$${(usd * EXCHANGE_RATE).toLocaleString('es-NI')}`;
-  return `$${usd.toLocaleString('en-US')}`;
+function Headline({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <h2 className={`text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[#174a3a] sm:text-5xl lg:text-6xl ${className}`}>
+      {children}
+    </h2>
+  );
 }
 
-function downloadContract() {
-  import('jspdf').then(({ jsPDF }) => {
-    const doc = new jsPDF({ unit: 'mm', format: 'letter' });
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const ml = 25;
-    const mr = 25;
-    const cw = pw - ml - mr;
-    let y = 0;
-
-    const addPage = () => { doc.addPage(); y = 25; };
-    const checkPage = (needed: number) => { if (y + needed > ph - 30) addPage(); };
-
-    // ─── PAGE 1: HEADER ───
-    doc.setFillColor(25, 25, 25);
-    doc.rect(0, 0, pw, 40, 'F');
-    doc.setFontSize(24);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('NOVAHUB', ml, 24);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(160, 160, 160);
-    doc.text('SOLUCIONES EMPRESARIALES INTEGRADAS', ml + 72, 24);
-
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(`Managua, Nicaragua`, pw - mr, 18, { align: 'right' });
-    doc.text(`${new Date().toLocaleDateString('es-NI', { year: 'numeric', month: 'long', day: 'numeric' })}`, pw - mr, 24, { align: 'right' });
-
-    // Accent line
-    doc.setFillColor(225, 29, 72);
-    doc.rect(0, 40, pw, 2, 'F');
-
-    y = 58;
-
-    // Title block
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(25, 25, 25);
-    doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', pw / 2, y, { align: 'center' });
-    y += 8;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text('Modelo Software como Servicio (SaaS)', pw / 2, y, { align: 'center' });
-    y += 12;
-
-    // Divider
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.3);
-    doc.line(ml, y, pw - mr, y);
-    y += 12;
-
-    // ─── PARTIES ───
-    const sectionTitle = (num: string, title: string) => {
-      checkPage(20);
-      doc.setFillColor(245, 245, 245);
-      doc.roundedRect(ml, y - 4, cw, 9, 1, 1, 'F');
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(25, 25, 25);
-      doc.text(`${num}. ${title.toUpperCase()}`, ml + 4, y + 2.5);
-      y += 12;
-    };
-
-    const bodyText = (text: string, indent = 0) => {
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(50, 50, 50);
-      const lines = doc.splitTextToSize(text, cw - indent * 4);
-      for (const line of lines) {
-        checkPage(6);
-        doc.text(line, ml + indent, y);
-        y += 4.5;
-      }
-      y += 2;
-    };
-
-    const fieldLine = (label: string) => {
-      checkPage(8);
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(50, 50, 50);
-      doc.text(label, ml + 2, y + 1);
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.2);
-      doc.line(ml + 55, y + 1.5, pw - mr - 2, y + 1.5);
-      y += 9;
-    };
-
-    sectionTitle('I', 'Partes Contratantes');
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(50, 50, 50);
-    doc.text('EL PROVEEDOR:', ml + 2, y);
-    y += 5;
-    doc.setFont('helvetica', 'normal');
-    doc.text('NovaHub — Empresa de tecnologia y software.', ml + 6, y);
-    y += 9;
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('EL CLIENTE:', ml + 2, y);
-    y += 7;
-
-    fieldLine('Razon Social / Nombre:  ____________________________________________');
-    fieldLine('RUC / Cedula:  ____________________________________________');
-    fieldLine('Representante Legal:  ____________________________________________');
-    fieldLine('Correo Electronico:  ____________________________________________');
-    fieldLine('Direccion:  ____________________________________________');
-    fieldLine('Telefono:  ____________________________________________');
-    y += 4;
-
-    // ─── SECTIONS ───
-    sectionTitle('II', 'Objeto del Contrato');
-    bodyText('EL PROVEEDOR otorga a EL CLIENTE una licencia de uso del software NOVAHUB ERP, bajo el modelo de pago por uso a plazo de doce (12) meses. EL CLIENTE podra utilizar el software para todas sus operaciones comerciales internas incluyendo, pero no limitado a: inventario, ventas, compras, contabilidad, recursos humanos, reportes y demas modulos incluidos en el plan contratado.');
-
-    sectionTitle('III', 'Duracion');
-    bodyText('Este contrato tiene una duracion de DOCE (12) meses a partir de la fecha de activacion del servicio. La renovacion es automatica por periodos iguales salvo que cualquiera de las partes notifique por escrito su intencion de no renovar con al menos treinta (30) dias de antelacion al vencimiento del periodo vigente.');
-
-    sectionTitle('IV', 'Licencia de Uso');
-    bodyText('EL CLIENTE adquiere el derecho de uso del software NOVAHUB ERP para sus operaciones comerciales internas. Esta licencia es intransferible, no exclusiva y esta vinculada exclusivamente a la empresa contratante. EL CLIENTE no podra: (a) revender, arrendar o ceder la licencia a terceros; (b) descompilar, modificar o crear trabajos derivados del software; (c) eliminar o alterar avisos de propiedad intelectual.');
-
-    sectionTitle('V', 'Precio y Forma de Pago');
-    bodyText('Los precios aplicables son los siguientes:', 0);
-    y += 1;
-
-    const pricingItems = [
-      ['Paquete Base (10 modulos, 5 usuarios)', 'USD $600.00 / anio'],
-      ['Modulo Contabilidad (adicional)', 'USD $100.00 / mes'],
-      ['Modulo Recursos Humanos (adicional)', 'USD $85.00 / mes'],
-      ['Usuario adicional', 'USD $5.00 / mes'],
-      ['Implementacion y configuracion', 'USD $200.00 (pago unico)'],
-      ['Dominio + Hosting + 5 correos', 'USD $100.00 / anio'],
-    ];
-    for (const [desc, price] of pricingItems) {
-      checkPage(8);
-      doc.setFontSize(8.5);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      doc.text(`• ${desc}`, ml + 6, y);
-      doc.setFont('helvetica', 'bold');
-      doc.text(price, pw - mr - 2, y, { align: 'right' });
-      y += 5.5;
-    }
-    y += 2;
-    bodyText('El pago total anual se realizara por adelantado via transferencia bancaria o tarjeta de credito/debito. Los pagos mensuales de modulos adicionales se facturaran el primer dia de cada mes.');
-
-    sectionTitle('VI', 'Implementacion');
-    bodyText('EL PROVEEDOR se compromete a realizar la implementacion completa del ERP, incluyendo: (a) configuracion inicial del sistema con datos de la empresa; (b) carga de datos iniciales (clientes, proveedores, productos, inventario); (c) configuracion de modulos seleccionados; (d) capacitacion basica al personal designado por EL CLIENTE. La implementacion tiene una duracion estimada de quince (15) dias habiles a partir de la confirmacion del pago.');
-
-    sectionTitle('VII', 'Confidencialidad y Proteccion de Datos');
-    bodyText('EL PROVEEDOR se compromete a: (a) mantener estricta confidencialidad sobre toda la informacion de EL CLIENTE; (b) almacenar datos unicamente en servidores privados de Amazon Web Services (AWS) con cifrado AES-256 en reposo y TLS 1.3 en transito; (c) realizar copias de seguridad automaticas cada siete (7) dias con retencion de treinta (30) dias; (d) no compartir, vender ni divulgar datos de EL CLIENTE a terceros bajo ninguna circunstancia; (e) garantizar confidencialidad absoluta bajo responsabilidad contractual y legal. Los datos de cada cliente estan fisicamente aislados (multi-tenant architecture).');
-
-    sectionTitle('VIII', 'Soporte Tecnico');
-    bodyText('Incluido en el plan: soporte tecnico via ticket y correo electronico durante horario laboral de lunes a viernes de 8:00 AM a 5:00 PM (hora de Nicaragua). El soporte cubre incidencias tecnicas, consultas de uso y orientacion en la configuracion del sistema. No incluye desarrollo personalizado ni integraciones con sistemas de terceros.');
-
-    sectionTitle('IX', 'Propiedad Intelectual');
-    bodyText('El software NOVAHUB ERP, su codigo fuente, documentacion, disenos, interfaces y todos los derechos de propiedad intelectual pertenecen exclusivamente a EL PROVEEDOR. EL CLIENTE no adquiere ningun derecho de propiedad sobre el software, unicamente una licencia de uso limitada y revocable conforme a los terminos de este contrato.');
-
-    sectionTitle('X', 'Terminacion');
-    bodyText('Cualquiera de las partes podra dar por terminado este contrato mediante notificacion por escrito con treinta (30) dias de antelacion. En caso de terminacion, EL PROVEEDOR proporcionara a EL CLIENTE un archivo exportado de todos sus datos en formato estandar (CSV o JSON) dentro de los quince (15) dias siguientes a la notificacion. El uso del software cesara inmediatamente al vencimiento del periodo de notificacion.');
-
-    sectionTitle('XI', 'Ley Aplicable y Jurisdiccion');
-    bodyText('Este contrato se rige e interpreta conforme a las leyes de la Republica de Nicaragua. Cualquier controversia derivada de este contrato sera resuelta en los tribunales competentes de Managua, Nicaragua, renunciando expresamente a cualquier otro fuero que pudiera corresponderles.');
-
-    // ─── SIGNATURES ───
-    checkPage(60);
-    y += 6;
-    doc.setDrawColor(220, 220, 220);
-    doc.line(ml, y, pw - mr, y);
-    y += 14;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(25, 25, 25);
-    doc.text('FIRMAS', pw / 2, y, { align: 'center' });
-    y += 16;
-
-    // Left signature
-    doc.setDrawColor(80, 80, 80);
-    doc.setLineWidth(0.4);
-    doc.line(ml, y, ml + 80, y);
-    y += 5;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(50, 50, 50);
-    doc.text('EL PROVEEDOR', ml + 40, y, { align: 'center' });
-    y += 4;
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text('NovaHub', ml + 40, y, { align: 'center' });
-    y += 5;
-    doc.text('Fecha: _______________', ml + 40, y, { align: 'center' });
-
-    // Right signature
-    const rx = pw - mr - 80;
-    y -= 14;
-    doc.line(rx, y, rx + 80, y);
-    y += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(50, 50, 50);
-    doc.text('EL CLIENTE', rx + 40, y, { align: 'center' });
-    y += 4;
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 100);
-    doc.text('Nombre: ___________________', rx + 40, y, { align: 'center' });
-    y += 5;
-    doc.text('Fecha: _______________', rx + 40, y, { align: 'center' });
-
-    // ─── FOOTER ───
-    const footerY = ph - 15;
-    doc.setDrawColor(225, 29, 72);
-    doc.setLineWidth(0.5);
-    doc.line(ml, footerY, pw - mr, footerY);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(150, 150, 150);
-    doc.text('NovaHub — Soluciones Empresariales Integradas — www.novahub.com.ni', pw / 2, footerY + 5, { align: 'center' });
-    doc.text('Este documento es un ejemplo del contrato de licencia. Los terminos finales seran confirmados al momento de la firma.', pw / 2, footerY + 9, { align: 'center' });
-
-    doc.save('Contrato_Licencia_NOVAHUB_ERP.pdf');
-  });
+function CTA({ href, children, className = '', onClick, variant = 'solid' }: { href?: string; children: ReactNode; className?: string; onClick?: () => void; variant?: 'solid' | 'soft' }) {
+  const styles = variant === 'solid'
+    ? 'bg-[#22c55e] text-white shadow-[0_18px_45px_-16px_rgba(34,197,94,.5)] hover:bg-[#16a34a] hover:shadow-[0_24px_50px_-16px_rgba(34,197,94,.6)]'
+    : 'bg-white text-[#174a3a] border border-[#d8e3df] shadow-sm hover:bg-[#f0fdf4] hover:border-[#22c55e]';
+  const cls = `inline-flex -skew-x-6 items-center justify-center gap-2.5 rounded-[14px] px-8 py-4 text-sm font-bold uppercase tracking-[0.12em] transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] ${styles} ${className}`;
+  const inner = <span className="inline-flex skew-x-6 items-center gap-2.5">{children}</span>;
+  if (onClick) return <button type="button" onClick={onClick} className={cls}>{inner}</button>;
+  return <a href={href} className={cls}>{inner}</a>;
 }
 
-export default function LandingPage() {
-  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD');
+/* ──────────── HEADER ──────────── */
+
+function Header() {
   const [scrolled, setScrolled] = useState(false);
-  const { scrollYProgress } = useScroll();
-  const heroScale = useTransform(scrollYProgress, [0, 0.15], [1, 0.97]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0.6]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -296,286 +149,599 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const closeMenu = () => setMenuOpen(false);
+
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased overflow-x-hidden">
-      {/* Nav */}
-      <motion.nav initial={{ y: -80 }} animate={{ y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${scrolled ? 'bg-background/95 backdrop-blur-xl shadow-lg shadow-black/5 border-b border-border/30' : 'bg-transparent'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-          <a href="/landing" className="flex items-center gap-2">
-            <span className="text-xl font-black tracking-tight text-foreground">NovaHub</span>
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
+        scrolled || menuOpen
+          ? 'border-b border-[#e0ebe4]/80 bg-white/95 shadow-[0_8px_40px_-20px_rgba(23,74,58,.08)] backdrop-blur-2xl'
+          : 'bg-white/80 backdrop-blur-xl'
+      }`}
+    >
+      <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
+        <a href="/landing" className="flex items-center gap-2.5">
+          <NovaHubLogo size={34} />
+          <span className="flex flex-col leading-none">
+            <span className="text-[17px] font-black tracking-[-0.04em] text-[#174a3a]">Nova<span className="text-[#22c55e]">Hub</span></span>
+            <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-[#84a1ad]">ERP Platform</span>
+          </span>
+        </a>
+
+        <div className="flex items-center gap-3">
+          <a href="/login" className="hidden text-sm font-bold text-[#5d7884] transition-colors hover:text-[#174a3a] sm:block">
+            Iniciar sesión
           </a>
-          <div className="hidden md:flex items-center gap-7 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            <a href="#modules" className="hover:text-foreground transition-colors">Modulos</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Precios</a>
-            <a href="#security" className="hover:text-foreground transition-colors">Seguridad</a>
-            <a href="#contract" className="hover:text-foreground transition-colors">Contrato</a>
-          </div>
-          <div className="flex items-center gap-3">
-            <a href="/login"><Button variant="ghost" className="text-xs font-bold uppercase tracking-widest hidden sm:inline-flex">Iniciar Sesion</Button></a>
-            <a href="/register"><Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-widest px-5 h-9 rounded-xl shadow-lg shadow-primary/25">Comenzar</Button></a>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={menuOpen}
+            className="relative z-50 grid size-11 place-items-center rounded-xl border border-[#e0ebe4] bg-white text-[#174a3a] shadow-sm transition-colors hover:border-[#22c55e]"
+          >
+            <motion.span animate={menuOpen ? { rotate: 90, opacity: 0 } : { rotate: 0, opacity: 1 }} transition={{ duration: 0.2 }} className="absolute">
+              <Menu className="size-5" />
+            </motion.span>
+            <motion.span animate={menuOpen ? { rotate: 0, opacity: 1 } : { rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }} className="absolute">
+              <X className="size-5" />
+            </motion.span>
+          </button>
         </div>
-      </motion.nav>
+      </nav>
 
-      {/* Hero */}
-      <section className="relative pt-32 pb-8 px-4 overflow-hidden">
-        <FloatingBlob className="top-20 left-[10%] w-[600px] h-[600px] bg-primary/[0.06]" />
-        <FloatingBlob className="top-40 right-[5%] w-[400px] h-[400px] bg-primary/[0.04]" style={{ animationDelay: '2s' } as any} />
-        <FloatingBlob className="bottom-0 left-[40%] w-[500px] h-[500px] bg-primary/[0.03]" style={{ animationDelay: '4s' } as any} />
-
-        <motion.div style={{ scale: heroScale, opacity: heroOpacity }} className="relative max-w-5xl mx-auto text-center">
-          <motion.div initial="hidden" animate="visible" variants={stagger}>
-            <motion.div variants={popIn}>
-              <Badge className="mb-6 bg-primary/10 text-primary border-primary/20 text-[10px] font-bold uppercase tracking-[0.25em] px-5 py-1.5 shadow-sm">ERP para Negocios Nicaraguenses</Badge>
-            </motion.div>
-            <motion.h1 variants={fadeIn} className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight leading-[1.05] mb-6">
-              Tu negocio{' '}
-              <span className="relative inline-block">
-                <span className="relative z-10 text-primary">centralizado</span>
-                <motion.span initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ delay: 0.8, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute bottom-1 left-0 h-3 bg-primary/15 -z-0 rounded-full" />
-              </span>
-              <br />
-              <span className="text-2xl sm:text-3xl md:text-5xl text-muted-foreground/70 font-medium mt-2 block">en una sola plataforma</span>
-            </motion.h1>
-            <motion.p variants={fadeIn} className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              Inventario, ventas, compras, contabilidad, RRHH y mas. Todo integrado para que crezcas sin complicaciones.
-            </motion.p>
-            <motion.div variants={fadeIn} className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a href="#pricing">
-                <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs uppercase tracking-widest px-10 h-12 rounded-xl shadow-xl shadow-primary/25 gap-2">
-                  Ver Planes <ArrowRight className="size-4" />
-                </Button>
-              </a>
-              <a href="#modules">
-                <Button size="lg" variant="outline" className="font-bold text-xs uppercase tracking-widest px-10 h-12 rounded-xl border-2">
-                  Explorar Modulos
-                </Button>
-              </a>
-            </motion.div>
-            <motion.div variants={fadeIn} className="mt-12 flex items-center justify-center gap-1 text-muted-foreground/40">
-              <ChevronDown className="size-5 animate-bounce" style={{ animationDuration: '1.5s' }} />
-            </motion.div>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      <WaveDivider color="fill-primary/[0.08]" />
-
-      {/* Modules */}
-      <section id="modules" className="relative py-20 px-4 bg-gradient-to-b from-primary/[0.02] to-transparent">
-        <FloatingBlob className="top-20 right-[10%] w-[400px] h-[400px] bg-blue-500/[0.03]" />
-        <div className="max-w-6xl mx-auto relative">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} variants={stagger} className="text-center mb-14">
-            <motion.div variants={popIn}><Badge className="mb-4 bg-blue-500/10 text-blue-500 border-blue-500/20 text-[9px] font-bold uppercase tracking-widest">Modulos</Badge></motion.div>
-            <motion.h2 variants={fadeIn} className="text-3xl md:text-4xl font-black tracking-tight mb-4">Todo lo que necesitas, <span className="text-primary">nada que no</span></motion.h2>
-            <motion.p variants={fadeIn} className="text-sm text-muted-foreground max-w-lg mx-auto">10 modulos incluidos en el plan base. Disenados para trabajar juntos, sin integraciones complicadas.</motion.p>
-          </motion.div>
-
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-50px' }} variants={stagger} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
-            {BASE_MODULES.map((mod, i) => (
-              <motion.div key={mod.name} variants={scaleIn} whileHover={{ y: -6, scale: 1.02 }} transition={{ type: 'spring', stiffness: 300 }}
-                className="rounded-2xl border border-border/40 bg-background/80 backdrop-blur p-5 text-center hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 transition-shadow cursor-default">
-                <div className={`size-12 rounded-xl ${mod.bg} mx-auto mb-3 flex items-center justify-center`}>
-                  <mod.icon className={`size-6 ${mod.color}`} />
-                </div>
-                <p className="text-xs font-bold">{mod.name}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-6 flex flex-wrap justify-center gap-4">
-            {EXTRA_MODULES.map((mod) => (
-              <motion.div key={mod.name} variants={scaleIn} whileHover={{ y: -4 }} className="rounded-2xl border-2 border-amber-500/30 bg-background/80 backdrop-blur p-5 px-7 flex items-center gap-4 hover:border-amber-500/50 hover:shadow-lg transition-all cursor-default">
-                <div className={`size-12 rounded-xl ${mod.bg} flex items-center justify-center`}><mod.icon className={`size-6 ${mod.color}`} /></div>
-                <div className="text-left">
-                  <p className="text-sm font-bold">{mod.name}</p>
-                  <p className="text-[11px] text-muted-foreground">+{formatPrice(mod.priceUsd, currency)}/mes</p>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      <WaveDivider flip color="fill-primary/[0.08]" />
-
-      {/* Pricing */}
-      <section id="pricing" className="relative py-24 px-4">
-        <FloatingBlob className="top-10 left-[5%] w-[500px] h-[500px] bg-emerald-500/[0.03]" />
-        <div className="max-w-6xl mx-auto relative">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} variants={stagger} className="text-center mb-14">
-            <motion.div variants={popIn}><Badge className="mb-4 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-bold uppercase tracking-widest">Precios</Badge></motion.div>
-            <motion.h2 variants={fadeIn} className="text-3xl md:text-4xl font-black tracking-tight mb-4">Precios <span className="text-primary">transparentes</span></motion.h2>
-            <motion.p variants={fadeIn} className="text-sm text-muted-foreground mb-8">Sin sorpresas. Paga solo lo que necesitas.</motion.p>
-            <motion.div variants={fadeIn} className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 p-1 shadow-inner">
-              <button onClick={() => setCurrency('USD')} className={`px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${currency === 'USD' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}>USD</button>
-              <button onClick={() => setCurrency('NIO')} className={`px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${currency === 'NIO' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}>Cordobas (C$)</button>
-            </motion.div>
-          </motion.div>
-
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-50px' }} variants={stagger} className="grid md:grid-cols-3 gap-5 md:gap-6">
-            {/* Base */}
-            <motion.div variants={scaleIn} whileHover={{ y: -8 }} className="rounded-3xl border border-border/40 bg-background/80 backdrop-blur p-8 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
-              <Badge className="mb-4 bg-primary/10 text-primary border-primary/20 text-[9px] font-bold uppercase tracking-widest relative z-10">Base</Badge>
-              <div className="mb-5 relative z-10">
-                <motion.span key={currency} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-4xl font-black">{formatPrice(600, currency)}</motion.span>
-                <span className="text-sm text-muted-foreground"> /anio</span>
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease }}
+            className="overflow-hidden border-t border-[#e0ebe4]/60 bg-white/98 backdrop-blur-2xl"
+          >
+            <div className="mx-auto flex max-w-7xl flex-col gap-1 px-5 py-6 sm:px-8">
+              {NAV_LINKS.map((link) => (
+                <a key={link.href} href={link.href} onClick={closeMenu} className="rounded-xl px-4 py-4 text-base font-bold text-[#5d7884] transition-colors hover:bg-[#e5f5eb] hover:text-[#22c55e]">
+                  {link.label}
+                </a>
+              ))}
+              <div className="mt-4 flex flex-col gap-3 border-t border-[#e0ebe4]/60 pt-4">
+                <a href="/login" onClick={closeMenu} className="rounded-xl px-4 py-3.5 text-center text-sm font-bold text-[#5d7884]">
+                  Iniciar sesión
+                </a>
+                <CTA href="#contacto" className="w-full text-center">
+                  Solicitar demostración
+                </CTA>
               </div>
-              <p className="text-xs text-muted-foreground mb-6 relative z-10">10 modulos incluidos con 5 usuarios</p>
-              <ul className="space-y-2.5 mb-8 relative z-10">
-                {BASE_MODULES.map(m => <li key={m.name} className="flex items-center gap-2.5 text-xs"><Check className="size-4 text-primary shrink-0" />{m.name}</li>)}
-              </ul>
-              <a href="/register"><Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[10px] uppercase tracking-widest h-10 rounded-xl relative z-10">Comenzar</Button></a>
-            </motion.div>
-
-            {/* Contabilidad - Featured */}
-            <motion.div variants={scaleIn} whileHover={{ y: -8 }} className="rounded-3xl border-2 border-primary bg-background p-8 relative overflow-hidden shadow-2xl shadow-primary/10 group">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
-              <div className="absolute -top-1 -right-1">
-                <div className="bg-primary text-primary-foreground text-[9px] font-bold uppercase tracking-widest px-4 py-1 rounded-bl-xl rounded-tr-2xl shadow-lg">Popular</div>
-              </div>
-              <div className="mb-5 relative z-10 mt-2">
-                <motion.span key={currency} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-4xl font-black">{formatPrice(100, currency)}</motion.span>
-                <span className="text-sm text-muted-foreground"> /mes</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-6 relative z-10">Contabilidad completa para tu empresa</p>
-              <ul className="space-y-2.5 mb-8 relative z-10">
-                {['Plan de cuentas', 'Asientos contables', 'Balance general', 'Estado de resultados', 'Conciliacion bancaria', 'Reportes fiscales', 'IVA / IR automatico', 'Cuentas por pagar/cobrar'].map(f => <li key={f} className="flex items-center gap-2.5 text-xs"><Check className="size-4 text-primary shrink-0" />{f}</li>)}
-              </ul>
-              <a href="/register"><Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-[10px] uppercase tracking-widest h-10 rounded-xl relative z-10 shadow-lg shadow-primary/25">Agregar modulo</Button></a>
-            </motion.div>
-
-            {/* RRHH */}
-            <motion.div variants={scaleIn} whileHover={{ y: -8 }} className="rounded-3xl border border-border/40 bg-background/80 backdrop-blur p-8 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
-              <Badge className="mb-4 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px] font-bold uppercase tracking-widest relative z-10">RRHH</Badge>
-              <div className="mb-5 relative z-10">
-                <motion.span key={currency} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-4xl font-black">{formatPrice(85, currency)}</motion.span>
-                <span className="text-sm text-muted-foreground"> /mes</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-6 relative z-10">Gestion completa de Recursos Humanos</p>
-              <ul className="space-y-2.5 mb-8 relative z-10">
-                {['Nomina Nicaragua (INSS/IR)', 'Control de asistencia', 'Vacaciones y permisos', 'Evaluaciones de desempeno', 'Capacitaciones', 'KPIs y metricas', 'Dashboard RRHH', 'Empleados y departamentos'].map(f => <li key={f} className="flex items-center gap-2.5 text-xs"><Check className="size-4 text-emerald-500 shrink-0" />{f}</li>)}
-              </ul>
-              <a href="/register"><Button variant="outline" className="w-full font-bold text-[10px] uppercase tracking-widest h-10 rounded-xl border-2 relative z-10">Agregar modulo</Button></a>
-            </motion.div>
-          </motion.div>
-
-          {/* Extra pricing cards */}
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { icon: Users, label: 'Usuario adicional', price: 5, unit: '/mes', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-              { icon: Settings, label: 'Implementacion completa', price: 200, unit: 'pago unico', color: 'text-purple-500', bg: 'bg-purple-500/10' },
-              { icon: Globe, label: 'Dominio + Hosting + 5 correos', price: 100, unit: '/anio', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
-            ].map((item, i) => (
-              <motion.div key={item.label} variants={fadeIn} whileHover={{ y: -4 }} className="rounded-2xl border border-border/40 bg-muted/30 p-6 text-center hover:shadow-lg transition-all cursor-default">
-                <div className={`size-11 rounded-xl ${item.bg} mx-auto mb-3 flex items-center justify-center`}><item.icon className={`size-5 ${item.color}`} /></div>
-                <motion.p key={currency} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-2xl font-black">{formatPrice(item.price, currency)}<span className="text-xs text-muted-foreground font-normal"> {item.unit}</span></motion.p>
-                <p className="text-[11px] text-muted-foreground mt-1.5">{item.label}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      <WaveDivider color="fill-primary/[0.08]" />
-
-      {/* Security */}
-      <section id="security" className="relative py-24 px-4 bg-gradient-to-b from-primary/[0.02] to-transparent">
-        <FloatingBlob className="bottom-10 right-[10%] w-[400px] h-[400px] bg-rose-500/[0.03]" />
-        <div className="max-w-6xl mx-auto relative">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} variants={stagger} className="text-center mb-14">
-            <motion.div variants={popIn}><Badge className="mb-4 bg-rose-500/10 text-rose-500 border-rose-500/20 text-[9px] font-bold uppercase tracking-widest">Seguridad</Badge></motion.div>
-            <motion.h2 variants={fadeIn} className="text-3xl md:text-4xl font-black tracking-tight mb-4">Tus datos estan <span className="text-primary">protegidos</span></motion.h2>
-            <motion.p variants={fadeIn} className="text-sm text-muted-foreground max-w-lg mx-auto">Infraestructura de clase mundial. Tu informacion es tuya y nadie mas puede acceder a ella.</motion.p>
-          </motion.div>
-
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-50px' }} variants={stagger} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {SECURITY.map((f, i) => (
-              <motion.div key={f.title} variants={scaleIn} whileHover={{ y: -6, scale: 1.02 }} transition={{ type: 'spring', stiffness: 300 }}
-                className="rounded-2xl border border-border/40 bg-background/80 backdrop-blur p-7 text-center hover:shadow-xl transition-shadow cursor-default">
-                <motion.div initial={{ rotate: -10, scale: 0 }} whileInView={{ rotate: 0, scale: 1 }} viewport={{ once: true }}
-                  transition={{ delay: i * 0.1, type: 'spring', stiffness: 200 }}
-                  className={`size-14 rounded-2xl ${f.bg} mx-auto mb-4 flex items-center justify-center`}>
-                  <f.icon className={`size-7 ${f.color}`} />
-                </motion.div>
-                <h3 className="text-sm font-bold mb-2">{f.title}</h3>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">{f.desc}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      <WaveDivider flip color="fill-primary/[0.08]" />
-
-      {/* Contract */}
-      <section id="contract" className="relative py-20 px-4">
-        <div className="max-w-4xl mx-auto">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger}
-            className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.04] via-primary/[0.02] to-transparent p-10 md:p-14 relative overflow-hidden">
-            <div className="absolute -top-20 -right-20 w-60 h-60 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-            <motion.div variants={fadeInLeft} className="flex flex-col md:flex-row items-start md:items-center gap-8 relative z-10">
-              <motion.div initial={{ rotate: -20, scale: 0 }} whileInView={{ rotate: 0, scale: 1 }} viewport={{ once: true }} transition={{ type: 'spring', stiffness: 150 }}
-                className="size-16 rounded-2xl bg-primary/15 flex items-center justify-center shrink-0 shadow-lg shadow-primary/10">
-                <Shield className="size-8 text-primary" />
-              </motion.div>
-              <div className="flex-1">
-                <h3 className="text-2xl font-black mb-3">Contrato de Confidencialidad y Licencia</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-6 max-w-xl">Cada cliente recibe un contrato legal que garantiza la confidencialidad absoluta de sus datos. Nos comprometemos contractualmente a cero filtraciones. Tus datos se almacenan exclusivamente en servidores privados de AWS con backups cada 7 dias.</p>
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button onClick={downloadContract} variant="outline" className="gap-2.5 font-bold text-xs uppercase tracking-widest h-11 rounded-xl border-2 hover:bg-primary hover:text-primary-foreground transition-colors">
-                    <Download className="size-4" /> Descargar Contrato (PDF)
-                  </Button>
-                </motion.div>
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      <WaveDivider color="fill-primary" />
-
-      {/* CTA */}
-      <section className="relative py-24 px-4 bg-primary text-primary-foreground overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent_60%)]" />
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-white/5 rounded-full blur-[100px] pointer-events-none" />
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="max-w-4xl mx-auto text-center relative z-10">
-          <motion.div variants={popIn}>
-            <div className="flex justify-center gap-1 mb-6">
-              {[...Array(5)].map((_, i) => <Star key={i} className="size-5 fill-white/80 text-white/80" />)}
             </div>
           </motion.div>
-          <motion.h2 variants={fadeIn} className="text-3xl md:text-5xl font-black tracking-tight mb-5">Listo para transformar tu negocio?</motion.h2>
-          <motion.p variants={fadeIn} className="text-primary-foreground/75 max-w-lg mx-auto mb-10 text-sm md:text-base leading-relaxed">Empresas nicaraguenses ya confian en NovaHub ERP para gestionar sus operaciones diarias. Unete a ellas.</motion.p>
-          <motion.div variants={fadeIn} className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <motion.a href="/register" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-              <Button size="lg" className="bg-white text-primary hover:bg-white/90 font-bold text-xs uppercase tracking-widest px-10 h-12 rounded-xl shadow-2xl shadow-black/20 gap-2">
-                Comenzar Ahora <ArrowRight className="size-4" />
-              </Button>
-            </motion.a>
-            <motion.a href="mailto:ventas@novahub.com.ni" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-              <Button size="lg" variant="outline" className="border-2 border-white text-white bg-white/10 hover:bg-white hover:text-primary font-bold text-xs uppercase tracking-widest px-10 h-12 rounded-xl gap-2">
-                <Mail className="size-4" /> Contactar Ventas
-              </Button>
-            </motion.a>
-          </motion.div>
-        </motion.div>
-      </section>
+        )}
+      </AnimatePresence>
+    </header>
+  );
+}
 
-      {/* Footer */}
-      <footer className="py-8 px-4 bg-background">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-foreground">NovaHub ERP</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">&copy; {new Date().getFullYear()} NovaHub. Todos los derechos reservados.</p>
+/* ──────────── HERO ──────────── */
+
+function HeroSection() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
+  const blobY = useTransform(scrollYProgress, [0, 1], [0, 60]);
+
+  return (
+    <section ref={ref} className="relative isolate overflow-hidden bg-white px-5 pb-16 pt-36 sm:px-8 sm:pb-24 lg:px-10 lg:pt-44">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(23,74,58,1) 1px, transparent 1px), linear-gradient(90deg, rgba(23,74,58,1) 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
+      <motion.div style={{ y: blobY }} className="pointer-events-none absolute left-[-10%] top-[-10%] size-[40rem] rounded-full bg-[#22c55e]/10 blur-[140px]" />
+
+      <div className="relative mx-auto max-w-7xl">
+        <div className="mx-auto max-w-3xl text-center">
+          <Reveal>
+            <Kicker>Sistema de gestión empresarial</Kicker>
+            <h1 className="text-[2.5rem] font-black leading-[0.96] tracking-[-0.05em] text-[#174a3a] sm:text-6xl lg:text-[5.5rem]">
+              Un solo sistema para manejar{' '}
+              <span className="text-[#22c55e]">tu negocio completo.</span>
+            </h1>
+            <p className="mx-auto mt-8 max-w-xl text-lg leading-7 text-[#5d7884]">
+              Ventas, inventario, caja y contabilidad en el mismo lugar. Sin hojas de cálculo, sin coordinar por WhatsApp, sin perder datos.
+            </p>
+            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+              <CTA href="#producto">
+                Ver el sistema <ArrowRight className="size-4" />
+              </CTA>
+              <CTA href="#contacto">
+                Hablar con un asesor
+              </CTA>
+            </div>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm font-bold text-[#84a1ad]">
+              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Sin tarjeta de crédito</span>
+              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Soporte en español</span>
+              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Desde USD 600/año</span>
+            </div>
+          </Reveal>
         </div>
-      </footer>
+
+        <Reveal delay={0.15} className="mt-16">
+          <ProductWindow />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function ProductWindow() {
+  return (
+    <div className="relative mx-auto w-full max-w-[960px]">
+      <div className="absolute -inset-8 rounded-[3rem] bg-[#22c55e]/8 blur-[80px]" />
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.9, delay: 0.2, ease }}
+        className="relative overflow-hidden rounded-[18px] border border-[#e0ebe4] bg-[#f8faf9] p-2 shadow-[0_40px_90px_-30px_rgba(34,197,94,.2)] sm:p-3"
+      >
+        <div className="flex items-center justify-between rounded-t-[13px] bg-white px-4 py-3">
+          <div className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full bg-[#f59e9e]" />
+            <span className="size-2.5 rounded-full bg-[#f4c95d]" />
+            <span className="size-2.5 rounded-full bg-[#4acb8d]" />
+          </div>
+          <div className="rounded-full bg-[#f0f7f3] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5d7884]">
+            Sistema en funcionamiento
+          </div>
+        </div>
+        <div className="relative overflow-hidden rounded-b-[13px] bg-white">
+          <img src={facturacionCajaDemo} alt="NovaHub ERP — Sistema de facturación e inventario" className="block h-auto w-full" loading="eager" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-[#22c55e]/5 via-transparent to-white/10" />
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.7, delay: 0.9, ease }}
+        className="absolute -bottom-5 -left-3 hidden rounded-2xl border border-[#d8e3df] bg-white px-5 py-3.5 shadow-xl sm:block"
+      >
+        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#84a1ad]">Conectado</p>
+        <p className="mt-1 text-sm font-bold text-[#174a3a]">Venta → caja → contabilidad</p>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ──────────── SCROLLING BANNER ──────────── */
+
+function ScrollingBanner() {
+  const items = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Restaurant POS', 'Reportes', 'Compras', 'Personas'];
+  return (
+    <div className="relative border-y border-[#e0ebe4] bg-[#f0f7f3] py-4 overflow-hidden">
+      <motion.div className="flex whitespace-nowrap" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}>
+        {[...items, ...items].map((item, i) => (
+          <span key={i} className="mx-8 text-xs font-bold uppercase tracking-[0.16em] text-[#5d7884]">
+            <span className="mr-3 text-[#22c55e]">·</span>{item}
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
+/* ──────────── MOUNTAIN DIVIDER (más visible) ──────────── */
+
+function WaveDivider({ to = '#ffffff', accent = '#a7f3d0', flip = false }: { to?: string; accent?: string; flip?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const x1 = useTransform(scrollYProgress, [0, 1], [0, -60]);
+  const x2 = useTransform(scrollYProgress, [0, 1], [0, 45]);
+
+  return (
+    <div ref={ref} className={`relative z-10 -mb-px h-16 overflow-hidden leading-none sm:h-24 ${flip ? 'rotate-180' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 1440 120" preserveAspectRatio="none" className="block h-full w-full">
+        <motion.path style={{ x: x1 }} d="M-160,58 C180,105 440,12 740,44 C1040,76 1300,22 1600,52 L1600,130 L-160,130 Z" fill={accent} opacity=".35" />
+        <motion.path style={{ x: x2 }} d="M-160,84 C220,116 500,38 780,66 C1060,94 1340,52 1600,76 L1600,130 L-160,130 Z" fill={to} />
+      </svg>
+    </div>
+  );
+}
+
+/* ──────────── PRODUCTO ──────────── */
+
+function ProductSection() {
+  return (
+    <section id="producto" className="relative overflow-hidden bg-white px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
+      <div className="relative mx-auto max-w-7xl">
+        <div className="grid gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
+          <Reveal>
+            <Kicker>La diferencia está en el flujo</Kicker>
+            <Headline className="mt-4 max-w-lg">
+              Todo conectado desde la primera venta.
+            </Headline>
+            <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
+              La operación que ves arriba es la que tu equipo usaría: con sus documentos, sus responsables, sus sucursales y sus números.
+            </p>
+            <a href="#proceso" className="mt-8 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#174a3a] underline decoration-[#22c55e] decoration-2 underline-offset-8 transition-colors hover:text-[#22c55e]">
+              Ver el recorrido <ArrowRight className="size-4" />
+            </a>
+          </Reveal>
+
+          <div className="space-y-0">
+            {[
+              { title: 'Una sola captura', body: 'La información entra una vez y se conserva desde la cotización hasta el cobro.' },
+              { title: 'Una lectura compartida', body: 'Ventas, inventario, caja y contabilidad trabajan con el mismo contexto.' },
+              { title: 'Un control por responsabilidad', body: 'Cada usuario tiene acceso por rol, módulo, empresa, rubro y sucursal.' },
+              { title: 'Una decisión más rápida', body: 'La dirección deja de perseguir datos y empieza a leer la operación.' },
+            ].map((item, i) => (
+              <Reveal key={item.title} delay={i * 0.06}>
+                <div className="group border-t border-[#e0ebe4] py-6 transition-colors hover:border-[#22c55e]">
+                  <h3 className="text-lg font-bold text-[#174a3a]">{item.title}</h3>
+                  <p className="mt-2 max-w-sm text-base leading-6 text-[#5d7884]">{item.body}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── CÓMO FUNCIONA ──────────── */
+
+function ProcessSection() {
+  return (
+    <section id="proceso" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-32">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(34,197,94,1) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,1) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+
+      <div className="relative mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.45fr_1.55fr]">
+        <div className="lg:sticky lg:top-32 lg:h-fit">
+          <Reveal>
+            <Kicker>El recorrido completo</Kicker>
+            <Headline className="mt-4 max-w-sm !text-white">
+              Cada venta alimenta tu inventario, caja y contabilidad.
+            </Headline>
+            <p className="mt-6 max-w-sm text-lg leading-7 text-white/50">
+              Así funciona un sistema cuando todo está conectado.
+            </p>
+            <div className="mt-10 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em] text-white/30">
+              <span className="h-px w-9 bg-[#22c55e]" /> Desliza para avanzar
+            </div>
+          </Reveal>
+        </div>
+
+        <div className="relative space-y-10 sm:space-y-14">
+          <div className="absolute bottom-8 left-4 top-8 w-px bg-gradient-to-b from-transparent via-[#22c55e]/30 to-transparent sm:left-9" />
+
+          {PROCESS_STEPS.map((step, index) => (
+            <Reveal key={step.kicker} delay={index * 0.06}>
+              <article className={`relative max-w-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-sm sm:p-9 ${index % 2 ? 'ml-4 sm:ml-16' : 'mr-4 sm:mr-16'}`}>
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{step.kicker}</p>
+                <h3 className="mt-4 max-w-2xl text-2xl font-black leading-[1.05] tracking-[-0.03em] text-white sm:text-4xl">{step.title}</h3>
+                <p className="mt-4 max-w-xl text-base leading-7 text-white/50">{step.body}</p>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── MÓDULOS ──────────── */
+
+function ModulesSection() {
+  return (
+    <section className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
+      <div className="mx-auto max-w-7xl">
+        <Reveal>
+          <div className="flex flex-col justify-between gap-6 border-b border-white/10 pb-8 sm:flex-row sm:items-end">
+            <div>
+              <Kicker>Módulos que trabajan juntos</Kicker>
+              <Headline className="mt-2 !text-white">
+                Todo conectado.<br className="hidden sm:block" /> Sin trabajo duplicado.
+              </Headline>
+            </div>
+            <p className="max-w-xs text-base leading-6 text-white/50">
+              Activa lo que necesitas hoy. Mañana creces sin cambiar de sistema.
+            </p>
+          </div>
+        </Reveal>
+
+        <div className="mt-10 grid gap-px overflow-hidden border border-white/10 bg-white/5 sm:grid-cols-2 lg:grid-cols-4">
+          {MODULES.map((mod, index) => {
+            const Icon = mod.icon;
+            return (
+              <Reveal key={mod.title} delay={index * 0.04} className="bg-[#0f1a14]">
+                <div className="group h-full p-6 transition-colors hover:bg-white/[0.03]">
+                  <Icon className="size-5 text-[#22c55e]" />
+                  <h3 className="mt-8 text-lg font-bold text-white">{mod.title}</h3>
+                  <p className="mt-3 text-base leading-6 text-white/50">{mod.body}</p>
+                  <div className="mt-6 h-1 w-7 bg-[#22c55e]/30 transition-all group-hover:w-14 group-hover:bg-[#22c55e]" />
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── INDUSTRIAS ──────────── */
+
+function IndustriesSection() {
+  return (
+    <section id="giros" className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
+      <div className="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+        <Reveal>
+          <Kicker>Funciona para tu tipo de negocio</Kicker>
+          <Headline className="mt-4 max-w-md !text-white">
+            No importa cómo vendes. Importa que puedas controlarlo.
+          </Headline>
+          <p className="mt-6 max-w-md text-lg leading-7 text-white/50">
+            Desde una tienda hasta un grupo empresarial con varias sucursales, NovaHub ordena la operación alrededor de tus procesos.
+          </p>
+        </Reveal>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {INDUSTRIES.map((industry, index) => (
+            <Reveal key={industry.title} delay={index * 0.04}>
+              <div className="group relative min-h-[160px] overflow-hidden border border-white/10 bg-white/[0.03] p-6">
+                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rotate-12 border-8 border-white/[0.06]" />
+                <h3 className="text-lg font-bold text-white">{industry.title}</h3>
+                <p className="mt-2 max-w-xs text-base leading-6 text-white/50">{industry.body}</p>
+                <div className="absolute bottom-0 left-0 h-1 w-0 bg-[#22c55e] transition-all duration-300 group-hover:w-full" />
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── PRECIOS ──────────── */
+
+function PricingSection({ currency, setCurrency }: { currency: 'USD' | 'NIO'; setCurrency: (c: 'USD' | 'NIO') => void }) {
+  return (
+    <section id="precios" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-32">
+      <div className="relative mx-auto max-w-7xl">
+        <div className="flex flex-col justify-between gap-8 border-b border-white/10 pb-8 sm:flex-row sm:items-end">
+          <Reveal>
+            <Kicker>Planes claros. Sin sorpresas.</Kicker>
+            <Headline className="mt-2 !text-white">
+              Empieza con lo esencial.<br className="hidden sm:block" /> Crece con la operación.
+            </Headline>
+          </Reveal>
+
+          <div className="flex items-center gap-2 self-start rounded-xl border border-white/10 bg-white/[0.05] p-1">
+            <button type="button" onClick={() => setCurrency('USD')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'USD' ? 'bg-[#22c55e] text-white shadow-md' : 'text-white/40'}`}>
+              USD
+            </button>
+            <button type="button" onClick={() => setCurrency('NIO')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'NIO' ? 'bg-[#22c55e] text-white shadow-md' : 'text-white/40'}`}>
+              NIO
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-10 grid gap-4 lg:grid-cols-3">
+          {PRICES.map((plan, index) => (
+            <Reveal key={plan.title} delay={index * 0.07}>
+              <article className={`relative h-full border p-6 sm:p-8 ${plan.featured ? 'border-[#22c55e] bg-[#22c55e]/[0.08]' : 'border-white/10 bg-white/[0.03]'}`}>
+                {plan.featured && (
+                  <span className="absolute right-5 top-5 rounded-full bg-[#22c55e] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-md">
+                    Popular
+                  </span>
+                )}
+                <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{plan.title}</p>
+                <p className="mt-3 text-base text-white/50">{plan.note}</p>
+                <div className="mt-8 flex items-end gap-2">
+                  <span className="text-5xl font-black tracking-[-0.05em] text-white">{formatPrice(plan.value, currency)}</span>
+                  <span className="mb-1.5 text-base text-white/40">{plan.period}</span>
+                </div>
+                <ul className="mt-8 space-y-3">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5 text-base text-white/60">
+                      <Check className="mt-0.5 size-4 shrink-0 text-[#22c55e]" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                <CTA href="#contacto" variant={plan.featured ? 'solid' : 'soft'} className="mt-8 w-full text-center">
+                  {plan.cta}
+                </CTA>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── CONFIANZA ──────────── */
+
+function TrustSection() {
+  const items = [
+    { icon: ShieldCheck, title: 'Control de acceso', body: 'Cada usuario ve solo lo que le corresponde por rol, módulo y sucursal.' },
+    { icon: LockKeyhole, title: 'Sesiones seguras', body: 'Autenticación y autorización protegidas en cada petición.' },
+    { icon: CircleDollarSign, title: 'Trazabilidad', body: 'Cada movimiento financiero se conecta con documentos, responsables y fechas.' },
+    { icon: Zap, title: 'Monitoreo activo', body: 'Registros y alertas para detectar problemas antes de que crezcan.' },
+  ];
+
+  return (
+    <section id="confianza" className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-14 lg:grid-cols-[0.74fr_1.26fr]">
+          <Reveal>
+            <Kicker>Control total sobre quién ve qué</Kicker>
+            <Headline className="mt-4 max-w-md !text-white">
+              La seguridad se refleja en cada detalle.
+            </Headline>
+            <p className="mt-6 max-w-md text-lg leading-7 text-white/50">
+              Cómo acceden los usuarios, cómo se separan las empresas y cómo se registra cada acción.
+            </p>
+          </Reveal>
+
+          <div className="grid gap-px border border-white/10 bg-white/5 sm:grid-cols-2">
+            {items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="bg-[#0f1a14] p-6 sm:p-8">
+                  <Icon className="size-6 text-[#22c55e]" />
+                  <h3 className="mt-6 text-lg font-bold text-white">{item.title}</h3>
+                  <p className="mt-3 text-base leading-6 text-white/50">{item.body}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── CTA FINAL ──────────── */
+
+function CTASection({ onDownloadContract }: { onDownloadContract: () => void }) {
+  return (
+    <section id="contacto" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 sm:px-8 lg:px-10 lg:py-28">
+      <div className="pointer-events-none absolute -right-32 top-0 size-[30rem] rounded-full bg-[#22c55e]/8 blur-[120px]" />
+
+      <div className="relative mx-auto flex max-w-7xl flex-col justify-between gap-10 lg:flex-row lg:items-end">
+        <Reveal>
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#22c55e]">Siguiente paso</p>
+          <h2 className="mt-4 max-w-3xl text-4xl font-black leading-[0.96] tracking-[-0.05em] text-white sm:text-6xl">
+            Agenda una demostración con nuestro equipo.
+          </h2>
+          <p className="mt-5 max-w-xl text-lg leading-7 text-white/50">
+            Revisamos el flujo que tu empresa necesita ordenar primero.
+          </p>
+        </Reveal>
+
+        <div className="flex flex-col gap-4 sm:flex-row lg:flex-col">
+          <CTA href="/register">
+            Solicitar demostración <ArrowRight className="size-4" />
+          </CTA>
+          <button type="button" onClick={onDownloadContract} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white">
+            <FileText className="size-4" /> Descargar contrato modelo
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ──────────── FOOTER ──────────── */
+
+function Footer() {
+  return (
+    <footer className="bg-[#0a1210] px-5 py-12 text-white sm:px-8 lg:px-10">
+      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 sm:flex-row sm:items-end">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <NovaHubLogo size={30} />
+            <span className="flex flex-col leading-none">
+              <span className="text-[16px] font-black tracking-[-0.04em] text-white">Nova<span className="text-[#22c55e]">Hub</span></span>
+              <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white/40">ERP Platform</span>
+            </span>
+          </div>
+          <p className="mt-5 max-w-sm text-sm leading-5 text-white/40">
+            Una forma más clara de vender, controlar y hacer crecer tu empresa.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-3 text-xs font-bold uppercase tracking-[0.1em] text-white/35">
+          <a href="/login" className="transition-colors hover:text-[#22c55e]">Iniciar sesión</a>
+          <a href="/register" className="transition-colors hover:text-[#22c55e]">Crear cuenta</a>
+          <a href="#precios" className="transition-colors hover:text-[#22c55e]">Precios</a>
+          <a href="#contacto" className="transition-colors hover:text-[#22c55e]">Contacto</a>
+          <span>© {new Date().getFullYear()} NovaHub</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* ──────────── MOBILE STICKY CTA ──────────── */
+
+function MobileStickyCTA() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 500);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          transition={{ duration: 0.3, ease }}
+          className="fixed bottom-0 inset-x-0 z-50 border-t border-[#e0ebe4] bg-white/95 px-5 py-3 shadow-[0_-10px_40px_-15px_rgba(23,74,58,.1)] backdrop-blur-xl lg:hidden"
+        >
+          <CTA href="#contacto" className="w-full text-center">
+            Solicitar demostración
+          </CTA>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ──────────── CONTRACT PDF ──────────── */
+
+function downloadContract() {
+  void import('jspdf').then(({ jsPDF }) => {
+    const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+    const width = doc.internal.pageSize.getWidth();
+    const height = doc.internal.pageSize.getHeight();
+    const margin = 22;
+    let y = 48;
+    const green = [34, 197, 94] as const;
+    const forest = [23, 74, 58] as const;
+    const body = [71, 92, 99] as const;
+    const footer = () => { doc.setDrawColor(...green); doc.line(margin, height - 17, width - margin, height - 17); doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(120, 135, 137); doc.text('NovaHub ERP · Modelo comercial sujeto a revisión y firma de las partes.', width / 2, height - 11, { align: 'center' }); };
+    const header = () => { doc.setFillColor(23, 74, 58); doc.rect(0, 0, width, 34, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(255, 255, 255); doc.text('NOVAHUB', margin, 22); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(190, 225, 205); doc.text('ERP PLATFORM · MODELO SAAS', margin + 48, 22); doc.setFillColor(...green); doc.rect(0, 34, width, 1.5, 'F'); };
+    const nextPage = () => { footer(); doc.addPage(); header(); y = 51; };
+    const ensure = (space: number) => { if (y + space > height - 26) nextPage(); };
+    const heading = (text: string) => { ensure(16); doc.setFillColor(231, 245, 235); doc.roundedRect(margin, y - 5, width - margin * 2, 9, 1.5, 1.5, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...forest); doc.text(text.toUpperCase(), margin + 4, y + 1); y += 13; };
+    const paragraph = (text: string) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...body); const lines = doc.splitTextToSize(text, width - margin * 2); ensure(lines.length * 4.5 + 6); lines.forEach((line: string) => { doc.text(line, margin, y); y += 4.5; }); y += 4; };
+    header(); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...forest); doc.text('CONTRATO DE LICENCIA DE USO DE SOFTWARE', width / 2, y, { align: 'center' }); y += 8; doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...body); doc.text('Modelo Software como Servicio (SaaS)', width / 2, y, { align: 'center' }); y += 14;
+    heading('I. Partes contratantes'); paragraph('EL PROVEEDOR: NovaHub, empresa de tecnología y software. EL CLIENTE: la persona natural o jurídica que suscribe el documento.');
+    ['Razón social / nombre', 'RUC / cédula', 'Representante legal', 'Correo electrónico', 'Dirección', 'Teléfono'].forEach((label) => { ensure(9); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...body); doc.text(`${label}:`, margin, y); doc.line(margin + 42, y + 0.5, width - margin, y + 0.5); y += 8; });
+    heading('II. Objeto y licencia'); paragraph('EL PROVEEDOR otorga a EL CLIENTE una licencia de uso no exclusiva, intransferible y limitada del NovaHub ERP para sus operaciones internas, conforme al plan, módulos y usuarios contratados.');
+    heading('III. Precio y forma de pago'); paragraph('Los precios de referencia se detallan en la cotización vigente. La propuesta final, impuestos, implementación, equipos, alcance y forma de pago serán confirmados por escrito antes de la activación.');
+    [['Plan base', 'USD 600 / año'], ['Contabilidad', 'USD 100 / mes'], ['Recursos humanos', 'USD 85 / mes'], ['Usuario adicional', 'USD 5 / mes'], ['Implementación', 'USD 200 / pago único'], ['Dominio, hosting y 5 correos', 'USD 100 / año']].forEach(([label, value]) => { ensure(7); doc.setFontSize(8.5); doc.text(`• ${label}`, margin + 4, y); doc.setFont('helvetica', 'bold'); doc.text(value, width - margin, y, { align: 'right' }); doc.setFont('helvetica', 'normal'); y += 5.5; }); y += 4;
+    heading('IV. Seguridad, confidencialidad y datos'); paragraph('Las partes tratarán como confidencial la información a la que tengan acceso. NovaHub aplicará controles de autenticación, autorización, separación por empresa y medidas técnicas razonables para proteger la información.');
+    heading('V. Implementación y soporte'); paragraph('La implementación puede incluir configuración inicial, carga de catálogos, permisos, capacitación y acompañamiento. El soporte cubre incidencias técnicas y consultas de uso según el horario y nivel contratado.');
+    heading('VI. Vigencia y aceptación'); paragraph('La vigencia, renovación, terminación y exportación de información se determinarán en la propuesta aceptada. Este archivo es un modelo comercial descargable y no sustituye asesoría legal.');
+    ensure(32); y += 10; doc.line(margin, y, margin + 70, y); doc.line(width - margin - 70, y, width - margin, y); y += 5; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text('EL PROVEEDOR', margin + 35, y, { align: 'center' }); doc.text('EL CLIENTE', width - margin - 35, y, { align: 'center' }); footer(); doc.save('Contrato_Licencia_NovaHub_ERP.pdf');
+  });
+}
+
+/* ──────────── MAIN ──────────── */
+
+export default function LandingPage() {
+  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD');
+
+  return (
+    <div className="min-h-screen overflow-x-hidden bg-white text-[#174a3a] antialiased selection:bg-[#22c55e]/20 selection:text-[#174a3a]">
+      <Header />
+
+      <main>
+        <HeroSection />
+        <ScrollingBanner />
+        <WaveDivider />
+        <ProductSection />
+        <WaveDivider to="#0f1a14" accent="#22c55e" />
+        <ProcessSection />
+        <ModulesSection />
+        <IndustriesSection />
+        <PricingSection currency={currency} setCurrency={setCurrency} />
+        <TrustSection />
+        <CTASection onDownloadContract={downloadContract} />
+      </main>
+
+      <Footer />
+      <MobileStickyCTA />
     </div>
   );
 }
