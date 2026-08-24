@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png';
 import { NovaHubLogo } from './NovaHubLogo';
+import { LandingChatModal } from './LandingChatModal';
 
 const EXCHANGE_RATE = 36.5;
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -68,7 +69,7 @@ const PRICES = [
     note: '10 módulos incluidos con 5 usuarios',
     features: ['Inventario', 'Ventas', 'Compras', 'Caja', 'Finanzas', 'Reportes', 'Actividades', 'Herramientas', 'Tickets', 'Conocimiento'],
     featured: false,
-    cta: 'Comenzar',
+    cta: 'Empezar ahora',
   },
   {
     title: 'Contabilidad',
@@ -77,7 +78,7 @@ const PRICES = [
     note: 'Contabilidad completa para tu empresa',
     features: ['Plan de cuentas', 'Asientos contables', 'Balance general', 'Estado de resultados', 'Conciliación bancaria', 'Reportes fiscales', 'IVA / IR automático', 'Cuentas por pagar/cobrar'],
     featured: true,
-    cta: 'Agregar módulo',
+    cta: 'Lo quiero',
   },
   {
     title: 'RRHH',
@@ -86,12 +87,17 @@ const PRICES = [
     note: 'Gestión completa de Recursos Humanos',
     features: ['Nómina Nicaragua (INSS/IR)', 'Control de asistencia', 'Vacaciones y permisos', 'Evaluaciones de desempeño', 'Capacitaciones', 'KPIs y métricas', 'Dashboard RRHH', 'Empleados y departamentos'],
     featured: false,
-    cta: 'Agregar módulo',
+    cta: 'Agregar a mi plan',
   },
 ];
 
 function formatPrice(value: number, currency: 'USD' | 'NIO') {
   return currency === 'NIO' ? `C$${(value * EXCHANGE_RATE).toLocaleString('es-NI')}` : `$${value.toLocaleString('en-US')}`;
+}
+
+function planWhatsAppHref(title: string) {
+  const message = encodeURIComponent(`Hola, me interesa el plan ${title} de NovaHub ERP`);
+  return `https://wa.me/50588241003?text=${message}`;
 }
 
 /* ──────────── REUSABLE ──────────── */
@@ -208,8 +214,8 @@ function Header() {
                 <a href="/login" onClick={closeMenu} className="rounded-xl px-4 py-3.5 text-center text-sm font-bold text-[#5d7884]">
                   Iniciar sesión
                 </a>
-                <CTA href="#contacto" className="w-full text-center">
-                  Solicitar demostración
+                <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP" className="w-full text-center">
+                  Agendar llamada
                 </CTA>
               </div>
             </div>
@@ -228,11 +234,11 @@ function HeroSection() {
   const blobY = useTransform(scrollYProgress, [0, 1], [0, 60]);
 
   return (
-    <section ref={ref} className="relative isolate overflow-hidden bg-white px-5 pb-16 pt-36 sm:px-8 sm:pb-24 lg:px-10 lg:pt-44">
+    <section ref={ref} className="relative isolate overflow-hidden bg-white px-5 pt-36 sm:px-8 lg:px-10 lg:pt-44">
       <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(23,74,58,1) 1px, transparent 1px), linear-gradient(90deg, rgba(23,74,58,1) 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
       <motion.div style={{ y: blobY }} className="pointer-events-none absolute left-[-10%] top-[-10%] size-[40rem] rounded-full bg-[#22c55e]/10 blur-[140px]" />
 
-      <div className="relative mx-auto max-w-7xl">
+      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
         <div className="mx-auto max-w-3xl text-center">
           <Reveal>
             <Kicker>Sistema de gestión empresarial</Kicker>
@@ -244,17 +250,17 @@ function HeroSection() {
               Ventas, inventario, caja y contabilidad en el mismo lugar. Sin hojas de cálculo, sin coordinar por WhatsApp, sin perder datos.
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <CTA href="#producto">
-                Ver el sistema <ArrowRight className="size-4" />
+              <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP">
+                Agendar llamada <ArrowRight className="size-4" />
               </CTA>
-              <CTA href="#contacto">
-                Hablar con un asesor
+              <CTA href="#precios" variant="soft">
+                Ver precios
               </CTA>
             </div>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm font-bold text-[#84a1ad]">
               <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Sin tarjeta de crédito</span>
               <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Soporte en español</span>
-              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Desde USD 600/año</span>
+              <span className="flex items-center gap-2"><Check className="size-4 text-[#22c55e]" /> Desde $600/año</span>
             </div>
           </Reveal>
         </div>
@@ -263,6 +269,7 @@ function HeroSection() {
           <ProductWindow />
         </Reveal>
       </div>
+      <WaveHero />
     </section>
   );
 }
@@ -283,7 +290,7 @@ function ProductWindow() {
             <span className="size-2.5 rounded-full bg-[#f4c95d]" />
             <span className="size-2.5 rounded-full bg-[#4acb8d]" />
           </div>
-          <div className="rounded-full bg-[#f0f7f3] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5d7884]">
+          <div className="rounded-full bg-[#f0fdf4] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5d7884]">
             Sistema en funcionamiento
           </div>
         </div>
@@ -311,42 +318,79 @@ function ProductWindow() {
 function ScrollingBanner() {
   const items = ['Ventas', 'Inventario', 'Caja', 'Contabilidad', 'Restaurant POS', 'Reportes', 'Compras', 'Personas'];
   return (
-    <div className="relative border-y border-[#e0ebe4] bg-[#f0f7f3] py-4 overflow-hidden">
-      <motion.div className="flex whitespace-nowrap" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}>
-        {[...items, ...items].map((item, i) => (
-          <span key={i} className="mx-8 text-xs font-bold uppercase tracking-[0.16em] text-[#5d7884]">
-            <span className="mr-3 text-[#22c55e]">·</span>{item}
-          </span>
+    <div className="relative overflow-hidden border-t border-[#d1fae5] bg-[#f0fdf4] pt-5">
+      <motion.div className="flex w-max whitespace-nowrap" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 45, repeat: Infinity, ease: 'linear' }}>
+        {[0, 1].map((copy) => (
+          <div key={copy} className="flex items-center" aria-hidden={copy === 1}>
+            {items.map((item) => (
+              <span key={item} className="flex items-center text-xs font-bold uppercase tracking-[0.18em] text-[#5d7884]">
+                <span className="mx-7">{item}</span>
+                <span className="text-[#22c55e]">✦</span>
+              </span>
+            ))}
+            <span className="flex items-center text-xs font-black uppercase tracking-[0.18em] text-[#22c55e]">
+              <span className="mx-7">NovaHub ERP</span>
+              <span>✦</span>
+            </span>
+          </div>
         ))}
       </motion.div>
+      <WaveBanner />
     </div>
   );
 }
 
-/* ──────────── MOUNTAIN DIVIDER (más visible) ──────────── */
+/* ──────────── WAVE DIVIDERS — dos capas, sin franja posterior ──────────── */
 
-function WaveDivider({ to = '#ffffff', accent = '#a7f3d0', flip = false }: { to?: string; accent?: string; flip?: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const x1 = useTransform(scrollYProgress, [0, 1], [0, -60]);
-  const x2 = useTransform(scrollYProgress, [0, 1], [0, 45]);
+type WaveDestination = '#f0fdf4' | '#ffffff' | '#174a3a';
+type WaveShape = 'hero' | 'banner' | 'process' | 'standard';
 
+const WAVE_SHAPES: Record<WaveShape, { green: string; destination: string }> = {
+  hero: {
+    green: 'M0 42 C150 4 300 26 450 54 C610 84 760 12 920 38 C1080 64 1240 62 1440 20 L1440 140 L0 140 Z',
+    destination: 'M0 96 C150 58 300 80 450 108 C610 136 760 66 920 92 C1080 118 1240 116 1440 74 L1440 140 L0 140 Z',
+  },
+  banner: {
+    green: 'M0 34 C180 82 360 6 540 48 C720 90 900 18 1080 58 C1240 94 1360 24 1440 42 L1440 140 L0 140 Z',
+    destination: 'M0 94 C180 132 360 56 540 98 C720 136 900 68 1080 108 C1240 140 1360 74 1440 92 L1440 140 L0 140 Z',
+  },
+  process: {
+    green: 'M0 30 C120 74 240 4 360 38 C480 72 600 8 720 42 C840 76 960 10 1080 44 C1200 78 1320 12 1440 40 L1440 140 L0 140 Z',
+    destination: 'M0 92 C120 128 240 58 360 96 C480 130 600 66 720 100 C840 134 960 68 1080 102 C1200 136 1320 70 1440 98 L1440 140 L0 140 Z',
+  },
+  standard: {
+    green: 'M0 38 C160 0 320 28 480 54 C640 80 800 16 960 42 C1120 68 1280 64 1440 24 L1440 140 L0 140 Z',
+    destination: 'M0 96 C160 60 320 88 480 112 C640 136 800 72 960 98 C1120 124 1280 120 1440 82 L1440 140 L0 140 Z',
+  },
+};
+
+function WaveDivider({ destination, shape = 'standard', bleed = false }: { destination: WaveDestination; shape?: WaveShape; bleed?: boolean }) {
+  const paths = WAVE_SHAPES[shape];
   return (
-    <div ref={ref} className={`relative z-10 -mb-px h-16 overflow-hidden leading-none sm:h-24 ${flip ? 'rotate-180' : ''}`} aria-hidden="true">
-      <svg viewBox="0 0 1440 120" preserveAspectRatio="none" className="block h-full w-full">
-        <motion.path style={{ x: x1 }} d="M-160,58 C180,105 440,12 740,44 C1040,76 1300,22 1600,52 L1600,130 L-160,130 Z" fill={accent} opacity=".35" />
-        <motion.path style={{ x: x2 }} d="M-160,84 C220,116 500,38 780,66 C1060,94 1340,52 1600,76 L1600,130 L-160,130 Z" fill={to} />
+    <div className={`relative -mt-px h-20 overflow-hidden leading-none sm:h-32 ${bleed ? '-mx-5 sm:-mx-8 lg:-mx-10' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 1440 140" preserveAspectRatio="none" className="block h-full w-full">
+        <path d={paths.green} fill="#22c55e" />
+        <path d={paths.destination} fill={destination} />
       </svg>
     </div>
   );
 }
 
+function WaveHero() { return <WaveDivider destination="#f0fdf4" shape="hero" bleed />; }
+function WaveBanner() { return <WaveDivider destination="#ffffff" shape="banner" />; }
+function WaveProduct() { return <WaveDivider destination="#f0fdf4" bleed />; }
+function WaveProcess() { return <WaveDivider destination="#ffffff" shape="process" bleed />; }
+function WaveModules() { return <WaveDivider destination="#f0fdf4" bleed />; }
+function WaveIndustries() { return <WaveDivider destination="#ffffff" shape="banner" bleed />; }
+function WavePricing() { return <WaveDivider destination="#f0fdf4" shape="process" bleed />; }
+function WaveTrust() { return <WaveDivider destination="#174a3a" shape="hero" bleed />; }
+
 /* ──────────── PRODUCTO ──────────── */
 
 function ProductSection() {
   return (
-    <section id="producto" className="relative overflow-hidden bg-white px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
-      <div className="relative mx-auto max-w-7xl">
+    <section id="producto" className="relative overflow-hidden bg-white px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
+      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
         <div className="grid gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
           <Reveal>
             <Kicker>La diferencia está en el flujo</Kicker>
@@ -378,6 +422,7 @@ function ProductSection() {
           </div>
         </div>
       </div>
+      <WaveProduct />
     </section>
   );
 }
@@ -386,20 +431,20 @@ function ProductSection() {
 
 function ProcessSection() {
   return (
-    <section id="proceso" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-32">
+    <section id="proceso" className="relative overflow-hidden bg-[#f0fdf4] px-5 pt-24 text-[#174a3a] sm:px-8 lg:px-10 lg:pt-32">
       <div className="pointer-events-none absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(34,197,94,1) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,1) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
 
-      <div className="relative mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.45fr_1.55fr]">
+      <div className="relative mx-auto grid max-w-7xl gap-14 pb-12 lg:grid-cols-[0.45fr_1.55fr] lg:pb-16">
         <div className="lg:sticky lg:top-32 lg:h-fit">
           <Reveal>
             <Kicker>El recorrido completo</Kicker>
-            <Headline className="mt-4 max-w-sm !text-white">
+            <Headline className="mt-4 max-w-sm">
               Cada venta alimenta tu inventario, caja y contabilidad.
             </Headline>
-            <p className="mt-6 max-w-sm text-lg leading-7 text-white/50">
+            <p className="mt-6 max-w-sm text-lg leading-7 text-[#5d7884]">
               Así funciona un sistema cuando todo está conectado.
             </p>
-            <div className="mt-10 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em] text-white/30">
+            <div className="mt-10 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em] text-[#84a1ad]">
               <span className="h-px w-9 bg-[#22c55e]" /> Desliza para avanzar
             </div>
           </Reveal>
@@ -410,15 +455,16 @@ function ProcessSection() {
 
           {PROCESS_STEPS.map((step, index) => (
             <Reveal key={step.kicker} delay={index * 0.06}>
-              <article className={`relative max-w-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-sm sm:p-9 ${index % 2 ? 'ml-4 sm:ml-16' : 'mr-4 sm:mr-16'}`}>
+              <article className={`relative max-w-2xl border border-[#d1fae5] bg-white p-6 shadow-[0_24px_60px_-45px_rgba(34,197,94,.15)] sm:p-9 ${index % 2 ? 'ml-4 sm:ml-16' : 'mr-4 sm:mr-16'}`}>
                 <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{step.kicker}</p>
-                <h3 className="mt-4 max-w-2xl text-2xl font-black leading-[1.05] tracking-[-0.03em] text-white sm:text-4xl">{step.title}</h3>
-                <p className="mt-4 max-w-xl text-base leading-7 text-white/50">{step.body}</p>
+                <h3 className="mt-4 max-w-2xl text-2xl font-black leading-[1.05] tracking-[-0.03em] text-[#174a3a] sm:text-4xl">{step.title}</h3>
+                <p className="mt-4 max-w-xl text-base leading-7 text-[#5d7884]">{step.body}</p>
               </article>
             </Reveal>
           ))}
         </div>
       </div>
+      <WaveProcess />
     </section>
   );
 }
@@ -427,38 +473,39 @@ function ProcessSection() {
 
 function ModulesSection() {
   return (
-    <section className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
-      <div className="mx-auto max-w-7xl">
+    <section className="bg-white px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
+      <div className="mx-auto max-w-7xl pb-12 lg:pb-16">
         <Reveal>
-          <div className="flex flex-col justify-between gap-6 border-b border-white/10 pb-8 sm:flex-row sm:items-end">
+          <div className="flex flex-col justify-between gap-6 border-b border-[#e0ebe4] pb-8 sm:flex-row sm:items-end">
             <div>
               <Kicker>Módulos que trabajan juntos</Kicker>
-              <Headline className="mt-2 !text-white">
+              <Headline className="mt-2">
                 Todo conectado.<br className="hidden sm:block" /> Sin trabajo duplicado.
               </Headline>
             </div>
-            <p className="max-w-xs text-base leading-6 text-white/50">
+            <p className="max-w-xs text-base leading-6 text-[#5d7884]">
               Activa lo que necesitas hoy. Mañana creces sin cambiar de sistema.
             </p>
           </div>
         </Reveal>
 
-        <div className="mt-10 grid gap-px overflow-hidden border border-white/10 bg-white/5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-px overflow-hidden border border-[#e0ebe4] bg-[#e0ebe4] sm:grid-cols-2 lg:grid-cols-4">
           {MODULES.map((mod, index) => {
             const Icon = mod.icon;
             return (
-              <Reveal key={mod.title} delay={index * 0.04} className="bg-[#0f1a14]">
-                <div className="group h-full p-6 transition-colors hover:bg-white/[0.03]">
+              <Reveal key={mod.title} delay={index * 0.04} className="bg-white">
+                <div className="group h-full p-6 transition-colors hover:bg-[#f0fdf4]">
                   <Icon className="size-5 text-[#22c55e]" />
-                  <h3 className="mt-8 text-lg font-bold text-white">{mod.title}</h3>
-                  <p className="mt-3 text-base leading-6 text-white/50">{mod.body}</p>
-                  <div className="mt-6 h-1 w-7 bg-[#22c55e]/30 transition-all group-hover:w-14 group-hover:bg-[#22c55e]" />
+                  <h3 className="mt-8 text-lg font-bold text-[#174a3a]">{mod.title}</h3>
+                  <p className="mt-3 text-base leading-6 text-[#5d7884]">{mod.body}</p>
+                  <div className="mt-6 h-1 w-7 bg-[#22c55e]/25 transition-all group-hover:w-14 group-hover:bg-[#22c55e]" />
                 </div>
               </Reveal>
             );
           })}
         </div>
       </div>
+      <WaveModules />
     </section>
   );
 }
@@ -467,14 +514,14 @@ function ModulesSection() {
 
 function IndustriesSection() {
   return (
-    <section id="giros" className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
-      <div className="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+    <section id="giros" className="bg-[#f0fdf4] px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
+      <div className="mx-auto grid max-w-7xl gap-14 pb-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start lg:pb-16">
         <Reveal>
           <Kicker>Funciona para tu tipo de negocio</Kicker>
-          <Headline className="mt-4 max-w-md !text-white">
+          <Headline className="mt-4 max-w-md">
             No importa cómo vendes. Importa que puedas controlarlo.
           </Headline>
-          <p className="mt-6 max-w-md text-lg leading-7 text-white/50">
+          <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
             Desde una tienda hasta un grupo empresarial con varias sucursales, NovaHub ordena la operación alrededor de tus procesos.
           </p>
         </Reveal>
@@ -482,16 +529,17 @@ function IndustriesSection() {
         <div className="grid gap-3 sm:grid-cols-2">
           {INDUSTRIES.map((industry, index) => (
             <Reveal key={industry.title} delay={index * 0.04}>
-              <div className="group relative min-h-[160px] overflow-hidden border border-white/10 bg-white/[0.03] p-6">
-                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rotate-12 border-8 border-white/[0.06]" />
-                <h3 className="text-lg font-bold text-white">{industry.title}</h3>
-                <p className="mt-2 max-w-xs text-base leading-6 text-white/50">{industry.body}</p>
+              <div className="group relative min-h-[160px] overflow-hidden border border-[#d1fae5] bg-white p-6 shadow-[0_20px_50px_-40px_rgba(34,197,94,.12)]">
+                <div className="pointer-events-none absolute -right-8 -top-8 size-24 rotate-12 border-8 border-[#d1fae5]/50" />
+                <h3 className="text-lg font-bold text-[#174a3a]">{industry.title}</h3>
+                <p className="mt-2 max-w-xs text-base leading-6 text-[#5d7884]">{industry.body}</p>
                 <div className="absolute bottom-0 left-0 h-1 w-0 bg-[#22c55e] transition-all duration-300 group-hover:w-full" />
               </div>
             </Reveal>
           ))}
         </div>
       </div>
+      <WaveIndustries />
     </section>
   );
 }
@@ -500,21 +548,21 @@ function IndustriesSection() {
 
 function PricingSection({ currency, setCurrency }: { currency: 'USD' | 'NIO'; setCurrency: (c: 'USD' | 'NIO') => void }) {
   return (
-    <section id="precios" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 text-white sm:px-8 lg:px-10 lg:py-32">
-      <div className="relative mx-auto max-w-7xl">
-        <div className="flex flex-col justify-between gap-8 border-b border-white/10 pb-8 sm:flex-row sm:items-end">
+    <section id="precios" className="relative overflow-hidden bg-white px-5 pt-24 text-[#174a3a] sm:px-8 lg:px-10 lg:pt-32">
+      <div className="relative mx-auto max-w-7xl pb-12 lg:pb-16">
+        <div className="flex flex-col justify-between gap-8 border-b border-[#e0ebe4] pb-8 sm:flex-row sm:items-end">
           <Reveal>
             <Kicker>Planes claros. Sin sorpresas.</Kicker>
-            <Headline className="mt-2 !text-white">
+            <Headline className="mt-2">
               Empieza con lo esencial.<br className="hidden sm:block" /> Crece con la operación.
             </Headline>
           </Reveal>
 
-          <div className="flex items-center gap-2 self-start rounded-xl border border-white/10 bg-white/[0.05] p-1">
-            <button type="button" onClick={() => setCurrency('USD')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'USD' ? 'bg-[#22c55e] text-white shadow-md' : 'text-white/40'}`}>
+          <div className="flex items-center gap-2 self-start rounded-xl border border-[#e0ebe4] bg-[#f0fdf4] p-1">
+            <button type="button" onClick={() => setCurrency('USD')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'USD' ? 'bg-[#22c55e] text-white shadow-md' : 'text-[#6a8490]'}`}>
               USD
             </button>
-            <button type="button" onClick={() => setCurrency('NIO')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'NIO' ? 'bg-[#22c55e] text-white shadow-md' : 'text-white/40'}`}>
+            <button type="button" onClick={() => setCurrency('NIO')} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-all ${currency === 'NIO' ? 'bg-[#22c55e] text-white shadow-md' : 'text-[#6a8490]'}`}>
               NIO
             </button>
           </div>
@@ -523,26 +571,26 @@ function PricingSection({ currency, setCurrency }: { currency: 'USD' | 'NIO'; se
         <div className="mt-10 grid gap-4 lg:grid-cols-3">
           {PRICES.map((plan, index) => (
             <Reveal key={plan.title} delay={index * 0.07}>
-              <article className={`relative h-full border p-6 sm:p-8 ${plan.featured ? 'border-[#22c55e] bg-[#22c55e]/[0.08]' : 'border-white/10 bg-white/[0.03]'}`}>
+              <article className={`relative h-full border p-6 sm:p-8 ${plan.featured ? 'border-[#22c55e] bg-[#f0fdf4]' : 'border-[#e0ebe4] bg-white'}`}>
                 {plan.featured && (
                   <span className="absolute right-5 top-5 rounded-full bg-[#22c55e] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-md">
                     Popular
                   </span>
                 )}
                 <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#22c55e]">{plan.title}</p>
-                <p className="mt-3 text-base text-white/50">{plan.note}</p>
+                <p className="mt-3 text-base text-[#5d7884]">{plan.note}</p>
                 <div className="mt-8 flex items-end gap-2">
-                  <span className="text-5xl font-black tracking-[-0.05em] text-white">{formatPrice(plan.value, currency)}</span>
-                  <span className="mb-1.5 text-base text-white/40">{plan.period}</span>
+                  <span className="text-5xl font-black tracking-[-0.05em] text-[#174a3a]">{formatPrice(plan.value, currency)}</span>
+                  <span className="mb-1.5 text-base text-[#5d7884]">{plan.period}</span>
                 </div>
                 <ul className="mt-8 space-y-3">
                   {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-base text-white/60">
+                    <li key={f} className="flex items-start gap-2.5 text-base text-[#5d7884]">
                       <Check className="mt-0.5 size-4 shrink-0 text-[#22c55e]" /> {f}
                     </li>
                   ))}
                 </ul>
-                <CTA href="#contacto" variant={plan.featured ? 'solid' : 'soft'} className="mt-8 w-full text-center">
+                <CTA href={planWhatsAppHref(plan.title)} variant={plan.featured ? 'solid' : 'soft'} className="mt-8 w-full text-center">
                   {plan.cta}
                 </CTA>
               </article>
@@ -550,6 +598,7 @@ function PricingSection({ currency, setCurrency }: { currency: 'USD' | 'NIO'; se
           ))}
         </div>
       </div>
+      <WavePricing />
     </section>
   );
 }
@@ -565,33 +614,34 @@ function TrustSection() {
   ];
 
   return (
-    <section id="confianza" className="bg-[#0f1a14] px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
-      <div className="mx-auto max-w-7xl">
+    <section id="confianza" className="bg-[#f0fdf4] px-5 pt-24 sm:px-8 lg:px-10 lg:pt-32">
+      <div className="mx-auto max-w-7xl pb-12 lg:pb-16">
         <div className="grid gap-14 lg:grid-cols-[0.74fr_1.26fr]">
           <Reveal>
             <Kicker>Control total sobre quién ve qué</Kicker>
-            <Headline className="mt-4 max-w-md !text-white">
+            <Headline className="mt-4 max-w-md">
               La seguridad se refleja en cada detalle.
             </Headline>
-            <p className="mt-6 max-w-md text-lg leading-7 text-white/50">
+            <p className="mt-6 max-w-md text-lg leading-7 text-[#5d7884]">
               Cómo acceden los usuarios, cómo se separan las empresas y cómo se registra cada acción.
             </p>
           </Reveal>
 
-          <div className="grid gap-px border border-white/10 bg-white/5 sm:grid-cols-2">
+          <div className="grid gap-px border border-[#d1fae5] bg-[#d1fae5] sm:grid-cols-2">
             {items.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="bg-[#0f1a14] p-6 sm:p-8">
+                <div key={item.title} className="bg-[#f0fdf4] p-6 sm:p-8">
                   <Icon className="size-6 text-[#22c55e]" />
-                  <h3 className="mt-6 text-lg font-bold text-white">{item.title}</h3>
-                  <p className="mt-3 text-base leading-6 text-white/50">{item.body}</p>
+                  <h3 className="mt-6 text-lg font-bold text-[#174a3a]">{item.title}</h3>
+                  <p className="mt-3 text-base leading-6 text-[#5d7884]">{item.body}</p>
                 </div>
               );
             })}
           </div>
         </div>
       </div>
+      <WaveTrust />
     </section>
   );
 }
@@ -600,25 +650,25 @@ function TrustSection() {
 
 function CTASection({ onDownloadContract }: { onDownloadContract: () => void }) {
   return (
-    <section id="contacto" className="relative overflow-hidden bg-[#0f1a14] px-5 py-24 sm:px-8 lg:px-10 lg:py-28">
-      <div className="pointer-events-none absolute -right-32 top-0 size-[30rem] rounded-full bg-[#22c55e]/8 blur-[120px]" />
+    <section id="contacto" className="relative overflow-hidden bg-[#174a3a] px-5 pt-24 pb-12 sm:px-8 lg:px-10 lg:pt-32 lg:pb-16">
+      <div className="pointer-events-none absolute -right-32 top-0 size-[30rem] rounded-full bg-[#22c55e]/10 blur-[120px]" />
 
       <div className="relative mx-auto flex max-w-7xl flex-col justify-between gap-10 lg:flex-row lg:items-end">
         <Reveal>
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#22c55e]">Siguiente paso</p>
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#22c55e]">No esperes más</p>
           <h2 className="mt-4 max-w-3xl text-4xl font-black leading-[0.96] tracking-[-0.05em] text-white sm:text-6xl">
-            Agenda una demostración con nuestro equipo.
+            Tu negocio merece un sistema que funcione.
           </h2>
-          <p className="mt-5 max-w-xl text-lg leading-7 text-white/50">
-            Revisamos el flujo que tu empresa necesita ordenar primero.
+          <p className="mt-5 max-w-xl text-lg leading-7 text-white/60">
+            Agenda una demo y te mostramos cómo NovaHub ordena tu operación en minutos.
           </p>
         </Reveal>
 
         <div className="flex flex-col gap-4 sm:flex-row lg:flex-col">
-          <CTA href="/register">
-            Solicitar demostración <ArrowRight className="size-4" />
+          <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP">
+            Agendar llamada ahora <ArrowRight className="size-4" />
           </CTA>
-          <button type="button" onClick={onDownloadContract} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white/40 transition-colors hover:text-white">
+          <button type="button" onClick={onDownloadContract} className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white/50 transition-colors hover:text-white">
             <FileText className="size-4" /> Descargar contrato modelo
           </button>
         </div>
@@ -631,26 +681,65 @@ function CTASection({ onDownloadContract }: { onDownloadContract: () => void }) 
 
 function Footer() {
   return (
-    <footer className="bg-[#0a1210] px-5 py-12 text-white sm:px-8 lg:px-10">
-      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 sm:flex-row sm:items-end">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <NovaHubLogo size={30} />
-            <span className="flex flex-col leading-none">
-              <span className="text-[16px] font-black tracking-[-0.04em] text-white">Nova<span className="text-[#22c55e]">Hub</span></span>
-              <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white/40">ERP Platform</span>
-            </span>
+    <footer className="bg-[#0d1f1a] px-5 pt-16 pb-10 text-white sm:px-8 lg:px-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr_1fr]">
+          {/* Marca */}
+          <div>
+            <div className="flex items-center gap-2.5">
+              <NovaHubLogo size={30} />
+              <span className="flex flex-col leading-none">
+                <span className="text-[16px] font-black tracking-[-0.04em] text-white">Nova<span className="text-[#22c55e]">Hub</span></span>
+                <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-white/40">ERP Platform</span>
+              </span>
+            </div>
+            <p className="mt-5 max-w-sm text-sm leading-5 text-white/50">
+              Una forma más clara de vender, controlar y hacer crecer tu empresa.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-xs font-bold uppercase tracking-[0.1em] text-white/40">
+              <a href="/login" className="transition-colors hover:text-[#22c55e]">Iniciar sesión</a>
+              <a href="/register" className="transition-colors hover:text-[#22c55e]">Crear cuenta</a>
+              <a href="#precios" className="transition-colors hover:text-[#22c55e]">Precios</a>
+              <a href="#contacto" className="transition-colors hover:text-[#22c55e]">Contacto</a>
+            </div>
           </div>
-          <p className="mt-5 max-w-sm text-sm leading-5 text-white/40">
-            Una forma más clara de vender, controlar y hacer crecer tu empresa.
-          </p>
+
+          {/* Seguridad y datos */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#22c55e]">Seguridad y datos</h4>
+            <ul className="mt-5 space-y-3 text-sm leading-5 text-white/50">
+              <li className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Control de acceso por rol, módulo y sucursal. Cada usuario ve solo lo que le corresponde.</li>
+              <li className="flex items-start gap-2"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Autenticación y autorización protegidas en cada petición. Sesiones seguras con expiración.</li>
+              <li className="flex items-start gap-2"><CircleDollarSign className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Trazabilidad completa: cada movimiento financiero se conecta con documentos, responsables y fechas.</li>
+              <li className="flex items-start gap-2"><Zap className="mt-0.5 size-4 shrink-0 text-[#22c55e]/60" /> Copias de seguridad automáticas diarias. Monitoreo activo con alertas para detectar problemas.</li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#22c55e]">Legal</h4>
+            <ul className="mt-5 space-y-3 text-sm leading-5 text-white/50">
+              <li><a href="#privacidad" className="transition-colors hover:text-[#22c55e]">Política de Privacidad</a></li>
+              <li><a href="#terminos" className="transition-colors hover:text-[#22c55e]">Términos y Condiciones</a></li>
+              <li><a href="#datos" className="transition-colors hover:text-[#22c55e]">Tratamiento de Datos</a></li>
+              <li><a href="#backups" className="transition-colors hover:text-[#22c55e]">Copias de Seguridad</a></li>
+            </ul>
+            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs leading-5 text-white/40">
+                Tus datos son tuyos. NovaHub no comparte información con terceros. Puedes exportar o eliminar tu información en cualquier momento.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-x-6 gap-y-3 text-xs font-bold uppercase tracking-[0.1em] text-white/35">
-          <a href="/login" className="transition-colors hover:text-[#22c55e]">Iniciar sesión</a>
-          <a href="/register" className="transition-colors hover:text-[#22c55e]">Crear cuenta</a>
-          <a href="#precios" className="transition-colors hover:text-[#22c55e]">Precios</a>
-          <a href="#contacto" className="transition-colors hover:text-[#22c55e]">Contacto</a>
-          <span>© {new Date().getFullYear()} NovaHub</span>
+
+        {/* Línea inferior */}
+        <div className="mt-12 flex flex-col justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center">
+          <p className="text-xs text-white/30">© {new Date().getFullYear()} NovaHub ERP. Todos los derechos reservados.</p>
+          <div className="flex gap-6 text-xs text-white/30">
+            <a href="#privacidad" className="transition-colors hover:text-[#22c55e]">Privacidad</a>
+            <a href="#terminos" className="transition-colors hover:text-[#22c55e]">Términos</a>
+            <a href="#datos" className="transition-colors hover:text-[#22c55e]">Datos</a>
+          </div>
         </div>
       </div>
     </footer>
@@ -675,10 +764,10 @@ function MobileStickyCTA() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ duration: 0.3, ease }}
-          className="fixed bottom-0 inset-x-0 z-50 border-t border-[#e0ebe4] bg-white/95 px-5 py-3 shadow-[0_-10px_40px_-15px_rgba(23,74,58,.1)] backdrop-blur-xl lg:hidden"
+          className="fixed bottom-0 inset-x-0 z-30 border-t border-[#d1fae5] bg-white/95 px-5 py-3 shadow-[0_-10px_40px_-15px_rgba(34,197,94,.15)] backdrop-blur-xl lg:hidden"
         >
-          <CTA href="#contacto" className="w-full text-center">
-            Solicitar demostración
+          <CTA href="https://wa.me/50588241003?text=Hola%2C%20quiero%20agendar%20una%20llamada%20para%20conocer%20NovaHub%20ERP" className="w-full text-center">
+            Agendar llamada
           </CTA>
         </motion.div>
       )}
@@ -723,15 +812,13 @@ export default function LandingPage() {
   const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD');
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white text-[#174a3a] antialiased selection:bg-[#22c55e]/20 selection:text-[#174a3a]">
+    <div id="novahub-landing" className="min-h-screen overflow-x-hidden bg-white text-[#174a3a] antialiased selection:bg-[#22c55e]/20 selection:text-[#174a3a]">
       <Header />
 
       <main>
         <HeroSection />
         <ScrollingBanner />
-        <WaveDivider />
         <ProductSection />
-        <WaveDivider to="#0f1a14" accent="#22c55e" />
         <ProcessSection />
         <ModulesSection />
         <IndustriesSection />
@@ -742,6 +829,7 @@ export default function LandingPage() {
 
       <Footer />
       <MobileStickyCTA />
+      <LandingChatModal />
     </div>
   );
 }
