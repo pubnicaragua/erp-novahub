@@ -10,6 +10,7 @@ import { storageService } from '../../services/storage.service';
 import { toast } from 'sonner';
 import { Package, Check, Tag, X } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 interface EditProductModalProps {
@@ -23,6 +24,8 @@ interface EditProductModalProps {
 
 export function EditProductModal({ product, categories, warehouses = [], itemType = 'PRODUCT', onClose, onRefresh }: EditProductModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
@@ -69,7 +72,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           categoryId: product.categoryId || '',
           priceCurrency: baseCurrency || 'NIO',
           salePrice: Number(product.salePrice) || 0,
-          costPrice: Number(product.costPrice) || 0,
+        ...(canViewInventoryCost ? { costPrice: Number(product.costPrice) || 0 } : {}),
           trackSerialNumbers: Boolean(
             product.trackSerialNumbers ||
             product.serialTracking ||
@@ -103,7 +106,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [product, baseCurrency]);
+  }, [product, baseCurrency, canViewInventoryCost]);
 
   useEffect(() => {
     if (!product) return;
@@ -240,7 +243,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         name: draft.name,
         description: draft.description || '',
         categoryId: draft.categoryId,
-        costPrice: Number(draft.costPrice || 0) * rate,
+         ...(canViewInventoryCost ? { costPrice: Number(draft.costPrice || 0) * rate } : {}),
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
         itemType: draft.itemType || 'PRODUCT',
         isActive: draft.isActive !== false,
@@ -402,7 +405,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                 </Select>
               </div>
 
-              {!isService && <div className="col-span-1">
+               {!isService && canViewInventoryCost && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input
                   type="number" min={0} step="any"

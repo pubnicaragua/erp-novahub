@@ -4,7 +4,8 @@ export type ManagerPermissionState = Record<string, ManagerPermissionLevel>;
 
 export const MANAGER_PERMISSION_OPTIONS = [
   { id: 'MANAGER_OVERVIEW', label: 'Resumen empresarial', description: 'Indicadores y distribución por sucursal' },
-  { id: 'MANAGER_INVENTORY', label: 'Inventario consolidado', description: 'Stock, bodegas y existencias' },
+  { id: 'MANAGER_INVENTORY', label: 'Inventario consolidado', description: 'Stock, bodegas, existencias e importación masiva' },
+  { id: 'MANAGER_INVENTORY_COST', label: 'Ver costos de inventario', description: 'Permite consultar costos, valor al costo y pérdidas monetarias del inventario' },
   { id: 'MANAGER_SALES', label: 'Ventas consolidadas', description: 'Clientes, documentos, cobros y caja' },
   { id: 'MANAGER_PURCHASES', label: 'Compras consolidadas', description: 'Proveedores, órdenes, recepciones, facturas y pagos' },
   { id: 'MANAGER_FINANCE', label: 'Finanzas consolidadas', description: 'Caja, ingresos, gastos, saldos y análisis financieros' },

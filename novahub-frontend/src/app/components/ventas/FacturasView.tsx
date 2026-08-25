@@ -36,6 +36,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
+import { InvoiceCashQueueBell } from './caja/InvoiceCashQueueBell';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -78,6 +79,9 @@ const paymentMethodOptions = [
   { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Cheque', value: 'CHECK' },
 ];
+
+const isInvoiceInCashQueue = (invoice?: Partial<Invoice> | null) =>
+  ['PENDING', 'CLAIMED'].includes(String(invoice?.cashQueue?.status || '').toUpperCase());
 
 type InvoicePaymentLine = {
   method: string;
@@ -551,6 +555,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
     if (['PAID', 'CANCELLED'].includes(String(invoice.status || '').toUpperCase()) || getInvoiceBalance(invoice) <= 0.01) {
       toast.error('La factura no tiene saldo pendiente para enviar a caja');
+      return;
+    }
+    if (isInvoiceInCashQueue(invoice)) {
+      toast.info(`La factura ${invoice.number} ya está en la cola de caja; no se duplicará.`);
       return;
     }
     setCashSendingInvoiceId(invoice.id);
@@ -1146,6 +1154,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 })()}
               </div>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Completar datos para crear factura' : 'Detalle de la factura'}</p>
+              {!isCreating && isInvoiceInCashQueue(localDoc as Invoice) && (
+                <Badge className="mt-2 border-amber-500/30 bg-amber-500/10 text-[9px] font-black uppercase text-amber-700 dark:text-amber-300">
+                  En cola de caja · {String(localDoc?.cashQueue?.status || '').toUpperCase() === 'CLAIMED' ? 'tomada; también puede pagarse aquí' : 'disponible para Caja'}
+                </Badge>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2" data-tour="sales-form-actions">
@@ -1171,7 +1184,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     Enviar a crédito
                   </Button>
                 )}
-                {!isInvoiceLocked && canPerform('SALES_INVOICES', 'approve') && getInvoiceBalance(localDoc as Invoice) > 0.01 && (
+                {!isInvoiceLocked && !isInvoiceInCashQueue(localDoc as Invoice) && canPerform('SALES_INVOICES', 'approve') && getInvoiceBalance(localDoc as Invoice) > 0.01 && (
                   <Button variant="outline" className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => void handleSendInvoiceToCash(localDoc as Invoice)} disabled={cashSendingInvoiceId === localDoc.id || accountingBlocked}>
                     <Send className="mr-2 size-4" /> {cashSendingInvoiceId === localDoc.id ? 'Enviando...' : 'Enviar a caja'}
@@ -1664,6 +1677,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
+            {canPerform('RETAIL_POS', 'read') && <InvoiceCashQueueBell onItemSelect={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'ventas', subModule: 'facturacion-caja' } }))} />}
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
@@ -1722,6 +1736,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               )}
               {canPerform('SALES_INVOICES', 'approve') &&
                 !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
+                !isInvoiceInCashQueue(row) &&
                 getInvoiceBalance(row) > 0.01 && (
                 <Button type="button" title="Enviar factura a caja" aria-label={`Enviar factura ${row.number} a caja`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 transition-colors" onClick={() => void handleSendInvoiceToCash(row)} disabled={cashSendingInvoiceId === row.id}>
                   {cashSendingInvoiceId === row.id ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

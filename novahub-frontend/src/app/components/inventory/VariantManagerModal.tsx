@@ -9,6 +9,7 @@ import { inventoryService } from '../../services/inventario.service';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { ProductVariant } from '../../types/variants';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface VariantManagerModalProps {
   open: boolean;
@@ -18,6 +19,8 @@ interface VariantManagerModalProps {
 }
 
 export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: VariantManagerModalProps) {
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const [variants, setVariants] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -95,7 +98,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
         name: formName.trim() || formSku.trim().toUpperCase(),
         barcode: formBarcode.trim() || undefined,
         priceModifier: parseFloat(formPriceModifier) || 0,
-        costModifier: parseFloat(formCostModifier) || 0,
+        ...(canViewInventoryCost ? { costModifier: parseFloat(formCostModifier) || 0 } : {}),
       };
 
       if (editingId) {
@@ -229,7 +232,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                                 +{variant.priceModifier}
                               </Badge>
                             )}
-                            {Number(variant.costModifier) !== 0 && (
+                            {canViewInventoryCost && Number(variant.costModifier) !== 0 && (
                               <Badge variant="outline" className="text-[8px] text-amber-600">
                                 costo {variant.costModifier}
                               </Badge>
@@ -339,7 +342,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                   step="0.01"
                 />
               </div>
-              <div className="space-y-1.5">
+              {canViewInventoryCost && <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Modificador costo</label>
                 <Input
                   type="number"
@@ -348,7 +351,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
                   className="h-9 text-xs"
                   step="0.01"
                 />
-              </div>
+              </div>}
             </div>
           </div>
 

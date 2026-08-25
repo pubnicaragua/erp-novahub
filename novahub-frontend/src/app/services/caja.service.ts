@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, getApiUrl, getAuthHeaders } from './api';
 import { resolveStorageReferences } from './storage.service';
 
 export type CashClosureMode = 'NORMAL' | 'BLIND';
@@ -65,6 +65,22 @@ export interface CashRegisterSession {
   closedBy?: { name: string };
   denominations?: SessionDenomination[];
   countAttempts?: CashRegisterCount[];
+}
+
+export interface HistoricalCashReport {
+  items: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pages: number;
+  aggregationComplete: boolean;
+  filters: Record<string, any>;
+  summary: Record<string, any>;
+  options: {
+    registers: CashRegister[];
+    cashiers: { id: string; name: string }[];
+    branches: { id: string; name: string; code: string }[];
+  };
 }
 
 export interface CashRegisterCount {
@@ -193,13 +209,24 @@ export interface InvoiceCashQueue {
   requestedById?: string | null;
   claimedById?: string | null;
   claimedAt?: string | null;
+  claimToken?: string | null;
+  claimExpiresAt?: string | null;
+  lastActivityAt?: string | null;
   paidAt?: string | null;
+  releasedAt?: string | null;
+  releasedById?: string | null;
+  releaseReason?: string | null;
   notes?: string | null;
   createdAt: string;
   invoice: {
     id: string;
     number: string;
     status: string;
+    date?: string;
+    subtotal?: number;
+    taxAmount?: number;
+    discountAmount?: number;
+    irAmount?: number;
     total: number;
     balance: number;
     currency: 'NIO' | 'USD';
@@ -218,6 +245,9 @@ export interface InvoiceCashQueueResponse {
   total: number;
   page: number;
   pageSize: number;
+  maxVisible?: number;
+  activeOnly?: boolean;
+  hasMore?: boolean;
 }
 
 // ==================== VENTAS SUSPENDIDAS / RESERVADAS ====================
@@ -517,10 +547,16 @@ export const cajaService = {
   claimInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string }) =>
     api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/claim`, dto),
 
-  releaseInvoiceCashQueue: (id: string) =>
-    api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/release`, {}),
+  releaseInvoiceCashQueue: (id: string, dto?: { claimToken?: string; reason?: string }) =>
+    api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/release`, dto || {}),
 
-  payInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string; payments: PosPaymentLine[] }, idempotencyKey?: string) =>
+  heartbeatInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string; claimToken?: string }) =>
+    api.patch<InvoiceCashQueue>(`/caja/invoice-cash-queue/${id}/heartbeat`, dto),
+
+  reconcileInvoiceCashQueue: (dto?: { queueId?: string; sessionId?: string }) =>
+    api.post<{ examined: number; stale: number; released: number; markedPaid: number; affectedQueueIds: string[] }>('/caja/invoice-cash-queue/reconcile', dto || {}),
+
+  payInvoiceCashQueue: (id: string, dto: { registerId: string; sessionId: string; claimToken?: string; payments: PosPaymentLine[] }, idempotencyKey?: string) =>
     api.idempotentPatch<{ queue: InvoiceCashQueue; payment: any }>(`/caja/invoice-cash-queue/${id}/pay`, dto, idempotencyKey),
 
   // --- Ventas suspendidas / reservadas (entrega inter-sucursal) ---
@@ -562,6 +598,21 @@ export const cajaService = {
     return res?.data !== undefined ? res.data : res; // { items, total, pages }
   },
 
+  getHistoricalCashReport: async (filters: {
+    dateFrom?: string;
+    dateTo?: string;
+    branchId?: string;
+    registerId?: string;
+    cashierId?: string;
+    paymentMethod?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}, signal?: AbortSignal): Promise<HistoricalCashReport> => {
+    const res = await api.get<any>('/caja/reports/historical', { params: filters, signal });
+    return (res?.data !== undefined ? res.data : res) as HistoricalCashReport;
+  },
+
   countSession: async (id: string, dto: any) => {
     const res = await api.post<any>(`/caja/sessions/${id}/count`, dto);
     return res?.data !== undefined ? res.data : res;
@@ -592,3 +643,53 @@ export const cajaService = {
   getDashboard: (period?: string, registerId?: string, startDate?: string, endDate?: string, signal?: AbortSignal, valuationMode?: 'HISTORICAL' | 'CURRENT') =>
     api.get<DashboardData>('/caja/dashboard', { params: { period, registerId, startDate, endDate, valuationMode }, signal }),
 };
+
+export interface InvoiceCashQueueEvent {
+  tenantId: string;
+  queueId: string;
+  invoiceId: string;
+  status: InvoiceCashQueueStatus;
+  reason: string;
+  occurredAt: string;
+}
+
+/** Consume la conexión SSE usando fetch para conservar Authorization: Bearer. */
+export async function consumeInvoiceCashQueueEvents(
+  signal: AbortSignal,
+  onEvent: (event: InvoiceCashQueueEvent) => void,
+  onOpen?: () => void,
+) {
+  const response = await fetch(getApiUrl('/caja/invoice-cash-queue/events'), {
+    headers: { Accept: 'text/event-stream', ...getAuthHeaders() },
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) throw new Error(`No se pudo abrir la sincronización en vivo (${response.status}).`);
+  if (!response.body) throw new Error('El navegador no habilitó el canal de sincronización en vivo.');
+  onOpen?.();
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (!signal.aborted) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() || '';
+      for (const frame of frames) {
+        const data = frame.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+        if (!data) continue;
+        try {
+          const parsed = JSON.parse(data) as { type?: string; data?: InvoiceCashQueueEvent };
+          if (parsed.type === 'queue-changed' && parsed.data) onEvent(parsed.data);
+        } catch {
+          // Un frame keepalive o inválido no debe cerrar la conexión.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}

@@ -74,7 +74,11 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
   return url.toString();
 }
 
-function getAuthHeaders(): Record<string, string> {
+export function getApiUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+  return buildUrl(path, params);
+}
+
+export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('nh-auth-token');
   if (!token) return {};
   if (!isSafeAuthToken(token)) {

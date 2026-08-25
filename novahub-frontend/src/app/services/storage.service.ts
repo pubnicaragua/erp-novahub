@@ -29,6 +29,7 @@ interface PreparedUpload {
   signedUrl?: string;
   uri: string;
   publicUrl: string | null;
+  upsert?: boolean;
 }
 
 export interface UploadedFile {
@@ -73,7 +74,7 @@ export const storageService = {
   async uploadFile(
     purpose: StoragePurpose,
     file: File,
-    options: { folder?: string; scopeId?: string } = {},
+    options: { folder?: string; scopeId?: string; dedupeKey?: string } = {},
   ): Promise<UploadedFile> {
     const mimeType = getUploadMimeType(file);
     const normalizedFile = file.type === mimeType
@@ -93,6 +94,7 @@ export const storageService = {
       size: uploadFile.size,
       folder: options.folder,
       scopeId: options.scopeId,
+      dedupeKey: options.dedupeKey,
     });
 
     // The backend creates the signed URL with its service-role client. Uploading
@@ -105,7 +107,7 @@ export const storageService = {
 
       const response = await fetch(prepared.signedUrl, {
         method: 'PUT',
-        headers: { 'x-upsert': 'false' },
+        headers: { 'x-upsert': String(Boolean(prepared.upsert)) },
         body,
       });
 

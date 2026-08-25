@@ -87,6 +87,7 @@ const STOCK_TOUR_STEPS: GuidedTourStep[] = [
 
 export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
   const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
   const { baseCurrency } = useCurrency();
   const [showTutorial, setShowTutorial] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -478,8 +479,8 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
         <div className="min-w-0">
           <div className="space-y-3 lg:hidden" data-tour="stock-table">
-        {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={newAdjustment.productId} onChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" /><div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div></div></Card>}
-        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-3"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div></div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
+         {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={newAdjustment.productId} onChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
+        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
         </div>
 
         <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="stock-table">
@@ -491,7 +492,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Razón<ColumnFilterMenu label="Razón" options={reasonOptions} selected={colFilters.state.reason?.values || []} onSelect={(values) => colFilters.setValues('reason', values)} sort={colFilters.state.reason?.sort || null} onSort={(sort) => colFilters.setSort('reason', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest"><span className="inline-flex items-center gap-1">Producto<ColumnFilterMenu label="Producto" sort={colFilters.state.product?.sort || null} onSort={(sort) => colFilters.setSort('product', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Cant. Ajuste</TableHead>
-              <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Costo Ref.</TableHead>
+              {canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Costo Ref.</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center w-24"><span className="inline-flex items-center gap-1">Estado<ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right w-24">Acciones</TableHead>
             </TableRow>
@@ -549,7 +550,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                     />
                   </div>
                 </TableCell>
-                <TableCell className="text-right">
+                {canViewInventoryCost && <TableCell className="text-right">
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"
@@ -568,7 +569,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       </SelectContent>
                     </Select>
                   </div>
-                </TableCell>
+                </TableCell>}
                 <TableCell className="text-xs">Borrador</TableCell>
                 <TableCell>
                   <div className="flex gap-1 justify-end" data-tour="inventory-adjustment-form-actions">
@@ -585,7 +586,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             
             {filteredData.length === 0 && !isCreating ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={canViewInventoryCost ? 8 : 7} className="text-center py-12 text-muted-foreground">
                   <Scale className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay ajustes</p>
                 </TableCell>
@@ -607,13 +608,13 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       ) : '—'}
                     </TableCell>
                     <TableCell className="text-center font-medium">{adj.items?.length || 0}</TableCell>
-                    <TableCell className="text-right text-xs">
+                    {canViewInventoryCost && <TableCell className="text-right text-xs">
                       {adj.items && adj.items[0] && (
                         <div className="flex flex-col">
                           <span>{adj.items[0].currency} {adj.items[0].unitCost || 0}</span>
                         </div>
                       )}
-                    </TableCell>
+                    </TableCell>}
                     <TableCell>
                       <Badge className={`text-[10px] ${getStatusBadge(adj.status)}`}>
                         {adj.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}
@@ -775,7 +776,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
+              {canViewInventoryCost && <div>
                 <p className="text-[10px] text-muted-foreground mb-1">Costo Unitario Referencia</p>
                 <div className="flex items-center gap-2">
                   <Input
@@ -796,7 +797,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                   </Select>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1">Si se deja en 0, se usarǭ el costo actual del producto.</p>
-              </div>
+              </div>}
             </div>
 
             <div className="space-y-2" data-tour="inventory-stock-reception-items">

@@ -9,6 +9,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { ProductImagePicker } from '../ui/ProductImage';
 import { Trash2, Plus, Package, X, Tag, Check } from 'lucide-react';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { inventoryService } from '@/app/services/inventario.service';
 import { storageService } from '@/app/services/storage.service';
 import { toast } from 'sonner';
@@ -46,6 +47,8 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
 
 export function AddProductsModal({ open, onOpenChange, categories, warehouses, onRefresh, itemType = 'PRODUCT' }: AddProductsModalProps) {
   const { exchangeRate, baseCurrency } = useCurrency();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const [internalCategories, setInternalCategories] = useState<any[]>([]);
   const [internalWarehouses, setInternalWarehouses] = useState<any[]>([]);
 
@@ -322,7 +325,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           warehouseId: product.initialWarehouseId || undefined,
           trackInventory: product.itemType === 'PRODUCT',
           trackSeries: Boolean(product.trackSerialNumbers),
-          costPrice: convertedCost,
+          ...(canViewInventoryCost ? { costPrice: convertedCost } : {}),
           salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
           priceCurrency: product.priceCurrency || baseCurrency,
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
@@ -530,7 +533,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                 />
               </div>}
               
-              {catalogItemType !== 'SERVICE' && <div className="col-span-1">
+              {catalogItemType !== 'SERVICE' && canViewInventoryCost && <div className="col-span-1">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
                 <Input 
                   type="number" min={0}

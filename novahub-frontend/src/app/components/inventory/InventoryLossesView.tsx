@@ -28,6 +28,7 @@ interface InventoryLossesViewProps {
 export function InventoryLossesView({ warehouses, warehouseId }: InventoryLossesViewProps) {
   const { user, canPerform } = useAuth();
   const canReadInventory = canPerform('INVENTORY', 'view');
+  const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
   const { formatCurrentAmount } = useCurrency();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'current';
   const [dateFrom, setDateFrom] = useState('');
@@ -79,7 +80,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-tour="inventory-losses-data">
+      <div className={`grid grid-cols-1 gap-3 ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`} data-tour="inventory-losses-data">
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
@@ -88,14 +89,14 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
             <p className="mt-1 text-2xl font-black tabular-nums">{meta.total}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-2xl border-border/50">
+        {canViewInventoryCost && <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               <TrendingDown className="size-3.5 text-red-500" /> Valor total (página)
             </div>
             <p className="mt-1 text-2xl font-black tabular-nums">{formatCurrentAmount(totalLoss)}</p>
           </CardContent>
-        </Card>
+        </Card>}
         <Card className="rounded-2xl border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
@@ -119,15 +120,15 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Productos con merma</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Cantidad perdida</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Valor de pérdida</TableHead>
+                {canViewInventoryCost && <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Valor de pérdida</TableHead>}
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Cuenta contable</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="py-10 text-center text-xs text-muted-foreground">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={canViewInventoryCost ? 8 : 7} className="py-10 text-center text-xs text-muted-foreground">Cargando...</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="py-10 text-center text-xs text-muted-foreground">
+                <TableRow><TableCell colSpan={canViewInventoryCost ? 8 : 7} className="py-10 text-center text-xs text-muted-foreground">
                   No hay pérdidas registradas en el período. Las pérdidas se calculan de los ajustes aprobados con merma.
                 </TableCell></TableRow>
               ) : rows.map((row: any) => {
@@ -155,7 +156,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
                     ))}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs font-bold text-red-600">-{fmtQty(totalQty)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</TableCell>
+                   {canViewInventoryCost && <TableCell className="text-right font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</TableCell>}
                   <TableCell>
                     {row.account ? (
                       <button

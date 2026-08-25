@@ -66,6 +66,7 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ProductThumbnail } from '../ui/ProductImage';
 import { toast } from 'sonner';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ============================================================================
 // Tipos del componente
@@ -195,6 +196,8 @@ export function ProductDetailDrawer({
   series = [],
 }: ProductDetailDrawerProps) {
   const { baseCurrency } = useCurrency();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -479,7 +482,7 @@ export function ProductDetailDrawer({
                   alt={product?.name || 'Producto'}
                   size="lg"
                   className="ring-1 ring-primary/10"
-                />
+                 />
               )}
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -582,7 +585,7 @@ export function ProductDetailDrawer({
                 <TabsContent value="general" className="mt-0 space-y-4">
                   {/* Grid de métricas principales */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {!isService && (
+                      {!isService && (
                       <MetricCard
                         label="Stock total"
                         value={totalStock.toString()}
@@ -590,8 +593,8 @@ export function ProductDetailDrawer({
                         accent="text-primary"
                         loading={loading && !productSnapshot}
                       />
-                    )}
-                    <MetricCard
+                      )}
+                     <MetricCard
                       label="Categoría"
                       value={product?.category?.name || '—'}
                       icon={Tag}
@@ -605,15 +608,15 @@ export function ProductDetailDrawer({
                       accent={isService ? 'text-violet-500' : 'text-sky-500'}
                       loading={false}
                     />
-                    {!isService && (
+                     {!isService && canViewInventoryCost && (
                       <MetricCard
                         label="Valor stock"
                         value={<CurrencyValuationAmount amount={stockValue} sourceCurrency={product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.priceExchangeRate} className="text-base" />}
                         icon={DollarSign}
                         accent="text-emerald-500"
                         loading={loading && !productSnapshot}
-                      />
-                    )}
+                       />
+                     )}
                     {isService ? (
                       <MetricCard
                         label="Precio"
@@ -622,7 +625,7 @@ export function ProductDetailDrawer({
                         accent="text-emerald-500"
                         loading={loading && !productSnapshot}
                       />
-                    ) : (
+                     ) : canViewInventoryCost ? (
                       <MetricCard
                         label="Precio costo"
                         value={<CurrencyValuationAmount amount={costPrice} sourceCurrency={product?.costCurrency || product?.priceCurrency || baseCurrency} sourceExchangeRate={product?.costExchangeRate || product?.priceExchangeRate} className="text-base" />}
@@ -630,8 +633,8 @@ export function ProductDetailDrawer({
                         accent="text-rose-500"
                         loading={loading && !productSnapshot}
                       />
-                    )}
-                    <MetricCard
+                     ) : null}
+                     <MetricCard
                       label="Última act."
                       value={
                         product?.updatedAt
@@ -658,7 +661,7 @@ export function ProductDetailDrawer({
                         icon={Info}
                         muted={!product?.description && !product?.descriptionHtml}
                       />
-                      {!isService && (
+                      {!isService && canViewInventoryCost && (
                         <InfoField
                           label="Código de barras"
                           value={product?.barcode || product?.ean || '—'}
@@ -889,7 +892,7 @@ export function ProductDetailDrawer({
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Cantidad</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Stock Ant.</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest text-right">Stock Res.</TableHead>
-                            <TableHead className="text-[10px] uppercase tracking-widest text-right">Costo Unit.</TableHead>
+                             {canViewInventoryCost && <TableHead className="text-[10px] uppercase tracking-widest text-right">Costo Unit.</TableHead>}
                             <TableHead className="text-[10px] uppercase tracking-widest">Referencia</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Almacén</TableHead>
                             <TableHead className="text-[10px] uppercase tracking-widest">Usuario</TableHead>
@@ -933,7 +936,7 @@ export function ProductDetailDrawer({
                                 <TableCell className="text-right text-xs tabular-nums font-medium">
                                   {move.resultingQty != null ? Number(move.resultingQty) : '—'}
                                 </TableCell>
-                                <TableCell className="text-right text-xs">
+                                 {canViewInventoryCost && <TableCell className="text-right text-xs">
                                   {move.unitCost !== undefined && move.unitCost !== null ? (
                                     <div className="flex flex-col">
                                       <CurrencyValuationAmount amount={Number(move.unitCost || 0)} sourceCurrency={move.currency || 'NIO'} sourceExchangeRate={move.exchangeRate} className="font-medium" />
@@ -941,7 +944,7 @@ export function ProductDetailDrawer({
                                   ) : (
                                     <span className="text-muted-foreground">-</span>
                                   )}
-                                </TableCell>
+                                 </TableCell>}
                                 <TableCell className="text-xs font-mono text-muted-foreground">
                                   {move.reference || '—'}
                                 </TableCell>

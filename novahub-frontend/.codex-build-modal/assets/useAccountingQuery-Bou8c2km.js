@@ -1,0 +1,2 @@
+import{i as y,F as e}from"./index-D-EBOu1j.js";function A(t,n,c){const{user:u}=y(),a=u,i=(a==null?void 0:a.clientTenantId)||(a==null?void 0:a.tenantId)||"current";return e({queryKey:["accounting",i,...t],queryFn:({signal:r})=>n(r),staleTime:6e4,gcTime:10*6e4,refetchOnWindowFocus:!1,retry:1,...c})}const d=t=>Array.isArray(t)?t:Array.isArray(t==null?void 0:t.data)?t.data:[];export{d as a,A as u};
+//# sourceMappingURL=useAccountingQuery-Bou8c2km.js.map

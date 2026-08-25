@@ -114,7 +114,7 @@ export type PermissionAction =
   | 'import' | 'export' | 'approve' | 'reject' | 'authorize' | 'reopen'
   | 'close' | 'confirm' | 'process' | 'pay' | 'apply' | 'reconcile'
   | 'reverse' | 'duplicate' | 'convert' | 'assign' | 'download'
-  | 'generate' | 'send' | 'print' | 'manage';
+  | 'generate' | 'send' | 'print' | 'manage' | 'viewCost';
 
 // La matriz de roles expone CRUD, importación/exportación y una acción de
 // flujo. Estas acciones legacy siguen aceptándose en las vistas, pero ahora
@@ -479,6 +479,7 @@ const createUserObject = (apiPayload: any): User => {
         canCancel: serverMatch.cancel !== undefined ? !!serverMatch.cancel : !!serverMatch.delete,
         canImport: !!serverMatch.import,
         canExport: !!serverMatch.export,
+        canViewCost: serverMatch.viewCost === true || serverMatch.canViewCost === true,
         approve: Object.prototype.hasOwnProperty.call(serverMatch, 'approve') ? !!serverMatch.approve : undefined,
         ...mapSpecialPermissionFlags(serverMatch),
       };
@@ -518,6 +519,7 @@ const createUserObject = (apiPayload: any): User => {
         canCancel: sp.cancel !== undefined ? !!sp.cancel : !!sp.delete,
         canImport: !!sp.import,
         canExport: !!sp.export,
+        canViewCost: sp.viewCost === true || sp.canViewCost === true,
         approve: Object.prototype.hasOwnProperty.call(sp, 'approve') ? !!sp.approve : undefined,
         ...mapSpecialPermissionFlags(sp),
       });
@@ -825,7 +827,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canPerform = useCallback((module: string, action: PermissionAction): boolean => {
     if (!user) return false;
-    if (user.managerMode) return tenantAdminHasModuleEnabled(user, module);
+    if (user.managerMode && action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
     // El administrador de la empresa tiene todas las acciones de los módulos
     // habilitados, incluidos permisos de flujo nuevos.
     if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module);
@@ -901,6 +903,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (permission.canManage === true) return true;
     const legacyActionAllowed = (permission as any)[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`] === true;
     switch (action) {
+      case 'viewCost': return permission.canViewCost === true || legacyActionAllowed;
       case 'view': return permission.canView;
       case 'create': return permission.canCreate;
       case 'edit': return permission.canEdit;

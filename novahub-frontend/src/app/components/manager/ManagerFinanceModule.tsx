@@ -73,7 +73,7 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
       XLSX.writeFile(workbook, `manager-finanzas-${view}.xlsx`);
     } finally { setExporting(false); }
   };
-  const Icon = icons[view];
+  const Icon = icons[view] || BarChart3;
   return <div className="finance-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">
     <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div className="flex min-w-0 items-start gap-3"><div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="size-6" /></div><div className="min-w-0"><h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">Finanzas <span className="text-primary">consolidadas</span></h1><Badge variant="outline" className="mt-3 border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursal(es) en el alcance</Badge></div></div>

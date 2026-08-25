@@ -36,6 +36,7 @@ import {
   type CreatePosHoldDto,
   type PosHoldItemInput,
   type InvoiceCashQueue,
+  consumeInvoiceCashQueueEvents,
 } from '../../services/caja.service';
 import { VariantPickerModal } from './VariantPickerModal';
 import { QuickAddCustomerModal } from './QuickAddCustomerModal';
@@ -54,6 +55,7 @@ import { getPdfDesignSettings } from '../../utils/pdfGenerator';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { playNotificationSound } from '../../utils/notificationSound';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -64,6 +66,7 @@ interface CartItem extends PosInvoiceItem {
   irRate?: number;
   irTaxId?: string | null;
   priceListId?: string;
+  priceMissing?: boolean;
 }
 
 type PricingMode = 'global' | 'individual';
@@ -161,16 +164,6 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const headerHtml = isTicket
     ? `<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`
     : `<div style="text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #000;"><h1 style="font-size:18pt;font-weight:800;margin:0 0 5px;text-transform:uppercase;">${escapeTicketHtml(companyName)}</h1><p style="font-size:10pt;color:#555;margin:0;">Comprobante de venta</p></div>`;
-
-  const tableStyle = isTicket
-    ? ''
-    : 'style="width:100%;border-collapse:collapse;margin:15px 0;font-size:10pt;"';
-  const thStyle = isTicket
-    ? ''
-    : 'style="border:1px solid #ccc;padding:6px 8px;background:#f0f0f0;font-weight:700;text-transform:uppercase;font-size:8pt;"';
-  const tdStyle = isTicket
-    ? ''
-    : 'style="border:1px solid #ccc;padding:6px 8px;"';
 
   win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
   const designStyle = win.document.createElement('style');
@@ -368,8 +361,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
-  const [irRate, setIrRate] = useState(0);
-  const [irTaxId, setIrTaxId] = useState<string | null>(null);
+  const [irRate] = useState(0);
+  const [irTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -390,6 +383,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
   const [cashQueue, setCashQueue] = useState<InvoiceCashQueue[]>([]);
   const [cashQueueLoading, setCashQueueLoading] = useState(false);
+  const [cashQueueError, setCashQueueError] = useState<string | null>(null);
+  const [cashQueueLastSyncAt, setCashQueueLastSyncAt] = useState<Date | null>(null);
+  const [cashQueueConnection, setCashQueueConnection] = useState<'CONNECTING' | 'LIVE' | 'RECONNECTING' | 'ERROR'>('CONNECTING');
+  const cashQueueRequestRef = useRef<Promise<void> | null>(null);
   const [queueInvoice, setQueueInvoice] = useState<InvoiceCashQueue | null>(null);
   const [queuePayments, setQueuePayments] = useState<PosPaymentLine[]>([]);
   const [queueSubmitting, setQueueSubmitting] = useState(false);
@@ -404,22 +401,76 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const loadCashQueue = useCallback(async () => {
     if (!user?.tenantId) return;
+    if (cashQueueRequestRef.current) return cashQueueRequestRef.current;
     setCashQueueLoading(true);
-    try {
-      const response = await cajaService.getInvoiceCashQueue({ status: 'PENDING,CLAIMED', page: 1, pageSize: 50 });
-      setCashQueue((response as any)?.data?.items || response?.items || []);
-    } catch {
-      // La cola no debe bloquear la facturación POS si una consulta puntual falla.
-    } finally {
-      setCashQueueLoading(false);
-    }
+    const request = (async () => {
+      try {
+        const response = await cajaService.getInvoiceCashQueue({ status: 'PENDING,CLAIMED', page: 1, pageSize: 50 });
+        const payload = (response as any)?.data || response;
+        if (!Array.isArray(payload?.items)) throw new Error('La respuesta de la cola de caja no es válida.');
+        setCashQueue(payload.items);
+        setCashQueueError(null);
+        setCashQueueLastSyncAt(new Date());
+      } catch (error: unknown) {
+        if ((error as any)?.name !== 'AbortError') {
+          setCashQueueError(getErrorMessage(error, 'No se pudo sincronizar la cola de caja.'));
+        }
+      } finally {
+        setCashQueueLoading(false);
+        cashQueueRequestRef.current = null;
+      }
+    })();
+    cashQueueRequestRef.current = request;
+    return request;
   }, [user?.tenantId]);
 
   useEffect(() => {
     void loadCashQueue();
-    const timer = window.setInterval(() => void loadCashQueue(), 15000);
+    const timer = window.setInterval(() => void loadCashQueue(), 60000);
     return () => window.clearInterval(timer);
   }, [loadCashQueue]);
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    const controller = new AbortController();
+    let retryTimer: number | null = null;
+    let retryAttempt = 0;
+    const connect = async () => {
+      if (controller.signal.aborted) return;
+      setCashQueueConnection(retryAttempt > 0 ? 'RECONNECTING' : 'CONNECTING');
+      try {
+        await consumeInvoiceCashQueueEvents(
+          controller.signal,
+          (event) => {
+            if (controller.signal.aborted) return;
+            setCashQueueConnection('LIVE');
+            if (event.status === 'PENDING') playNotificationSound();
+            void loadCashQueue();
+          },
+          () => {
+            retryAttempt = 0;
+            setCashQueueConnection('LIVE');
+          },
+        );
+        if (!controller.signal.aborted) {
+          retryAttempt += 1;
+          setCashQueueConnection('RECONNECTING');
+          retryTimer = window.setTimeout(() => void connect(), 1000);
+        }
+      } catch (error: unknown) {
+        if (controller.signal.aborted) return;
+        retryAttempt += 1;
+        setCashQueueConnection('ERROR');
+        const delay = Math.min(10000, 1000 * Math.max(1, retryAttempt));
+        retryTimer = window.setTimeout(() => void connect(), delay);
+      }
+    };
+    void connect();
+    return () => {
+      controller.abort();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
+  }, [loadCashQueue, user?.tenantId]);
 
   const handleClaimCashQueue = async (queue: InvoiceCashQueue) => {
     if (!selectedRegisterId || !activeSession) {
@@ -440,19 +491,116 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
   };
 
-  const submitCashQueuePayment = async () => {
-    if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmitting) return;
+  const handleReleaseCashQueue = async (queue: InvoiceCashQueue) => {
+    try {
+      await cajaService.releaseInvoiceCashQueue(queue.id, { claimToken: queue.claimToken || undefined, reason: 'MANUAL' });
+      if (queueInvoice?.id === queue.id) {
+        setQueueInvoice(null);
+        setQueuePayments([]);
+      }
+      toast.success(`Factura ${queue.invoice.number} liberada para cualquier cajero.`);
+      await loadCashQueue();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'No se pudo liberar la factura. Actualiza la cola e inténtalo nuevamente.'));
+      void loadCashQueue();
+    }
+  };
+
+  const handleReconcileCashQueue = async () => {
+    try {
+      const response = await cajaService.reconcileInvoiceCashQueue();
+      const result = (response as any)?.data || response;
+      toast.success(`Reconciliación completada: ${Number(result?.released || 0) + Number(result?.markedPaid || 0)} reserva(s) corregida(s).`);
+      await loadCashQueue();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'No se pudo reconciliar la cola de caja.'));
+    }
+  };
+
+  useEffect(() => {
+    if (!queueInvoice || !activeSession || !selectedRegisterId || !queueInvoice.claimToken) return;
+    let disposed = false;
+    const heartbeat = async () => {
+      try {
+        const response = await cajaService.heartbeatInvoiceCashQueue(queueInvoice.id, {
+          registerId: selectedRegisterId,
+          sessionId: activeSession.id,
+          claimToken: queueInvoice.claimToken || undefined,
+        });
+        if (!disposed) {
+          const renewed = (response as any)?.data || response;
+          setQueueInvoice((current) => current?.id === queueInvoice.id ? { ...current, claimExpiresAt: renewed.claimExpiresAt, lastActivityAt: renewed.lastActivityAt } : current);
+        }
+      } catch (error: unknown) {
+        if (disposed) return;
+        setQueueInvoice(null);
+        setQueuePayments([]);
+        toast.error(getErrorMessage(error, 'La reserva expiró. Toma nuevamente la factura antes de cobrar.'));
+        void loadCashQueue();
+      }
+    };
+    void heartbeat();
+    const timer = window.setInterval(() => void heartbeat(), 60000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [activeSession, loadCashQueue, queueInvoice?.claimToken, queueInvoice?.id, selectedRegisterId]);
+
+  const getQueuePaymentSummary = () => {
+    if (!queueInvoice || !activeSession) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0 };
     const invoiceCurrency = queueInvoice.invoice.currency;
     const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(activeSession.exchangeRateUSD || globalRate || 1);
     const totalBase = toBaseAmount(Number(queueInvoice.invoice.balance || 0), invoiceCurrency, invoiceRate);
-    const paidBase = queuePayments.reduce((sum, payment) => sum + toBaseAmount(Number(payment.amount || 0), payment.currency || invoiceCurrency, (payment.currency || invoiceCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1)), 0);
+    const paidBase = queuePayments.reduce((sum, payment) => sum + toBaseAmount(
+      Number(payment.amount || 0),
+      payment.currency || invoiceCurrency,
+      (payment.currency || invoiceCurrency) === baseCurrency ? 1 : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1),
+    ), 0);
+    return {
+      totalBase,
+      paidBase,
+      changeBase: Math.max(0, paidBase - totalBase),
+      missingBase: Math.max(0, totalBase - paidBase),
+    };
+  };
+
+  const getQueuePaymentApplications = () => {
+    if (!queueInvoice || !activeSession) return [] as PosPaymentLine[];
+    const invoiceCurrency = queueInvoice.invoice.currency;
+    let remainingBase = getQueuePaymentSummary().totalBase;
+    return queuePayments.flatMap((payment) => {
+      if (remainingBase <= 0.005) return [];
+      const currency = payment.currency || invoiceCurrency;
+      const exchangeRate = currency === baseCurrency
+        ? 1
+        : Number(payment.exchangeRate || activeSession.exchangeRateUSD || globalRate || 1);
+      const lineBase = toBaseAmount(Number(payment.amount || 0), currency, exchangeRate);
+      const appliedBase = Math.min(lineBase, remainingBase);
+      if (appliedBase <= 0.005) return [];
+      remainingBase = Math.max(0, remainingBase - appliedBase);
+      return [{
+        ...payment,
+        amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, currency, 1, exchangeRate).toFixed(2)),
+        currency,
+        exchangeRate,
+      }];
+    });
+  };
+
+  const submitCashQueuePayment = async () => {
+    if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmitting) return;
+    const { totalBase, paidBase } = getQueuePaymentSummary();
     if (paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
     if (queuePayments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) { toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque.'); return; }
     if (queuePayments.some((payment) => isBankPaymentMethod(payment.method, true) && !payment.bankAccountId)) { toast.error('Selecciona el banco para cada pago con tarjeta, transferencia o cheque.'); return; }
+    const appliedPayments = getQueuePaymentApplications();
+    if (!appliedPayments.length) { toast.error('Registra un monto válido para cubrir el saldo pendiente.'); return; }
+    const changeBase = Math.max(0, paidBase - totalBase);
     setQueueSubmitting(true);
     try {
-      await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, payments: queuePayments }, createIdempotencyKey('invoice-cash-queue'));
-      toast.success(`Factura ${queueInvoice.invoice.number} cobrada en caja.`);
+      await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments }, createIdempotencyKey('invoice-cash-queue'));
+      toast.success(`Factura ${queueInvoice.invoice.number} cobrada en caja.${changeBase > 0.005 ? ` Cambio: ${baseCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(changeBase)}` : ''}`);
       setQueueInvoice(null);
       setQueuePayments([]);
       await Promise.all([loadCashQueue(), queryClient.invalidateQueries({ queryKey: ['sales'] }), queryClient.invalidateQueries({ queryKey: ['finance'] }), queryClient.invalidateQueries({ queryKey: ['accounting'] })]);
@@ -701,7 +849,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
   };
 
-  const stockBlockedMessage = (product: PosProduct, requestedQty: number, globalQty: number) => {
+  const stockBlockedMessage = (product: PosProduct, globalQty: number) => {
     return globalQty > 0
       ? `Stock insuficiente para ${product.name}. Tienes ${globalQty} separadas en otras cajas y solo hay ${product.currentStock} disponibles acá.`
       : `Stock insuficiente para ${product.name}. Solo hay ${product.currentStock} unidades disponibles en esta sucursal.`;
@@ -779,7 +927,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const requestedQty = (existing?.quantity || 0) + 1;
 
     if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && requestedQty + globalQty > product.currentStock) {
-      toast.error(stockBlockedMessage(product, requestedQty, globalQty), {
+      toast.error(stockBlockedMessage(product, globalQty), {
         action: {
           label: 'Ver otras sucursales',
           onClick: () => void openAvailabilityFor(product, requestedQty),
@@ -827,7 +975,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     if (product && product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
       const globalQty = getGlobalCartQuantity(productId);
       if (quantity + globalQty > product.currentStock) {
-        toast.error(stockBlockedMessage(product, quantity, globalQty), {
+        toast.error(stockBlockedMessage(product, globalQty), {
           action: {
             label: 'Ver otras sucursales',
             onClick: () => void openAvailabilityFor(product, quantity),
@@ -1312,31 +1460,51 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               </div>
               <Badge className="border-none bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{cashQueue.length}</Badge>
             </div>
-            <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
-              <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()}><CheckCircle2 className="size-3.5" /> Reconciliar</Button>}
+              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
+                <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
+              </Button>
+            </div>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground" aria-live="polite">
+            <span className={cn('inline-flex items-center gap-1.5', cashQueueConnection === 'LIVE' ? 'text-emerald-600 dark:text-emerald-400' : cashQueueConnection === 'ERROR' ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')}>
+              <span className={cn('size-1.5 rounded-full', cashQueueConnection === 'LIVE' ? 'bg-emerald-500' : cashQueueConnection === 'ERROR' ? 'bg-destructive' : 'bg-amber-500 animate-pulse')} />
+              {cashQueueConnection === 'LIVE' ? 'En vivo' : cashQueueConnection === 'RECONNECTING' ? 'Reconectando' : cashQueueConnection === 'ERROR' ? 'Canal no disponible' : 'Conectando'}
+            </span>
+            <span>Última sincronización: {cashQueueLastSyncAt ? cashQueueLastSyncAt.toLocaleTimeString('es-NI') : 'Sin sincronización confirmada'}</span>
+          </div>
+          {cashQueueError && (
+            <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <span><AlertCircle className="mr-1.5 inline size-4" />{cashQueueError}{cashQueue.length > 0 ? ' Se conservan los datos de la última sincronización correcta.' : ''}</span>
+              <Button type="button" variant="outline" size="sm" className="h-7 border-destructive/30 text-xs text-destructive" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>Reintentar</Button>
+            </div>
+          )}
           {cashQueue.length > 0 ? (
             <div className="mt-4 grid gap-2 lg:grid-cols-2">
               {cashQueue.map((queue) => {
                 const customer = queue.invoice.customer?.name || queue.invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
                 const isMine = queue.status === 'CLAIMED' && queue.claimedById === user?.id;
+                const canForceRelease = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || Boolean(user?.isPlatformAdmin);
+                const canRelease = isMine || canForceRelease;
                 return (
                   <div key={queue.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/80 p-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2"><span className="font-black">{queue.invoice.number}</span><Badge variant="outline" className="text-[9px]">{queue.status === 'PENDING' ? 'Pendiente' : isMine ? 'Tomada por mí' : `Tomada por ${queue.claimedBy?.name || 'otro cajero'}`}</Badge></div>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{customer}</p>
                       <p className="mt-1 font-mono text-sm font-black text-primary">{queue.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queue.invoice.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
+                      {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)}><CheckCircle2 className="mr-1.5 size-4" /> Tomar factura</Button>}
+                      {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-amber-500/40 text-xs font-black text-amber-700 dark:text-amber-300" onClick={() => void handleReleaseCashQueue(queue)}>Liberar</Button>}
                       {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(queue.invoice.balance || 0), queue.invoice.currency)]); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );
               })}
             </div>
-          ) : (
+          ) : cashQueueError ? null : (
             <p className="mt-4 rounded-xl border border-dashed border-border/60 px-3 py-3 text-xs text-muted-foreground">No hay facturas pendientes enviadas a caja.</p>
           )}
         </CardContent>
@@ -1550,7 +1718,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
                               <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
-                                {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod))}
+                                {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}
                               </td>
                               <td data-actions-column="compact" className="px-2 sm:px-3 py-2.5 text-center">
                                 <div className="flex flex-wrap items-center justify-center gap-1">
@@ -1620,7 +1788,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                         <Store className="size-3.5" />
                                       </Button>
                                     )}
-                                    <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod))}</span>
+                                    <span className="font-mono text-sm font-black text-primary">{getCatalogPrice(prod) === undefined ? 'Sin precio' : formatCurrency(getCatalogPrice(prod) ?? 0)}</span>
                                   </div>
                                 </div>
                                 <h4 className="truncate text-sm font-black">{prod.name}</h4>
@@ -2046,9 +2214,31 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">Factura {queueInvoice.invoice.number}</h2><p className="mt-1 text-sm text-muted-foreground">{queueInvoice.invoice.customer?.name || queueInvoice.invoice.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
               <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); } }} aria-label="Cerrar cobro">×</Button>
             </div>
+            {queueInvoice.invoice.items?.length ? (
+              <div className="mt-5 overflow-hidden rounded-2xl border border-border/50">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/50 bg-muted/30 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <span>Detalle de la factura</span><span>Cant.</span><span>Total</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {queueInvoice.invoice.items.map((item) => (
+                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-border/30 px-4 py-2.5 text-xs last:border-0">
+                      <span className="min-w-0 truncate font-semibold">{item.description}</span>
+                      <span className="font-mono text-muted-foreground">{item.quantity}</span>
+                      <span className="font-mono font-bold">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(item.total || 0))}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-primary/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-xl font-black text-primary">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.balance || 0))}</p></div>
               <div className="rounded-xl border border-border/50 bg-muted/20 p-3 sm:col-span-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja operativa</p><p className="mt-1 text-sm font-bold">{selectedRegister?.code} · {selectedRegister?.name}</p><p className="text-[11px] text-muted-foreground">Sesión abierta y lista para registrar el pago.</p></div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 text-xs">
+              <div><span className="text-muted-foreground">Subtotal</span><p className="font-mono font-bold">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.subtotal || 0))}</p></div>
+              <div><span className="text-muted-foreground">Descuento</span><p className="font-mono font-bold text-rose-600">- {queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.discountAmount || 0))}</p></div>
+              <div><span className="text-muted-foreground">IVA</span><p className="font-mono font-bold">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.taxAmount || 0))}</p></div>
+              <div><span className="text-muted-foreground">Total factura</span><p className="font-mono font-black text-primary">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.total || 0))}</p></div>
             </div>
             <div className="mt-5 space-y-3">
               {queuePayments.map((payment, index) => (
@@ -2067,6 +2257,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               ))}
               <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, queueInvoice.invoice.currency)])}>+ Agregar pago mixto</Button>
             </div>
+            {(() => {
+              const paymentSummary = getQueuePaymentSummary();
+              return (
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total recibido</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.paidBase)}</p></div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.changeBase > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Cambio / vuelto</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.changeBase)}</p></div>
+                  <div className={cn('rounded-xl border p-3', paymentSummary.missingBase > 0.005 ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'border-border/50 bg-muted/20 text-muted-foreground')}><p className="text-[10px] font-black uppercase tracking-widest">Faltante</p><p className="mt-1 font-mono text-lg font-black">{baseCurrency === 'USD' ? '$' : 'C$'} {formatSalesAmount(paymentSummary.missingBase)}</p></div>
+                </div>
+              );
+            })()}
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border/50 pt-4"><Button type="button" variant="outline" onClick={() => { setQueueInvoice(null); setQueuePayments([]); }} disabled={queueSubmitting}>Cancelar</Button><Button type="button" onClick={() => void submitCashQueuePayment()} disabled={queueSubmitting}>{queueSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar cobro'}</Button></div>
           </div>
         </div>

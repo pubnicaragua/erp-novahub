@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Activity, ArrowUpRight, Building2, Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, FileSpreadsheet, FileText, History, LayoutGrid, List, Loader2, Mail, MapPin, Phone, Receipt, RefreshCw, Search, ShoppingCart, TrendingUp, Truck, UserRound, Users } from 'lucide-react';
+import { Activity, ArrowUpRight, Building2, Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, FileCog, FileSpreadsheet, FileText, History, LayoutGrid, List, Loader2, Mail, MapPin, Phone, Receipt, RefreshCw, Search, ShoppingCart, TrendingUp, Truck, UserRound, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_SALES_VIEWS, type ManagerSalesView } from './manager-sales.types';
@@ -29,6 +29,7 @@ import { publicAccessService, publicLinkUrl } from '../../services/public-access
 import { ColumnFilterMenu, type ColumnSort, type ColumnSortType } from '../ui/ColumnFilterMenu';
 import { toast } from 'sonner';
 import { ManagerSalesCashSheet, ManagerSalesDeliverySheet, ManagerSalesPriceListSheet } from './ManagerSalesOperationalSheets';
+import { ManagerInvoiceSeriesSettings } from './ManagerInvoiceSeriesSettings';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -118,10 +119,11 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   const [exporting, setExporting] = useState(false);
   const { user } = useAuth();
   const { themeConfig } = useTheme();
+  const isInvoiceSeriesView = view === 'invoice-series';
   const query = useTenantQuery<ManagerSalesModuleResponse>(
     ['manager-sales', groupId, view, businessUnitId || 'all', branchId || 'all', debouncedSearch, status, customerType, dateFrom, dateTo, registerId, deliveryBranchId, paymentStatus, priceListMode, reportCurrency || 'group-default', page, pageSize],
     (signal) => enterpriseGroupsService.getSalesModule(groupId, { view, businessUnitId, branchId, search: debouncedSearch || undefined, status: status || undefined, customerType: customerType || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, registerId: registerId || undefined, deliveryBranchId: deliveryBranchId || undefined, paymentStatus: paymentStatus || undefined, priceListMode: view === 'pricelists' ? priceListMode : undefined, reportCurrency: reportCurrency || undefined, page, pageSize }, signal),
-    { enabled: Boolean(groupId) },
+    { enabled: Boolean(groupId) && !isInvoiceSeriesView },
   );
   const response = query.data;
   const rows = response?.data || [];
@@ -390,12 +392,12 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
   return <div className="sales-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">
     <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ShoppingCart className="size-6" /></div>
-        <div className="min-w-0"><h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">Ventas</h1><Badge variant="outline" className="mt-3 border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursal(es) en el alcance</Badge></div>
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">{isInvoiceSeriesView ? <FileCog className="size-6" /> : <ShoppingCart className="size-6" />}</div>
+        <div className="min-w-0"><h1 className="truncate text-3xl font-black uppercase italic tracking-tighter sm:text-4xl">{isInvoiceSeriesView ? 'Facturación y reportes' : 'Ventas'}</h1><Badge variant="outline" className="mt-3 border-primary/20 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary">{branches.length} sucursal(es) en el alcance</Badge></div>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
-        <Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>
-        {view === 'quotes' ? <DropdownMenu>
+        {!isInvoiceSeriesView && <Button variant="outline" className="rounded-xl" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={cn('mr-2 size-4', query.isFetching && 'animate-spin')} />Actualizar</Button>}
+        {!isInvoiceSeriesView && (view === 'quotes' ? <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="rounded-xl" disabled={exporting}>{exporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}Exportar</Button>
           </DropdownMenuTrigger>
@@ -416,13 +418,13 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
               } finally { setExporting(false); }
             }}><FileText className="size-4 text-primary" /> PDF (.pdf)</DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>}
+        </DropdownMenu>)}
       </div>
     </div>
 
     {sidebarCollapsed && <div className="sales-subnav flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-border/60 bg-muted/30 p-1.5">{MANAGER_SALES_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => changeView(item.id)} className={cn('flex-none rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wide text-muted-foreground transition-colors hover:bg-card hover:text-foreground', view === item.id && 'bg-primary text-primary-foreground shadow-sm')}><span className="sm:hidden">{item.label.slice(0, 3)}</span><span className="hidden sm:inline">{item.label}</span></button>)}</div>}
 
-    {view === 'overview' ? <SalesOverview metrics={metrics} reportCurrency={activeReportCurrency} /> : <>
+    {view === 'invoice-series' ? <ManagerInvoiceSeriesSettings groupId={groupId} businessUnitId={businessUnitId} branchId={branchId} /> : view === 'overview' ? <SalesOverview metrics={metrics} reportCurrency={activeReportCurrency} /> : <>
       <SalesFilters view={view} search={search} setSearch={(value) => { setSearch(value); setPage(1); }} status={status} setStatus={(value) => { setStatus(value); setPage(1); }} customerType={customerType} setCustomerType={(value) => { setCustomerType(value); setPage(1); }} dateFrom={dateFrom} setDateFrom={(value) => { setDateFrom(value); setPage(1); }} dateTo={dateTo} setDateTo={(value) => { setDateTo(value); setPage(1); }} statusOptions={activeStatusOptions} layoutMode={effectiveLayoutMode} setLayoutMode={setLayoutMode} registerId={registerId} setRegisterId={(value) => { setRegisterId(value); setPage(1); }} registerOptions={metrics.registers || []} deliveryBranchId={deliveryBranchId} setDeliveryBranchId={(value) => { setDeliveryBranchId(value); setPage(1); }} branches={branches} paymentStatus={paymentStatus} setPaymentStatus={(value) => { setPaymentStatus(value); setPage(1); }} priceListMode={priceListMode} setPriceListMode={(value) => { setPriceListMode(value); setPage(1); }} />
       <SalesKpis view={view} metrics={metrics} reportCurrency={activeReportCurrency} status={status} onStatusChange={(value) => { setStatus(value); setPage(1); }} />
       {view === 'cash' && <CashRegisterSummary rows={metrics.registerSummary || []} reportCurrency={activeReportCurrency} />}

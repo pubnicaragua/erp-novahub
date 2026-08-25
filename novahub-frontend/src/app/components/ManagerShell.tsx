@@ -38,6 +38,7 @@ import {
   ShoppingCart,
   UserRound,
   FileText,
+  FileCog,
   ClipboardList,
   CalendarDays,
   CircleDollarSign,
@@ -130,6 +131,7 @@ const MANAGER_SALES_VIEW_ICONS: Record<ManagerSalesView, LucideIcon> = {
   credits: CreditCard,
   deliveries: Truck,
   cash: Landmark,
+  'invoice-series': FileCog,
   pricelists: ListChecks,
 };
 
@@ -547,7 +549,7 @@ export function ManagerShell({
   const handleSectionClick = (next: ManagerSection) => {
     if (next === "inventory" || next === "sales" || next === "purchases" || next === "finances" || next === "accounting" || next === "reports" || next === "hr") {
       if (next === "inventory")
-        onInventoryViewChange(MANAGER_INVENTORY_VIEWS[0].id);
+        onInventoryViewChange(MANAGER_INVENTORY_VIEWS.find((view) => view.id === "products")?.id || MANAGER_INVENTORY_VIEWS[0].id);
       if (next === "sales") onSalesViewChange(MANAGER_SALES_VIEWS[0].id);
       if (next === "purchases") onPurchasesViewChange(MANAGER_PURCHASES_VIEWS[0].id);
       if (next === "finances") onFinanceViewChange(MANAGER_FINANCE_VIEWS[0].id);
@@ -1015,7 +1017,7 @@ function ManagerSidebar({
                                 const isFinances = item.id === "finances";
                                 const isAccounting = item.id === "accounting";
                                 const isReports = item.id === "reports";
-                                const SubIcon = isInventory
+                                const SubIcon = (isInventory
                                   ? MANAGER_INVENTORY_VIEW_ICONS[view.id as ManagerInventoryView]
                                   : isSales
                                     ? MANAGER_SALES_VIEW_ICONS[view.id as ManagerSalesView]
@@ -1027,7 +1029,7 @@ function ManagerSidebar({
                                           ? MANAGER_ACCOUNTING_VIEW_ICONS[view.id as ManagerAccountingView]
                                           : isReports
                                             ? MANAGER_REPORTS_VIEW_ICONS[view.id as ManagerReportsView]
-                                            : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView];
+                                            : MANAGER_HR_VIEW_ICONS[view.id as ManagerHrView]) || FileText;
                                 const subActive = isInventory
                                   ? inventoryView === view.id
                                   : isSales

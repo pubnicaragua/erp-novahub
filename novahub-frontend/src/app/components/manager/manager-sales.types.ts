@@ -10,6 +10,7 @@ export type ManagerSalesView =
   | 'credits'
   | 'deliveries'
   | 'cash'
+  | 'invoice-series'
   | 'pricelists';
 
 export const MANAGER_SALES_VIEWS: Array<{ id: ManagerSalesView; label: string }> = [
@@ -24,5 +25,6 @@ export const MANAGER_SALES_VIEWS: Array<{ id: ManagerSalesView; label: string }>
   { id: 'credits', label: 'Créditos' },
   { id: 'deliveries', label: 'Entregas' },
   { id: 'cash', label: 'Facturación y reportes de caja' },
+  { id: 'invoice-series', label: 'Series de facturación' },
   { id: 'pricelists', label: 'Listas de precios' },
 ];

@@ -5,6 +5,7 @@ import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card"
 import { Separator } from "../ui/separator"
+import { useAuth } from '../../contexts/AuthContext'
 import { InventoryViewTutorial } from './InventoryViewTutorial'
 
 interface InventoryDetailPanelProps {
@@ -121,7 +122,7 @@ function TransferDetail({ data }: { data: any }) {
   );
 }
 
-function AdjustmentDetail({ data }: { data: any }) {
+function AdjustmentDetail({ data, canViewInventoryCost }: { data: any; canViewInventoryCost: boolean }) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const totalDelta = items.reduce((sum: number, item: any) => sum + (Number(item.actualStock || 0) - Number(item.currentStock || 0)), 0);
   const referenceCost = items[0]?.unitCost != null ? `${items[0].currency || ''} ${Number(items[0].unitCost || 0)}` : '—';
@@ -171,7 +172,7 @@ function AdjustmentDetail({ data }: { data: any }) {
           className={totalDelta >= 0 ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}
           valueClassName={totalDelta >= 0 ? 'text-emerald-600' : 'text-rose-500'}
         />
-        <StatCard label="Costo referencia" value={referenceCost} />
+        {canViewInventoryCost && <StatCard label="Costo referencia" value={referenceCost} />}
       </div>
 
       <section className="min-w-0">
@@ -197,7 +198,8 @@ function AdjustmentDetail({ data }: { data: any }) {
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold" title={item.product?.name || 'Producto'}>{item.product?.name || 'Producto'}</p>
                     <p className="mt-1 truncate text-[10px] text-muted-foreground">
-                      {item.product?.code ? `${item.product.code} · ` : ''}{item.currency || ''} {Number(item.unitCost || 0)}
+                      {item.product?.code || 'Sin referencia'}
+                      {canViewInventoryCost && <> · {item.currency || ''} {Number(item.unitCost || 0)}</>}
                     </p>
                   </div>
                   <div className="shrink-0 text-right font-mono text-[11px] font-bold tabular-nums">
@@ -217,6 +219,8 @@ function AdjustmentDetail({ data }: { data: any }) {
 
 export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPanelProps) {
   const isTransfer = kind === 'transfer';
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
 
   return (
     <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
@@ -237,7 +241,7 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
         </CardHeader>
         <Separator />
         <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5" data-tour="inventory-detail-data">
-          {data && (isTransfer ? <TransferDetail data={data} /> : <AdjustmentDetail data={data} />)}
+          {data && (isTransfer ? <TransferDetail data={data} /> : <AdjustmentDetail data={data} canViewInventoryCost={canViewInventoryCost} />)}
         </CardContent>
       </Card>
     </div>

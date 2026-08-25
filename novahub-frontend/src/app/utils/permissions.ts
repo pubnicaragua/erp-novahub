@@ -8,7 +8,21 @@ export const PERMISSION_ACTION_DEFINITIONS = [
   { key: 'export', label: 'Exportar', description: 'Permite descargar o exportar información de la vista.' },
 ] as const;
 
-export type PermissionMatrixAction = typeof PERMISSION_ACTION_DEFINITIONS[number]['key'];
+/** Permisos de datos sensibles que solo aplican a filas concretas de la matriz. */
+export const SENSITIVE_PERMISSION_ACTION_DEFINITIONS = [
+  { key: 'viewCost', label: 'Ver costo', description: 'Permite ver costos, valores de inventario y últimos costos de compra.' },
+] as const;
+
+/** Vistas de inventario que contienen costos o valoraciones monetarias visibles. */
+export const INVENTORY_COST_PERMISSION_MODULES = ['INVENTORY', 'INVENTORY_PRODUCTS', 'INVENTORY_ADJUSTMENTS'] as const;
+
+export function supportsInventoryCostPermission(module: string): boolean {
+  return INVENTORY_COST_PERMISSION_MODULES.includes(String(module || '').toUpperCase() as typeof INVENTORY_COST_PERMISSION_MODULES[number]);
+}
+
+export type PermissionMatrixAction =
+  | typeof PERMISSION_ACTION_DEFINITIONS[number]['key']
+  | typeof SENSITIVE_PERMISSION_ACTION_DEFINITIONS[number]['key'];
 
 export const PERMISSION_ACTION_KEYS = PERMISSION_ACTION_DEFINITIONS.map(action => action.key);
 
@@ -49,6 +63,7 @@ export function supportsPermissionAction(module: string, action: PermissionMatri
 
 export function permissionValue(permission: any, action: PermissionMatrixAction): boolean {
   if (!permission) return false;
+  if (action === 'viewCost') return permission.viewCost === true || permission.canViewCost === true;
   if (action === 'read') return permission.read === true || permission.view === true || permission.canView === true;
   // Los roles existentes pueden guardar la misma capacidad con los nombres
   // históricos "deactivate", "cancel", "reject" o "reverse". Se muestran y editan como Eliminar.
@@ -67,5 +82,6 @@ export function hydratePermissionActions(permission: any, module: string) {
   return {
     module,
     ...Object.fromEntries(PERMISSION_ACTION_DEFINITIONS.map(({ key }) => [key, permissionValue(permission, key)])),
+    viewCost: permissionValue(permission, 'viewCost'),
   };
 }

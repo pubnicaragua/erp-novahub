@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { rolesService } from '../../services/roles.service';
 import { ALL_PERM_MODULES, normalizePermissions, SUBMODULES_FOR_PERMS } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
+import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -25,7 +25,7 @@ interface TeamAccessPanelProps {
   canDeleteRoles?: boolean;
 }
 
-const permissionActions = PERMISSION_ACTION_DEFINITIONS;
+const permissionActions = [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS];
 
 const emptyPermissions = () => ALL_PERM_MODULES.map((module: any) => ({
   module: module.id,
@@ -51,7 +51,7 @@ function PermissionHelp() {
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Las acciones se aplican a la vista de cada fila. "Aprobar" solo aparece donde existe un flujo de aprobación o transición.</p>
         </div>
         <div className="space-y-3 p-4">
-          {PERMISSION_ACTION_DEFINITIONS.map(({ key, label, description }) => (
+          {permissionActions.map(({ key, label, description }) => (
             <div key={key} className="flex items-start gap-2.5">
               <span className={key === 'approve' ? 'mt-0.5 size-2 shrink-0 rounded-full bg-emerald-500' : 'mt-0.5 size-2 shrink-0 rounded-full bg-primary/60'} />
               <div className="min-w-0">
@@ -112,7 +112,9 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
     return groups;
   }, {}), []);
 
-  const actionIsAvailable = (moduleId: string, action: PermissionMatrixAction) => supportsPermissionAction(moduleId, action);
+  const actionIsAvailable = (moduleId: string, action: PermissionMatrixAction) => action === 'viewCost'
+    ? supportsInventoryCostPermission(moduleId)
+    : supportsPermissionAction(moduleId, action);
 
   const isSectionFullyEnabled = (modules: any[]) => {
     const permissions = normalizePermissions(editingRole?.permissions);
@@ -282,15 +284,15 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
             <DialogDescription className="text-sm">{viewingRole?.description || 'Revisa los módulos y acciones habilitadas para este rol.'}</DialogDescription>
           </DialogHeader>
           <div className="relative min-h-0 flex-1 overflow-auto px-6 pt-0 pb-5">
-            <div className="min-w-[940px] rounded-xl border border-border/50">
-              <div className="isolate sticky top-0 z-[100] grid min-w-[940px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
+            <div className="min-w-[1040px] rounded-xl border border-border/50">
+              <div className="isolate sticky top-0 z-[100] grid min-w-[1040px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
                 <span>Módulo</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}
               </div>
               {Object.entries(groupedModules).map(([group, modules]) => <div key={group} className="border-b border-border last:border-b-0">
                 <div className="bg-muted px-5 py-3 text-xs font-black uppercase tracking-widest text-primary">{getPermissionGroupLabel(group)}</div>
                 {(modules as any[]).map((module: any) => {
                   const permission = normalizePermissions(viewingRole?.permissions).find((item: any) => item.module === module.id) || {};
-                  return <div key={module.id} className="grid min-w-[940px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
+                  return <div key={module.id} className="grid min-w-[1040px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
                     <span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>
                     {permissionActions.map(({ key }) => <div key={key} className="flex justify-center">
                       {!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : permissionValue(permission, key) ? <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-500"><Check className="mr-1 size-3" />Sí</Badge> : <span className="text-muted-foreground/30">—</span>}
@@ -346,8 +348,8 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
             <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest">{ALL_PERM_MODULES.length} vistas · {permissionActions.length} acciones</Badge>
           </div>
           <div data-tour="role-permissions" className="relative min-h-0 flex-1 overflow-auto px-6 pt-0 pb-5">
-            <div className="min-w-[940px] rounded-xl border border-border/50">
-              <div className="isolate sticky top-0 z-[100] grid min-w-[940px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
+            <div className="min-w-[1040px] rounded-xl border border-border/50">
+              <div className="isolate sticky top-0 z-[100] grid min-w-[1040px] items-center gap-1.5 border-b border-border bg-card px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground shadow-md" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}>
                 <span>Módulo</span>{permissionActions.map(({ key, label }) => <span key={key} className="text-center">{label}</span>)}
               </div>
               {Object.entries(groupedModules).map(([group, modules]) => <div key={group} className="border-b border-border last:border-b-0">
@@ -364,7 +366,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
                 </div>
                 {(modules as any[]).map((module: any) => {
                   const permission = normalizePermissions(editingRole?.permissions).find((item: any) => item.module === module.id) || {};
-                  return <div key={module.id} className="grid min-w-[940px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key, label }) => <div key={key} className="flex justify-center">{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : <Switch aria-label={`${module.label}: ${label}`} checked={permissionValue(permission, key)} onCheckedChange={() => togglePermission(module.id, key)} />}</div>)}</div>;
+                  return <div key={module.id} className="grid min-w-[1040px] items-center gap-1.5 border-t border-border/40 px-5 py-3.5 text-sm" style={{ gridTemplateColumns: `minmax(240px,1fr) repeat(${permissionActions.length},88px)` }}><span className={module.parent ? 'pl-5 text-muted-foreground' : 'font-bold'}>{module.label}</span>{permissionActions.map(({ key, label }) => <div key={key} className={`flex justify-center ${key === 'viewCost' ? 'border-l border-rose-500/20' : ''}`}>{!actionIsAvailable(module.id, key) ? <span className="text-muted-foreground/20" aria-label="No aplica">—</span> : <Switch aria-label={`${module.label}: ${label}`} checked={permissionValue(permission, key)} onCheckedChange={() => togglePermission(module.id, key)} className={key === 'viewCost' ? 'data-[state=checked]:bg-rose-500' : undefined} />}</div>)}</div>;
                 })}
               </div>)}
             </div>

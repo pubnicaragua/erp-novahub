@@ -257,6 +257,16 @@ export interface Invoice {
   accountId?: string;
   registerId?: string | null;
   sessionId?: string | null;
+  cashQueue?: {
+    id: string;
+    status: 'PENDING' | 'CLAIMED' | 'PAID' | 'CANCELLED' | string;
+    registerId?: string | null;
+    sessionId?: string | null;
+    claimedById?: string | null;
+    claimExpiresAt?: string | null;
+    lastActivityAt?: string | null;
+    createdAt?: string;
+  } | null;
   sourceType?: 'ESTIMATE' | 'SALES_ORDER' | 'CASH_SALE' | 'RECURRING' | 'DIRECT' | string;
   sourceLabel?: string | null;
   status: PaymentStatus;

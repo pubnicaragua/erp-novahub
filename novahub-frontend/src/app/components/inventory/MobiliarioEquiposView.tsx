@@ -18,6 +18,7 @@ import { storageService } from '../../services/storage.service';
 import { api } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 
 const CATEGORIES = [
@@ -128,13 +129,18 @@ function buildTemplateRows(): (string | number)[][] {
   ]);
 }
 
-function downloadTemplate() {
+function downloadTemplate(includeCost = true) {
   const rows = buildTemplateRows();
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...rows]);
-  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: TEMPLATE_HEADERS.length - 1 } });
-  const totalRow = rows.length + 1; // fila 1 = encabezado, filas 2..51 = datos
-  const totalCell = XLSX.utils.encode_cell({ r: totalRow - 1, c: 13 }); // columna Costo (N)
-  ws[totalCell] = { t: 'n', f: `SUMA(N2:N${rows.length + 1})` };
+  const costIndex = TEMPLATE_HEADERS.indexOf('Costo');
+  const headers = includeCost ? TEMPLATE_HEADERS : TEMPLATE_HEADERS.filter((_, index) => index !== costIndex);
+  const outputRows = includeCost ? rows : rows.map((row) => row.filter((_, index) => index !== costIndex));
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...outputRows]);
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: outputRows.length, c: headers.length - 1 } });
+  const totalRow = outputRows.length + 1; // fila 1 = encabezado, filas 2..51 = datos
+  if (includeCost) {
+    const totalCell = XLSX.utils.encode_cell({ r: totalRow - 1, c: costIndex });
+    ws[totalCell] = { t: 'n', f: `SUMA(N2:N${outputRows.length + 1})` };
+  }
   const labelCell = XLSX.utils.encode_cell({ r: totalRow - 1, c: 1 });
   ws[labelCell] = { t: 's', v: 'TOTAL' };
   const wb = XLSX.utils.book_new();
@@ -227,6 +233,8 @@ const EMPTY_FORM: FormState = {
 export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?: string }) {
   const queryClient = useQueryClient();
   const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -451,7 +459,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       const m = String(cutoff.getMonth() + 1).padStart(2, '0');
       const d = String(cutoff.getDate()).padStart(2, '0');
       const defaultDate = `${y}-${m}-${d}`;
-      const items = importRowsData.map((row) => row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate });
+      const items = importRowsData.map((row) => {
+        const item = row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate };
+        return canViewInventoryCost ? item : { ...item, cost: 0, currency: 'USD', exchangeRate: null };
+      });
       const res = await mobiliarioService.importAssets(items);
       setImportResult(res);
       toast.success(`Importación completada: ${res?.createdCount ?? 0} creados, ${res?.skippedCount ?? 0} omitidos`);
@@ -534,7 +545,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={downloadTemplate} className="h-9 gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-9 gap-1.5">
             <FileDown className="size-4" /> Plantilla
           </Button>
           <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-9 gap-1.5">
@@ -581,14 +592,14 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total de activos</p>
                 <p className="text-xl font-black tabular-nums">{effectiveSummary.totalAssets ?? displayTotal}</p>
               </div>
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+              {canViewInventoryCost && <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Valor total ({effectiveSummary.baseCurrency || 'USD'})</p>
                 <p className="text-xl font-black tabular-nums">
                   {effectiveSummary.baseCurrency === 'NIO' ? 'C$' : '$'} {fmtCost(Number(effectiveSummary.totalCostBase || 0))}
                 </p>
                 <p className="text-[9px] text-muted-foreground">Convertido con la tasa de cada activo</p>
-              </div>
-              <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
+              </div>}
+              {canViewInventoryCost && <div className="rounded-xl border border-border/40 bg-muted/10 p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Desglose por moneda</p>
                 <p className="text-sm font-black tabular-nums">
                   <span className="text-amber-600">C$ {fmtCost(Number(effectiveSummary.perCurrency?.NIO || 0))}</span>
@@ -596,7 +607,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                   <span className="text-emerald-600">$ {fmtCost(Number(effectiveSummary.perCurrency?.USD || 0))}</span>
                 </p>
                 <p className="text-[9px] text-muted-foreground">Costo original de cada registro</p>
-              </div>
+              </div>}
             </div>
           )}
           {loading ? (
@@ -607,7 +618,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               <p className="text-sm">Sin activos registrados</p>
               <div className="flex items-center gap-2">
                 <Button variant="link" size="sm" onClick={openCreate}>Registrar el primer activo</Button>
-                <Button variant="link" size="sm" onClick={downloadTemplate}>Descargar plantilla</Button>
+                <Button variant="link" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)}>Descargar plantilla</Button>
               </div>
             </div>
           ) : (
@@ -621,7 +632,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Categoría</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Sucursal</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground hidden xl:table-cell">Responsable</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right w-[150px]">Costo</TableHead>
+                      {canViewInventoryCost && <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right w-[150px]">Costo</TableHead>}
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center w-[60px]">Factura</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right w-[110px]">Acciones</TableHead>
@@ -640,7 +651,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                         </TableCell>
                         <TableCell className="py-2 px-2 hidden md:table-cell text-xs text-muted-foreground">{branchNameOf(asset.branchId)}</TableCell>
                         <TableCell className="py-2 px-2 hidden xl:table-cell text-xs">{userNameOf(asset.responsibleUserId)}</TableCell>
-                        <TableCell className="py-2 px-2">{renderCostCell(asset)}</TableCell>
+                         {canViewInventoryCost && <TableCell className="py-2 px-2">{renderCostCell(asset)}</TableCell>}
                         <TableCell className="py-2 px-2">
                           <Badge className={cn("text-[10px] border", STATUS_BADGES[asset.status] || STATUS_BADGES.AVAILABLE)}>{asset.statusLabel || statusLabelOf(asset.status)}</Badge>
                         </TableCell>
@@ -784,11 +795,11 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                 <Label>Número de factura / documento</Label>
                 <Input value={form.documentNumber} onChange={e => set('documentNumber', e.target.value)} placeholder="FAC-2026-0001" />
               </div>
-              <div className="space-y-2">
+              {canViewInventoryCost && <div className="space-y-2">
                 <Label>Costo</Label>
                 <Input type="number" step="0.01" min="0" value={form.cost} onChange={e => set('cost', e.target.value)} />
-              </div>
-              <div className="space-y-2">
+              </div>}
+              {canViewInventoryCost && <div className="space-y-2">
                 <Label>Moneda del costo</Label>
                 <Select value={form.currency} onValueChange={v => set('currency', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -796,15 +807,15 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
                     {CURRENCIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              {form.currency === 'NIO' && (
+              </div>}
+              {canViewInventoryCost && form.currency === 'NIO' && (
                 <div className="space-y-2 sm:col-span-2">
                   <Label>Tasa de cambio (C$ por US$)</Label>
                   <Input type="number" step="0.01" min="0" value={form.exchangeRate} onChange={e => set('exchangeRate', e.target.value)} placeholder="Ej: 36.5 (se sugiere automáticamente)" />
                   <p className="text-[10px] text-muted-foreground">Se mostrará el costo también en dólares equivalentes.</p>
                 </div>
               )}
-              {form.currency === 'NIO' && form.cost && Number(form.cost) > 0 && form.exchangeRate && Number(form.exchangeRate) > 0 && (
+              {canViewInventoryCost && form.currency === 'NIO' && form.cost && Number(form.cost) > 0 && form.exchangeRate && Number(form.exchangeRate) > 0 && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-700 sm:col-span-2">
                   Equivalente: <strong>$ {fmtCost(Number(form.cost) / Number(form.exchangeRate))} USD</strong>
                   <span className="text-muted-foreground"> · Costo: C$ {fmtCost(Number(form.cost))}</span>
@@ -892,7 +903,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               {importRowsData.slice(0, 8).map((row, i) => (
                 <div key={i} className="flex items-center justify-between gap-2 border-b border-border/30 px-3 py-1.5 text-[11px] last:border-0">
                   <span className="min-w-0 truncate font-medium">{row.name || '—'}</span>
-                  <span className="shrink-0 text-muted-foreground">{row.category} · {row.currency || 'USD'} · {row.cost || '0'}</span>
+                  <span className="shrink-0 text-muted-foreground">{row.category}{canViewInventoryCost ? ` · ${row.currency || 'USD'} · ${row.cost || '0'}` : ''}</span>
                 </div>
               ))}
               {importRowsData.length > 8 && <p className="px-3 py-1.5 text-[10px] text-muted-foreground">...y {importRowsData.length - 8} filas más</p>}

@@ -1,9 +1,12 @@
 import { Package, Warehouse, AlertTriangle, TrendingUp, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function DashboardView({ products, warehouses, movements = [], transfers = [], adjustments = [] }: any) {
   const { formatConvertedAmount, baseCurrency } = useCurrency();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY', 'viewCost');
   const totalValue = products.reduce((acc: number, p: any) => acc + ((p.stock || 0) * (p.costPrice || 0)), 0);
   const totalStockUnits = products.reduce((acc: number, p: any) => acc + Number(p.stock || 0), 0);
   const averageTicketValue = products.length > 0 ? totalValue / products.length : 0;
@@ -21,7 +24,7 @@ export function DashboardView({ products, warehouses, movements = [], transfers 
     { label: 'Valor Promedio/Producto', value: averageTicketValue, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10', isCurrency: true },
     { label: 'Transferencias Pendientes', value: pendingTransfers, icon: Clock, color: pendingTransfers > 0 ? 'text-amber-500' : 'text-green-500', bg: pendingTransfers > 0 ? 'bg-amber-500/10' : 'bg-green-500/10' },
     { label: 'Ajustes por Aprobar', value: draftAdjustments, icon: AlertTriangle, color: draftAdjustments > 0 ? 'text-rose-500' : 'text-green-500', bg: draftAdjustments > 0 ? 'bg-rose-500/10' : 'bg-green-500/10' },
-  ];
+  ].filter((stat) => canViewInventoryCost || !stat.isCurrency);
 
   const recentActivity = [
     ...movements.slice(0, 4).map((m: any) => ({

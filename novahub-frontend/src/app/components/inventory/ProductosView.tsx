@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import JSZip from 'jszip';
-import { createExtractorFromData } from 'node-unrar-js/esm/index.esm.js';
-import rarWasmUrl from 'node-unrar-js/esm/js/unrar.wasm?url';
+import { extractProductImageArchive, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -100,72 +98,6 @@ const normalizeImportHeader = (value: unknown) => String(value ?? '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim()
   .replace(/\s+/g, ' ');
-
-const PRODUCT_IMAGE_EXTENSIONS = /\.(jpe?g|png)$/i;
-const PRODUCT_IMAGE_ARCHIVE_EXTENSIONS = /\.(zip|rar)$/i;
-
-const productImageSkuFromPath = (path: string) => {
-  const fileName = path.split(/[\\/]/).pop() || '';
-  return fileName.replace(PRODUCT_IMAGE_EXTENSIONS, '').trim().toLowerCase();
-};
-
-const productImageFileFromBytes = (path: string, bytes: BlobPart | Uint8Array) => {
-  const fileName = path.split(/[\\/]/).pop() || 'imagen';
-  return new File([bytes as BlobPart], fileName, {
-    type: /\.png$/i.test(fileName) ? 'image/png' : 'image/jpeg',
-  });
-};
-
-/**
- * Extrae imágenes de un ZIP/RAR usando el mismo contrato para ambas cargas.
- * La clave de asociación siempre es el nombre del archivo sin extensión,
- * normalizado a minúsculas y sin espacios laterales.
- */
-const extractProductImageArchive = async (
-  file: File,
-  onProgress?: (completed: number, total: number) => void,
-): Promise<Map<string, File>> => {
-  if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
-    throw new Error('Selecciona un archivo ZIP o RAR válido');
-  }
-
-  const entries = new Map<string, File>();
-  if (/\.zip$/i.test(file.name)) {
-    const zip = await JSZip.loadAsync(file);
-    const files = Object.values(zip.files).filter((entry) => !entry.dir && PRODUCT_IMAGE_EXTENSIONS.test(entry.name));
-    let completed = 0;
-    onProgress?.(0, files.length);
-    for (const entry of files) {
-      const sku = productImageSkuFromPath(entry.name);
-      if (sku) {
-        const blob = await entry.async('blob');
-        entries.set(sku, productImageFileFromBytes(entry.name, blob));
-      }
-      completed += 1;
-      onProgress?.(completed, files.length);
-    }
-    return entries;
-  }
-
-  const [archiveData, wasmResponse] = await Promise.all([
-    file.arrayBuffer(),
-    fetch(rarWasmUrl),
-  ]);
-  if (!wasmResponse.ok) throw new Error('No se pudo cargar el extractor RAR');
-  const wasmBinary = await wasmResponse.arrayBuffer();
-  const extractor = await createExtractorFromData({ data: archiveData, wasmBinary });
-  const fileHeaders = [...extractor.getFileList().fileHeaders].filter((header) => !header.flags.directory && PRODUCT_IMAGE_EXTENSIONS.test(header.name));
-  const extracted = [...extractor.extract({ files: fileHeaders.map((header) => header.name) }).files];
-  onProgress?.(0, extracted.length);
-  extracted.forEach((item, index) => {
-    if (item.extraction) {
-      const sku = productImageSkuFromPath(item.fileHeader.name);
-      if (sku) entries.set(sku, productImageFileFromBytes(item.fileHeader.name, item.extraction));
-    }
-    onProgress?.(index + 1, extracted.length);
-  });
-  return entries;
-};
 
 interface ProductosViewProps {
   products: any[];
@@ -266,6 +198,8 @@ function ImportPreviewPage({
   onBack,
 }: ImportPreviewPageProps) {
   useImportPreviewLayout();
+  const { canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const previewPageSize = 50;
   const [previewPage, setPreviewPage] = useState(1);
   const validRows = importData.filter((row) => !row._hasError).length;
@@ -296,7 +230,7 @@ function ImportPreviewPage({
           <ImportPreviewField label="Minorista"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Mayorista"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Distribuidor"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Costo"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          {canViewInventoryCost && <ImportPreviewField label="Costo"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Stock inicial"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Stock mínimo"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Bodega" className="sm:col-span-2">
@@ -347,7 +281,7 @@ function ImportPreviewPage({
                 <TableHead className="w-28 text-right text-[10px] uppercase">Minorista</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Mayorista</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Distribuidor</TableHead>
-                <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>
+                  {canViewInventoryCost && <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>}
                 <TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead>
                 <TableHead className="w-40 text-[10px] uppercase">Bodega</TableHead>
@@ -389,7 +323,7 @@ function ImportPreviewPage({
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+                  {canViewInventoryCost && <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>}
                   <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
                   <TableCell className="p-1">
@@ -450,6 +384,7 @@ function ImportPreviewPage({
 export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
   const [stockByProduct, setStockByProduct] = useState<Record<string, Record<string, number>>>({});
   const refreshStockMap = useCallback(async () => {
@@ -1257,7 +1192,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           salePriceOriginal: Number(product.salePrice || 0),
           priceCurrency: product.priceCurrency || baseCurrency,
           priceExchangeRate: Number(product.priceExchangeRate || 1),
-          costPrice: Number(product.costPrice || 0),
+           ...(canViewInventoryCost ? { costPrice: Number(product.costPrice || 0) } : {}),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
@@ -1316,7 +1251,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           salePriceOriginal: Number(product.salePrice || 0),
           priceCurrency: product.priceCurrency || baseCurrency,
           priceExchangeRate: Number(product.priceExchangeRate || 1),
-          costPrice: Number(product.costPrice || 0),
+           ...(canViewInventoryCost ? { costPrice: Number(product.costPrice || 0) } : {}),
           unit: product.unit || 'unidad',
           minStock: Number(product.minStock || 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
@@ -1797,7 +1732,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <span className="block text-[9px] text-muted-foreground">Tasa: {product.priceCurrency === baseCurrency ? '1.00' : Number(exchangeRate || 1).toFixed(4)}</span>
           </div>
         </TableCell>}
-        {!isServiceView && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
+        {!isServiceView && canViewInventoryCost && <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>
           <Input
             type="number"
             min={0}
@@ -1853,10 +1788,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   // ==================== EXCEL IMPORT ====================
   const handleDownloadTemplate = useCallback(() => {
-    const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Costo', 'Stock inicial', 'Stock mínimo', 'Bodega'];
+    const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Stock inicial', 'Stock mínimo', 'Bodega'];
+    if (canViewInventoryCost) headers.splice(7, 0, 'Costo');
+    const sampleRow: any[] = ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', '', 150, 140, 130, 0, 0, warehouses[0]?.name || ''];
+    if (canViewInventoryCost) sampleRow.splice(7, 0, 100);
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', '', 150, 140, 130, 100, 0, 0, warehouses[0]?.name || ''],
+      sampleRow,
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
     const wb = XLSX.utils.book_new();
@@ -1869,25 +1807,26 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       ['Nombre', 'Obligatorio. En Productos solo se podrá editar nombre, SKU e imagen posteriormente.'],
       ['Categoría', 'Debe coincidir con una categoría existente de productos; durante la previsualización puedes elegir otra o crearla.'],
       ['Bodega', 'Obligatoria únicamente si Stock inicial es mayor que cero. Debe ser una bodega activa de la sucursal.'],
-      ['Costo', 'Es el único precio que permanece visible/editable en Productos.'],
+      ...(canViewInventoryCost ? [['Costo', 'Costo unitario de referencia para valoración de inventario.']] : []),
       ['Precio Minorista / Mayorista / Distribuidor', 'Incluye las tres listas predeterminadas. Puedes dejar una o dos vacías, pero cada producto debe tener al menos un precio de venta. Las celdas vacías se mostrarán como advertencias y no impedirán la carga.'],
     ]);
     guide['!cols'] = [{ wch: 36 }, { wch: 110 }];
     XLSX.utils.book_append_sheet(wb, guide, 'Guía de llenado');
     XLSX.writeFile(wb, 'plantilla_importacion_inicial_inventario.xlsx');
     toast.success('Plantilla descargada');
-  }, [categories, warehouses]);
+  }, [categories, warehouses, canViewInventoryCost]);
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       'Código / SKU': row.code || '', Nombre: row.name || '', Categoría: row.category || '', Bodega: row.warehouse || '',
-      Costo: row.costPrice ?? '', Minorista: row.prices?.RETAIL ?? '', Mayorista: row.prices?.WHOLESALE ?? '', Distribuidor: row.prices?.DISTRIBUTOR ?? '',
+      ...(canViewInventoryCost ? { Costo: row.costPrice ?? '' } : {}),
+      Minorista: row.prices?.RETAIL ?? '', Mayorista: row.prices?.WHOLESALE ?? '', Distribuidor: row.prices?.DISTRIBUTOR ?? '',
       Clasificación: row._hasError ? 'Error' : 'Advertencia', Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
     }));
     if (!errors.length) return;
     const ws = XLSX.utils.json_to_sheet(errors); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Incidencias'); XLSX.writeFile(wb, 'incidencias_importacion_inicial.xlsx');
     toast.success('Reporte de incidencias descargado');
-  }, [importData]);
+  }, [importData, canViewInventoryCost]);
 
   const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
     const codeCounts = new Map<string, number>();
@@ -1917,7 +1856,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         !code ? 'SKU requerido' : codeCounts.get(code.toLowerCase())! > 1 ? 'SKU duplicado en la plantilla' : '',
         !String(row.name || '').trim() ? 'Nombre requerido' : '',
         !categoryOk ? 'Categoría no encontrada' : '',
-        cost === undefined || !Number.isFinite(cost) || cost < 0 ? 'Costo requerido y debe ser válido' : '',
+        canViewInventoryCost && (cost === undefined || !Number.isFinite(cost) || cost < 0) ? 'Costo requerido y debe ser válido' : '',
         invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
         !Number.isFinite(stock) || stock < 0 ? 'Stock inicial inválido' : !warehouseExists ? 'Bodega no encontrada' : !warehouseOk ? 'Selecciona una bodega para el stock inicial' : '',
       ].filter(Boolean);
@@ -1927,7 +1866,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ...row,
         code,
         name: String(row.name || '').trim(),
-        costPrice: cost,
+        ...(canViewInventoryCost ? { costPrice: cost } : {}),
         salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
         _hasError: errors.length > 0,
         _errorMessage: errors[0],
@@ -1936,7 +1875,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         _imageStatus: imageStatus,
       };
     });
-  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName]);
+  }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost]);
 
   const handleFileSelected = useCallback((file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -2108,9 +2047,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             code: row.code,
             name: row.name,
             categoryId: cat?.id,
-            description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, lastPurchasePrice: row.lastPurchasePrice, trackBatch: row.trackBatch, attributes: row.attributes,
+             description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
             unit: String(row.unit ?? '').trim(),
-            costPrice: row.costPrice,
+             ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
+             ...(canViewInventoryCost ? { lastPurchasePrice: row.lastPurchasePrice } : {}),
             initialStock: row.initialStock,
             minStock: row.minStock || 0,
             warehouseId: warehouse?.id,
@@ -2145,7 +2085,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, importCategoryOptions, importWarehouseOptions, imageArchiveEntries, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh]);
+  }, [importData, importCategoryOptions, importWarehouseOptions, imageArchiveEntries, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh, canViewInventoryCost]);
 
   const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -2333,35 +2273,33 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         })()}
       </div>
 
-      {/* ─── Barra de herramientas: filtros + acciones en UNA sola línea ─── */}
-      <div className="inventory-products-toolbar mb-4 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1" data-tour="inventory-products-filters">
-          {/* Búsqueda */}
-          <div className="relative w-48 shrink-0">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+      {/* ─── Barra de herramientas: patrón de filtros y acciones de Ventas ─── */}
+      <div className="erp-composite-toolbar mb-4 flex flex-wrap items-center justify-between gap-3" data-tour="inventory-products-filters">
+        <div className="erp-toolbar-filter-group flex min-w-0 flex-1 flex-wrap items-center gap-2" data-toolbar-role="filters">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
-              placeholder="Buscar..."
-              className="h-10 rounded-xl pl-8 text-xs"
+              placeholder="Buscar producto o SKU..."
+              className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest sm:w-64"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
             />
           </div>
 
-          {/* Bodegas */}
           <MultiSelectFilter
             label="Bodegas"
-            placeholder="Buscar Bodegas..."
+            placeholder="Buscar bodegas..."
             searchable
             options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
             selected={warehouseFilters}
             onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
-            className="h-10 rounded-xl border border-input px-3 text-xs"
+            className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest"
           />
 
-          {/* Selects compactos */}
           {!isServiceView && (
             <Select value={effectiveProductStatusFilter} onValueChange={(value) => { const nextValue = value as ProductStatusFilter; setLocalProductStatusFilter(nextValue); onProductStatusFilterChange?.(nextValue); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Estado"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por estado"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
                 <SelectItem value="ALL">Estado</SelectItem>
                 <SelectItem value="ACTIVE">Activos</SelectItem>
                 <SelectItem value="INACTIVE">Inactivos</SelectItem>
@@ -2370,8 +2308,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {isServiceView && (
             <Select value={availabilityFilter} onValueChange={(value) => setAvailabilityFilter(value as typeof availabilityFilter)}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[9.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar servicios por disponibilidad"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
                 <SelectItem value="all">Disponibilidad</SelectItem>
                 <SelectItem value="available">Disponibles</SelectItem>
                 <SelectItem value="unavailable">No disponibles</SelectItem>
@@ -2380,8 +2318,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveUnitFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalUnitFilter(v); onUnitChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Unidad"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por unidad"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
                 <SelectItem value="__all__">Unidad</SelectItem>
                 {UNIT_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
               </SelectContent>
@@ -2389,8 +2327,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Impuesto"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por impuesto"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
                 <SelectItem value="__all__">Impuesto</SelectItem>
                 {TAX_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
               </SelectContent>
@@ -2398,8 +2336,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
           {!isServiceView && (
             <Select value={effectiveStockStatusFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalStockStatusFilter(v); onStockStatusChange?.(v); }}>
-              <SelectTrigger className="h-10 w-auto shrink-0 rounded-xl border border-input px-3 text-xs" aria-label="Stock"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por stock"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
                 <SelectItem value="__all__">Stock</SelectItem>
                 <SelectItem value="available">Con stock</SelectItem>
                 <SelectItem value="low">Bajo</SelectItem>
@@ -2408,60 +2346,52 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </Select>
           )}
 
-          {/* Separador */}
-          <div className="h-4 w-px shrink-0 bg-border/60" />
+          {!selectedBranchId && !isServiceView && (
+            <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
+              <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-4" />
+              <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground">Todos los almacenes</span>
+            </label>
+          )}
 
-          {/* Acciones — todo en la misma fila */}
-          <div className="erp-toolbar-actions">
-          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-1 size-3.5" /> Cómo
+          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
+            <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" onClick={() => {
+              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onSearchChange?.(''); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
+            }}>
+              <X className="mr-2 size-4" /> Limpiar
+            </Button>
+          )}
+        </div>
+
+        <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto" data-tour="inventory-products-actions">
+          {canPerform('INVENTORY_PRODUCTS', 'create') && (
+            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => setCreateModalOpen(true)}>
+              <Plus className="mr-2 size-4" /> Nuevo
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-2 size-4" /> Cómo
           </Button>
           {!isServiceView && canPerform('INVENTORY', 'edit') && !initialImportCompleted && products.length === 0 && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 px-3 text-xs text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
-              <Upload className="mr-1 size-3.5" /> Importar productos
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
+              <Upload className="mr-2 size-4" /> Importar productos
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
-              <ImageIcon className="mr-1 size-3.5" /> Imágenes
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
+              <ImageIcon className="mr-2 size-4" /> Imágenes
             </Button>
           )}
           {!isServiceView && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
-              <PackageSearch className="size-3.5 mr-1" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
+              <PackageSearch className="mr-2 size-4" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
-              <Barcode className="mr-1 size-3.5" /> Etiquetas
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
+              <Barcode className="mr-2 size-4" /> Etiquetas
             </Button>
           )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3.5 mr-1" /> Nuevo
-            </Button>
-          )}
-          {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-xs text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3.5 mr-1" /> Nuevo
-            </Button>
-          )}
-
-          {/* Checkbox + Limpiar */}
-          {!selectedBranchId && !isServiceView && (
-            <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-xl border border-input px-3" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
-              <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-3.5" />
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Todos alm.</span>
-            </label>
-          )}
-          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
-            <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border border-input px-3 text-xs text-muted-foreground" onClick={() => {
-              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
-            }}>
-              <X className="size-3.5 mr-1" /> Limpiar
-            </Button>
-          )}
-          </div>
+        </div>
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
@@ -2518,7 +2448,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       <div className="min-w-0"><span className="text-muted-foreground">U. medida</span><p className="truncate font-medium">{product.unit || 'unidad'}</p></div>
                       <div><span className="text-muted-foreground">Mínimo</span><p className="font-bold tabular-nums">{product.minStock || 0}</p></div>
                       <div><span className="text-muted-foreground">Máximo</span><p className="font-bold tabular-nums">{maxStock}</p></div>
-                      <div><span className="text-muted-foreground">Precio costo</span><CurrencyValuationAmount amount={costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></div>
+                       {canViewInventoryCost && <div><span className="text-muted-foreground">Precio costo</span><CurrencyValuationAmount amount={costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></div>}
                     </>}
                   </div>
                   {!isServiceView && <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -2606,7 +2536,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.warehouse, minWidth: PRODUCT_TABLE_WIDTHS.warehouse }}>{isServiceView ? 'Estado' : 'Bodegas'}</TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.stock, minWidth: PRODUCT_TABLE_WIDTHS.stock }}><span className="inline-flex items-center gap-1">Stock<ColumnFilterMenu label="Stock" sort={colFilters.state.stock?.sort || null} onSort={(sort) => colFilters.setSort('stock', sort)} /></span></TableHead>}
               {isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.price, minWidth: PRODUCT_TABLE_WIDTHS.price }}>Precio</TableHead>}
-              {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
+               {!isServiceView && canViewInventoryCost && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.cost, minWidth: PRODUCT_TABLE_WIDTHS.cost }}>Precio Costo</TableHead>}
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.actions, minWidth: PRODUCT_TABLE_WIDTHS.actions }}>Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -2619,7 +2549,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {/* Existing products */}
             {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={isServiceView ? 8 : 11} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={isServiceView ? 8 : canViewInventoryCost ? 11 : 10} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -2770,7 +2700,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       {getProductStock(product)}
                     </TableCell>}
                     {isServiceView && <TableCell className="text-right"><CurrencyValuationAmount amount={Number(product.salePrice || 0)} sourceCurrency={product.priceCurrency || baseCurrency} sourceExchangeRate={product.priceExchangeRate} className="font-medium" /></TableCell>}
-                     {!isServiceView && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
+                      {!isServiceView && canViewInventoryCost && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
                      <TableCell className="text-right">
                          <div className="flex items-center justify-end gap-1 transition-opacity">
                          {canPerform('INVENTORY_PRODUCTS', 'edit') && (
@@ -2924,6 +2854,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="space-y-1 sm:col-span-2">
               <p className="text-xs font-semibold">Nombre <span className="text-red-500">*</span></p>
               <Input value={newWarehouseName} onChange={(event) => setNewWarehouseName(event.target.value)} placeholder="Ej. Bodega principal" disabled={creatingWarehouse} autoFocus />
+              <p className="text-[11px] text-muted-foreground">El nombre debe ser único dentro del rubro.</p>
             </div>
             <div className="space-y-1">
               <p className="text-xs font-semibold">Ubicación</p>
@@ -3129,8 +3060,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <InventoryViewTutorial label="Cómo importar inventario" targetPrefix="inventory-initial-import" copy={{ data: { description: 'Descarga la plantilla, prepara productos, precios, costos, stock e imágenes y revisa las reglas.' }, actions: { description: 'Descarga la plantilla o continúa con la carga para iniciar la importación.' } }} />
           </DialogHeader>
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm" data-tour="inventory-initial-import-data">
-            <p><b>La plantilla siempre incluye:</b> costo, Minorista, Mayorista, Distribuidor y Bodega.</p>
-            <p>Cada producto debe tener SKU único, nombre, categoría, costo y al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
+            <p><b>La plantilla siempre incluye:</b> {canViewInventoryCost ? 'costo, ' : ''}Minorista, Mayorista, Distribuidor y Bodega.</p>
+            <p>Cada producto debe tener SKU único, nombre, categoría, {canViewInventoryCost ? 'costo y ' : ''}al menos uno de los tres precios. Los precios faltantes serán advertencias.</p>
             <p>Opcionalmente puedes cargar un ZIP o RAR con imágenes JPG, JPEG o PNG cuyo nombre sea exactamente el SKU.</p>
           </div>
           <DialogFooter data-tour="inventory-initial-import-actions">
@@ -3234,7 +3165,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           <TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Distribuidor</TableHead>
-                          <TableHead className="text-[10px] uppercase w-28 text-right">Costo</TableHead>
+                          {canViewInventoryCost && <TableHead className="text-[10px] uppercase w-28 text-right">Costo</TableHead>}
                           <TableHead className="text-[10px] uppercase w-24 text-right">Stock</TableHead>
                           <TableHead className="text-[10px] uppercase w-24 text-right">Min</TableHead>
                           <TableHead className="text-[10px] uppercase w-32">Bodega</TableHead>
@@ -3317,9 +3248,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             <TableCell className="p-1">
                               <Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" />
                             </TableCell>
-                            <TableCell className="p-1">
+                            {canViewInventoryCost && <TableCell className="p-1">
                               <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" />
-                            </TableCell>
+                            </TableCell>}
                             <TableCell className="p-1">
                               <Input
                                 type="number"
@@ -3388,7 +3319,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <p>• <b>Nombre</b> (requerido)</p>
                 <p>• <b>Categoría</b></p>
                 <p>• <b>Precios por lista</b></p>
-                <p>• <b>Costo</b></p>
+                {canViewInventoryCost && <p>• <b>Costo</b></p>}
                 <p>• <b>Stock Inicial</b></p>
                 <p>• <b>IMEI</b> (Si/No)</p>
               </div>

@@ -742,13 +742,14 @@ export function EnterpriseGroupSetupView({
 
   const startDraftBranchEdit = (branch: any) => {
     setEditingBranchId(branch.id);
+    const selectedUnit = units.find((unit: any) => unit.id === branch.businessUnitId);
     setBranchForm({
       name: branch.name || "",
       slug: branch.slug || "",
       logo: branch.logo || "",
       industry: branch.industry || "OTHER",
-      subIndustry: branch.subIndustry || "OTHER",
-      businessType: branch.businessType || "OTHER",
+      subIndustry: selectedUnit?.name || branch.subIndustry || "OTHER",
+      businessType: selectedUnit?.name || branch.businessType || "OTHER",
       businessUnitId: branch.businessUnitId || "",
       adminName: branch.adminName || "",
       adminEmail: branch.adminEmail || "",
@@ -1732,9 +1733,9 @@ function GroupConfigurationView({
             items={branches.map((branch: any) => ({
               title: branch.name,
               detail:
-                branch.businessType ||
                 units.find((unit: any) => unit.id === branch.businessUnitId)
                   ?.name ||
+                branch.businessType ||
                 "Giro pendiente",
               badge: branch.isActive === false ? "Inactiva" : "Activa",
             }))}
@@ -2522,6 +2523,9 @@ function WarehousesStep({
               placeholder="Almacén Central Tecnología"
               className={inputClass}
             />
+            <span className="text-[11px] font-normal normal-case text-muted-foreground">
+              El nombre debe ser único dentro del rubro; así se identifica directamente en la plantilla de inventario.
+            </span>
           </label>
           <label className={labelClass}>
             Ubicación
@@ -2653,9 +2657,6 @@ function BranchesStep({
   const selectedUnit = units.find(
     (unit: any) => unit.id === form.businessUnitId,
   );
-  const availableBusinessTypes = units.length
-    ? units
-    : [{ id: "legacy-other", name: "Otro giro de negocio" }];
   return (
     <div className="space-y-6">
       <SectionIntro
@@ -2663,7 +2664,7 @@ function BranchesStep({
         minimal={editMode}
         eyebrow="Paso 3"
         title="Crea las sucursales operativas"
-        description="El rubro define el catálogo y los módulos máximos. El tipo de negocio se elige únicamente entre los rubros existentes en este grupo."
+        description="El rubro define el catálogo, el giro de negocio y los módulos disponibles para la sucursal."
       />
       <Card className="rounded-3xl border-border/60">
         <CardHeader>
@@ -2693,7 +2694,8 @@ function BranchesStep({
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">
-                  {branch.businessType ||
+                  {units.find((unit: any) => unit.id === branch.businessUnitId)?.name ||
+                    branch.businessType ||
                     getBusinessTypeLabel(branch.industry, branch.subIndustry)}
                 </Badge>
                 {onEdit && (
@@ -2792,34 +2794,16 @@ function BranchesStep({
             </select>
           </label>
           <label className={`${labelClass} sm:col-span-2`}>
-            Tipo de negocio
-            <select
-              value={
-                units.find((unit: any) => unit.name === form.businessType)
-                  ?.id ||
-                selectedUnit?.id ||
-                ""
-              }
-              onChange={(event) => {
-                const selected = units.find(
-                  (unit: any) => unit.id === event.target.value,
-                );
-                setForm((current: any) => ({
-                  ...current,
-                  businessType: selected?.name || "",
-                  industry: "OTHER",
-                  subIndustry: selected?.name || "",
-                }));
-              }}
-              className={inputClass}
-            >
-              <option value="">Selecciona el rubro como giro de negocio</option>
-              {availableBusinessTypes.map((unit: any) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </select>
+            Giro de negocio (definido por el rubro)
+            <input
+              value={selectedUnit?.name || form.businessType || ""}
+              readOnly
+              placeholder="Selecciona primero un rubro"
+              className={`${inputClass} bg-muted/30 text-muted-foreground`}
+            />
+            <span className="text-[11px] font-normal text-muted-foreground">
+              No se puede escoger un giro distinto: así se mantienen alineados el catálogo, el inventario y los módulos.
+            </span>
           </label>
           <div className="sm:col-span-2 grid gap-4 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-[160px_minmax(0,1fr)]">
             <LogoPicker
@@ -2897,40 +2881,10 @@ function BranchesStep({
             <PasswordRequirements value={form.adminPassword} className="sm:col-span-2" />
           </div>
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
-            <label className={labelClass}>
-              Módulos de la sucursal
-              <select
-                value={form.moduleMode}
-                onChange={(event) =>
-                  setForm((current: any) => ({
-                    ...current,
-                    moduleMode: event.target.value,
-                    enabledModules:
-                      event.target.value === "CUSTOM" &&
-                      !current.enabledModules.length
-                        ? selectedUnit?.enabledModules || availableModules
-                        : current.enabledModules,
-                  }))
-                }
-                className={inputClass}
-              >
-                <option value="INHERIT">Heredar módulos del rubro</option>
-                <option value="CUSTOM">Personalizar esta sucursal</option>
-              </select>
-            </label>
-            {form.moduleMode === "CUSTOM" && (
-              <div className="mt-3">
-                <ModuleSelector
-                  value={form.enabledModules}
-                  availableModules={
-                    selectedUnit?.enabledModules || availableModules
-                  }
-                  onChange={(enabledModules) =>
-                    setForm((current: any) => ({ ...current, enabledModules }))
-                  }
-                />
-              </div>
-            )}
+            <p className={labelClass}>Módulos de la sucursal</p>
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">
+              La sucursal hereda todos los módulos activos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>. Los permisos particulares se administran desde el rol del usuario o desde la asignación del Manager.
+            </div>
           </div>
           <div className="sm:col-span-2 flex justify-end gap-2">
             <Button

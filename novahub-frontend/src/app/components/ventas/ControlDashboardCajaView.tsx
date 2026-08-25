@@ -4,7 +4,6 @@ import { cajaService, CashRegister } from '../../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Coins, Settings2, Eye, CircleHelp, AlertTriangle, CheckCircle2, XCircle, Landmark, ListChecks, Loader2 } from 'lucide-react';
 import { DashboardCajaView } from './DashboardCajaView';
@@ -17,15 +16,15 @@ import { AdministrarCajasModal } from './caja/AdministrarCajasModal';
 import { NormasProcedimientosPanel } from './caja/NormasProcedimientosPanel';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { CajaSetupGuide } from './caja/CajaSetupGuide';
 import { getApiErrorMessage, api } from '../../services/api';
 import { consumeImplementationTourContext } from '../../services/implementation-setup.service';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
+import { HistoricalCashReport } from './caja/HistoricalCashReport';
 
-type SectionType = 'dashboard' | 'session' | 'history' | 'normas' | 'deficits';
+type SectionType = 'dashboard' | 'session' | 'history' | 'report' | 'normas' | 'deficits';
 
 const DEFICIT_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'PENDIENTE', cls: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
@@ -119,10 +118,11 @@ export function ControlDashboardCajaView({
         cajaService.getDeficitCharges(),
         api.get<any[]>('/users'),
       ]);
-      setDeficitCharges(Array.isArray(charges) ? charges : (charges?.data || []));
+      const chargesData = Array.isArray(charges) ? charges : (((charges as any)?.data || []) as any[]);
+      setDeficitCharges(chargesData);
       setTeamUsers(Array.isArray(users) ? users : ((users as any)?.data || []));
       const nextDrafts: Record<string, string> = {};
-      for (const charge of (Array.isArray(charges) ? charges : (charges?.data || []))) {
+      for (const charge of chargesData) {
         nextDrafts[charge.id] = charge.responsibleUserId || '';
       }
       setResponsibleDrafts(nextDrafts);
@@ -242,6 +242,14 @@ export function ControlDashboardCajaView({
                   data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
               >
                 Historial de Cajas
+              </TabsTrigger>
+              <TabsTrigger
+                value="report"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest
+                  data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80
+                  data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all"
+              >
+                Reporte histórico
               </TabsTrigger>
               <TabsTrigger 
                 value="normas"
@@ -704,6 +712,11 @@ export function ControlDashboardCajaView({
             </CardContent>
           </Card>
         )}
+
+        {activeSection === 'report' && (
+          <HistoricalCashReport initialRegisterId={selectedRegister === 'ALL' ? undefined : selectedRegister} />
+        )}
+
       </div>
       {showTutorial && <GuidedTour steps={CASH_CONTROL_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Control de Caja" allowTargetInteraction />}
 

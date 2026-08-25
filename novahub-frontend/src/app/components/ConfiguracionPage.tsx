@@ -36,7 +36,7 @@ import { CountriesView } from './admin/CountriesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
-import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, type PermissionMatrixAction } from '../utils/permissions';
+import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, type PermissionMatrixAction } from '../utils/permissions';
 import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
 import { optimizeImageFile } from '../utils/image-optimization';
@@ -1109,7 +1109,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
     // Si se intenta desactivar leer, pero crear/editar/borrar siguen activos, no permitir.
     if (type === 'read' && newValue === false) {
-      if (PERMISSION_ACTION_DEFINITIONS.some(({ key }) => key !== 'read' && permissionValue(targetPerm, key))) {
+      if ([...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS].some(({ key }) => key !== 'read' && permissionValue(targetPerm, key))) {
         return; // Bloquear
       }
     }
@@ -1136,7 +1136,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
           }
           // Si se desactiva leer en padre, desactivar todo en hijos
           if (type === 'read' && newValue === false) {
-            PERMISSION_ACTION_DEFINITIONS.filter(({ key }) => key !== 'read').forEach(({ key }) => { childPerm[key] = false; });
+            [...PERMISSION_ACTION_DEFINITIONS, ...SENSITIVE_PERMISSION_ACTION_DEFINITIONS].filter(({ key }) => key !== 'read').forEach(({ key }) => { childPerm[key] = false; });
             childPerm.write = false;
           }
         }
@@ -1670,17 +1670,19 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-500 inline-block" />Editar</span>
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Eliminar</span>
                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-violet-500 inline-block" />Importar</span>
-                    <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-cyan-500 inline-block" />Exportar</span>
+                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-cyan-500 inline-block" />Exportar</span>
+                     <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-500 inline-block" />Costo solo en Inventario</span>
                   </div>
                 </div>
                 
                 <div className="flex-1 rounded-2xl border border-border/40 overflow-hidden flex flex-col min-h-0 relative">
                   <div className="min-w-0 flex-1 overflow-auto" style={{ contain: 'paint' }}>
-                    <table className="w-max min-w-[1900px] text-sm">
+                    <table className="w-max min-w-[1200px] text-sm">
                       <thead className="bg-muted/95 backdrop-blur-md sticky top-0 z-[50] shadow-sm border-b border-border/50">
                         <tr>
                           <th className="text-left px-4 py-3 text-[10px] sm:text-xs font-black uppercase tracking-wider text-muted-foreground">Módulo</th>
                           {PERMISSION_ACTION_DEFINITIONS.map(({ key, label }) => <th key={key} className="w-[72px] px-0 py-3 text-center text-[10px] font-black text-muted-foreground sm:text-xs">{label}</th>)}
+                          <th className="sticky right-0 z-[60] w-[92px] border-l border-border/50 bg-muted/95 px-0 py-3 text-center text-[10px] font-black text-rose-600 shadow-[-6px_0_10px_-10px_hsl(var(--foreground)/0.5)] sm:text-xs" title="Solo habilita la visualización de costos de Inventario">Ver costo</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/30">
@@ -1688,6 +1690,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                           const mod = tenantPermModules.find(m => m.id === p.module);
                           if (!mod) return null; // No renderizar si no tiene permisos
                           const isSubmodule = mod && 'parent' in mod;
+                          const isInventoryPermission = supportsInventoryCostPermission(p.module);
                           const Icon = mod?.icon;
                           
                           return (
@@ -1713,6 +1716,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                 </div>
                               </td>
                               {PERMISSION_ACTION_DEFINITIONS.map(({ key }) => <td key={key} className="px-0 py-1.5 text-center"><div className="flex justify-center"><Switch disabled={!canEditRoles} checked={permissionValue(p, key)} onCheckedChange={() => togglePermission(p.module, key)} className="scale-[0.65] sm:scale-75" /></div></td>)}
+                              <td className="sticky right-0 z-10 border-l border-border/50 bg-card px-0 py-1.5 text-center shadow-[-6px_0_10px_-10px_hsl(var(--foreground)/0.5)]"><div className="flex justify-center">{!isInventoryPermission ? <span className="text-muted-foreground/30" aria-label="No aplica">—</span> : <Switch disabled={!canEditRoles} checked={permissionValue(p, 'viewCost')} onCheckedChange={() => togglePermission(p.module, 'viewCost')} aria-label={`Ver costo en ${mod?.label || p.module}`} className="scale-[0.65] sm:scale-75 data-[state=checked]:bg-rose-500" />}</div></td>
                             </tr>
                           );
                         })}

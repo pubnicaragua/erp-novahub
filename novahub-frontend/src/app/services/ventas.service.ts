@@ -45,6 +45,9 @@ export const salesOrdersService = {
 export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
   getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
+  getSeriesConfiguration: () => api.get<InvoiceSeriesConfiguration>('/sales/invoice-series'),
+  saveSeriesConfiguration: (data: { branchId?: string | null; documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean }) =>
+    api.put<any>('/sales/invoice-series', data),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
     api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; cogsAccount?: any; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
@@ -59,6 +62,26 @@ export const invoicesService = {
   cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
 };
+
+export interface InvoiceSeriesConfiguration {
+  currentTenant: { id: string; name: string; slug: string };
+  branches: Array<{ id: string; name: string; code: string }>;
+  items: Array<{
+    id: string | null;
+    scopeKey: string;
+    branchId: string | null;
+    branchName: string;
+    branchCode: string;
+    documentType: 'SALES_INVOICE' | 'POS_INVOICE';
+    documentLabel: string;
+      prefix: string;
+      defaultPrefix: string;
+      configured: boolean;
+      inherited?: boolean;
+      sharedWithNormal?: boolean;
+      nextNumber: string;
+  }>;
+}
 
 // ---- Recurring Invoices ----
 export const recurringInvoicesService = {

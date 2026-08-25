@@ -1479,3 +1479,91 @@ export const generateSessionSummaryPDF = async ({
 
   doc.save(`Arqueo_Caja_${new Date().getTime()}.pdf`);
 };
+
+export const generateHistoricalCashReportPDF = async ({
+  report,
+  tenantName,
+}: {
+  report: { summary: any; items: any[]; filters?: any };
+  tenantName: string;
+}) => {
+  const settings = await getPdfDesignSettings('ventas.cash-historical-report');
+  const doc = new jsPDF(pdfDesignPaper({ ...settings, orientation: 'landscape' }));
+  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
+  const summary = report.summary || {};
+  const money = (value: any) => Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(tenantName || 'Nuestra Empresa', 14, 18);
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.setFontSize(14);
+  doc.text('REPORTE HISTÓRICO DE CAJA', 14, 27);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const reportDate = (value: any) => value ? String(value).slice(0, 10) : '—';
+  doc.text(`Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`, 14, 34);
+  doc.text(`Generado: ${new Date().toLocaleString()}`, 283, 18, { align: 'right' });
+
+  autoTable(doc, {
+    startY: 42,
+    head: [['Sesiones', 'Cerradas', 'Ventas NIO', 'Ventas USD', 'Diferencia NIO', 'Depósitos NIO']],
+    body: [[
+      String(summary.sessions || 0),
+      String(summary.closedSessions || 0),
+      `C$ ${money(summary.salesNIO)}`,
+      `$ ${money(summary.salesUSD)}`,
+      `C$ ${money(summary.differenceNIO)}`,
+      `C$ ${money(summary.depositsNIO)}`,
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { textColor, fontSize: 9 },
+    styles: { cellPadding: 3, halign: 'center' },
+  });
+
+  const paymentRows = Object.entries(summary.byPaymentMethod || {}).map(([method, value]: [string, any]) => [
+    method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'TRANSFER' ? 'Transferencia' : method === 'CHECK' ? 'Cheque' : 'Otro',
+    String(value.count || 0),
+    `C$ ${money(value.amountNIO)}`,
+    `$ ${money(value.amountUSD)}`,
+  ]);
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 8,
+    head: [['Forma de pago', 'Operaciones', 'Monto NIO', 'Monto USD']],
+    body: paymentRows,
+    theme: 'grid',
+    headStyles: { fillColor: [71, 85, 105], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { textColor, fontSize: 8 },
+    styles: { cellPadding: 2.5 },
+  });
+
+  const sessionRows = (report.items || []).map((item: any) => [
+    new Date(item.date).toLocaleDateString(),
+    item.branch?.name || 'Sin sucursal',
+    item.register ? `${item.register.code} · ${item.register.name}` : 'Sin caja',
+    item.openedBy?.name || '—',
+    item.status === 'CLOSED' ? 'CERRADA' : item.status === 'COUNTING' ? 'EN ARQUEO' : 'ABIERTA',
+    String(item.saleCount || 0),
+    `C$ ${money(item.salesNIO)}`,
+    `$ ${money(item.salesUSD)}`,
+    `C$ ${money(item.differenceNIO)}`,
+    `C$ ${money(item.depositNIO)}`,
+  ]);
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 8,
+    head: [['Fecha', 'Sucursal', 'Caja', 'Cajero', 'Estado', 'Ventas', 'Ventas NIO', 'Ventas USD', 'Dif. NIO', 'Depósito NIO']],
+    body: sessionRows,
+    theme: 'grid',
+    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 7, fontStyle: 'bold' },
+    bodyStyles: { textColor, fontSize: 7 },
+    styles: { cellPadding: 2, overflow: 'linebreak' },
+  });
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Generado por ${tenantName || 'NovaHub'} - Reporte histórico de Caja`, 14, doc.internal.pageSize.height - 10);
+  doc.save(`Reporte_Historico_Caja_${new Date().getTime()}.pdf`);
+};

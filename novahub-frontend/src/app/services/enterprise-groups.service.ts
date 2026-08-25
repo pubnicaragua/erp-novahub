@@ -48,6 +48,7 @@ export interface ManagerOverview {
     subIndustry?: string | null;
     businessType?: string | null;
     businessUnitId?: string | null;
+    businessUnit?: { id: string; name: string; isActive?: boolean } | null;
     isActive?: boolean;
     _count: { users: number; products: number; warehouses: number };
   }>;
@@ -147,11 +148,119 @@ export interface ManagerInventoryModuleResponse {
   metrics: Record<string, number>;
 }
 
+export interface ManagerInventoryImportLocation {
+  id: string;
+  warehouseId: string;
+  name: string;
+  location?: string | null;
+  scopeType: string;
+  type: 'BODEGA' | 'ALMACEN';
+  branchId?: string | null;
+  branchName?: string | null;
+  businessUnitId: string;
+  active: boolean;
+  isCorporate?: boolean;
+  ownershipScope?: 'SUCURSAL' | 'RUBRO';
+  selectionLabel?: string;
+}
+
+export interface ManagerInventoryImportOptions {
+  businessUnitId: string;
+  branches: Array<{ id: string; name: string; code?: string | null; baseCurrency?: string | null }>;
+  categories: Array<{ id: string; name: string }>;
+  locations: ManagerInventoryImportLocation[];
+  generatedAt: string;
+}
+
+export interface ManagerInventoryImportPreviewRow {
+  rowNumber: number;
+  code: string;
+  name: string;
+  branchId?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  locationLabel?: string;
+  locationType?: 'BODEGA' | 'ALMACEN' | string;
+  stock: number;
+  costPrice?: number;
+  currentQty: number;
+  resultingQty: number;
+  productName: string;
+  status: string;
+  locationStatus: string;
+  value: number;
+  currency: string;
+  issues: string[];
+}
+
+export interface ManagerInventoryImportPreview {
+  businessUnitId: string;
+  stockMode: 'SET' | 'ADD';
+  currency: 'NIO' | 'USD';
+  locations: ManagerInventoryImportLocation[];
+  rows: ManagerInventoryImportPreviewRow[];
+  errors: string[];
+  summary: {
+    totalRows: number;
+    validRows: number;
+    errorRows: number;
+    products: number;
+    locations: number;
+    importedUnits: number;
+    resultingUnits: number;
+    value: number;
+  };
+}
+
+export interface ManagerInventoryImportResult {
+  success: boolean;
+  importReference?: string;
+  productsCreated?: number;
+  locationsCreated?: number;
+  stockUpdated?: number;
+  movementsCreated?: number;
+  costUpdates?: number;
+  imagesLinked?: number;
+  affected?: any[];
+}
+
 export interface ManagerSalesModuleResponse {
   view: string;
   data: any[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: Record<string, any>;
+}
+
+export interface ManagerInvoiceSeriesItem {
+  id?: string | null;
+  scopeKey: string;
+  branchId?: string | null;
+  branchName: string;
+  branchCode?: string | null;
+  documentType: 'SALES_INVOICE' | 'POS_INVOICE';
+  documentLabel: string;
+  prefix: string;
+  defaultPrefix: string;
+  configured: boolean;
+  inherited?: boolean;
+  sharedWithNormal?: boolean;
+  nextNumber: string;
+}
+
+export interface ManagerInvoiceSeriesBranch {
+  clientTenantId: string;
+  name: string;
+  slug: string;
+  businessUnitId?: string | null;
+  baseCurrency?: string | null;
+  items: ManagerInvoiceSeriesItem[];
+}
+
+export interface ManagerInvoiceSeriesConfiguration {
+  groupId: string;
+  businessUnitId?: string | null;
+  selectedClientTenantId?: string | null;
+  branches: ManagerInvoiceSeriesBranch[];
 }
 
 export interface ManagerPdfDesign {
@@ -411,9 +520,12 @@ export const enterpriseGroupsService = {
     api.idempotentPatch(`/enterprise-groups/platform/${groupId}`, body),
   getManagerGroups: (signal?: AbortSignal) =>
     api.get<ManagerGroup[]>("/enterprise-groups/manager", { signal }),
-  getOverview: (groupId: string, branchId?: string, signal?: AbortSignal) =>
+  getOverview: (groupId: string, branchId?: string, businessUnitId?: string, signal?: AbortSignal) =>
     api.get<ManagerOverview>(`/enterprise-groups/manager/${groupId}/overview`, {
-      params: branchId ? { branchId } : undefined,
+      params: {
+        ...(branchId ? { branchId } : {}),
+        ...(businessUnitId ? { businessUnitId } : {}),
+      },
       signal,
     }),
   getInventory: (
@@ -499,6 +611,23 @@ export const enterpriseGroupsService = {
     api.get<ManagerSalesModuleResponse>(
       `/enterprise-groups/manager/${groupId}/sales/module`,
       { params, signal },
+    ),
+  getManagerInvoiceSeriesConfiguration: (
+    groupId: string,
+    params: { businessUnitId?: string; branchId?: string },
+    signal?: AbortSignal,
+  ) =>
+    api.get<ManagerInvoiceSeriesConfiguration>(
+      `/enterprise-groups/manager/${groupId}/sales/invoice-series`,
+      { params, signal },
+    ),
+  saveManagerInvoiceSeriesConfiguration: (
+    groupId: string,
+    body: { clientTenantId: string; businessUnitId?: string; scopeBranchId?: string | null; documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean },
+  ) =>
+    api.put<{ clientTenantId: string; scopeBranchId: string | null; configuration: unknown }>(
+      `/enterprise-groups/manager/${groupId}/sales/invoice-series`,
+      body,
     ),
   getPurchasesDocumentDetail: (groupId: string, entity: string, recordId: string, reportCurrency?: string, signal?: AbortSignal) =>
     api.get<ManagerPurchasesDocumentDetailResponse>(
@@ -645,8 +774,18 @@ export const enterpriseGroupsService = {
       { params, signal },
     ),
   importSharedInventory: (groupId: string, body: any) =>
-    api.idempotentPost(
+    api.idempotentPost<ManagerInventoryImportResult>(
       `/enterprise-groups/manager/${groupId}/inventory/import`,
+      body,
+    ),
+  getSharedInventoryImportOptions: (groupId: string, businessUnitId: string, signal?: AbortSignal) =>
+    api.get<ManagerInventoryImportOptions>(
+      `/enterprise-groups/manager/${groupId}/inventory/import/options`,
+      { params: { businessUnitId }, signal },
+    ),
+  previewSharedInventory: (groupId: string, body: any) =>
+    api.post<ManagerInventoryImportPreview>(
+      `/enterprise-groups/manager/${groupId}/inventory/import/preview`,
       body,
     ),
   getAccounting: (groupId: string, branchId?: string, signal?: AbortSignal) =>
