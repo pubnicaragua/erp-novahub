@@ -166,6 +166,10 @@ export interface PosInvoice {
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   total: number;
   status: string;
   register?: CashRegister;
@@ -226,6 +230,10 @@ export interface InvoiceCashQueue {
     subtotal?: number;
     taxAmount?: number;
     discountAmount?: number;
+    extraCostDescription?: string | null;
+    extraCostAmount?: number;
+    deliveryDescription?: string | null;
+    deliveryAmount?: number;
     irAmount?: number;
     total: number;
     balance: number;
@@ -306,6 +314,10 @@ export interface PosHold {
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   irAmount: number;
   total: number;
   currency: 'NIO' | 'USD';
@@ -347,6 +359,10 @@ export interface CreatePosHoldDto {
   customCustomerName?: string;
   date: string;
   discountPercent?: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   pricingMode?: 'global' | 'individual';
   irRate?: number;
   irTaxId?: string | null;
@@ -508,6 +524,10 @@ export const cajaService = {
     customCustomerName?: string;
     date: string;
     discountPercent?: number;
+    extraCostDescription?: string | null;
+    extraCostAmount?: number;
+    deliveryDescription?: string | null;
+    deliveryAmount?: number;
     pricingMode?: 'global' | 'individual';
     items: PosInvoiceItem[];
     includeTax?: boolean;
@@ -524,6 +544,10 @@ export const cajaService = {
     customCustomerName?: string;
     date: string;
     discountPercent?: number;
+    extraCostDescription?: string | null;
+    extraCostAmount?: number;
+    deliveryDescription?: string | null;
+    deliveryAmount?: number;
     pricingMode?: 'global' | 'individual';
     irRate?: number;
     irTaxId?: string | null;

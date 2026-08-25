@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -50,6 +50,7 @@ import { Card } from '../ui/card';
 import { Label } from '../ui/label';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
   Table,
   TableBody,
@@ -79,7 +80,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { toast } from 'sonner';
-import type { Customer, Invoice } from '../../types';
+import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 interface CustomerDetailDrawerProps {
@@ -88,7 +89,8 @@ interface CustomerDetailDrawerProps {
   customerSnapshot?: Customer | null;
 }
 
-type TabKey = 'general' | 'facturas' | 'historial';
+type TabKey = 'general' | 'movimientos' | 'historial';
+type MovementFilter = 'ALL' | 'Factura' | 'Orden de venta' | 'Cotización' | 'Nota de crédito' | 'Crédito' | 'Pago recibido' | 'Factura recurrente';
 
 type RelatedTransaction = {
   id: string;
@@ -100,6 +102,7 @@ type RelatedTransaction = {
   currency?: string;
   exchangeRate?: number;
   description?: string;
+  document?: any;
 };
 
 const unwrapList = (response: any): any[] => {
@@ -191,10 +194,11 @@ export function CustomerDetailDrawer({
   const [history, setHistory] = useState<any[]>([]);
   const [relatedTransactions, setRelatedTransactions] = useState<RelatedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [selectedMovement, setSelectedMovement] = useState<RelatedTransaction | null>(null);
+  const [movementFilter, setMovementFilter] = useState<MovementFilter>('ALL');
   const [publicLinks, setPublicLinks] = useState<any[]>([]);
   const [publicLinksLoading, setPublicLinksLoading] = useState(false);
   const [creatingPortalLink, setCreatingPortalLink] = useState(false);
@@ -208,12 +212,16 @@ export function CustomerDetailDrawer({
       setRelatedTransactions([]);
       setLoadingRelated(false);
       setSelectedInvoiceId(null);
+      setSelectedMovement(null);
+      setMovementFilter('ALL');
       setError(null);
       return;
     }
 
     let cancelled = false;
     setSelectedInvoiceId(null);
+    setSelectedMovement(null);
+    setMovementFilter('ALL');
     setRelatedTransactions([]);
     setLoading(true);
     setError(null);
@@ -236,7 +244,6 @@ export function CustomerDetailDrawer({
     })();
 
     // Fetch facturas asociadas
-    setLoadingInvoices(true);
     (async () => {
       try {
         const resp: any = await invoicesService.getAll({ customerId, pageSize: 50 } as any);
@@ -246,8 +253,6 @@ export function CustomerDetailDrawer({
         }
       } catch {
         if (!cancelled) setInvoices([]);
-      } finally {
-        if (!cancelled) setLoadingInvoices(false);
       }
     })();
 
@@ -278,17 +283,22 @@ export function CustomerDetailDrawer({
         result.status === 'fulfilled' ? unwrapList(result.value) : [],
       );
       const transactions: RelatedTransaction[] = [
-        ...estimates.map((item: any) => ({ id: item.id, kind: 'Cotización', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency })),
-        ...orders.map((item: any) => ({ id: item.id, kind: 'Orden de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency })),
-        ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency })),
-        ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, description: item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference })),
-        ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: 'Programación de facturación' })),
-        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
-        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, description: item.reason })),
+        ...estimates.map((item: any) => ({ id: item.id, kind: 'Cotización', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
+        ...orders.map((item: any) => ({ id: item.id, kind: 'Orden de venta', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
+        ...invoiceRecords.map((item: any) => ({ id: item.id, kind: 'Factura', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, document: item })),
+        ...payments.map((item: any) => ({ id: item.id, kind: 'Pago recibido', number: item.number, date: item.date, status: item.isActive === false ? 'CANCELLED' : 'PAID', amount: Number(item.amount || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.invoice?.number ? `Aplicado a ${item.invoice.number}` : item.reference, document: item })),
+        ...recurring.map((item: any) => ({ id: item.id, kind: 'Factura recurrente', number: item.number || item.id.slice(0, 8), date: item.nextInvoiceDate || item.createdAt, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: 'Programación de facturación', document: item })),
+        ...returns.map((item: any) => ({ id: item.id, kind: 'Nota de crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.reason, document: item })),
+        ...creditNotes.map((item: any) => ({ id: item.id, kind: 'Crédito', number: item.number, date: item.date, status: item.status, amount: Number(item.total || 0), currency: item.currency, exchangeRate: item.exchangeRate, description: item.reason, document: item })),
       ].sort((a, b) => {
         const aDate = a.date ? new Date(a.date).getTime() : 0;
         const bDate = b.date ? new Date(b.date).getTime() : 0;
-        return bDate - aDate;
+        if (bDate !== aDate) return bDate - aDate;
+        const number = (value: string) => {
+          const match = String(value || '').match(/(\d+)(?!.*\d)/);
+          return match ? Number(match[1]) : Number.NEGATIVE_INFINITY;
+        };
+        return number(b.number) - number(a.number);
       });
       setRelatedTransactions(transactions);
       setLoadingRelated(false);
@@ -314,6 +324,19 @@ export function CustomerDetailDrawer({
   const isOpen = Boolean(customerId);
   const selectedInvoice = invoices.find((invoice) => invoice.id === selectedInvoiceId) || null;
 
+  const openMovementDetail = (transaction: RelatedTransaction) => {
+    if (transaction.kind === 'Factura') {
+      const invoice = (transaction.document as Invoice | undefined) || invoices.find((item) => item.id === transaction.id);
+      if (invoice) {
+        setSelectedInvoiceId(invoice.id);
+        setSelectedMovement(null);
+        return;
+      }
+    }
+    setSelectedInvoiceId(null);
+    setSelectedMovement(transaction);
+  };
+
   const statusInfo = getStatusBadge(customer?.status);
   const typeInfo = getTypeBadge(customer?.type);
   const TypeIcon = typeInfo.icon;
@@ -331,7 +354,7 @@ export function CustomerDetailDrawer({
         return;
       }
       const options = {
-        rows: relatedTransactions,
+        rows: relatedTransactions.map(({ document: _document, ...row }) => row),
         customerName: customer.name || 'Cliente',
         branchName: customer.branchName,
         tenantName: user?.tenantName || 'Empresa',
@@ -363,6 +386,9 @@ export function CustomerDetailDrawer({
     .filter((inv) => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
     .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
   const creditUsagePct = creditLimit > 0 ? Math.min(100, (balance / creditLimit) * 100) : 0;
+  const visibleMovements = movementFilter === 'ALL'
+    ? relatedTransactions
+    : relatedTransactions.filter((transaction) => transaction.kind === movementFilter);
 
   const createPortalLink = async () => {
     if (!customer?.id) return;
@@ -440,8 +466,8 @@ export function CustomerDetailDrawer({
               <TabsTrigger value="general" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <User className="size-3.5" /> General
               </TabsTrigger>
-              <TabsTrigger value="facturas" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
-                <FileText className="size-3.5" /> Facturas ({invoices.length})
+              <TabsTrigger value="movimientos" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
+                <Activity className="size-3.5" /> Movimientos ({relatedTransactions.length})
               </TabsTrigger>
               <TabsTrigger value="historial" className="rounded-lg text-xs font-bold gap-1.5 px-3 py-1">
                 <History className="size-3.5" /> Historial
@@ -565,123 +591,59 @@ export function CustomerDetailDrawer({
                 </Card>
               </TabsContent>
 
-              {/* Tab Facturas */}
-              <TabsContent value="facturas" className="mt-0 space-y-4 outline-none">
-                {loadingInvoices ? (
-                  <div className="space-y-3 p-4">
-                    <Skeleton className="h-10 w-full rounded-xl" />
-                    <Skeleton className="h-10 w-full rounded-xl" />
-                    <Skeleton className="h-10 w-full rounded-xl" />
-                  </div>
-                ) : invoices.length === 0 ? (
-                  <EmptyState icon={FileText} title="Sin facturas registradas" description="Este cliente aún no registra facturas de venta en el sistema." />
-                ) : (
-                  <>
-                  <Card className="hidden rounded-2xl border border-border/60 overflow-hidden shadow-sm xl:block">
-                    <Table>
-                      <TableHeader className="bg-muted/40">
-                        <TableRow>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest">N.º de factura</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Vencimiento</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Total</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Detalle</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {invoices.map((inv) => (
-                          <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setSelectedInvoiceId(inv.id)}>
-                            <TableCell className="font-mono text-xs font-bold text-foreground">{inv.number}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{inv.date ? format(new Date(inv.date), 'dd/MM/yyyy') : '—'}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{inv.dueDate ? format(new Date(inv.dueDate), 'dd/MM/yyyy') : '—'}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-[9px] font-black tracking-wider border-none bg-muted/50 text-muted-foreground">
-                                {getInvoiceStatusInfo(inv.status).label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs font-black text-right tabular-nums text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO', inv.exchangeRate)}</TableCell>
-                            <TableCell className="text-right"><Button type="button" variant="ghost" size="sm" className="h-7 gap-1 rounded-lg px-2 text-[10px] font-bold text-muted-foreground" onClick={(event) => { event.stopPropagation(); setSelectedInvoiceId(inv.id); }}>Ver detalle <ChevronRight className="size-3" /></Button></TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </Card>
-                  <div className="h-[calc(100dvh-15rem)] min-h-[24rem] max-h-none space-y-3 overflow-y-auto rounded-2xl border border-border/60 bg-muted/5 p-3 xl:hidden">
-                    {invoices.map((inv) => (
-                        <article key={inv.id} className="cursor-pointer rounded-2xl border border-border/50 bg-card p-4 shadow-sm" onClick={() => setSelectedInvoiceId(inv.id)}>
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-mono text-sm font-black text-foreground">{inv.number}</p>
-                            <p className="mt-1 text-[11px] text-muted-foreground">{inv.date ? format(new Date(inv.date), 'dd/MM/yyyy') : '—'}</p>
-                          </div>
-                          <Badge variant="outline" className="shrink-0 border-none bg-muted/50 text-[9px] font-black tracking-wider text-muted-foreground">
-                            {getInvoiceStatusInfo(inv.status).label}
-                          </Badge>
-                        </div>
-                        <div className="mt-4 flex items-end justify-between gap-3 border-t border-border/40 pt-3">
-                          <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total</p>
-                            <p className="text-[10px] font-bold text-muted-foreground">Pagado: {formatConvertedAmount(inv.amountPaid || 0, inv.currency || 'NIO', inv.exchangeRate)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-mono text-base font-black text-foreground">{formatConvertedAmount(inv.total, inv.currency || 'NIO', inv.exchangeRate)}</p>
-                            <p className={`text-[10px] font-black ${Number(inv.balance || 0) > 0 ? 'text-destructive' : 'text-primary'}`}>
-                              {Number(inv.balance || 0) > 0 ? `Saldo: ${formatConvertedAmount(inv.balance, inv.currency || 'NIO', inv.exchangeRate)}` : 'Pagada'}
-                            </p>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                  {selectedInvoice && (
-                    <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />
-                  )}
-                  </>
-                )}
-              </TabsContent>
-
-              {/* Tab Historial */}
-              <TabsContent value="historial" className="mt-0 space-y-4 outline-none">
+              {/* Tab Movimientos */}
+              <TabsContent value="movimientos" className="mt-0 space-y-4 outline-none">
                 <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80">
-                        <Activity className="size-4 text-primary" /> Transacciones del cliente
+                        <Activity className="size-4 text-primary" /> Movimientos del cliente
                       </h3>
-                      <p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y demás operaciones relacionadas con este cliente.</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">Consulta facturas, órdenes, cotizaciones, pagos, créditos y notas de crédito en un solo lugar.</p>
                     </div>
-                    <div className="flex items-center gap-2"><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-[10px] font-bold" disabled={loadingRelated || exportingHistory}>{exportingHistory ? <RefreshCcw className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Descargar historial</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48 rounded-xl p-1.5"><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => void downloadHistory('xlsx')}><FileText className="size-3.5 text-primary" /> Excel (.xlsx)</DropdownMenuItem><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => void downloadHistory('pdf')}><FileText className="size-3.5 text-primary" /> PDF (.pdf)</DropdownMenuItem></DropdownMenuContent></DropdownMenu><Badge variant="outline" className="shrink-0 text-[9px] font-black">{relatedTransactions.length}</Badge></div>
+                    <div className="w-full sm:w-56">
+                      <Label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mostrar</Label>
+                      <Select value={movementFilter} onValueChange={(value) => { setMovementFilter(value as MovementFilter); setSelectedInvoiceId(null); setSelectedMovement(null); }}>
+                        <SelectTrigger className="h-9 rounded-xl text-xs font-bold"><SelectValue placeholder="Todos los movimientos" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">Todos los movimientos</SelectItem>
+                          <SelectItem value="Factura">Facturas</SelectItem>
+                          <SelectItem value="Orden de venta">Órdenes de venta</SelectItem>
+                          <SelectItem value="Cotización">Cotizaciones</SelectItem>
+                          <SelectItem value="Nota de crédito">Notas de crédito</SelectItem>
+                          <SelectItem value="Crédito">Créditos</SelectItem>
+                          <SelectItem value="Pago recibido">Pagos recibidos</SelectItem>
+                          <SelectItem value="Factura recurrente">Facturas recurrentes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   {loadingRelated ? (
-                    <div className="mt-4 space-y-2">
-                      <Skeleton className="h-12 w-full rounded-xl" />
-                      <Skeleton className="h-12 w-full rounded-xl" />
-                      <Skeleton className="h-12 w-full rounded-xl" />
-                    </div>
-                  ) : relatedTransactions.length === 0 ? (
-                    <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay transacciones comerciales registradas para este cliente.</p>
+                    <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div>
+                  ) : visibleMovements.length === 0 ? (
+                    <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">No hay movimientos para este filtro.</p>
                   ) : (
                     <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">
-                      {relatedTransactions.slice(0, 50).map((transaction) => (
-                        <div key={`${transaction.kind}-${transaction.id}`} className="flex items-center justify-between gap-3 p-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-bold text-foreground">{transaction.kind}</p>
-                              <p className="truncate font-mono text-[10px] text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p>
+                      {visibleMovements.slice(0, 100).map((transaction) => (
+                        <Fragment key={`${transaction.kind}-${transaction.id}`}>
+                          <button type="button" className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
+                              <div className="min-w-0"><p className="truncate text-xs font-bold text-foreground">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
                             </div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p>
-                            <p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p>
-                          </div>
-                        </div>
+                            <div className="flex shrink-0 items-center gap-3 text-right"><div><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className="size-4 text-primary" /></div>
+                          </button>
+                          {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />}
+                          {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />}
+                        </Fragment>
                       ))}
                     </div>
                   )}
                 </Card>
+              </TabsContent>
 
+              {/* Tab Historial */}
+              <TabsContent value="historial" className="mt-0 space-y-4 outline-none">
                 <Card className="p-5 bg-card border-border/60 rounded-2xl space-y-4 shadow-sm">
                   <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
                     <History className="size-4 text-primary" /> Cambios del registro del cliente
@@ -773,6 +735,130 @@ interface InvoiceInlineDetailProps {
   onClose: () => void;
   formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
   tenantName?: string;
+}
+
+interface EstimateInlineDetailProps {
+  estimate: Estimate;
+  onClose: () => void;
+  formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
+  tenantName?: string;
+}
+
+function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName }: EstimateInlineDetailProps) {
+  const handleDownloadPdf = async (format: PdfDownloadFormat) => {
+    const previewToastId = toast.loading('Preparando la previsualización de la cotización...');
+    try {
+      await previewSalesTransactionPDF({
+        document: estimate as any,
+        tenantName: tenantName || 'Empresa',
+        formatAmount: formatAmount as any,
+        documentType: 'estimate',
+        format,
+      });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
+    }
+  };
+
+  return (
+    <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-black uppercase tracking-tight">Detalle de cotización</h3>
+            <Badge variant="outline" className="border-none bg-muted/50 text-[9px] font-black text-muted-foreground">{getTransactionStatus(estimate.status)}</Badge>
+          </div>
+          <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{estimate.number}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />
+          <Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <InfoField label="Fecha" value={estimate.date ? format(new Date(estimate.date), 'dd/MM/yyyy') : '—'} icon={Calendar} />
+        <InfoField label="Válida hasta" value={estimate.expiryDate ? format(new Date(estimate.expiryDate), 'dd/MM/yyyy') : '—'} icon={Clock} />
+        <InfoField label="Total" value={formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate)} icon={DollarSign} mono />
+        <InfoField label="Líneas" value={String(estimate.items?.length || 0)} icon={FileText} />
+      </div>
+
+      <div className="mt-5 overflow-hidden rounded-xl border border-border/50 bg-background/40">
+        <Table>
+          <TableHeader className="bg-muted/30">
+            <TableRow>
+              <TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead>
+              <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(estimate.items || []).map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell>
+                <TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell>
+                <TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
+                <TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="mt-4 flex flex-col items-end gap-1 text-xs">
+        <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate)}</span></p>
+        <p className="text-muted-foreground">Descuento: <span className="font-bold text-foreground">{formatAmount(Number(estimate.discountAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>
+        <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>
+        {Number((estimate as any).extraCostAmount || 0) > 0 && <p className="text-muted-foreground">{(estimate as any).extraCostDescription || 'Coste extra'}: <span className="font-bold text-foreground">{formatAmount(Number((estimate as any).extraCostAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>}
+        {Number((estimate as any).deliveryAmount || 0) > 0 && <p className="text-muted-foreground">{(estimate as any).deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(Number((estimate as any).deliveryAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>}
+        <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate)}</span></p>
+      </div>
+      {estimate.notes && <p className="mt-4 rounded-xl border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground"><span className="font-bold text-foreground">Notas:</span> {estimate.notes}</p>}
+    </Card>
+  );
+}
+
+interface MovementInlineDetailProps {
+  transaction: RelatedTransaction;
+  onClose: () => void;
+  formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
+  tenantName?: string;
+}
+
+function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName }: MovementInlineDetailProps) {
+  const document = transaction.document || {};
+  const items = Array.isArray(document.items) ? document.items : [];
+  const documentType = transaction.kind === 'Cotización' ? 'estimate' : transaction.kind === 'Orden de venta' ? 'order' : undefined;
+  const handleDownloadPdf = async (format: PdfDownloadFormat) => {
+    if (!documentType) return;
+    const previewToastId = toast.loading(`Preparando la previsualización de ${transaction.kind.toLowerCase()}...`);
+    try {
+      await previewSalesTransactionPDF({ document, tenantName: tenantName || 'Empresa', formatAmount: formatAmount as any, documentType, format });
+      toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
+    }
+  };
+  return (
+    <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
+        <div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className="border-none bg-muted/50 text-[9px] font-black text-muted-foreground">{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
+        <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <InfoField label="Fecha" value={transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'} icon={Calendar} />
+        <InfoField label="Estado" value={getTransactionStatus(transaction.status)} icon={Activity} />
+        <InfoField label="Total" value={formatAmount(Number(transaction.amount || document.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)} icon={DollarSign} mono />
+        <InfoField label="Líneas" value={String(items.length || '—')} icon={FileText} />
+      </div>
+      {items.length > 0 ? <div className="mt-5 overflow-x-auto rounded-xl border border-border/50 bg-background/40"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead></TableRow></TableHeader><TableBody>{items.map((item: any, index: number) => <TableRow key={item.id || `${transaction.id}-${index}`}><TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell><TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell></TableRow>)}</TableBody></Table></div> : <p className="mt-5 rounded-xl border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground">{transaction.description || 'Este movimiento no tiene líneas de detalle disponibles.'}</p>}
+      {document.notes && <p className="mt-4 rounded-xl border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground"><span className="font-bold text-foreground">Notas:</span> {document.notes}</p>}
+    </Card>
+  );
 }
 
 function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: InvoiceInlineDetailProps) {
@@ -889,6 +975,8 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
       <div className="mt-4 flex flex-col items-end gap-1 text-xs">
         <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate)}</span></p>
         <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>
+        {Number((invoice as any).extraCostAmount || 0) > 0 && <p className="text-muted-foreground">{(invoice as any).extraCostDescription || 'Coste extra'}: <span className="font-bold text-foreground">{formatAmount(Number((invoice as any).extraCostAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>}
+        {Number((invoice as any).deliveryAmount || 0) > 0 && <p className="text-muted-foreground">{(invoice as any).deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(Number((invoice as any).deliveryAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>}
         <p className="text-muted-foreground">Pagado: <span className="font-bold text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate)}</span></p>
         <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)}</span></p>
       </div>

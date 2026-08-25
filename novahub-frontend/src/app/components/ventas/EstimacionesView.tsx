@@ -62,6 +62,22 @@ const normalizeEstimateStatus = (status: unknown) => String(status || '').toUppe
 const hasEstimateContent = (estimate: Estimate | null | undefined) => Boolean(
   estimate?.customerId || (estimate?.items || []).some((item: any) => item?.productId || String(item?.description || '').trim()),
 );
+const getEstimateWorkflowIssues = (estimate: Estimate | null | undefined): string[] => {
+  if (!estimate) return ['Información general'];
+  const issues: string[] = [];
+  if (!estimate.customerId && !String((estimate as any).customCustomerName || '').trim()) issues.push('Cliente');
+  if (!estimate.date || Number.isNaN(new Date(estimate.date).getTime())) issues.push('Fecha');
+  if (!estimate.expiryDate || Number.isNaN(new Date(estimate.expiryDate).getTime())) issues.push('Válida hasta');
+  const items = Array.isArray(estimate.items) ? estimate.items : [];
+  if (!items.length) issues.push('al menos un producto o servicio');
+  items.forEach((item: any, index) => {
+    const label = `Ítem ${index + 1}`;
+    if (!item.productId && !String(item.description || '').trim()) issues.push(`${label}: producto o servicio`);
+    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) issues.push(`${label}: cantidad mayor que cero`);
+    if (!Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0) issues.push(`${label}: precio válido`);
+  });
+  return issues;
+};
 const isLocalEstimate = (id: string | number | undefined | null) => String(id || '').startsWith('local-');
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
@@ -82,6 +98,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const localDraftRef = useRef<Estimate | null>(null);
   const creatingEstimateRef = useRef<Promise<Estimate> | null>(null);
+  const savingEstimateRef = useRef(false);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -180,6 +197,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           irAmount: (nextDoc as any).irAmount || 0,
           priceListId: nextDoc.priceListId || null,
           total: nextDoc.total || 0,
+          extraCostDescription: nextDoc.extraCostDescription || null,
+          extraCostAmount: nextDoc.extraCostAmount || 0,
+          deliveryDescription: nextDoc.deliveryDescription || null,
+          deliveryAmount: nextDoc.deliveryAmount || 0,
           currency: nextDoc.currency || displayCurrency,
           exchangeRate: nextDoc.exchangeRate || globalRate,
           baseTotal: (nextDoc as any).baseTotal || 0,
@@ -207,6 +228,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   };
 
   const handleKanbanStatusChange = async (estimateId: string, newStatus: string, estimate: Estimate) => {
+    if (savingEstimateRef.current) return;
+    savingEstimateRef.current = true;
     const toastId = toast.loading(`Moviendo cotización a ${newStatus}...`);
     try {
       await estimatesService.update(estimateId, {
@@ -222,6 +245,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         irAmount: (estimate as any).irAmount || 0,
         priceListId: estimate.priceListId || null,
         total: estimate.total,
+        extraCostDescription: estimate.extraCostDescription || null,
+        extraCostAmount: estimate.extraCostAmount || 0,
+        deliveryDescription: estimate.deliveryDescription || null,
+        deliveryAmount: estimate.deliveryAmount || 0,
         currency: estimate.currency,
         exchangeRate: estimate.exchangeRate,
         warehouseId: estimate.warehouseId || null,
@@ -246,10 +273,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: toastId });
+    } finally {
+      savingEstimateRef.current = false;
     }
   };
 
-  const buildEstimateStatusPayload = (status: 'DRAFT' | 'SENT') => ({
+  const buildEstimateStatusPayload = (status: 'DRAFT' | 'IN_PROCESS') => ({
     number: localDoc?.number,
     customerId: localDoc?.customerId || null,
     date: localDoc?.date,
@@ -262,6 +291,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     irAmount: (localDoc as any)?.irAmount || 0,
     priceListId: localDoc?.priceListId || null,
     total: localDoc?.total,
+    extraCostDescription: localDoc?.extraCostDescription || null,
+    extraCostAmount: localDoc?.extraCostAmount || 0,
+    deliveryDescription: localDoc?.deliveryDescription || null,
+    deliveryAmount: localDoc?.deliveryAmount || 0,
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
@@ -272,9 +305,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
 
   const handleSaveEstimate = async (status: 'DRAFT' | 'IN_PROCESS') => {
     if (!localDoc) return;
+    if (savingEstimateRef.current) return;
     if (status === 'IN_PROCESS') {
-      if (!hasEstimateContent({ ...localDoc, customerId: '', items: localDoc.items } as Estimate)) {
-        toast.error('La cotización debe contener al menos un producto o servicio');
+      const workflowIssues = getEstimateWorkflowIssues(localDoc);
+      if (workflowIssues.length) {
+        toast.error(`No se puede marcar la cotización en proceso. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
         return;
       }
       const priceMessage = getMissingSalesPriceMessage((localDoc.items || []).filter((item: any) => item.productId || String(item.description || '').trim()));
@@ -288,6 +323,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       return;
     }
     const saveToastId = toast.loading(status === 'IN_PROCESS' ? 'Marcando cotización en proceso...' : 'Guardando cotización...');
+    savingEstimateRef.current = true;
     try {
       await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
       localDraftRef.current = null;
@@ -295,6 +331,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       toast.success(status === 'IN_PROCESS' ? 'Cotización marcada en proceso' : 'Cotización guardada como borrador', { id: saveToastId });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la cotización', { id: saveToastId });
+    } finally {
+      savingEstimateRef.current = false;
     }
   };
 
@@ -398,6 +436,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     summaryDetails: [
       { label: 'Moneda', value: estimate.currency || 'NIO' },
       { label: 'Líneas', value: String(estimate.items?.length || 0) },
+      ...(Number(estimate.extraCostAmount || 0) > 0 ? [{ label: estimate.extraCostDescription || 'Coste extra', value: formatConvertedAmount(Number(estimate.extraCostAmount), estimate.currency, estimate.exchangeRate) }] : []),
+      ...(Number(estimate.deliveryAmount || 0) > 0 ? [{ label: estimate.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(estimate.deliveryAmount), estimate.currency, estimate.exchangeRate) }] : []),
     ],
     metadata: [
       { label: 'Fecha de emisión', value: formatDateEs(estimate.date) },
@@ -428,6 +468,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       irRate: 0,
       irAmount: 0,
       total: 0,
+      extraCostDescription: null,
+      extraCostAmount: 0,
+      deliveryDescription: null,
+      deliveryAmount: 0,
       baseTotal: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
@@ -451,6 +495,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
   };
 
+  const additionalChargesTotal = (doc: any = localDoc) => Math.max(0, Number(doc?.extraCostAmount || 0)) + Math.max(0, Number(doc?.deliveryAmount || 0));
+
+  const updateAdditionalCharges = (updates: Partial<Estimate>) => {
+    if (!localDoc) return;
+    const nextDoc = { ...localDoc, ...updates } as Estimate;
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    void handleUpdate(localDoc.id, { ...updates, total } as Partial<Estimate>);
+  };
+
   // Keep virtual rates to auto-apply when subtotal changes
   const recalcIndividualTotals = (items: any[]) => {
     const pricedItems = items.map((line: any) => {
@@ -472,7 +527,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       const net = gross - gross * Number(line.discount || 0) / 100;
       return sum + net * Number(line.irRate || 0) / 100;
     }, 0);
-    return { items: pricedItems, subtotal, discountAmount, taxAmount, irAmount, total: subtotal - discountAmount + taxAmount - irAmount };
+    return { items: pricedItems, subtotal, discountAmount, taxAmount, irAmount, total: subtotal - discountAmount + taxAmount - irAmount + additionalChargesTotal() };
   };
   const recalcGlobalTotals = (items: any[], dRate: number, tRate: number, irRate = 0) => {
     const normalizedItems = items.map((line: any) => ({ ...line, total: Number(line.quantity || 0) * Number(line.unitPrice || 0) }));
@@ -481,7 +536,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const base = subtotal - discountAmount;
     const taxAmount = base * Math.max(0, Number(tRate || 0)) / 100;
     const irAmount = base * Math.max(0, Number(irRate || 0)) / 100;
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount, total: base + taxAmount - irAmount };
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount, total: base + taxAmount - irAmount + additionalChargesTotal() };
   };
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
@@ -698,6 +753,18 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => setPricingMode('individual')}>Por producto</Button>
               </div>
+              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra</p>
+                  <Input value={localDoc?.extraCostDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, extraCostDescription: event.target.value } as Estimate)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { extraCostDescription: localDoc.extraCostDescription || null })} placeholder="Descripción variable" className="h-8 text-xs" />
+                  <Input type="number" min="0" step="0.01" value={localDoc?.extraCostAmount || ''} onChange={(event) => updateAdditionalCharges({ extraCostAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</p>
+                  <Input value={localDoc?.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value } as Estimate)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción opcional" className="h-8 text-xs" />
+                  <Input type="number" min="0" step="0.01" value={localDoc?.deliveryAmount || ''} onChange={(event) => updateAdditionalCharges({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
+                </div>
+              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
@@ -711,7 +778,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
                       const tAmount = base * (localRates.tRate / 100);
-                      const newTotal = base + tAmount;
+                      const newTotal = base + tAmount + additionalChargesTotal();
                       setLocalRates(prev => ({ ...prev, dRate: newRate }));
                       setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                     }} onBlur={(e) => {
@@ -719,7 +786,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
                       const tAmount = base * (localRates.tRate / 100);
-                      const newTotal = base + tAmount;
+                      const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     -{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}
@@ -735,8 +802,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const base = Number(localDoc?.subtotal || 0) - dAmount;
                         const tAmount = base * (newRate / 100);
                         setLocalRates(prev => ({ ...prev, tRate: newRate }));
-                        setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount } as any);
-                        void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount } as any);
+                        setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount + additionalChargesTotal() } as any);
+                        void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount + additionalChargesTotal() } as any);
                       }} /> Aplicar
                     </label>}
                     {localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.taxAmount)}
@@ -745,6 +812,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">IR</span>
                 </div>
+                {Number(localDoc?.extraCostAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.extraCostDescription || 'Coste extra'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.extraCostAmount)}</span></div>}
+                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.deliveryAmount)}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
@@ -817,7 +886,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         const nextDoc = { ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any;
                         setLocalDoc(nextDoc);
                         void handleUpdate(localDoc!.id, {
@@ -889,7 +958,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
                       onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}
@@ -911,7 +980,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
                       onBlur={() => handleUpdate(localDoc!.id, { items: localDoc.items, subtotal: localDoc.subtotal, discountAmount: localDoc.discountAmount, taxAmount: localDoc.taxAmount, total: localDoc.total })}

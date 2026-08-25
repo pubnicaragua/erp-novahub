@@ -70,7 +70,7 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
     groups.set(key, [...(groups.get(key) || []), row]);
   });
   return [...groups.values()].map((children) => {
-    const ordered = [...children].sort((a, b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+    const ordered = [...children].sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
     const active = ordered.filter((row) => row.isActive !== false);
     const effective = active.length ? active : ordered;
     const first = effective[0] || ordered[0];

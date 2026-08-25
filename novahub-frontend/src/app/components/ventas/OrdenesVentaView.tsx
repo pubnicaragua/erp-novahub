@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
   Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
@@ -74,6 +74,22 @@ const normalizeOrderStatus = (status: unknown) => {
   return normalized;
 };
 
+const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] => {
+  if (!order) return ['Información general'];
+  const issues: string[] = [];
+  if (!order.customerId && !String((order as any).customCustomerName || '').trim()) issues.push('Cliente');
+  if (!order.date || Number.isNaN(new Date(order.date).getTime())) issues.push('Fecha');
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (!items.length) issues.push('al menos un producto o servicio');
+  items.forEach((item: any, index) => {
+    const label = `Ítem ${index + 1}`;
+    if (!item.productId && !String(item.description || '').trim()) issues.push(`${label}: producto o servicio`);
+    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) issues.push(`${label}: cantidad mayor que cero`);
+    if (!Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0) issues.push(`${label}: precio válido`);
+  });
+  return issues;
+};
+
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
@@ -124,6 +140,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return options;
   };
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
+  const savingOrderRef = useRef(false);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
 
   useEffect(() => {
@@ -138,7 +155,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       return;
     }
     if (invoicingOrderId) return;
-    const orderForConversion = localDoc?.id === order.id
+    let orderForConversion = localDoc?.id === order.id
       ? {
           ...order,
           sellerEmployeeId: localDoc.sellerEmployeeId,
@@ -183,9 +200,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const invoiceToastId = toast.loading('Generando factura desde la orden de venta...');
     try {
       const currentStatus = normalizeOrderStatus(orderForConversion.status);
-      if (currentStatus !== 'APPROVED') {
-        toast.error('La orden debe estar aprobada antes de enviarse a factura', { id: invoiceToastId });
+      if (!['IN_PROCESS', 'APPROVED'].includes(currentStatus)) {
+        toast.error('La orden debe estar en proceso o aprobada antes de enviarse a factura', { id: invoiceToastId });
         return;
+      }
+      if (currentStatus === 'IN_PROCESS') {
+        await salesOrdersService.update(order.id, { status: 'APPROVED' as any });
+        orderForConversion = { ...orderForConversion, status: 'APPROVED' as any };
       }
       await onGenerateInvoice({ ...orderForConversion, status: 'APPROVED' as any });
       toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
@@ -282,6 +303,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     summaryDetails: [
       { label: 'Moneda', value: order.currency || 'NIO' },
       { label: 'Líneas', value: String(order.items?.length || 0) },
+      ...(Number(order.extraCostAmount || 0) > 0 ? [{ label: order.extraCostDescription || 'Coste extra', value: formatConvertedAmount(Number(order.extraCostAmount), order.currency, order.exchangeRate) }] : []),
+      ...(Number(order.deliveryAmount || 0) > 0 ? [{ label: order.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(order.deliveryAmount), order.currency, order.exchangeRate) }] : []),
     ],
     metadata: [
       { label: 'Fecha', value: formatDateEs(order.date) },
@@ -325,16 +348,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return matchesStatus && matchesSearch;
   });
 
-  const orderStatusPriority: Record<string, number> = {
-    APPROVED: 0,
-    IN_PROCESS: 1,
-    DRAFT: 2,
-    CANCELLED: 3,
+  const getDocumentNumber = (value: unknown) => {
+    const match = String(value || '').match(/(\d+)(?!.*\d)/);
+    return match ? Number(match[1]) : Number.NEGATIVE_INFINITY;
   };
   const statusOrdered = [...filtered].sort((a, b) => {
-    const statusOrder = (orderStatusPriority[normalizeOrderStatus(a.status)] ?? 99)
-      - (orderStatusPriority[normalizeOrderStatus(b.status)] ?? 99);
-    if (statusOrder !== 0) return statusOrder;
+    const numberDifference = getDocumentNumber(b.number) - getDocumentNumber(a.number);
+    if (Number.isFinite(numberDifference) && numberDifference !== 0) return numberDifference;
     return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
   });
 
@@ -368,6 +388,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     commissionType: localDoc?.commissionType,
     commissionRate: localDoc?.commissionRate || 0,
     commissionAmount: localDoc?.commissionAmount || 0,
+    extraCostDescription: localDoc?.extraCostDescription || null,
+    extraCostAmount: localDoc?.extraCostAmount || 0,
+    deliveryDescription: localDoc?.deliveryDescription || null,
+    deliveryAmount: localDoc?.deliveryAmount || 0,
     priceListId: localDoc?.priceListId || null,
     date: localDoc?.date,
     expectedDelivery: localDoc?.expectedDelivery || null,
@@ -389,7 +413,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const handleSaveOrder = async (status: OrderWorkflowStatus): Promise<boolean> => {
     if (!localDoc) return false;
+    if (savingOrderRef.current) return false;
     if (status !== 'DRAFT') {
+      const workflowIssues = getOrderWorkflowIssues(localDoc);
+      if (workflowIssues.length) {
+        toast.error(`No se puede ${status === 'APPROVED' ? 'aprobar' : 'marcar en proceso'} la orden. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
+        return false;
+      }
       const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
       if (priceMessage) {
         toast.error(priceMessage);
@@ -407,6 +437,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const saveToastId = toast.loading(
       status === 'APPROVED' ? 'Aprobando orden de venta...' : status === 'IN_PROCESS' ? 'Marcando orden en proceso...' : 'Guardando orden de venta...',
     );
+    savingOrderRef.current = true;
     try {
       await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
       setEditingId(null);
@@ -418,6 +449,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la orden de venta', { id: saveToastId });
       return false;
+    } finally {
+      savingOrderRef.current = false;
     }
   };
 
@@ -439,6 +472,17 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
   };
 
+  const additionalChargesTotal = (doc: any = localDoc) => Math.max(0, Number(doc?.extraCostAmount || 0)) + Math.max(0, Number(doc?.deliveryAmount || 0));
+
+  const updateAdditionalCharges = (updates: Partial<SalesOrder>) => {
+    if (!localDoc) return;
+    const nextDoc = { ...localDoc, ...updates } as SalesOrder;
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    void handleUpdate(localDoc.id, { ...updates, total } as Partial<SalesOrder>);
+  };
+
   const recalculateIndividualPricing = (items: any[]) => {
     const pricedItems = items.map((line) => {
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
@@ -453,7 +497,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
     }, 0);
-    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
+    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
 
   const recalculateGlobalPricing = (items: any[]) => {
@@ -462,7 +506,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const discountAmount = subtotal * (Number(localRates.dRate || 0) / 100);
     const base = subtotal - discountAmount;
     const taxAmount = base * (Number(localRates.tRate || 0) / 100);
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount };
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount + additionalChargesTotal() };
   };
 
 
@@ -496,6 +540,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         date: new Date().toISOString(),
         expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
         discountAmount: 0,
+        extraCostDescription: null,
+        extraCostAmount: 0,
+        deliveryDescription: null,
+        deliveryAmount: 0,
         total: 0,
         currency: displayCurrency as any,
         exchangeRate: globalRate,
@@ -681,7 +729,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     Marcar En Proceso
                   </Button>
                 </>}
-                {['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(localDoc?.status)) && canPerform('SALES_ORDERS', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_ORDERS', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => void handleApproveAndInvoice()}>
                   Aprobar y enviar a Factura
                 </Button>}
@@ -698,6 +746,25 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Número</p>
                   <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
+                  <Combobox
+                    options={(customers || [])
+                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
+                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
+                    value={localDoc?.customerId || ''}
+                    onChange={(val) => {
+                      const customer = customers.find((entry) => entry.id === val);
+                      const priceListId = customer?.priceListId || null;
+                      const items = (localDoc?.items || []).map((item: any) => item.productId
+                        ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
+                        : { ...item, priceListId });
+                      setLocalDoc({ ...localDoc, customerId: val, priceListId, items } as any);
+                      void handleUpdate(localDoc!.id, { customerId: val, priceListId, items } as any);
+                    }}
+                    placeholder="Seleccionar Cliente"
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor</p>
@@ -754,25 +821,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   {!localDoc?.sellerEmployeeId && <p className="text-[9px] text-muted-foreground/60 mt-0.5 italic">Selecciona un empleado primero</p>}
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox 
-                    options={(customers || [])
-                      .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
-                      .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
-                    value={localDoc?.customerId || ''}
-                    onChange={(val) => {
-                      const customer = customers.find((entry) => entry.id === val);
-                      const priceListId = customer?.priceListId || null;
-                      const items = (localDoc?.items || []).map((item: any) => item.productId
-                        ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
-                        : { ...item, priceListId });
-                      setLocalDoc({ ...localDoc, customerId: val, priceListId, items } as any);
-                      void handleUpdate(localDoc!.id, { customerId: val, priceListId, items } as any);
-                    }}
-                    placeholder="Seleccionar Cliente"
-                  />
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input type="date" defaultValue={localDoc?.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
@@ -800,7 +848,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             const discountAmount = subtotal * (localRates.dRate / 100);
                             const base = subtotal - discountAmount;
                             const taxAmount = base * (localRates.tRate / 100);
-                            return { items: convertedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount };
+                            return { items: convertedItems, subtotal, discountAmount, taxAmount, total: base + taxAmount + additionalChargesTotal() };
                           })();
                       setLocalDoc({ ...localDoc, currency, exchangeRate, ...recalculated } as any);
                       void handleUpdate(localDoc!.id, { currency, exchangeRate, ...recalculated } as any);
@@ -833,6 +881,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>Por producto</Button>
               </div>
+              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra</p>
+                  <Input value={localDoc?.extraCostDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, extraCostDescription: event.target.value } as SalesOrder)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { extraCostDescription: localDoc.extraCostDescription || null })} placeholder="Descripción variable" className="h-8 text-xs" />
+                  <Input type="number" min="0" step="0.01" value={localDoc?.extraCostAmount || ''} onChange={(event) => updateAdditionalCharges({ extraCostAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</p>
+                  <Input value={localDoc?.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value } as SalesOrder)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción opcional" className="h-8 text-xs" />
+                  <Input type="number" min="0" step="0.01" value={localDoc?.deliveryAmount || ''} onChange={(event) => updateAdditionalCharges({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
+                </div>
+              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
@@ -846,7 +906,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
                       const tAmount = base * (localRates.tRate / 100);
-                      const newTotal = base + tAmount;
+                      const newTotal = base + tAmount + additionalChargesTotal();
                       setLocalRates(prev => ({ ...prev, dRate: newRate }));
                       setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                     }} onBlur={(e) => {
@@ -854,7 +914,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
                       const base = Number(localDoc?.subtotal||0) - dAmount;
                       const tAmount = base * (localRates.tRate / 100);
-                      const newTotal = base + tAmount;
+                      const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : <span className="text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}</span>} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     -{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}
@@ -873,7 +933,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             const dAmount = Number(localDoc?.subtotal || 0) * (localRates.dRate / 100);
                             const base = Number(localDoc?.subtotal || 0) - dAmount;
                             const tAmount = base * (newRate / 100);
-                            const newTotal = base + tAmount;
+                            const newTotal = base + tAmount + additionalChargesTotal();
                             setLocalRates(prev => ({ ...prev, tRate: newRate }));
                             setLocalDoc({ ...localDoc, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                             void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
@@ -885,6 +945,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.taxAmount || 0))}</span>
                   </div>
                 </div>
+                {Number(localDoc?.extraCostAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.extraCostDescription || 'Coste extra'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.extraCostAmount || 0))}</span></div>}
+                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.deliveryAmount || 0))}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
@@ -959,7 +1021,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             const dAmount = newSubtotal * (localRates.dRate / 100);
                             const base = newSubtotal - dAmount;
                             const tAmount = base * (localRates.tRate / 100);
-                            const newTotal = base + tAmount;
+                            const newTotal = base + tAmount + additionalChargesTotal();
                             setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                             void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                           }}
@@ -1095,7 +1157,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
@@ -1119,7 +1181,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                       }}
                       onBlur={() => {
@@ -1147,7 +1209,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         const dAmount = newSubtotal * (localRates.dRate / 100);
                         const base = newSubtotal - dAmount;
                         const tAmount = base * (localRates.tRate / 100);
-                        const newTotal = base + tAmount;
+                        const newTotal = base + tAmount + additionalChargesTotal();
                         setLocalDoc({ ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                         void handleUpdate(localDoc!.id, { items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any);
                     }}>
@@ -1244,11 +1306,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                 {canPerform('SALES_ORDERS', 'approve') && normalizeOrderStatus(row.status) === 'APPROVED' && !row.invoiceId && !row.invoiceNumber && (
+                 {canPerform('SALES_ORDERS', 'approve') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
-                    title="Enviar a Factura"
-                    aria-label="Enviar a Factura"
+                    title={normalizeOrderStatus(row.status) === 'IN_PROCESS' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
+                    aria-label={normalizeOrderStatus(row.status) === 'IN_PROCESS' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
                     onClick={() => void handleInvoiceOrder(row)}
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 

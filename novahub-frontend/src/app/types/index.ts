@@ -142,6 +142,10 @@ export interface Estimate {
   taxAmount: number;
   discountAmount: number;
   total: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
@@ -186,6 +190,10 @@ export interface SalesOrder {
   taxAmount: number;
   discountAmount: number;
   total: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;
@@ -249,8 +257,15 @@ export interface Invoice {
   taxAmount: number;
   discountAmount: number;
   total: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description?: string | null; amount?: number }>;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
   amountPaid: number;
   balance: number;
+  /** Disponibilidad en moneda base, excluyendo esta factura y considerando la deuda restante del cliente. */
+  creditAvailableBase?: number;
   currency: Currency;
   exchangeRate?: number;
   baseTotal?: number;

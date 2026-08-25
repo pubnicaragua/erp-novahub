@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Loader2
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -64,7 +64,7 @@ interface FacturasViewProps {
 // Todos los estados posibles (para visualización en badges)
 const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: 'bg-slate-500/10 text-slate-500' },
-  { label: 'Pendiente', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'En proceso', value: 'PENDING', color: 'bg-amber-500/10 text-amber-500' },
   { label: 'A crédito', value: 'CREDIT', color: 'bg-violet-500/10 text-violet-500' },
   { label: 'Pagada', value: 'PAID', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Anulada', value: 'CANCELLED', color: 'bg-rose-500/10 text-rose-500' },
@@ -94,7 +94,7 @@ type InvoicePaymentLine = {
   cardCommissionAccountId?: string;
 };
 
-type InvoiceSaveAction = 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
+type InvoiceSaveAction = 'SAVE' | 'PENDING' | 'PAYMENT' | 'CREDIT';
 
 const getInvoiceSourceBadge = (invoice: Partial<Invoice> | null | undefined) => {
   const sourceType = String(invoice?.sourceType || '').toUpperCase();
@@ -183,7 +183,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditLoading, setCreditLoading] = useState(false);
-  const [cashSendingInvoiceId, setCashSendingInvoiceId] = useState<string | null>(null);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
@@ -335,6 +334,37 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     ) ? 'individual' : 'global'
   );
 
+  type ExtraChargeLine = { id: string; description: string; amount: number };
+
+  const normalizeExtraCharges = (doc: any): ExtraChargeLine[] => {
+    if (Array.isArray(doc?.extraCharges)) {
+      return doc.extraCharges.map((charge: any, index: number) => ({
+        id: String(charge?.id || `extra-${index}`),
+        description: String(charge?.description || ''),
+        amount: Math.max(0, Number(charge?.amount || 0)),
+      }));
+    }
+    const amount = Math.max(0, Number(doc?.extraCostAmount || 0));
+    const description = String(doc?.extraCostDescription || '').trim();
+    return amount > 0 || description
+      ? [{ id: 'legacy-extra-0', description, amount }]
+      : [];
+  };
+
+  const getExtraChargesPayload = (doc: any = localDoc) => normalizeExtraCharges(doc)
+    .map(({ description, amount }) => ({ description: description.trim(), amount: Math.max(0, Number(amount || 0)) }))
+    .filter((charge) => charge.amount > 0 || charge.description);
+
+  const getExtraChargesAmount = (doc: any = localDoc) => getExtraChargesPayload(doc)
+    .reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+
+  const getLegacyExtraCostFields = (charges: Array<{ description: string; amount: number }>) => ({
+    extraCostDescription: charges.length === 1
+      ? charges[0].description || null
+      : charges.length > 1 ? 'Varios costes extra' : null,
+    extraCostAmount: charges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0),
+  });
+
   // Helper para mostrar la fecha sin desfase de zona horaria (UTC-local)
   const formatDateSafe = (dateStr: string) => {
     if (!dateStr) return 'N/A';
@@ -352,7 +382,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setIsCreating(!isExistingInvoice);
     setEditingId(isExistingInvoice ? draftId! : null);
     const draftSnapshot = JSON.parse(JSON.stringify(invoiceDraft));
-    setLocalDoc(draftSnapshot);
+    setLocalDoc({ ...draftSnapshot, extraCharges: normalizeExtraCharges(draftSnapshot) });
     setPricingMode(inferPricingMode(draftSnapshot));
 
     const sub = Number(invoiceDraft.subtotal || 0);
@@ -379,7 +409,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       if (inv) {
         setIsCreating(false);
         const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
-        setLocalDoc(invoiceSnapshot);
+        setLocalDoc({ ...invoiceSnapshot, extraCharges: normalizeExtraCharges(invoiceSnapshot) });
         setPricingMode(inferPricingMode(invoiceSnapshot));
         const sub = Number(inv.subtotal || 0);
         if (sub > 0) {
@@ -477,13 +507,27 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setPaymentDialogOpen(true);
   };
 
-  const getCustomerCreditAvailable = (customerId?: string | null) => {
-    if (!customerId) return 0;
-    const customer = customers.find((item) => item.id === customerId);
+  const getInvoiceBalanceInBase = (invoice: Invoice) => toBaseAmount(
+    getInvoiceBalance(invoice),
+    invoice.currency,
+    Number(invoice.exchangeRate || 1),
+  );
+
+  const getInvoiceCreditAvailable = (invoice: Invoice) => {
+    const apiAvailable = Number(invoice.creditAvailableBase);
+    if (Number.isFinite(apiAvailable)) return Math.max(0, apiAvailable);
+
+    // Compatibilidad con respuestas antiguas: el saldo firmado incluye la
+    // factura actual, por lo que se excluye antes de calcular lo disponible.
+    const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
     const limit = Math.max(0, Number(customer?.creditLimit || 0));
     const currentDebt = Math.max(0, -Number(customer?.balance || 0));
-    return Math.max(0, Number((limit - currentDebt).toFixed(2)));
+    const debtWithoutInvoice = Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice));
+    return Math.max(0, Number((limit - debtWithoutInvoice).toFixed(2)));
   };
+
+  const invoiceFitsAvailableCredit = (invoice: Invoice) =>
+    getInvoiceCreditAvailable(invoice) + 0.01 >= getInvoiceBalanceInBase(invoice);
 
   const closeInvoicePayment = () => {
     if (paymentLoading) return;
@@ -505,8 +549,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Solo se puede enviar a crédito una factura con saldo pendiente');
       return;
     }
-    if (getCustomerCreditAvailable(invoice.customerId) <= 0.01) {
-      toast.error('El cliente no tiene límite de crédito disponible para esta operación');
+    if (!invoiceFitsAvailableCredit(actionInvoice)) {
+      const available = getInvoiceCreditAvailable(actionInvoice);
+      const required = getInvoiceBalanceInBase(actionInvoice);
+      const currencyLabel = baseCurrency === 'USD' ? '$' : 'C$';
+      toast.error(`El saldo pendiente (${currencyLabel} ${formatSalesAmount(required)}) supera el crédito disponible (${currencyLabel} ${formatSalesAmount(available)})`);
       return;
     }
     const today = new Date().toISOString().split('T')[0];
@@ -543,33 +590,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error(Array.isArray(message) ? message[0] : message, { id: creditToastId });
     } finally {
       setCreditLoading(false);
-    }
-  };
-
-  const handleSendInvoiceToCash = async (invoice: Invoice) => {
-    if (!invoice.id) return;
-    if (!canPerform('SALES_INVOICES', 'approve')) {
-      toast.error('No tienes permiso para enviar facturas a caja');
-      return;
-    }
-    if (['PAID', 'CANCELLED'].includes(String(invoice.status || '').toUpperCase()) || getInvoiceBalance(invoice) <= 0.01) {
-      toast.error('La factura no tiene saldo pendiente para enviar a caja');
-      return;
-    }
-    if (isInvoiceInCashQueue(invoice)) {
-      toast.info(`La factura ${invoice.number} ya está en la cola de caja; no se duplicará.`);
-      return;
-    }
-    setCashSendingInvoiceId(invoice.id);
-    try {
-      await invoicesService.sendToCash(invoice.id);
-      toast.success(`Factura ${invoice.number} enviada a la cola de caja`);
-      onRefresh();
-    } catch (error: any) {
-      const message = error?.response?.data?.message || error?.message || 'No se pudo enviar la factura a caja';
-      toast.error(Array.isArray(message) ? message[0] : message);
-    } finally {
-      setCashSendingInvoiceId(null);
     }
   };
 
@@ -700,6 +720,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       subtotal: 0,
       taxAmount: 0,
       discountAmount: 0,
+      extraCostDescription: null,
+      extraCostAmount: 0,
+      extraCharges: [],
+      deliveryDescription: null,
+      deliveryAmount: 0,
       total: 0,
       notes: '',
       sellerEmployeeId: '',
@@ -719,11 +744,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   const handleSaveInvoice = async (
-    action: InvoiceSaveAction = 'DRAFT',
+    action: InvoiceSaveAction = 'PENDING',
     settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string },
   ) => {
     if (!localDoc) return;
-    const emitir = action !== 'DRAFT';
     if (!localDoc.customerId) {
       toast.error('Selecciona un cliente');
       return;
@@ -732,20 +756,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.error('Agrega al menos un producto');
       return;
     }
-    if (emitir) {
-      const priceMessage = getMissingSalesPriceMessage(localDoc.items);
-      if (priceMessage) {
-        toast.error(priceMessage);
-        return;
-      }
-      if (!localDoc.salesOrderId) {
-        for (const item of localDoc.items || []) {
-          if (resolveItemType(item) !== 'SERVICE') continue;
-          const p = findProductForItem(item);
-          if (p && p.isActive === false) {
-            toast.error(`El servicio ${p.name || item.description || ''} no está disponible`);
-            return;
-          }
+    const priceMessage = getMissingSalesPriceMessage(localDoc.items);
+    if (priceMessage) {
+      toast.error(priceMessage);
+      return;
+    }
+    if (!localDoc.salesOrderId) {
+      for (const item of localDoc.items || []) {
+        if (resolveItemType(item) !== 'SERVICE') continue;
+        const p = findProductForItem(item);
+        if (p && p.isActive === false) {
+          toast.error(`El servicio ${p.name || item.description || ''} no está disponible`);
+          return;
         }
       }
     }
@@ -799,9 +821,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         ? 'Creando y registrando pago...'
         : action === 'CREDIT'
           ? 'Creando y enviando a crédito...'
-          : action === 'PENDING'
-            ? 'Emitiendo factura pendiente...'
-            : (isCreating ? 'Guardando factura como borrador...' : 'Guardando factura...'),
+          : 'Guardando factura en proceso...',
     );
     try {
       if (isCreating) {
@@ -827,9 +847,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           subtotal: Number(localDoc.subtotal || 0),
           taxAmount: Number(localDoc.taxAmount || 0),
           discountAmount: Number(localDoc.discountAmount || 0),
+          extraCostDescription: localDoc.extraCostDescription || null,
+          extraCostAmount: Number(localDoc.extraCostAmount || 0),
+          extraCharges: getExtraChargesPayload(localDoc),
+          deliveryDescription: localDoc.deliveryDescription || null,
+          deliveryAmount: Number(localDoc.deliveryAmount || 0),
           total: Number(localDoc.total || 0),
           pricingMode,
-          status: action === 'PENDING' ? 'PENDING' : 'DRAFT',
+          status: 'PENDING',
           initialAction: action === 'PAYMENT' || action === 'CREDIT' ? action : undefined,
           initialPayment: action === 'PAYMENT' ? {
             payments: settlement?.payments || [],
@@ -851,21 +876,22 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
         toast.success(
           action === 'PAYMENT' ? 'Factura creada y pago registrado'
             : action === 'CREDIT' ? 'Factura creada y enviada a Créditos'
-              : action === 'PENDING' ? 'Factura emitida como pendiente'
-                : 'Factura guardada como borrador',
+              : 'Factura guardada en proceso',
           { id: saveToastId },
         );
       } else {
         const invoiceUpdates = { ...localDoc };
         delete invoiceUpdates.paymentMethod;
         delete invoiceUpdates.paymentDetails;
-        await handleUpdate(localDoc.id, {
+        delete invoiceUpdates.status;
+        const updates: Partial<Invoice> = {
           ...invoiceUpdates,
           items: localDoc.items,
           notes: finalNotes,
-          status: action === 'PENDING' ? 'PENDING' : localDoc.status,
-        });
-        toast.success(action === 'PENDING' ? 'Factura emitida como pendiente' : 'Factura guardada como borrador', { id: saveToastId });
+        };
+        if (action === 'PENDING') updates.status = 'PENDING';
+        await handleUpdate(localDoc.id, updates);
+        toast.success(action === 'PENDING' ? 'Factura guardada en proceso' : 'Cambios guardados', { id: saveToastId });
       }
       setIsCreating(false);
       setEditingId(null);
@@ -890,13 +916,47 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     ? Math.max(0, getInvoiceBalance(paymentInvoice) - paymentTotalInInvoiceCurrency)
     : 0;
 
+  const additionalChargesTotal = (doc: any = localDoc) => getExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
+
+  const updateExtraCharges = (charges: ExtraChargeLine[]) => {
+    if (!localDoc) return;
+    const payload = getExtraChargesPayload({ extraCharges: charges });
+    const legacyFields = getLegacyExtraCostFields(payload);
+    const nextDoc = { ...localDoc, extraCharges: charges, ...legacyFields };
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    if (!isCreating) void handleUpdate(localDoc.id, { extraCharges: payload, ...legacyFields, total } as any);
+  };
+
+  const editExtraChargeDescription = (index: number, description: string) => {
+    if (!localDoc) return;
+    setLocalDoc({
+      ...localDoc,
+      extraCharges: normalizeExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, description } : item),
+    });
+  };
+
+  const persistExtraCharges = () => {
+    if (localDoc) updateExtraCharges(normalizeExtraCharges(localDoc));
+  };
+
+  const updateDelivery = (updates: Record<string, unknown>) => {
+    if (!localDoc) return;
+    const nextDoc = { ...localDoc, ...updates };
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    if (!isCreating) void handleUpdate(localDoc.id, { ...updates, total } as any);
+  };
+
   const recalcTotals = (items: any[], dRate: number, tRate: number) => {
     if (pricingMode === 'individual') return recalcIndividualTotals(items);
     const subtotal = items.reduce((acc: number, it: any) => acc + Number(it.total || 0), 0);
     const discountAmount = subtotal * (dRate / 100);
     const base = subtotal - discountAmount;
     const taxAmount = base * (tRate / 100);
-    const total = base + taxAmount;
+    const total = base + taxAmount + additionalChargesTotal();
     // Mantener las líneas en ambos modos. El selector de lista de precios
     // también recalcula los totales cuando su matriz termina de cargar; si
     // este retorno no incluye `items`, esa actualización visualiza la factura
@@ -918,7 +978,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       return sum + ((gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
     }, 0);
-    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount };
+    return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
 
   function getInvoiceBalance(invoice: Partial<Invoice>) {
@@ -1128,15 +1188,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const hasInventoryLines = (localDoc?.items || []).some((item: any) => item?.productId && resolveItemType(item) !== 'SERVICE');
     const accountingBlocked = hasInventoryLines && (accountingPreflightLoading || !accountingPreflight?.ready);
     const accountingErrors = accountingPreflight?.errors || [];
-    const hasCreditAvailable = getCustomerCreditAvailable(localDoc?.customerId) > 0.01;
-    const canCreateCredit = !isInvoiceLocked
-      && hasCreditAvailable
-      && canPerform('SALES_INVOICES', 'approve')
-      && canPerform('SALES_CREDIT_NOTES', 'approve');
-    const canRegisterPayment = !isInvoiceLocked
-      && canPerform('SALES_INVOICES', 'approve')
-      && canPerform('SALES_PAYMENTS', 'create')
-      && canPerform('SALES_PAYMENTS', 'approve');
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1168,34 +1219,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               </Button>
             )}
             {!isInvoiceLocked && ((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
-              <>
-                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => handleSaveInvoice('DRAFT')}>
-                  Guardar Borrador
-                </Button>
-                <Button variant="outline" className="rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300 font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => handleSaveInvoice('PENDING')} disabled={accountingBlocked}>
-                  Guardar como pendiente
-                </Button>
-                {canCreateCredit && (
-                  <Button variant="outline" className="rounded-xl border-violet-500/30 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300 font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => openInvoiceCredit(localDoc as Invoice)} disabled={accountingBlocked}>
-                    Enviar a crédito
-                  </Button>
-                )}
-                {!isInvoiceLocked && !isInvoiceInCashQueue(localDoc as Invoice) && canPerform('SALES_INVOICES', 'approve') && getInvoiceBalance(localDoc as Invoice) > 0.01 && (
-                  <Button variant="outline" className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => void handleSendInvoiceToCash(localDoc as Invoice)} disabled={cashSendingInvoiceId === localDoc.id || accountingBlocked}>
-                    <Send className="mr-2 size-4" /> {cashSendingInvoiceId === localDoc.id ? 'Enviando...' : 'Enviar a caja'}
-                  </Button>
-                )}
-                {canRegisterPayment && (
-                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => openInvoicePayment(localDoc as Invoice)}>
-                    Registrar pago
-                  </Button>
-                )}
-              </>
+              <Button variant="outline" className="rounded-xl border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-300 font-black uppercase text-[10px] tracking-widest px-4"
+                onClick={() => handleSaveInvoice(isCreating || String(localDoc?.status || '').toUpperCase() === 'DRAFT' ? 'PENDING' : 'SAVE')} disabled={accountingBlocked}>
+                Guardar
+              </Button>
             )}
           </div>
         </div>
@@ -1341,6 +1368,57 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                  <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('global'); setLocalRates({ dRate: 0, tRate: 15 }); }}>Global</Button>
                  <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>{'Por producto'}</Button>
               </div>
+              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costes extra</p>
+                    {!isInvoiceLocked && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 rounded-lg px-2 text-[9px] font-black uppercase tracking-wider" onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])}>
+                        <Plus className="mr-1 size-3" /> Agregar coste extra
+                      </Button>
+                    )}
+                  </div>
+                  {normalizeExtraCharges(localDoc).length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-border/60 px-2 py-2 text-[10px] text-muted-foreground">Agrega uno o varios costes adicionales.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {normalizeExtraCharges(localDoc).map((charge, index) => (
+                        <div key={charge.id} className="flex min-w-0 items-center gap-1.5">
+                          <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" disabled={isInvoiceLocked} />
+                          <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                            <span className="text-[10px] font-black text-muted-foreground">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span>
+                            <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
+                          </div>
+                          {!isInvoiceLocked && <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</p>
+                    {!isInvoiceLocked && !localDoc?.deliveryDescription && Number(localDoc?.deliveryAmount || 0) <= 0 && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 rounded-lg px-2 text-[9px] font-black uppercase tracking-wider" onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })}>
+                         <Plus className="mr-1 size-3" /> Agregar delivery
+                      </Button>
+                    )}
+                  </div>
+                  {localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? (
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Input value={localDoc?.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => localDoc && !isCreating && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null } as any)} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" disabled={isInvoiceLocked} />
+                      <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                        <span className="text-[10px] font-black text-muted-foreground">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span>
+                        <Input type="number" min="0" step="0.01" value={localDoc?.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" disabled={isInvoiceLocked} />
+                      </div>
+                      {!isInvoiceLocked && <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-border/60 px-2 py-2 text-[10px] text-muted-foreground">Puedes agregar un solo delivery.</p>
+                  )}
+                  <p className="text-[9px] text-muted-foreground/70">Importes en la moneda de la factura: {localDoc?.currency === 'USD' ? 'Dólares (US$)' : 'Córdobas (C$)'}.</p>
+                </div>
+              </div>
               <div className="space-y-3">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Subtotal</span>
                   <div className="flex min-w-0 items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="h-8 w-24 max-w-full text-right font-bold bg-muted/20" /></div></div>
@@ -1365,6 +1443,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </label>}
                     {localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.taxAmount)}
                   </div></div>
+                {getExtraChargesPayload(localDoc).map((charge, index) => <div key={`summary-extra-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">{charge.description || 'Coste extra'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(charge.amount)}</span></div>)}
+                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.deliveryAmount)}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
@@ -1689,7 +1769,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           pagination={pagination}
         columns={columns}
         showHorizontalControls
-        actionsWidth="w-52"
+        actionsWidth="w-44"
         fitContent
         layoutMode={layoutMode}
         highlightedRowId={highlightedAlertId}
@@ -1727,17 +1807,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_CREDIT_NOTES', 'approve') &&
                 !['PAID', 'CANCELLED', 'CREDIT'].includes(String(row.status).toUpperCase()) &&
                 !row.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
-                getInvoiceBalance(row) > 0.01 && (
+                getInvoiceBalance(row) > 0.01 &&
+                invoiceFitsAvailableCredit(row) && (
                 <Button type="button" title="Enviar saldo a crédito" aria-label={`Enviar saldo a crédito de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-violet-500 hover:bg-violet-500/10 transition-colors" onClick={() => openInvoiceCredit(row)}>
                   <Send className="size-4" />
-                </Button>
-              )}
-              {canPerform('SALES_INVOICES', 'approve') &&
-                !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
-                !isInvoiceInCashQueue(row) &&
-                getInvoiceBalance(row) > 0.01 && (
-                <Button type="button" title="Enviar factura a caja" aria-label={`Enviar factura ${row.number} a caja`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 transition-colors" onClick={() => void handleSendInvoiceToCash(row)} disabled={cashSendingInvoiceId === row.id}>
-                  {cashSendingInvoiceId === row.id ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                 </Button>
               )}
               {canPerform('SALES_INVOICES', 'approve') && canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') &&
@@ -1865,7 +1938,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <p className="mt-1 text-2xl font-black text-primary">Saldo: {formatInvoiceAmount(getInvoiceBalance(paymentInvoice), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
                   </div>
                   <Badge className={cn('border-none px-2 py-1 text-[9px] font-black uppercase', String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'bg-blue-500/10 text-blue-500' : String(paymentInvoice.status).toUpperCase() === 'CREDIT' ? 'bg-violet-500/10 text-violet-500' : 'bg-amber-500/10 text-amber-500')}>
-                    {String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'Pago parcial' : String(paymentInvoice.status).toUpperCase() === 'CREDIT' ? 'A crédito' : 'Pendiente'}
+                    {String(paymentInvoice.status).toUpperCase() === 'PARTIAL' ? 'Pago parcial' : String(paymentInvoice.status).toUpperCase() === 'CREDIT' ? 'A crédito' : 'En proceso'}
                   </Badge>
                 </div>
                 {paymentInvoice.expectedDelivery && (

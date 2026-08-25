@@ -76,6 +76,10 @@ interface CartSession {
   selectedCustomerId: string | undefined;
   emitDate: string;
   discountPercent: number;
+  extraCostDescription: string;
+  extraCostAmount: number;
+  deliveryDescription: string;
+  deliveryAmount: number;
   includeTax: boolean;
   pricingMode: PricingMode;
 }
@@ -85,6 +89,8 @@ interface InvoiceSummary {
   tax: number;
   discount: number;
   ir: number;
+  extraCost: number;
+  delivery: number;
   total: number;
 }
 
@@ -150,6 +156,9 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   }).join('');
   const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
+  const extraCost = Number(invoice.extraCostAmount || 0);
+  const delivery = Number(invoice.deliveryAmount || 0);
+  const additionalRows = `${extraCost > 0 ? `<div class="row"><span>${escapeTicketHtml(invoice.extraCostDescription || 'Coste extra')}</span><span>${money(extraCost / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}${delivery > 0 ? `<div class="row"><span>${escapeTicketHtml(invoice.deliveryDescription || 'Delivery')}</span><span>${money(delivery / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}`;
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
   const registerCode = invoice.register?.code || 'N/D';
 
@@ -165,7 +174,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     ? `<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`
     : `<div style="text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #000;"><h1 style="font-size:18pt;font-weight:800;margin:0 0 5px;text-transform:uppercase;">${escapeTicketHtml(companyName)}</h1><p style="font-size:10pt;color:#555;margin:0;">Comprobante de venta</p></div>`;
 
-  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div><div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
+  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
   const designStyle = win.document.createElement('style');
   designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}'].join('');
   win.document.head.appendChild(designStyle);
@@ -278,7 +287,10 @@ function calculateInvoiceSummary(
   includeTax: boolean,
   irRate = 0,
   pricingMode: PricingMode = 'global',
+  extraCostAmount = 0,
+  deliveryAmount = 0,
 ): InvoiceSummary {
+  const additionalCharges = Math.max(0, Number(extraCostAmount || 0)) + Math.max(0, Number(deliveryAmount || 0));
   const subtotal = cart.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
   if (pricingMode === 'individual') {
     const discount = cart.reduce((sum, item) => {
@@ -295,7 +307,7 @@ function calculateInvoiceSummary(
       const taxable = Math.max(0, gross - gross * Number(item.discount || 0) / 100);
       return sum + taxable * Number(item.irRate || 0) / 100;
     }, 0);
-    return { subtotal, tax, discount, ir, total: subtotal + tax - discount - ir };
+    return { subtotal, tax, discount, ir, extraCost: Math.max(0, Number(extraCostAmount || 0)), delivery: Math.max(0, Number(deliveryAmount || 0)), total: subtotal + tax - discount - ir + additionalCharges };
   }
   const discount = subtotal * (discountPercent / 100);
   const taxableSubtotal = Math.max(0, subtotal - discount);
@@ -307,7 +319,9 @@ function calculateInvoiceSummary(
     tax,
     discount,
     ir,
-    total: subtotal + tax - discount - ir,
+    extraCost: Math.max(0, Number(extraCostAmount || 0)),
+    delivery: Math.max(0, Number(deliveryAmount || 0)),
+    total: subtotal + tax - discount - ir + additionalCharges,
   };
 }
 
@@ -363,6 +377,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [selectedPriceListId, setSelectedPriceListId] = useState('');
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [extraCostDescription, setExtraCostDescription] = useState('');
+  const [extraCostAmount, setExtraCostAmount] = useState(0);
+  const [deliveryDescription, setDeliveryDescription] = useState('');
+  const [deliveryAmount, setDeliveryAmount] = useState(0);
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
   const [irRate] = useState(0);
   const [irTaxId] = useState<string | null>(null);
@@ -395,6 +413,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [queueInvoice, setQueueInvoice] = useState<InvoiceCashQueue | null>(null);
   const [queuePayments, setQueuePayments] = useState<PosPaymentLine[]>([]);
   const [queueSubmitting, setQueueSubmitting] = useState(false);
+  const queueSubmittingRef = useRef(false);
+  const [queueClaimingId, setQueueClaimingId] = useState<string | null>(null);
+  const [queueReleasingId, setQueueReleasingId] = useState<string | null>(null);
+  const [reconcilingQueue, setReconcilingQueue] = useState(false);
+  const queueClaimingRef = useRef<string | null>(null);
+  const queueReleasingRef = useRef<string | null>(null);
+  const reconcilingQueueRef = useRef(false);
 
   const paymentLineRate = (currency: PaymentCurrency) => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: PosPaymentLine['method'], amount = 0, currency: PaymentCurrency = displayCurrency): PosPaymentLine => ({
@@ -478,11 +503,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [loadCashQueue, user?.tenantId]);
 
   const handleClaimCashQueue = async (queue: InvoiceCashQueue) => {
+    if (queueClaimingRef.current) return;
     if (!selectedRegisterId || !activeSession) {
       toast.error('Apertura una sesión de caja para tomar la factura.');
       onNavigateToControlCaja?.(selectedRegisterId);
       return;
     }
+    queueClaimingRef.current = queue.id;
+    setQueueClaimingId(queue.id);
     try {
       const response = await cajaService.claimInvoiceCashQueue(queue.id, { registerId: selectedRegisterId, sessionId: activeSession.id });
       const claimed = (response as any)?.data || response;
@@ -493,10 +521,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'La factura ya fue tomada o no se pudo reservar en esta caja.'));
       void loadCashQueue();
+    } finally {
+      queueClaimingRef.current = null;
+      setQueueClaimingId(null);
     }
   };
 
   const handleReleaseCashQueue = async (queue: InvoiceCashQueue) => {
+    if (queueReleasingRef.current) return;
+    queueReleasingRef.current = queue.id;
+    setQueueReleasingId(queue.id);
     try {
       await cajaService.releaseInvoiceCashQueue(queue.id, { claimToken: queue.claimToken || undefined, reason: 'MANUAL' });
       if (queueInvoice?.id === queue.id) {
@@ -508,10 +542,16 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo liberar la factura. Actualiza la cola e inténtalo nuevamente.'));
       void loadCashQueue();
+    } finally {
+      queueReleasingRef.current = null;
+      setQueueReleasingId(null);
     }
   };
 
   const handleReconcileCashQueue = async () => {
+    if (reconcilingQueueRef.current) return;
+    reconcilingQueueRef.current = true;
+    setReconcilingQueue(true);
     try {
       const response = await cajaService.reconcileInvoiceCashQueue();
       const result = (response as any)?.data || response;
@@ -519,6 +559,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       await loadCashQueue();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo reconciliar la cola de caja.'));
+    } finally {
+      reconcilingQueueRef.current = false;
+      setReconcilingQueue(false);
     }
   };
 
@@ -594,7 +637,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const submitCashQueuePayment = async () => {
-    if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmitting) return;
+    if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmittingRef.current) return;
     const queueReceipt = queueInvoice;
     const { totalBase, paidBase } = getQueuePaymentSummary();
     if (paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
@@ -603,6 +646,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const appliedPayments = getQueuePaymentApplications();
     if (!appliedPayments.length) { toast.error('Registra un monto válido para cubrir el saldo pendiente.'); return; }
     const changeBase = Math.max(0, paidBase - totalBase);
+    queueSubmittingRef.current = true;
     setQueueSubmitting(true);
     try {
       await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments }, createIdempotencyKey('invoice-cash-queue'));
@@ -638,6 +682,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo registrar el cobro de la factura.'));
     } finally {
+      queueSubmittingRef.current = false;
       setQueueSubmitting(false);
     }
   };
@@ -651,6 +696,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [availabilityRows, setAvailabilityRows] = useState<BranchProductAvailability[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [holdSubmitting, setHoldSubmitting] = useState(false);
+  const holdSubmittingRef = useRef(false);
   const [holdCreateDto, setHoldCreateDto] = useState<CreatePosHoldDto | null>(null);
   const [variantPickerOpen, setVariantPickerOpen] = useState(false);
   const [variantPickerProduct, setVariantPickerProduct] = useState<PosProduct | null>(null);
@@ -699,10 +745,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     // Guardar sesión de la caja actual
     if (selectedRegisterId && !skipSave) {
       cartSessions.current.set(selectedRegisterId, {
-        cart,
-        selectedCustomerId,
-        emitDate,
-        discountPercent,
+      cart,
+      selectedCustomerId,
+      emitDate,
+      discountPercent,
+        extraCostDescription,
+        extraCostAmount,
+        deliveryDescription,
+        deliveryAmount,
         includeTax,
         pricingMode,
       });
@@ -715,6 +765,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setSelectedCustomerId(savedSession.selectedCustomerId);
       setEmitDate(savedSession.emitDate);
       setDiscountPercent(savedSession.discountPercent);
+      setExtraCostDescription(savedSession.extraCostDescription || '');
+      setExtraCostAmount(Number(savedSession.extraCostAmount || 0));
+      setDeliveryDescription(savedSession.deliveryDescription || '');
+      setDeliveryAmount(Number(savedSession.deliveryAmount || 0));
       setIncludeTax(savedSession.includeTax);
       setPricingMode(savedSession.pricingMode || 'global');
     } else {
@@ -723,6 +777,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setSelectedCustomerId(undefined);
       setEmitDate(getTodayInputDate());
       setDiscountPercent(0);
+      setExtraCostDescription('');
+      setExtraCostAmount(0);
+      setDeliveryDescription('');
+      setDeliveryAmount(0);
       setIncludeTax(true);
       setPricingMode('global');
     }
@@ -1043,6 +1101,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   }, [registers, selectedRegisterId, productSearch]);
 
   const handleHoldReservation = async (selection: HoldReservationSelection) => {
+    if (holdSubmittingRef.current) return;
     if (!availabilityProduct) return;
     if (!selectedRegisterId) {
       toast.error('Seleccioná una caja');
@@ -1071,6 +1130,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       customerId: selectedCustomerId,
       date: emitDate,
       discountPercent: pricingMode === 'global' ? discountPercent || undefined : undefined,
+      extraCostDescription: extraCostDescription.trim() || undefined,
+      extraCostAmount: extraCostAmount > 0 ? extraCostAmount : undefined,
+      deliveryDescription: deliveryDescription.trim() || undefined,
+      deliveryAmount: deliveryAmount > 0 ? deliveryAmount : undefined,
       pricingMode,
       irRate: irRate || undefined,
       irTaxId: irTaxId || undefined,
@@ -1093,6 +1156,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       return;
     }
 
+    holdSubmittingRef.current = true;
     setHoldSubmitting(true);
     try {
       const res = await cajaService.createHold(dto, createIdempotencyKey('hold'));
@@ -1104,6 +1168,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Error al reservar la venta'));
     } finally {
+      holdSubmittingRef.current = false;
       setHoldSubmitting(false);
     }
   };
@@ -1125,6 +1190,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       holdCreateDto.includeTax !== false,
       holdCreateDto.irRate || 0,
       holdCreateDto.pricingMode,
+      holdCreateDto.extraCostAmount || 0,
+      holdCreateDto.deliveryAmount || 0,
     ).total;
     const received = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     if (received + 0.005 < holdTotal) {
@@ -1188,8 +1255,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   };
 
   const summary = useMemo(
-    () => calculateInvoiceSummary(cart, discountPercent, includeTax, irRate, pricingMode),
-    [cart, discountPercent, includeTax, irRate, pricingMode],
+    () => calculateInvoiceSummary(cart, discountPercent, includeTax, irRate, pricingMode, extraCostAmount, deliveryAmount),
+    [cart, discountPercent, includeTax, irRate, pricingMode, extraCostAmount, deliveryAmount],
   );
   const missingPriceMessage = useMemo(() => getMissingSalesPriceMessage(cart), [cart]);
 
@@ -1292,6 +1359,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
+        extraCostDescription: extraCostDescription.trim() || undefined,
+        extraCostAmount: extraCostAmount > 0 ? extraCostAmount : undefined,
+        deliveryDescription: deliveryDescription.trim() || undefined,
+        deliveryAmount: deliveryAmount > 0 ? deliveryAmount : undefined,
         pricingMode,
         irRate: irRate || undefined,
         irTaxId: irTaxId || undefined,
@@ -1344,6 +1415,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       // Limpiar datos en memoria de esta caja
       setCart([]);
       setDiscountPercent(0);
+      setExtraCostDescription('');
+      setExtraCostAmount(0);
+      setDeliveryDescription('');
+      setDeliveryAmount(0);
       cartSessions.current.delete(selectedRegisterId);
 
       await loadRecentInvoices(selectedRegisterId);
@@ -1375,6 +1450,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const clearCart = () => {
     setCart([]);
     setDiscountPercent(0);
+    setExtraCostDescription('');
+    setExtraCostAmount(0);
+    setDeliveryDescription('');
+    setDeliveryAmount(0);
     setPricingMode('global');
   };
 
@@ -1494,7 +1573,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <Badge className="border-none bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{cashQueue.length}</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()}><CheckCircle2 className="size-3.5" /> Reconciliar</Button>}
+              {(['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || user?.isPlatformAdmin) && <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void handleReconcileCashQueue()} disabled={reconcilingQueue}>{reconcilingQueue ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} {reconcilingQueue ? 'Reconciliando…' : 'Reconciliar'}</Button>}
               <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-bold" onClick={() => void loadCashQueue()} disabled={cashQueueLoading}>
                 <RefreshCw className={cn('size-3.5', cashQueueLoading && 'animate-spin')} /> Actualizar
               </Button>
@@ -1529,8 +1608,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)}><CheckCircle2 className="mr-1.5 size-4" /> Tomar factura</Button>}
-                      {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-amber-500/40 text-xs font-black text-amber-700 dark:text-amber-300" onClick={() => void handleReleaseCashQueue(queue)}>Liberar</Button>}
+                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : 'Tomar factura'}</Button>}
+                      {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-amber-500/40 text-xs font-black text-amber-700 dark:text-amber-300" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
                       {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(queue.invoice.balance || 0), queue.invoice.currency)]); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
@@ -1991,6 +2070,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     Configura el IVA y el descuento directamente en cada producto o servicio.
                   </p>
                 )}
+                <div className="grid gap-3 border-t border-border/30 pt-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Coste extra / descripción</Label>
+                    <Input value={extraCostDescription} onChange={(event) => setExtraCostDescription(event.target.value)} placeholder="Ej. Instalación" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
+                    <Input type="number" min="0" step="0.01" value={extraCostAmount || ''} onChange={(event) => setExtraCostAmount(Math.max(0, Number(event.target.value) || 0))} placeholder="Monto" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Delivery</Label>
+                    <Input value={deliveryDescription} onChange={(event) => setDeliveryDescription(event.target.value)} placeholder="Descripción opcional" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
+                    <Input type="number" min="0" step="0.01" value={deliveryAmount || ''} onChange={(event) => setDeliveryAmount(Math.max(0, Number(event.target.value) || 0))} placeholder="Monto" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
+                  </div>
+                </div>
                 <div className="space-y-2 pt-2 border-t border-border/30">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Subtotal Bruto:</span>
@@ -2004,6 +2095,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <span className="text-muted-foreground">IVA calculado:</span>
                     <span className="font-mono">{formatCurrency(summary.tax)}</span>
                   </div>
+                  {summary.extraCost > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">{extraCostDescription.trim() || 'Coste extra'}:</span><span className="font-mono">{formatCurrency(summary.extraCost)}</span></div>}
+                  {summary.delivery > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">{deliveryDescription.trim() || 'Delivery'}:</span><span className="font-mono">{formatCurrency(summary.delivery)}</span></div>}
                 </div>
                 <div className="pt-3 border-t border-border/30">
                   <div className="flex justify-between items-center">
@@ -2155,6 +2248,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   holdCreateDto.includeTax !== false,
                   holdCreateDto.irRate || 0,
                   holdCreateDto.pricingMode,
+                  holdCreateDto.extraCostAmount || 0,
+                  holdCreateDto.deliveryAmount || 0,
                 ).total
                 : null;
               const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession.exchangeRateUSD || 1);

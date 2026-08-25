@@ -133,7 +133,7 @@ export function getMissingSalesPriceMessage(items: any[] = []): string {
     .slice(0, 3)
     .join(', ');
   const suffix = missing.length > 3 ? ` y ${missing.length - 3} más` : '';
-  return `No hay precio configurado para: ${names}${suffix}. Selecciona una lista con precio antes de continuar.`;
+  return `Tener stock no basta: falta el precio en la lista seleccionada para: ${names}${suffix}. Selecciona una lista con precio antes de continuar.`;
 }
 
 /**

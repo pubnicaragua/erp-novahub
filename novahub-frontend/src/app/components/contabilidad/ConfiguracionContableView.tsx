@@ -82,6 +82,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Cuando la factura queda pagada, se registra una sola vez contra el cobro real',
     fields: [
       { key: 'income', label: 'Ingresos', side: 'credit', description: 'Se acredita el subtotal (sin IVA)', defaultCode: '4000', defaultName: 'Ingresos Operativos', defaultType: 'INCOME' },
+      { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada al cliente', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
+      { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
   },
@@ -99,6 +101,8 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
+      { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada en caja', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
+      { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery en caja', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
     ],
   },
