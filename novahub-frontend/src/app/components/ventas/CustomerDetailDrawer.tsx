@@ -133,6 +133,7 @@ const getTransactionStatus = (status?: string) => {
   const normalized = String(status || '').toUpperCase();
   const labels: Record<string, string> = {
     DRAFT: 'Borrador',
+    IN_PROCESS: 'En proceso',
     SENT: 'Enviada',
     APPROVED: 'Aprobada',
     CONFIRMED: 'Confirmada',

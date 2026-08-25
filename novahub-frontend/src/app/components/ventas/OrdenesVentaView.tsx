@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
-  Plus, Search, TrendingUp, Clock, ArrowRightCircle, Package, PackageCheck, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
+  Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -58,13 +58,21 @@ interface OrdenesVentaViewProps {
 
 const statusOptions = [
   { label: 'Borrador',       value: 'DRAFT',       color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'Confirmada',     value: 'CONFIRMED',   color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Enviada',        value: 'SHIPPED',     color: 'bg-purple-500/10 text-purple-500' },
-  { label: 'Entregada',      value: 'DELIVERED',   color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'En proceso',     value: 'IN_PROCESS',  color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'Aprobada',       value: 'APPROVED',    color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
 ];
 
-export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED';
+export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
+type OrderWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED';
+
+const normalizeOrderStatus = (status: unknown) => {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'CONFIRMED') return 'APPROVED';
+  if (normalized === 'IN_PROGRESS') return 'IN_PROCESS';
+  if (normalized === 'SHIPPED' || normalized === 'DELIVERED') return 'APPROVED';
+  return normalized;
+};
 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
@@ -174,11 +182,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     setInvoicingOrderId(order.id);
     const invoiceToastId = toast.loading('Generando factura desde la orden de venta...');
     try {
-      const currentStatus = String(orderForConversion.status || '').toUpperCase();
-      if (!['CONFIRMED', 'SHIPPED'].includes(currentStatus)) {
-        await salesOrdersService.update(order.id, { status: 'CONFIRMED' as any });
+      const currentStatus = normalizeOrderStatus(orderForConversion.status);
+      if (currentStatus !== 'APPROVED') {
+        toast.error('La orden debe estar aprobada antes de enviarse a factura', { id: invoiceToastId });
+        return;
       }
-      await onGenerateInvoice({ ...orderForConversion, status: 'confirmed' as any });
+      await onGenerateInvoice({ ...orderForConversion, status: 'APPROVED' as any });
       toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
       await onRefresh();
     } catch (error: any) {
@@ -307,7 +316,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   }, [targetOrderId, data, onClearTargetOrderId]);
 
   const filtered = data.filter((order) => {
-    const status = String(order.status || '').toUpperCase();
+    const status = normalizeOrderStatus(order.status);
     const matchesStatus = statusFilter === 'ALL' || status === statusFilter;
     const search = searchTerm.trim().toLowerCase();
     const matchesSearch = !search
@@ -317,15 +326,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   });
 
   const orderStatusPriority: Record<string, number> = {
-    CONFIRMED: 0,
-    SHIPPED: 1,
-    DELIVERED: 2,
-    DRAFT: 3,
-    CANCELLED: 4,
+    APPROVED: 0,
+    IN_PROCESS: 1,
+    DRAFT: 2,
+    CANCELLED: 3,
   };
   const statusOrdered = [...filtered].sort((a, b) => {
-    const statusOrder = (orderStatusPriority[String(a.status || '').toUpperCase()] ?? 99)
-      - (orderStatusPriority[String(b.status || '').toUpperCase()] ?? 99);
+    const statusOrder = (orderStatusPriority[normalizeOrderStatus(a.status)] ?? 99)
+      - (orderStatusPriority[normalizeOrderStatus(b.status)] ?? 99);
     if (statusOrder !== 0) return statusOrder;
     return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
   });
@@ -344,15 +352,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
-      if (updates.status && String(updates.status).toUpperCase() === 'SHIPPED') {
-        const orderToConvert = data.find(o => o.id === id) || localDoc;
-        if (orderToConvert) {
-          await onGenerateInvoice({ ...orderToConvert, status: 'SHIPPED' as any });
-          await onRefresh();
-          return;
-        }
-      }
-
       await salesOrdersService.update(id.toString(), updates);
       onRefresh();
     } catch (error: any) {
@@ -362,7 +361,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   };
 
-  const buildOrderStatusPayload = (status: 'DRAFT' | 'CONFIRMED') => ({
+  const buildOrderStatusPayload = (status: OrderWorkflowStatus) => ({
     number: localDoc?.number,
     customerId: localDoc?.customerId || null,
     sellerEmployeeId: localDoc?.sellerEmployeeId || null,
@@ -388,31 +387,45 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     status,
   } as Partial<SalesOrder>);
 
-  const handleSaveOrder = async (status: 'DRAFT' | 'CONFIRMED') => {
-    if (!localDoc) return;
-    if (status === 'CONFIRMED') {
+  const handleSaveOrder = async (status: OrderWorkflowStatus): Promise<boolean> => {
+    if (!localDoc) return false;
+    if (status !== 'DRAFT') {
       const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
       if (priceMessage) {
         toast.error(priceMessage);
-        return;
+        return false;
       }
       for (const item of localDoc.items || []) {
         if (resolveItemType(item) !== 'SERVICE') continue;
         const p = findProductForItem(item);
         if (p && p.isActive === false) {
           toast.error(`El servicio ${p.name || item.description || ''} no está disponible`);
-          return;
+          return false;
         }
       }
     }
-    const saveToastId = toast.loading(status === 'CONFIRMED' ? 'Confirmando orden de venta...' : 'Guardando orden de venta...');
+    const saveToastId = toast.loading(
+      status === 'APPROVED' ? 'Aprobando orden de venta...' : status === 'IN_PROCESS' ? 'Marcando orden en proceso...' : 'Guardando orden de venta...',
+    );
     try {
       await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
       setEditingId(null);
-      toast.success(status === 'CONFIRMED' ? 'Orden confirmada' : 'Orden guardada como borrador', { id: saveToastId });
+      toast.success(
+        status === 'APPROVED' ? 'Orden aprobada' : status === 'IN_PROCESS' ? 'Orden marcada en proceso' : 'Orden guardada como borrador',
+        { id: saveToastId },
+      );
+      return true;
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la orden de venta', { id: saveToastId });
+      return false;
     }
+  };
+
+  const handleApproveAndInvoice = async () => {
+    if (!localDoc) return;
+    const saved = await handleSaveOrder('APPROVED');
+    if (!saved) return;
+    await handleInvoiceOrder({ ...localDoc, status: 'APPROVED' as any });
   };
 
   const calculateRates = (doc: any) => {
@@ -551,13 +564,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       width: '135px',
       editable: false,
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
+        const normalizedStatus = normalizeOrderStatus(val);
+        const opt = statusOptions.find(o => o.value === normalizedStatus);
         return (
           <Badge variant="outline" className={cn(
             "whitespace-nowrap text-[9px] font-black uppercase tracking-wider px-2 py-0.5 border-none shadow-none",
             opt?.color || 'bg-muted/20 text-muted-foreground'
           )}>
-            {opt?.label || val}
+            {opt?.label || normalizedStatus || val}
           </Badge>
         );
       }
@@ -634,8 +648,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     { key: 'paymentStatus', label: 'Estado de pago' },
   ];
 
-  const confirmedAmountInDisplayCurrency = data
-    .filter(order => (order.status || '').toUpperCase() === 'CONFIRMED')
+  const approvedAmountInDisplayCurrency = data
+    .filter(order => normalizeOrderStatus(order.status) === 'APPROVED')
     .reduce((acc, order) => acc + ((order as any).baseTotal !== null && (order as any).baseTotal !== undefined
       ? Number((order as any).baseTotal)
       : toBaseAmount(order.total || 0, order.currency, order.exchangeRate)), 0);
@@ -655,16 +669,22 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           </div>
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="orders" context="form" />
-            {canPerform('SALES_ORDERS', 'edit') && (
+            {canPerform('SALES_ORDERS', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeOrderStatus(localDoc?.status)) && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => void handleSaveOrder('DRAFT')}>
-                  Guardar Borrador
-                </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => void handleSaveOrder('CONFIRMED')}>
-                  Confirmar Orden
-                </Button>
+                {normalizeOrderStatus(localDoc?.status) === 'DRAFT' && <>
+                  <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                    onClick={() => void handleSaveOrder('DRAFT')}>
+                    Guardar Borrador
+                  </Button>
+                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                    onClick={() => void handleSaveOrder('IN_PROCESS')}>
+                    Marcar En Proceso
+                  </Button>
+                </>}
+                {['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(localDoc?.status)) && canPerform('SALES_ORDERS', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => void handleApproveAndInvoice()}>
+                  Aprobar y enviar a Factura
+                </Button>}
               </>
             )}
           </div>
@@ -1157,10 +1177,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
-        <SalesKpiCard title="Órdenes Enviadas" value={data.filter(o => (o.status || '').toUpperCase() === 'SHIPPED').length} icon={Package} color="text-orange-500" bg="bg-orange-500/10" active={statusFilter === 'SHIPPED'} onClick={() => setStatusFilter(statusFilter === 'SHIPPED' ? 'ALL' : 'SHIPPED')} />
-        <SalesKpiCard title={`Monto Confirmado (${baseCurrency})`} value={formatConvertedAmount(confirmedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="Órdenes Confirmadas" value={data.filter(o => (o.status || '').toUpperCase() === 'CONFIRMED').length} icon={Check} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'CONFIRMED'} onClick={() => setStatusFilter(statusFilter === 'CONFIRMED' ? 'ALL' : 'CONFIRMED')} />
-        <SalesKpiCard title="Órdenes Entregadas" value={data.filter(o => (o.status || '').toUpperCase() === 'DELIVERED').length} icon={PackageCheck} color="text-cyan-500" bg="bg-cyan-500/10" active={statusFilter === 'DELIVERED'} onClick={() => setStatusFilter(statusFilter === 'DELIVERED' ? 'ALL' : 'DELIVERED')} />
+        <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title={`Monto Aprobado (${baseCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
+        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-slate-500" bg="bg-slate-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
@@ -1174,10 +1194,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <SelectTrigger className="h-10 w-44 rounded-xl border-border/50 bg-background/50 text-[10px] font-black uppercase tracking-widest"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos los estados</SelectItem>
-                <SelectItem value="SHIPPED">Órdenes enviadas</SelectItem>
-                <SelectItem value="DELIVERED">Órdenes entregadas</SelectItem>
                 <SelectItem value="DRAFT">Borradores</SelectItem>
-                <SelectItem value="CONFIRMED">Confirmadas</SelectItem>
+                <SelectItem value="IN_PROCESS">En proceso</SelectItem>
+                <SelectItem value="APPROVED">Aprobadas</SelectItem>
+                <SelectItem value="CANCELLED">Canceladas</SelectItem>
               </SelectContent>
             </Select>
             <div className="relative">
@@ -1224,11 +1244,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                 {canPerform('SALES_ORDERS', 'approve') && (row.status || '').toUpperCase() !== 'CANCELLED' && !row.invoiceId && !row.invoiceNumber && (
+                 {canPerform('SALES_ORDERS', 'approve') && normalizeOrderStatus(row.status) === 'APPROVED' && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
-                    title="Aprobar y enviar a Factura" 
-                    aria-label="Aprobar y enviar a Factura"
+                    title="Enviar a Factura"
+                    aria-label="Enviar a Factura"
                     onClick={() => void handleInvoiceOrder(row)}
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
@@ -1238,14 +1258,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <ArrowRightCircle className={cn('size-4 text-muted-foreground', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
-                {canPerform('SALES_ORDERS', 'edit') && ['SHIPPED', 'IN_PROGRESS'].includes(String(row.status || '').toUpperCase()) && (
-                  <Button type="button" title="Marcar como entregada" aria-label="Marcar como entregada" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-cyan-500 hover:bg-cyan-500/10" onClick={() => void handleUpdate(row.id, { status: 'DELIVERED' as any })}>
-                    <PackageCheck className="size-4" />
-                  </Button>
-                )}
                 <Button type="button" title="Ver orden completa" aria-label="Ver orden completa" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setDetailOrder(null); setEditingId(row.id); }}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'delete') &&
-                  !['CANCELLED', 'DELIVERED'].includes(String(row.status || '').toUpperCase()) &&
+                  ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(row.status)) &&
                   !row.invoiceId && !row.invoiceNumber && (
                   <Button
                     type="button"
@@ -1329,7 +1344,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           const cancelToastId = toast.loading('Cancelando orden de venta...');
           try {
             setCancelLoading(true);
-            await salesOrdersService.update(pendingCancelId, { status: 'cancelled' });
+            await salesOrdersService.update(pendingCancelId, { status: 'CANCELLED' as any });
             toast.success('Orden cancelada', { id: cancelToastId });
             if (editingId === pendingCancelId) setEditingId(null);
             await onRefresh();

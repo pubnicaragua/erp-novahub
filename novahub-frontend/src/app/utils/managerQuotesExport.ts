@@ -35,6 +35,7 @@ interface ManagerQuotesExportOptions {
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
+  IN_PROCESS: 'En proceso',
   SENT: 'Enviada',
   APPROVED: 'Aprobada',
   REJECTED: 'Rechazada',

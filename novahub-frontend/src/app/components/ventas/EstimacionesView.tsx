@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft
@@ -53,11 +53,16 @@ interface EstimacionesViewProps {
 
 const statusOptions = [
   { label: 'Borrador',  value: 'DRAFT',     color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Enviada',  value: 'SENT',      color: 'bg-blue-500/10 text-blue-500' },
+  { label: 'En proceso', value: 'IN_PROCESS', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Aprobada', value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Rechazada',value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
   { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
 ];
+type EstimateWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
+const normalizeEstimateStatus = (status: unknown) => String(status || '').toUpperCase() === 'SENT' ? 'IN_PROCESS' : String(status || '').toUpperCase();
+const hasEstimateContent = (estimate: Estimate | null | undefined) => Boolean(
+  estimate?.customerId || (estimate?.items || []).some((item: any) => item?.productId || String(item?.description || '').trim()),
+);
+const isLocalEstimate = (id: string | number | undefined | null) => String(id || '').startsWith('local-');
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
@@ -67,7 +72,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | EstimateWorkflowStatus>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,6 +80,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const localDraftRef = useRef<Estimate | null>(null);
+  const creatingEstimateRef = useRef<Promise<Estimate> | null>(null);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -92,8 +99,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
     if (convertingId) return;
     const currentStatus = String(estimate.status || '').toUpperCase();
-    if (!['DRAFT', 'SENT'].includes(currentStatus)) {
-      toast.info('Solo se pueden aprobar cotizaciones en borrador o enviadas');
+    if (!['IN_PROCESS', 'SENT'].includes(currentStatus)) {
+      toast.info('La cotización debe estar en proceso antes de aprobarla');
       return;
     }
     if (!estimate.items?.length) {
@@ -108,32 +115,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     setConvertingId(estimate.id);
     const conversionToastId = toast.loading('Generando orden de venta desde la cotización...');
     try {
-      if (currentStatus === 'DRAFT') {
-        await estimatesService.update(estimate.id, {
-          number: estimate.number,
-          customerId: estimate.customerId || null,
-          date: estimate.date,
-          expiryDate: estimate.expiryDate,
-          subtotal: estimate.subtotal,
-          taxAmount: estimate.taxAmount,
-          discountAmount: estimate.discountAmount,
-          irRate: estimate.irRate || 0,
-          irTaxId: estimate.irTaxId || null,
-          irAmount: estimate.irAmount || 0,
-          priceListId: estimate.priceListId || null,
-          total: estimate.total,
-          currency: estimate.currency,
-          exchangeRate: estimate.exchangeRate,
-          baseTotal: estimate.baseTotal,
-          notes: estimate.notes,
-          items: estimate.items || [],
-          status: 'SENT',
-        } as Partial<Estimate>);
-      }
       const order = await estimatesService.convertToOrder(estimate.id);
-      toast.success('Cotización enviada a Orden de Venta', { id: conversionToastId });
+      toast.success('Cotización aprobada y enviada a Orden de Venta', { id: conversionToastId });
       onConvertedToOrder?.(order.id);
       await onRefresh();
+      localDraftRef.current = null;
+      setEditingId(null);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización', { id: conversionToastId });
     } finally {
@@ -141,28 +128,78 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     }
   };
 
-  const filtered = data.filter(e => 
-    (statusFilter === 'ALL' || String(e.status || '').toUpperCase() === statusFilter) &&
-    e.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (statusFilter === 'ALL' || String(e.status || '').toUpperCase() === statusFilter) &&
-    (e.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = data.filter(e => {
+    const matchesStatus = statusFilter === 'ALL' || normalizeEstimateStatus(e.status) === statusFilter;
+    const search = searchTerm.toLowerCase();
+    return matchesStatus && (e.number.toLowerCase().includes(search) || (e.customer?.name || '').toLowerCase().includes(search));
+  });
 
   const colFilters = useColumnFilters();
   const filterGetters = {
     customerId: (row: Estimate) => row.customer?.name || 'Varios',
     date: (row: Estimate) => (row.date ? new Date(row.date).getTime() : null),
-    status: (row: Estimate) => String(row.status || '').toUpperCase(),
+    status: (row: Estimate) => normalizeEstimateStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
   const distinctCustomers = [...new Map(filtered.map((e) => [e.customer?.name || 'Varios', e.customer?.name || 'Varios'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((e) => (e.customer?.name || 'Varios') === label).length }));
-  const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((e) => String(e.status || '').toUpperCase() === option.value).length }));
+  const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((e) => normalizeEstimateStatus(e.status) === option.value).length }));
 
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     try {
+      if (isLocalEstimate(id)) {
+        const baseDoc = localDraftRef.current?.id === String(id) ? localDraftRef.current : localDoc;
+        if (!baseDoc) return;
+        const nextDoc = { ...baseDoc, ...updates, items: updates.items ?? baseDoc.items } as Estimate;
+        localDraftRef.current = nextDoc;
+        setLocalDoc(nextDoc);
+        if (!hasEstimateContent(nextDoc)) return;
+
+        if (creatingEstimateRef.current) {
+          await creatingEstimateRef.current;
+          const createdDoc = localDraftRef.current;
+          if (!createdDoc || isLocalEstimate(createdDoc.id)) return;
+          await estimatesService.update(createdDoc.id, updates);
+          localDraftRef.current = { ...createdDoc, ...updates, items: updates.items ?? createdDoc.items } as Estimate;
+          setLocalDoc(localDraftRef.current);
+          await onRefresh();
+          return;
+        }
+
+        const createStatus = normalizeEstimateStatus(updates.status || 'DRAFT');
+        const createRequest = estimatesService.create({
+          customerId: nextDoc.customerId || undefined,
+          date: nextDoc.date || new Date().toISOString(),
+          expiryDate: nextDoc.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+          items: nextDoc.items || [],
+          subtotal: nextDoc.subtotal || 0,
+          taxAmount: nextDoc.taxAmount || 0,
+          discountAmount: nextDoc.discountAmount || 0,
+          irRate: (nextDoc as any).irRate || 0,
+          irTaxId: (nextDoc as any).irTaxId || null,
+          irAmount: (nextDoc as any).irAmount || 0,
+          priceListId: nextDoc.priceListId || null,
+          total: nextDoc.total || 0,
+          currency: nextDoc.currency || displayCurrency,
+          exchangeRate: nextDoc.exchangeRate || globalRate,
+          baseTotal: (nextDoc as any).baseTotal || 0,
+          notes: nextDoc.notes,
+          status: createStatus === 'IN_PROCESS' ? 'IN_PROCESS' : 'DRAFT',
+        } as Partial<Estimate>);
+        creatingEstimateRef.current = createRequest;
+        try {
+          const created = await createRequest;
+          localDraftRef.current = created;
+          setLocalDoc(created);
+          setEditingId(created.id);
+          await onRefresh();
+          return;
+        } finally {
+          if (creatingEstimateRef.current === createRequest) creatingEstimateRef.current = null;
+        }
+      }
       await estimatesService.update(id.toString(), updates);
-      onRefresh();
+      await onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
       throw e;
@@ -233,20 +270,29 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     status,
   } as Partial<Estimate>);
 
-  const handleSaveEstimate = async (status: 'DRAFT' | 'SENT') => {
+  const handleSaveEstimate = async (status: 'DRAFT' | 'IN_PROCESS') => {
     if (!localDoc) return;
-    if (status === 'SENT') {
-      const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
+    if (status === 'IN_PROCESS') {
+      if (!hasEstimateContent({ ...localDoc, customerId: '', items: localDoc.items } as Estimate)) {
+        toast.error('La cotización debe contener al menos un producto o servicio');
+        return;
+      }
+      const priceMessage = getMissingSalesPriceMessage((localDoc.items || []).filter((item: any) => item.productId || String(item.description || '').trim()));
       if (priceMessage) {
         toast.error(priceMessage);
         return;
       }
     }
-    const saveToastId = toast.loading(status === 'SENT' ? 'Enviando cotización...' : 'Guardando cotización...');
+    if (isLocalEstimate(localDoc.id) && !hasEstimateContent(localDoc)) {
+      toast.info('Selecciona un cliente o agrega un producto o servicio antes de guardar');
+      return;
+    }
+    const saveToastId = toast.loading(status === 'IN_PROCESS' ? 'Marcando cotización en proceso...' : 'Guardando cotización...');
     try {
       await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
+      localDraftRef.current = null;
       setEditingId(null);
-      toast.success(status === 'SENT' ? 'Cotización enviada' : 'Cotización guardada como borrador', { id: saveToastId });
+      toast.success(status === 'IN_PROCESS' ? 'Cotización marcada en proceso' : 'Cotización guardada como borrador', { id: saveToastId });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la cotización', { id: saveToastId });
     }
@@ -347,7 +393,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     number: estimate.number,
     title: 'Cotización',
     customerName: estimate.customer?.name || customers.find((customer) => customer.id === estimate.customerId)?.name || 'Varios',
-    status: String(estimate.status || ''),
+    status: normalizeEstimateStatus(estimate.status),
     totalLabel: formatConvertedAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate),
     summaryDetails: [
       { label: 'Moneda', value: estimate.currency || 'NIO' },
@@ -367,27 +413,31 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     notes: estimate.notes,
   });
 
-  const handleAddEstimate = async () => {
-    const createToastId = toast.loading('Creando estimación...');
-    try {
-      const newEst = await estimatesService.create({
-        date: new Date().toISOString(),
-        expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        items: [],
-        subtotal: 0,
-        taxAmount: 0,
-        discountAmount: 0,
-        total: 0,
-        currency: displayCurrency,
-        exchangeRate: globalRate,
-        status: 'DRAFT' as any,
-      });
-      await onRefresh();
-      toast.success('Estimación creada como borrador', { id: createToastId });
-      setEditingId(newEst.id);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo crear la estimación', { id: createToastId });
-    }
+  const handleAddEstimate = () => {
+    const now = new Date().toISOString();
+    const draft = {
+      id: `local-${Date.now()}`,
+      number: 'Sin guardar',
+      customerId: '',
+      date: now,
+      expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      items: [],
+      subtotal: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      irRate: 0,
+      irAmount: 0,
+      total: 0,
+      baseTotal: 0,
+      currency: displayCurrency,
+      exchangeRate: globalRate,
+      status: 'DRAFT',
+    } as Estimate;
+    localDraftRef.current = draft;
+    setLocalDoc(draft);
+    setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
+    setPricingMode('global');
+    setEditingId(draft.id);
   };
 
   const calculateRates = (doc: any) => {
@@ -440,12 +490,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const timer = setTimeout(() => {
       if (editingId) {
         const e = data.find(x => x.id === editingId);
-        setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
         if (e) {
+          const cloned = JSON.parse(JSON.stringify(e));
+          localDraftRef.current = null;
+          setLocalDoc(cloned);
           setLocalRates({ ...calculateRates(e), irRate: Number((e as any).irRate || 0), irTaxId: (e as any).irTaxId || '' });
           setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+        } else if (localDraftRef.current?.id === editingId) {
+          setLocalDoc(localDraftRef.current);
         }
       } else {
+        localDraftRef.current = null;
         setLocalDoc(null);
         setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
       }
@@ -499,7 +554,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       editable: false,
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => {
-        const opt = statusOptions.find(o => o.value === String(val || '').toUpperCase());
+        const opt = statusOptions.find(o => o.value === normalizeEstimateStatus(val));
         return (
           <Badge variant="outline" className={cn(
             "whitespace-nowrap text-[9px] font-black uppercase tracking-wider px-2 py-0.5 border-none shadow-none",
@@ -534,7 +589,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { localDraftRef.current = null; setEditingId(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -549,16 +604,22 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
             )}
-            {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED', 'REJECTED'].includes(String(localDoc?.status || '').toUpperCase()) && (
+            {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
               <>
-                <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => void handleSaveEstimate('DRAFT')}>
-                  Guardar Borrador
-                </Button>
-                <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => void handleSaveEstimate('SENT')}>
-                  Enviar Cotización
-                </Button>
+                {normalizeEstimateStatus(localDoc?.status) === 'DRAFT' && <>
+                  <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                    onClick={() => void handleSaveEstimate('DRAFT')}>
+                    Guardar Borrador
+                  </Button>
+                  <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                    onClick={() => void handleSaveEstimate('IN_PROCESS')}>
+                    Marcar En Proceso
+                  </Button>
+                </>}
+                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => void handleConvertToOrder(localDoc)}>
+                  Aprobar y enviar a Orden
+                </Button>}
               </>
             )}
           </div>
@@ -904,7 +965,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="Enviadas" value={data.filter(e => (e.status||'').toUpperCase() === 'SENT').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'SENT'} onClick={() => setStatusFilter(statusFilter === 'SENT' ? 'ALL' : 'SENT')} />
+        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-purple-500" bg="bg-purple-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
       </div>
 
@@ -962,7 +1023,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 onSend={() => handleWhatsApp(row)}
               />
               {canPerform('SALES_QUOTES', 'approve') &&
-                ['DRAFT', 'SENT'].includes(String(row.status || '').toUpperCase()) && (
+                normalizeEstimateStatus(row.status) === 'IN_PROCESS' && (
                 <Button
                   variant="ghost"
                   title="Aprobar y enviar a Orden de Venta"
@@ -978,7 +1039,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
                 <Eye className={actionIconClass} />
               </Button>
-              {canPerform('SALES_QUOTES', 'edit') && !['CANCELLED', 'APPROVED'].includes(String(row.status).toUpperCase()) && (
+              {canPerform('SALES_QUOTES', 'edit') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
                 <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
                   <Ban className={actionIconClass} />
                 </Button>
@@ -1018,6 +1079,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             setCancelLoading(true);
             await estimatesService.update(pendingCancelId, { status: 'CANCELLED' as any });
             toast.success('Cotización cancelada', { id: cancelToastId });
+            localDraftRef.current = null;
             setEditingId(null);
             onRefresh();
           } catch (error: any) {

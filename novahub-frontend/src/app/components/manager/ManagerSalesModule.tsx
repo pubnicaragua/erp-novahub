@@ -47,8 +47,8 @@ const formatDate = (value: unknown, includeTime = false) => {
 const viewLabels: Record<ManagerSalesView, string> = Object.fromEntries(MANAGER_SALES_VIEWS.map((item) => [item.id, item.label])) as Record<ManagerSalesView, string>;
 
 const statusOptions: Partial<Record<ManagerSalesView, Array<{ value: string; label: string }>>> = {
-  quotes: [{ value: 'DRAFT', label: 'Borrador' }, { value: 'SENT', label: 'Enviada' }, { value: 'APPROVED', label: 'Aprobada' }, { value: 'REJECTED', label: 'Rechazada' }, { value: 'CANCELLED', label: 'Cancelada' }],
-  orders: [{ value: 'DRAFT', label: 'Borrador' }, { value: 'CONFIRMED', label: 'Confirmada' }, { value: 'IN_PROGRESS', label: 'En proceso' }, { value: 'DELIVERED', label: 'Entregada' }, { value: 'CANCELLED', label: 'Cancelada' }],
+  quotes: [{ value: 'DRAFT', label: 'Borrador' }, { value: 'IN_PROCESS', label: 'En proceso' }, { value: 'APPROVED', label: 'Aprobada' }, { value: 'CANCELLED', label: 'Cancelada' }],
+  orders: [{ value: 'DRAFT', label: 'Borrador' }, { value: 'IN_PROCESS', label: 'En proceso' }, { value: 'APPROVED', label: 'Aprobada' }, { value: 'CANCELLED', label: 'Cancelada' }],
   invoices: [{ value: 'PENDING', label: 'Pendiente' }, { value: 'PARTIAL', label: 'Parcial' }, { value: 'PAID', label: 'Pagada' }, { value: 'CREDIT', label: 'A crédito' }, { value: 'OVERDUE', label: 'Vencida' }, { value: 'CANCELLED', label: 'Cancelada' }],
   recurring: [{ value: 'ACTIVE', label: 'Activa' }, { value: 'PAUSED', label: 'Pausada' }, { value: 'EXPIRED', label: 'Vencida' }, { value: 'CANCELLED', label: 'Cancelada' }],
   payments: [{ value: 'CASH', label: 'Efectivo' }, { value: 'TRANSFER', label: 'Transferencia' }, { value: 'CHECK', label: 'Cheque' }, { value: 'CARD', label: 'Tarjeta' }],
@@ -61,8 +61,8 @@ const statusOptions: Partial<Record<ManagerSalesView, Array<{ value: string; lab
 const statusLabel = (value: unknown) => {
   const normalized = String(value || '').toUpperCase();
   const labels: Record<string, string> = {
-    DRAFT: 'Borrador', SENT: 'Enviada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada',
-    CONFIRMED: 'Confirmada', PENDING_REVIEW: 'Pendiente de revisión', IN_PROGRESS: 'En proceso', SHIPPED: 'Enviada', DELIVERED: 'Entregada', PROCESSED: 'Procesada',
+    DRAFT: 'Borrador', IN_PROCESS: 'En proceso', SENT: 'Enviada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada',
+    CONFIRMED: 'Aprobada', PENDING_REVIEW: 'Pendiente de revisión', IN_PROGRESS: 'En proceso', SHIPPED: 'Enviada', DELIVERED: 'Entregada', PROCESSED: 'Procesada',
     PENDING: 'Pendiente', PARTIAL: 'Parcial', PAID: 'Pagada', CREDIT: 'A crédito', OVERDUE: 'Vencida',
     ACTIVE: 'Activa', PAUSED: 'Pausada', EXPIRED: 'Vencida',
     CASH: 'Efectivo', TRANSFER: 'Transferencia', BANK_TRANSFER: 'Transferencia bancaria', CHECK: 'Cheque', CARD: 'Tarjeta', CREDIT_CARD: 'Tarjeta de crédito', DEBIT_CARD: 'Tarjeta de débito',
@@ -76,7 +76,7 @@ const statusLabel = (value: unknown) => {
 const statusBadgeClass = (value: unknown) => {
   const normalized = String(value || '').toUpperCase();
   if (['APPROVED', 'PAID', 'ACTIVE', 'DELIVERED', 'PROCESSED', 'APPLIED'].includes(normalized)) return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
-  if (['SENT', 'CONFIRMED', 'PARTIAL', 'IN_PROGRESS', 'PENDING', 'ISSUED', 'OPEN'].includes(normalized)) return 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300';
+  if (['SENT', 'CONFIRMED', 'PARTIAL', 'IN_PROGRESS', 'IN_PROCESS', 'PENDING', 'ISSUED', 'OPEN'].includes(normalized)) return 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300';
   if (['REJECTED', 'CANCELLED', 'VOIDED', 'OVERDUE', 'CLOSED'].includes(normalized)) return 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300';
   return 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300';
 };
@@ -498,8 +498,7 @@ function SalesKpis({ view, metrics, reportCurrency, status, onStatusChange }: { 
       { key: '__amount__', label: 'Monto total', value: formatMoney(metrics.amount, reportCurrency, true), detail: `Referencia: ${formatCurrencyDescriptor(reportCurrency)}${metrics.aggregationComplete === false ? ` · cálculo hasta ${metrics.aggregationLimit || 5000} registros` : ''}` },
       { key: 'APPROVED', label: 'Aprobadas', value: Number(metrics.statusCounts?.APPROVED || 0) },
       { key: 'DRAFT', label: 'Borradores', value: Number(metrics.statusCounts?.DRAFT || 0) },
-      { key: 'SENT', label: 'Enviadas', value: Number(metrics.statusCounts?.SENT || 0) },
-      { key: 'REJECTED', label: 'Rechazadas', value: Number(metrics.statusCounts?.REJECTED || 0) },
+      { key: 'IN_PROCESS', label: 'En proceso', value: Number(metrics.statusCounts?.IN_PROCESS || 0) },
       { key: 'CANCELLED', label: 'Canceladas', value: Number(metrics.statusCounts?.CANCELLED || 0) },
     ];
     return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{quoteStatusCards.map((card) => {

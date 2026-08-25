@@ -5,7 +5,7 @@
 
 // ---- Shared / Base ----
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-export type DocumentStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type DocumentStatus = 'draft' | 'in_process' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'IN_PROCESS' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'pending' | 'partial' | 'credit' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'CREDIT' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
 export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
@@ -191,7 +191,7 @@ export interface SalesOrder {
   baseTotal?: number;
   accountId?: string;
   warehouseId?: string;
-  status: 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
   paymentMethod?: string;
   items: SalesOrderItem[];

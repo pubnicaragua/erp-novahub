@@ -51,6 +51,7 @@ interface SalesDocumentDetailSheetProps {
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Borrador',
+  IN_PROCESS: 'En proceso',
   SENT: 'Enviada',
   PENDING: 'Pendiente',
   PENDING_REVIEW: 'Pendiente de revisión',
@@ -61,7 +62,7 @@ const statusLabels: Record<string, string> = {
   RETURNED_FOR_CORRECTION: 'Devuelta para corrección',
   CONVERTED_TO_ORDER: 'Convertida a orden',
   CLOSED: 'Cerrada',
-  CONFIRMED: 'Confirmada',
+  CONFIRMED: 'Aprobada',
   IN_PROGRESS: 'En proceso',
   SHIPPED: 'Enviada',
   DELIVERED: 'Entregada',
@@ -91,6 +92,7 @@ const statusLabels: Record<string, string> = {
 
 const statusClasses: Record<string, string> = {
   DRAFT: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
+  IN_PROCESS: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
   SENT: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
   PENDING_REVIEW: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
   CONFIRMED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',

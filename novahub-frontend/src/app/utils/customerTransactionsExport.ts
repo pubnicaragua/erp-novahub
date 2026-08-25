@@ -32,7 +32,7 @@ interface CustomerTransactionsExportOptions {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Borrador', SENT: 'Enviada', APPROVED: 'Aprobada', REJECTED: 'Rechazada', CANCELLED: 'Cancelada',
+  DRAFT: 'Borrador', IN_PROCESS: 'En proceso', SENT: 'Enviada', APPROVED: 'Aprobada', REJECTED: 'Rechazada', CANCELLED: 'Cancelada',
   CONFIRMED: 'Confirmada', IN_PROGRESS: 'En proceso', DELIVERED: 'Entregada', PENDING: 'Pendiente',
   PARTIAL: 'Pago parcial', PAID: 'Pagada', CREDIT: 'A crédito', OVERDUE: 'Vencida', ACTIVE: 'Activa',
   PAUSED: 'Pausada', EXPIRED: 'Vencida', ISSUED: 'Emitida', APPLIED: 'Aplicada', VOIDED: 'Anulada',
