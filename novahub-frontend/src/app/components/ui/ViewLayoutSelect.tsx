@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from './select';
 
-export type ViewLayoutMode = 'table' | 'cards';
+export type ViewLayoutMode = 'table' | 'cards' | 'kanban';
 export const TABLE_LAYOUT_BREAKPOINT = 1280;
 
 function readCompactTableViewport() {
@@ -67,6 +67,7 @@ export function ViewLayoutSelect({
       <SelectContent align="end">
         <SelectItem value="table">Lista</SelectItem>
         <SelectItem value="cards">Tarjetas</SelectItem>
+        <SelectItem value="kanban">Kanban</SelectItem>
       </SelectContent>
     </Select>
   );

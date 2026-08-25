@@ -8,7 +8,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
-import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { ViewLayoutSelect, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { estimatesService } from '../../services/ventas.service';
 import { toast } from 'sonner';
@@ -34,6 +34,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { EstimacionesKanban } from './EstimacionesKanban';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -65,7 +66,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-estimates-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SENT' | 'APPROVED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -165,6 +166,49 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
       throw e;
+    }
+  };
+
+  const handleKanbanStatusChange = async (estimateId: string, newStatus: string, estimate: Estimate) => {
+    const toastId = toast.loading(`Moviendo cotización a ${newStatus}...`);
+    try {
+      await estimatesService.update(estimateId, {
+        number: estimate.number,
+        customerId: estimate.customerId || null,
+        date: estimate.date,
+        expiryDate: estimate.expiryDate,
+        subtotal: estimate.subtotal,
+        taxAmount: estimate.taxAmount,
+        discountAmount: estimate.discountAmount,
+        irRate: (estimate as any).irRate || 0,
+        irTaxId: (estimate as any).irTaxId || null,
+        irAmount: (estimate as any).irAmount || 0,
+        priceListId: estimate.priceListId || null,
+        total: estimate.total,
+        currency: estimate.currency,
+        exchangeRate: estimate.exchangeRate,
+        warehouseId: estimate.warehouseId || null,
+        status: newStatus as any,
+        notes: estimate.notes,
+        items: (estimate.items || []).map((item) => ({
+          id: item.id,
+          productId: item.productId,
+          description: item.description,
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice || 0),
+          discount: Number((item as any).discount || 0),
+          taxRate: Number((item as any).taxRate || 0),
+          irRate: Number((item as any).irRate || 0),
+          irAmount: Number((item as any).irAmount || 0),
+          total: Number(item.total || 0),
+          itemType: (item as any).itemType || 'PRODUCT',
+          priceListId: (item as any).priceListId || null,
+        })),
+      } as any);
+      toast.success(`Cotización movida a ${newStatus}`, { id: toastId });
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo cambiar el estado', { id: toastId });
     }
   };
 
@@ -890,6 +934,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             )}
           </div>
         </div>
+        {layoutMode === 'kanban' ? (
+          <EstimacionesKanban
+            data={data}
+            onRefresh={onRefresh}
+            onStatusChange={handleKanbanStatusChange}
+            onViewDetail={(est) => { setDetailEstimate(null); setEditingId(est.id); }}
+            canEdit={canPerform('SALES_QUOTES', 'edit')}
+          />
+        ) : (
         <EditableDataTable 
           data={filteredData}
           pagination={pagination}
@@ -933,6 +986,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             </div>
           )}
         />
+        )}
       </div>
 
       <SalesDocumentDetailSheet
