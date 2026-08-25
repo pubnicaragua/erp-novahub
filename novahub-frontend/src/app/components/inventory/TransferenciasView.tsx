@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Truck, ArrowRight, Search, Plus, Check, X, CircleHelp } from 'lucide-react';
+import { Truck, ArrowRight, Search, Plus, Check, X, CircleHelp, Settings2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -29,6 +29,7 @@ interface TransferenciasViewProps {
   onStatusChange?: (value: string) => void;
   branches?: any[];
   selectedBranchId?: string;
+  onGoToConfig?: () => void;
 }
 
 interface TransferLocation {
@@ -52,20 +53,20 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="transfer-title"]',
     title: 'Transferencias',
-    description: 'Registra transferencias de inventario entre almacenes o sucursales. Cada transferencia tiene un origen y un destino.',
+    description: 'Registra transferencias de inventario entre bodegas y almacenes corporativos. Cada transferencia tiene un origen y un destino.',
     tip: 'Al confirmar una transferencia, el stock se descuenta del origen y se agrega al destino de inmediato.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="transfer-search"]',
     title: 'Buscar Transferencias',
-    description: 'Filtra por número de guía o nombre de almacén para encontrar rápidamente una transferencia específica.',
+    description: 'Filtra por número de guía o nombre de bodega/almacén para encontrar rápidamente una transferencia específica.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="transfer-new-btn"]',
     title: 'Nueva Transferencia',
-    description: 'Crea una nueva transferencia seleccionando el almacén origen, destino, producto y cantidad. También puedes asignar IMEI/Series si el producto lo requiere.',
+    description: 'Crea una nueva transferencia seleccionando la bodega o almacén origen, el destino, producto y cantidad. También puedes asignar IMEI/Series si el producto lo requiere.',
     placement: 'bottom',
   },
   {
@@ -82,7 +83,7 @@ const TRANSFER_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, branches = [], selectedBranchId }: TransferenciasViewProps) {
+export function TransferenciasView({ transfers, warehouses, products, series = [], onRefresh, pagination, onSearchChange, branches = [], selectedBranchId, onGoToConfig }: TransferenciasViewProps) {
   const { canPerform } = useAuth();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,6 +99,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
   });
   const [saving, setSaving] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
+  const [approvingTransferId, setApprovingTransferId] = useState<string | null>(null);
+  const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; errors: string[]; warehouses: any[] } | null>(null);
+  const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
   const [corporateWarehouses, setCorporateWarehouses] = useState<any[]>([]);
   const [transferBranchWarehouses, setTransferBranchWarehouses] = useState<TransferLocation[]>([]);
 
@@ -114,6 +118,25 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     void loadTransferLocations();
     return () => { cancelled = true; };
   }, [selectedBranchId]);
+
+  useEffect(() => {
+    if (!newTransfer.fromId || !newTransfer.toId || newTransfer.fromId === newTransfer.toId) {
+      setAccountingPreflight(null);
+      setAccountingPreflightLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAccountingPreflightLoading(true);
+    inventoryService.getTransferAccountingPreflight(newTransfer.fromId, newTransfer.toId)
+      .then((result) => { if (!cancelled) setAccountingPreflight(result); })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setAccountingPreflight({ ready: false, errors: [error?.message || 'No se pudo validar la configuración contable.'], warehouses: [] });
+        }
+      })
+      .finally(() => { if (!cancelled) setAccountingPreflightLoading(false); });
+    return () => { cancelled = true; };
+  }, [newTransfer.fromId, newTransfer.toId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,14 +299,37 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     );
   };
 
+  const handleApproveTransfer = async (transfer: any) => {
+    if (!transfer?.id || approvingTransferId) return;
+    setApprovingTransferId(transfer.id);
+    try {
+      const updated = await inventoryService.updateTransferStatus(transfer.id, 'COMPLETED');
+      toast.success(`Transferencia ${updated?.number || transfer.number} aprobada y contabilizada`);
+      setSelectedTransfer(null);
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo aprobar la transferencia');
+    } finally {
+      setApprovingTransferId(null);
+    }
+  };
+
   const handleCreateTransfer = async () => {
     if (!newTransfer.fromId || !newTransfer.toId) {
-      toast.error('Selecciona el almacén origen y el destino');
+      toast.error('Selecciona el origen y el destino de la transferencia');
       return;
     }
     const draftItems = newTransfer.items.filter((item) => item.productId);
     if (draftItems.length === 0) {
       toast.error('Agrega al menos un producto a la transferencia');
+      return;
+    }
+    if (accountingPreflightLoading) {
+      toast.info('Espera a que termine la validación contable');
+      return;
+    }
+    if (!accountingPreflight?.ready) {
+      toast.error(accountingPreflight?.errors?.join(' ') || 'Configura las cuentas contables de origen y destino antes de transferir');
       return;
     }
 
@@ -332,6 +378,20 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         checks.push(entry);
       }
 
+      const finalAccountingPreflight = await inventoryService.getTransferAccountingPreflight(
+        newTransfer.fromId,
+        newTransfer.toId,
+        {
+          date: newTransfer.date,
+          items: checks.map((check) => ({ variantId: check.variantId, quantity: check.quantity })),
+        },
+      );
+      setAccountingPreflight(finalAccountingPreflight);
+      if (!finalAccountingPreflight.ready) {
+        toast.error(finalAccountingPreflight.errors?.join(' ') || 'La transferencia no está lista para contabilizarse');
+        return;
+      }
+
       // 2) Crear la transferencia con todos los artículos (el backend aplica stock automáticamente)
       await inventoryService.createTransfer({
         fromId: newTransfer.fromId,
@@ -369,7 +429,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           <div className="relative min-w-0 flex-1 sm:max-w-sm" data-tour="transfer-search">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar por guía o almacén..." 
+              placeholder="Buscar por guía o bodega..."
               className="pl-9 h-9"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
@@ -377,13 +437,18 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           </div>
         </div>
         {canPerform('INVENTORY', 'edit') && (
-          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl">
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end">
+            {onGoToConfig && (
+              <Button type="button" variant="outline" size="sm" onClick={onGoToConfig} className="h-10 w-full rounded-xl md:w-auto">
+                <Settings2 className="mr-1 size-3.5" /> Configurar cuentas
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowTutorial(true)} className="h-10 w-full rounded-xl md:w-auto">
               <CircleHelp className="size-3.5 mr-1" /> Cómo transferir inventario
             </Button>
             <Button 
               size="sm" 
-              className="h-10 min-w-0 flex-1 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 sm:flex-none"
+              className="h-10 w-full min-w-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 md:w-auto"
               onClick={() => setIsCreating(true)}
               disabled={isCreating}
               data-tour="transfer-new-btn"
@@ -395,6 +460,16 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         )}
       </div>
 
+      {isCreating && newTransfer.fromId && newTransfer.toId && (
+        <div className={`mb-4 flex items-start gap-2 rounded-xl border p-3 text-xs ${accountingPreflightLoading || accountingPreflight?.ready ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-700' : 'border-amber-500/25 bg-amber-500/5 text-amber-700'}`}>
+          {accountingPreflightLoading ? <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" /> : accountingPreflight?.ready ? <Check className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
+          <div>
+            <p className="font-bold">{accountingPreflightLoading ? 'Validando configuración contable…' : accountingPreflight?.ready ? 'Origen y destino listos para contabilizar' : 'Configuración contable pendiente'}</p>
+            {!accountingPreflightLoading && !accountingPreflight?.ready && <p className="mt-1 leading-5">{accountingPreflight?.errors?.join(' ') || 'Configura una cuenta de Inventario activa y posteable en el origen y el destino desde Inventario → Configuración.'}</p>}
+          </div>
+        </div>
+      )}
+
       <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedTransfer ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
         <div className="min-w-0">
           <div className="space-y-3 lg:hidden" data-tour="transfer-table">
@@ -402,7 +477,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2" data-tour="inventory-transfer-form-title"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nueva transferencia</p><InventoryViewTutorial label="Cómo crear transferencia" targetPrefix="inventory-transfer-form" copy={{ data: { description: 'Selecciona origen, destino, productos, cantidades y fecha.' }, actions: { description: 'Guarda la transferencia para mover existencias entre almacenes.' } }} /></div><div className="flex gap-1" data-tour="inventory-transfer-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateTransfer} disabled={saving} aria-label="Guardar transferencia">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar transferencia"><X className="size-4" /></Button></div></div>
           <div className="grid gap-3 sm:grid-cols-2"><Select value={newTransfer.fromId} onValueChange={handleFromWarehouseChange}><SelectTrigger><SelectValue placeholder="Almacén origen" /></SelectTrigger><SelectContent>{transferLocations.map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><Select value={newTransfer.toId} onValueChange={(value) => setNewTransfer({ ...newTransfer, toId: value })}><SelectTrigger><SelectValue placeholder="Almacén destino" /></SelectTrigger><SelectContent>{transferLocations.filter((location) => location.id !== newTransfer.fromId).map((location) => <SelectItem key={location.id} value={location.id}>{location.kind === 'BODEGA' ? 'Bodega' : 'Almacén corporativo'} · {location.name}{location.branchName ? ` · ${location.branchName}` : ''}</SelectItem>)}</SelectContent></Select><div className="flex flex-col gap-2 sm:col-span-2">{newTransfer.items.map((item) => { const itemProduct = products.find((p: any) => p.id === item.productId); const itemSerialRequired = isSerialTracked(itemProduct); return (<div key={item.key} className="flex flex-wrap items-center gap-2"><Combobox options={productOptions} value={item.productId} onChange={(value) => handleItemProductChange(item.key, value)} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newTransfer.fromId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={productOptions.length} className="min-w-0 flex-1" disabled={saving} />{itemSerialRequired && <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => { setSerialPickerItemKey(item.key); setSerialSearch(''); }} disabled={saving}>IMEI ({item.serials.length})</Button>}<Input type="number" min={1} value={itemSerialRequired ? item.serials.length : item.quantity} onChange={(event) => updateItem(item.key, { quantity: Number(event.target.value) || 1 })} disabled={saving || itemSerialRequired} placeholder="Cantidad" className="w-20" /><Button type="button" variant="ghost" size="icon" className="size-8 text-red-600" onClick={() => removeItem(item.key)} disabled={saving} aria-label="Quitar producto"><X className="size-4" /></Button></div>); })}<Button type="button" variant="outline" size="sm" className="h-8 w-fit gap-1 text-[10px] uppercase tracking-wider" onClick={addItem} disabled={saving || !newTransfer.fromId}><Plus className="size-3.5" /> Agregar producto</Button></div><Input className="sm:col-span-2" type="date" value={newTransfer.date} onChange={(event) => setNewTransfer({ ...newTransfer, date: event.target.value })} /><Input className="sm:col-span-2" placeholder="Referencia / motivo (opcional)" value={newTransfer.reference} onChange={(event) => setNewTransfer({ ...newTransfer, reference: event.target.value })} /></div>
         </Card>}
-        {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => { const status = String(transfer.status || 'COMPLETED').toUpperCase(); const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'CANCELLED' ? 'Cancelada' : status; return <Card key={transfer.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedTransfer(transfer)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{transfer.number}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600"><Check className="mr-1 size-3" /> {statusLabel}</Badge></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4 text-muted-foreground" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><div className="flex flex-wrap items-center gap-1.5">{renderStockDelta(transfer)}</div></div></Card>; })}
+        {filteredTransfers.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Truck className="mx-auto mb-2 size-9 opacity-20" /><p>No hay transferencias</p></Card> : filteredTransfers.map((transfer: any) => { const status = String(transfer.status || 'COMPLETED').toUpperCase(); const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'CANCELLED' ? 'Cancelada' : status; return <Card key={transfer.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedTransfer(transfer)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{transfer.number}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(transfer.date).toLocaleDateString()}</p></div><Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600"><Check className="mr-1 size-3" /> {statusLabel}</Badge></div><div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/40 pt-3 text-xs"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Origen</p><p className="truncate font-medium">{transfer.from?.name || '—'}</p></div><ArrowRight className="size-4" /><div className="min-w-0 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Destino</p><p className="truncate font-medium">{transfer.to?.name || '—'}</p></div></div><div className="mt-3 flex justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground"><div className="flex flex-wrap items-center gap-1.5">{renderStockDelta(transfer)}</div>{status === 'PENDING' && canPerform('INVENTORY', 'edit') && <Button type="button" size="sm" className="h-7 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={(event) => { event.stopPropagation(); void handleApproveTransfer(transfer); }} disabled={approvingTransferId === transfer.id}>{approvingTransferId === transfer.id ? 'Aprobando…' : 'Aprobar'}</Button>}</div></Card>; })}
       </div>
 
       <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="transfer-table">
@@ -416,6 +491,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
               <TableHead className="font-black text-[10px] uppercase tracking-widest text-center min-w-96">Items</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-40">Fecha</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-36">Estado</TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest w-28 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -522,7 +598,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
             
             {filteredTransfers.length === 0 && !isCreating ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <Truck className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay transferencias</p>
                 </TableCell>
@@ -542,6 +618,13 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
                       <Badge variant="outline" className="bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600">
                         <Check className="mr-1 size-3" /> {String(trf.status || 'COMPLETED') === 'COMPLETED' ? 'Completada' : String(trf.status || '').toLowerCase()}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {String(trf.status || '').toUpperCase() === 'PENDING' && canPerform('INVENTORY', 'edit') && (
+                        <Button type="button" size="sm" className="h-7 rounded-lg text-[10px] font-black uppercase tracking-widest" onClick={(event) => { event.stopPropagation(); void handleApproveTransfer(trf); }} disabled={approvingTransferId === trf.id}>
+                          {approvingTransferId === trf.id ? 'Aprobando…' : 'Aprobar'}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 )
@@ -578,9 +661,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
           <DialogHeader data-tour="inventory-transfer-serial-title">
             <DialogTitle>Seleccionar IMEI / Series{serialProduct?.name ? ` · ${serialProduct.name}` : ''}</DialogTitle>
             <DialogDescription>
-              Selecciona los IMEI disponibles del almacén origen para la transferencia.
+              Selecciona los IMEI disponibles de la ubicación origen para la transferencia.
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo asignar IMEI o series" targetPrefix="inventory-transfer-serial" copy={{ data: { description: 'Busca y marca las series disponibles del almacén origen.' }, actions: { description: 'Confirma la selección para asociarla a la transferencia.' } }} />
+            <InventoryViewTutorial label="Cómo asignar IMEI o series" targetPrefix="inventory-transfer-serial" copy={{ data: { description: 'Busca y marca las series disponibles de la ubicación origen.' }, actions: { description: 'Confirma la selección para asociarla a la transferencia.' } }} />
           </DialogHeader>
           <div className="space-y-3" data-tour="inventory-transfer-serial-data">
             <Input

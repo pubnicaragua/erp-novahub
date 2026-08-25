@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Search, CalendarRange } from 'lucide-react';
+import { FileText, Plus, Check, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw, Umbrella, Search, CalendarRange, Pencil } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -44,6 +44,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
   const { canPerform, user } = useAuth();
   const canViewHr = canPerform('HR', 'view');
   const [showNewForm, setShowNewForm] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<any | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [newRequest, setNewRequest] = useState({
@@ -122,9 +123,15 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     }
 
     try {
-      await hrService.createLeaveRequest({ ...newRequest, days: computedDays });
-      toast.success('Solicitud creada');
+      const payload = { ...newRequest, days: computedDays };
+      if (editingRequest) {
+        await hrService.updateLeaveRequest(editingRequest.id, payload);
+      } else {
+        await hrService.createLeaveRequest(payload);
+      }
+      toast.success(editingRequest ? 'Solicitud actualizada' : 'Solicitud creada');
       setShowNewForm(false);
+      setEditingRequest(null);
       setNewRequest({
         employeeId: '',
         leaveType: 'VACATION',
@@ -139,6 +146,21 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear solicitud');
     }
+  };
+
+  const handleOpenEditRequest = (request: any) => {
+    setEditingRequest(request);
+    setNewRequest({
+      employeeId: request.employeeId || request.employee?.id || '',
+      leaveType: request.leaveType || 'VACATION',
+      leaveTypeCustom: request.leaveTypeCustom || '',
+      absenceTypeId: request.absenceTypeId || '',
+      startDate: request.startDate ? new Date(request.startDate).toISOString().slice(0, 10) : '',
+      endDate: request.endDate ? new Date(request.endDate).toISOString().slice(0, 10) : '',
+      days: Number(request.days || 1),
+      reason: request.reason || '',
+    });
+    setShowNewForm(true);
   };
 
   const handleApprove = async (id: string) => {
@@ -328,13 +350,13 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
       {/* New Request Form */}
       {showNewForm && (
         <HRCreateViewShell
-          title="Nueva solicitud de ausencia"
-          description="Selecciona el empleado, el tipo de ausencia y el período para enviar la solicitud a revisión."
-          onBack={() => setShowNewForm(false)}
+          title={editingRequest ? 'Editar solicitud de ausencia' : 'Nueva solicitud de ausencia'}
+          description={editingRequest ? 'Actualiza los datos de una solicitud pendiente antes de enviarla a revisión.' : 'Selecciona el empleado, el tipo de ausencia y el período para enviar la solicitud a revisión.'}
+              onBack={() => { setShowNewForm(false); setEditingRequest(null); }}
         >
         <div className="space-y-1" data-tour="hr-leave-form-shell">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2" data-tour="hr-leave-form-title">
-            <h3 className="text-lg font-semibold text-primary">Nueva Solicitud de Ausencia</h3>
+            <h3 className="text-lg font-semibold text-primary">{editingRequest ? 'Editar Solicitud de Ausencia' : 'Nueva Solicitud de Ausencia'}</h3>
             <HRViewTutorial label="Cómo crear solicitud de ausencia" targetPrefix="hr-leave-form" copy={{ data: { description: 'Selecciona empleado, tipo de ausencia, fechas, días y razón.' }, actions: { description: 'Guarda la solicitud para que pueda ser revisada y aprobada.' } }} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-tour="hr-leave-form-data">
@@ -435,7 +457,7 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
           </div>
           <div className="flex items-center gap-2 mt-4" data-tour="hr-leave-form-actions">
             <Button onClick={handleCreateRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Crear Solicitud
+              {editingRequest ? 'Guardar cambios' : 'Crear Solicitud'}
             </Button>
             <Button variant="outline" onClick={() => setShowNewForm(false)}>
               Cancelar
@@ -502,8 +524,17 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete')) && (
+                    {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete') || canPerform('HR_LEAVES', 'edit')) && (
                       <div className="flex items-center justify-end gap-1">
+                        {canPerform('HR_LEAVES', 'edit') && <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleOpenEditRequest(request)}
+                          className="h-7 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                          title="Editar solicitud"
+                        >
+                          <Pencil className="size-4" />
+                        </Button>}
                         {canPerform('HR_LEAVES', 'approve') && <Button
                           size="sm"
                           variant="ghost"
@@ -579,8 +610,11 @@ export function AusenciasView({ leaveRequests, employees, onRefresh }: any) {
                 )}
               </div>
 
-              {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete')) && (
+              {request.status === 'PENDING' && (canPerform('HR_LEAVES', 'approve') || canPerform('HR_LEAVES', 'delete') || canPerform('HR_LEAVES', 'edit')) && (
                 <div className="flex items-center gap-2 pt-4 mt-2 border-t border-border/50">
+                  {canPerform('HR_LEAVES', 'edit') && <Button size="sm" variant="outline" onClick={() => handleOpenEditRequest(request)} className="flex-1 rounded-xl text-[11px] h-8 text-primary border-primary/30 hover:bg-primary/10">
+                    <Pencil className="size-3 mr-1" /> Editar
+                  </Button>}
                   {canPerform('HR_LEAVES', 'approve') && <Button size="sm" onClick={() => handleApprove(request.id)} className="flex-1 bg-green-700 hover:bg-green-800 text-white rounded-xl text-[11px] h-8">
                     <Check className="size-3 mr-1" /> Aprobar
                   </Button>}

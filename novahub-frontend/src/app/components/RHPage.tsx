@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, UserCircle, FileSpreadsheet, CalendarClock, Plus, Search, Edit, DollarSign, Trash2 } from 'lucide-react';
+import { Users, UserCircle, FileSpreadsheet, CalendarClock, Plus, Search, Edit, DollarSign, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -13,6 +13,8 @@ import { ConfirmDialog } from './ui/ConfirmDialog';
 import { employeesService, payrollService, timeOffService } from '../services/rh.service';
 import type { Employee, Payroll, TimeOff, PaginatedResponse } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 interface RHPageProps {
   activeSubModule?: string;
@@ -37,11 +39,13 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const [empleadosData, setEmpleadosData] = useState<Employee[]>([]);
   const [planillasArr, setPlanillasArr] = useState<Payroll[]>([]);
   const [vacacionesArr, setVacacionesArr] = useState<TimeOff[]>([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchRHData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [emp, pay, vac] = await Promise.all([
         employeesService.getAll() as Promise<PaginatedResponse<Employee>>,
         payrollService.getAll() as Promise<PaginatedResponse<Payroll>>,
@@ -50,8 +54,10 @@ export function RHPage({ activeSubModule }: RHPageProps) {
       setEmpleadosData(emp.data || []);
       setPlanillasArr(pay.data || []);
       setVacacionesArr(vac.data || []);
-    } catch (error) {
-      console.error('Error fetching RH data:', error);
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'No se pudieron cargar los datos de Recursos Humanos.';
+      setLoadError(Array.isArray(message) ? message[0] : message);
+      toast.error(Array.isArray(message) ? message[0] : message);
     } finally {
       setLoading(false);
     }
@@ -106,6 +112,8 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const [pendingDeleteVacId, setPendingDeleteVacId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const toDateInput = (value: unknown) => String(value || '').slice(0, 10);
+
   const handleOpenEmpleado = (emp?: Employee) => {
     if (emp) {
       setEditingEmpleado(emp);
@@ -132,10 +140,11 @@ export function RHPage({ activeSubModule }: RHPageProps) {
       } else {
         await employeesService.create(empForm);
       }
-      fetchRHData();
+      await fetchRHData();
       setIsEmpleadoDialogOpen(false);
-    } catch (error) {
-      console.error('Error saving empleado:', error);
+      toast.success(editingEmpleado ? 'Empleado actualizado' : 'Empleado creado');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al guardar el empleado');
     }
   };
 
@@ -143,9 +152,10 @@ export function RHPage({ activeSubModule }: RHPageProps) {
     try {
       setDeleteLoading(true);
       await employeesService.terminate(id);
-      fetchRHData();
-    } catch (error) {
-      console.error('Error terminating employee:', error);
+      await fetchRHData();
+      toast.success('Empleado eliminado');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar el empleado');
     } finally {
       setDeleteLoading(false);
       setPendingDeleteEmpId(null);
@@ -155,7 +165,15 @@ export function RHPage({ activeSubModule }: RHPageProps) {
   const handleOpenPlanilla = (plan?: Payroll) => {
     if (plan) {
       setEditingPlanilla(plan);
-      setPlanillaForm(plan);
+      setPlanillaForm({
+        ...plan,
+        periodStart: toDateInput(plan.periodStart),
+        periodEnd: toDateInput(plan.periodEnd),
+        payDate: toDateInput((plan as any).payDate || (plan as any).paymentDate),
+        totalGross: (plan as any).totalGross ?? (plan as any).grossPay ?? 0,
+        totalDeductions: (plan as any).totalDeductions ?? (plan as any).deductions ?? 0,
+        totalNet: (plan as any).totalNet ?? (plan as any).netPay ?? 0,
+      });
     } else {
       setEditingPlanilla(null);
       setPlanillaForm({ 
@@ -174,20 +192,45 @@ export function RHPage({ activeSubModule }: RHPageProps) {
 
   const handleSavePlanilla = async () => {
     try {
-      if (!editingPlanilla) {
+      if (editingPlanilla) {
+        const gross = Number(planillaForm.totalGross ?? editingPlanilla.totalGross ?? 0);
+        const deductions = Number(planillaForm.totalDeductions ?? editingPlanilla.totalDeductions ?? 0);
+        await payrollService.update(editingPlanilla.id, {
+          periodStart: planillaForm.periodStart,
+          periodEnd: planillaForm.periodEnd,
+          paymentDate: planillaForm.payDate || null,
+          grossPay: gross,
+          netPay: gross - deductions,
+          costoTotalEmpresa: gross,
+          deductions,
+        });
+      } else {
         await payrollService.create(planillaForm);
       }
-      fetchRHData();
+      await fetchRHData();
       setIsPlanillaDialogOpen(false);
-    } catch (error) {
-      console.error('Error saving planilla:', error);
+      toast.success(editingPlanilla ? 'Nómina actualizada' : 'Nómina creada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al guardar la nómina');
     }
   };
 
   const handleOpenVacaciones = (vac?: TimeOff) => {
     if (vac) {
       setEditingVacaciones(vac);
-      setVacacionesForm(vac);
+      const leaveTypeMap: Record<string, string> = {
+        VACATION: 'vacation',
+        SICK: 'sick_leave',
+        PERSONAL: 'personal',
+        OTHER: 'other',
+      };
+      setVacacionesForm({
+        ...vac,
+        employeeId: vac.employeeId,
+        type: leaveTypeMap[String((vac as any).leaveType || vac.type).toUpperCase()] || (vac as any).type || 'vacation',
+        startDate: toDateInput(vac.startDate),
+        endDate: toDateInput(vac.endDate),
+      });
     } else {
       setEditingVacaciones(null);
       setVacacionesForm({ 
@@ -205,11 +248,32 @@ export function RHPage({ activeSubModule }: RHPageProps) {
     try {
       if (!editingVacaciones) {
         await timeOffService.create(vacacionesForm);
+      } else {
+        const leaveTypeMap: Record<string, string> = {
+          vacation: 'VACATION',
+          sick_leave: 'SICK',
+          personal: 'PERSONAL',
+          other: 'OTHER',
+        };
+        const start = new Date(String(vacacionesForm.startDate));
+        const end = new Date(String(vacacionesForm.endDate));
+        const days = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())
+          ? 1
+          : Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+        await timeOffService.update(editingVacaciones.id, {
+          employeeId: vacacionesForm.employeeId,
+          leaveType: leaveTypeMap[String(vacacionesForm.type)] || vacacionesForm.type,
+          startDate: vacacionesForm.startDate,
+          endDate: vacacionesForm.endDate,
+          days,
+          reason: vacacionesForm.reason,
+        });
       }
-      fetchRHData();
+      await fetchRHData();
       setIsVacacionesDialogOpen(false);
-    } catch (error) {
-      console.error('Error saving vacaciones:', error);
+      toast.success(editingVacaciones ? 'Solicitud actualizada' : 'Solicitud creada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al guardar la solicitud');
     }
   };
 
@@ -217,9 +281,10 @@ export function RHPage({ activeSubModule }: RHPageProps) {
     try {
       setDeleteLoading(true);
       await timeOffService.delete(id);
-      fetchRHData();
-    } catch (error) {
-      console.error('Error deleting vacation:', error);
+      await fetchRHData();
+      toast.success('Solicitud eliminada');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar la solicitud');
     } finally {
       setDeleteLoading(false);
       setPendingDeleteVacId(null);
@@ -233,8 +298,48 @@ export function RHPage({ activeSubModule }: RHPageProps) {
     vacacionesPendientes: vacacionesArr.filter(v => v.status === 'pending').length
   };
 
+  if (loading && empleadosData.length === 0 && planillasArr.length === 0 && vacacionesArr.length === 0) {
+    return (
+      <div className="flex min-h-[520px] items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="size-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <p className="text-sm font-medium text-muted-foreground">Cargando datos de Recursos Humanos…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError && empleadosData.length === 0 && planillasArr.length === 0 && vacacionesArr.length === 0) {
+    return (
+      <div className="flex min-h-[520px] items-center justify-center p-6">
+        <Alert variant="destructive" className="max-w-2xl border-red-500/30 bg-red-500/5">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>No se pudo cargar Recursos Humanos</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <Button variant="outline" size="sm" onClick={fetchRHData} className="gap-2">
+              <RefreshCw className="size-3.5" /> Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-4 md:p-6">
+      {loadError && (
+        <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Los datos podrían estar desactualizados</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <Button variant="outline" size="sm" onClick={fetchRHData} className="gap-2">
+              <RefreshCw className="size-3.5" /> Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
           <Users className="size-6 text-primary" />

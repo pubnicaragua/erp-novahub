@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2, CircleHelp } from 'lucide-react';
+import { Scale, Plus, Check, X, CheckCircle, Receipt, Trash2, CircleHelp, ClipboardCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { inventoryService } from '../../services/inventario.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,6 +24,7 @@ interface ControlStockViewProps {
   warehouses: any[];
   products: any[];
   series?: any[];
+  auditsForAdjustment?: any[];
   onRefresh: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -47,27 +49,35 @@ const STOCK_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="stock-title"]',
     title: 'Control de Existencias',
-    description: 'Esta vista te permite registrar y gestionar ajustes de inventario, ya sea por diferencias físicas, mermas, roturas, vencimientos o cualquier otra razón.',
-    tip: 'Los ajustes de inventario afectan directamente el stock contable y se reflejan en la contabilidad.',
+    description: 'Gestiona ajustes manuales, ajustes derivados de auditorías, recepciones y movimientos de IMEI o series desde un solo lugar.',
+    tip: 'Los borradores no cambian el stock; las diferencias de auditoría requieren revisión del Manager global.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="stock-imei-btn"]',
     title: 'IMEI / Series',
-    description: 'Si manejas productos con IMEI o números de serie, este botón te permite registrar ajustes específicos para ese tipo de inventario.',
+    description: 'Usa esta opción para agregar o remover un IMEI o número de serie puntual. Cada acción genera un movimiento auditado y conserva la trazabilidad.',
     tip: 'Los productos con serie requieren un tratamiento especial para mantener la trazabilidad.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="stock-audits-btn"]',
+    title: 'Ajustes desde auditorías',
+    description: 'Las auditorías con diferencias aparecen aquí. Previsualiza los faltantes y sobrantes y crea un borrador sin cambiar el stock todavía.',
+    tip: 'Los ajustes creados desde una auditoría solo pueden aprobarse desde el panel del Manager global.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="stock-reception-btn"]',
     title: 'Registrar Recepción',
-    description: 'Úsalo cuando recibas mercancía de un proveedor o transferencia, para registrar la entrada en el inventario.',
+    description: 'Registra una entrada de mercancía, distribúyela por bodega y captura sus IMEI o series cuando corresponda.',
+    tip: 'La cantidad distribuida debe coincidir con la cantidad total recibida.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="stock-new-btn"]',
     title: 'Nuevo Ajuste',
-    description: 'Crea un nuevo ajuste seleccionando almacén, producto, cantidad y razón. El ajuste quedará como borrador hasta que lo apruebes.',
+    description: 'Crea un ajuste manual seleccionando bodega, producto, existencia física, costo y razón. El ajuste quedará como borrador hasta que lo apruebes.',
     tip: 'Un ajuste en borrador no afecta el stock real. Debes aprobarlo para que se refleje.',
     placement: 'bottom',
   },
@@ -85,7 +95,30 @@ const STOCK_TOUR_STEPS: GuidedTourStep[] = [
   },
 ];
 
-export function ControlStockView({ adjustments, warehouses, products, series = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
+function normalizeAuditItems(value: unknown): any[] {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(value) ? value : [];
+}
+
+function auditOriginalStock(item: any): number {
+  return Number(item?.originalSystemStock ?? item?.systemStock ?? item?.snapshotStock ?? item?.theoreticalStock ?? 0);
+}
+
+function auditDifference(item: any): number {
+  return Number(item?.countedStock ?? 0) - auditOriginalStock(item);
+}
+
+function isAuditGeneratedAdjustment(adjustment: any): boolean {
+  return Boolean(adjustment?.auditGenerated || adjustment?.auditId || adjustment?.auditNumber);
+}
+
+export function ControlStockView({ adjustments, warehouses, products, series = [], auditsForAdjustment = [], onRefresh, pagination, onSearchChange, onStatusChange }: ControlStockViewProps) {
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_ADJUSTMENTS', 'viewCost');
   const { baseCurrency } = useCurrency();
@@ -108,6 +141,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
   const [saving, setSaving] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [selectedAdjustment, setSelectedAdjustment] = useState<any>(null);
+  const [auditPickerOpen, setAuditPickerOpen] = useState(false);
+  const [auditConfirmation, setAuditConfirmation] = useState<any>(null);
+  const [auditAdjustingId, setAuditAdjustingId] = useState<string | null>(null);
   const [serialAdjustment, setSerialAdjustment] = useState({
     action: 'ADD',
     productId: '',
@@ -125,6 +161,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     status: (a: any) => String(a.status || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(adjustments, filterGetters);
+  const auditConfirmationItems = normalizeAuditItems(auditConfirmation?.items);
+  const auditConfirmationDifferences = auditConfirmationItems.filter((item: any) => auditDifference(item) !== 0);
+  const auditConfirmationShortages = auditConfirmationDifferences.filter((item: any) => auditDifference(item) < 0);
+  const auditConfirmationSurpluses = auditConfirmationDifferences.filter((item: any) => auditDifference(item) > 0);
   const warehouseOptions = [...new Map(adjustments.map((a) => [a.warehouse?.name || 'Sin almacén', a.warehouse?.name || 'Sin almacén'])).entries()]
     .map(([, label]) => ({ value: label, label, count: adjustments.filter((a) => (a.warehouse?.name || 'Sin almacén') === label).length }));
   const reasonOptions = REASON_OPTIONS.map((r) => ({ value: r.value, label: r.label, count: adjustments.filter((a) => a.reason === r.value).length }));
@@ -252,6 +292,37 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       toast.error(e.message || 'Error al aprobar');
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const requestCreateAdjustmentFromAudit = (audit: any) => {
+    if (audit.adjustmentId) {
+      toast.info('Esta auditoría ya tiene un ajuste borrador generado. Apruébalo desde la tabla de ajustes.');
+      return;
+    }
+    setAuditPickerOpen(false);
+    setAuditConfirmation(audit);
+  };
+
+  const confirmCreateAdjustmentFromAudit = async () => {
+    const audit = auditConfirmation;
+    if (!audit) return;
+    try {
+      setAuditAdjustingId(audit.id);
+      const result = await inventoryService.createAdjustmentFromAudit(audit.id);
+      if (result?.adjustment) {
+        toast.success(`Ajuste ${result.adjustment.number} creado como borrador. Apruébalo para aplicar el stock.`);
+      } else {
+        toast.success(`Auditoría ${audit.number} revisada: no se generó ajuste porque no había diferencias.`);
+      }
+      setAuditConfirmation(null);
+      setAuditPickerOpen(false);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo generar el ajuste desde la auditoría');
+      throw e;
+    } finally {
+      setAuditAdjustingId(null);
     }
   };
 
@@ -443,6 +514,18 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <CircleHelp className="size-3.5 mr-1" /> Cómo ajustar inventario
               </Button>
               <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAuditPickerOpen(true)}
+                className={`h-10 gap-1.5 rounded-xl ${auditsForAdjustment.length > 0 ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100' : ''}`}
+                data-tour="stock-audits-btn"
+              >
+                <ClipboardCheck className="size-3.5" />
+                Auditorías
+                {auditsForAdjustment.length > 0 && <Badge className="ml-0.5 h-5 min-w-5 border-0 bg-amber-500 px-1 text-[9px] text-white hover:bg-amber-500">{auditsForAdjustment.length}</Badge>}
+              </Button>
+              <Button
                 size="sm"
                 variant="outline"
                 className="rounded-xl font-black text-[10px] uppercase tracking-widest h-10 px-4"
@@ -476,15 +559,15 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         </div>
       </div>
 
-      <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+      <div className={`grid min-w-0 grid-cols-1 gap-6 ${selectedAdjustment ? 'xl:grid-cols-[13fr_7fr]' : 'xl:grid-cols-1'}`}>
         <div className="min-w-0">
           <div className="space-y-3 lg:hidden" data-tour="stock-table">
          {isCreating && <Card className="rounded-2xl border-primary/30 bg-primary/5 p-4" data-tour="inventory-adjustment-form-data"><div className="mb-3 flex items-center justify-between" data-tour="inventory-adjustment-form-title"><div><p className="text-[10px] font-black uppercase tracking-widest text-primary">Nuevo ajuste</p><InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} /></div><div className="flex gap-1" data-tour="inventory-adjustment-form-actions"><Button type="button" variant="ghost" size="icon" className="size-8 text-emerald-500" onClick={handleCreateAdjustment} disabled={saving} aria-label="Guardar ajuste">{saving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Check className="size-4" />}</Button><Button type="button" variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => setIsCreating(false)} disabled={saving} aria-label="Cancelar ajuste"><X className="size-4" /></Button></div></div><div className="grid gap-3 sm:grid-cols-2"><Select value={newAdjustment.warehouseId} onValueChange={(value) => handleAdjustmentWarehouseChange(value)}><SelectTrigger><SelectValue placeholder="Almacén" /></SelectTrigger><SelectContent>{warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}</SelectContent></Select><Select value={newAdjustment.reason} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, reason: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASON_OPTIONS.map((reason) => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}</SelectContent></Select><Combobox options={adjustmentProductOptions} value={newAdjustment.productId} onChange={(value) => setNewAdjustment({ ...newAdjustment, productId: value })} placeholder="Buscar producto..." searchPlaceholder="Buscar por código o nombre..." emptyMessage={newAdjustment.warehouseId ? 'No hay productos en este almacén.' : 'Selecciona primero el almacén.'} maxVisibleOptions={adjustmentProductOptions.length} className="w-full sm:col-span-2" /><Input type="number" min={0} value={newAdjustment.actualStock} onChange={(event) => setNewAdjustment({ ...newAdjustment, actualStock: Number(event.target.value) || 0 })} placeholder="Cantidad real" />{canViewInventoryCost && <div className="flex gap-2"><Input type="number" min={0} step="0.01" value={newAdjustment.unitCost} onChange={(event) => setNewAdjustment({ ...newAdjustment, unitCost: Number(event.target.value) || 0 })} placeholder="Costo" /><Select value={newAdjustment.currency} onValueChange={(value) => setNewAdjustment({ ...newAdjustment, currency: value })}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO</SelectItem><SelectItem value="USD">USD</SelectItem></SelectContent></Select></div>}</div></Card>}
-        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; return <Card key={adjustment.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div><div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
+        {filteredData.length === 0 && !isCreating ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><Scale className="mx-auto mb-2 size-9 opacity-20" /><p>No hay ajustes</p></Card> : filteredData.map((adjustment: any) => { const isApproving = approvingId === adjustment.id; const auditGenerated = isAuditGeneratedAdjustment(adjustment); return <Card key={adjustment.id} className="min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30" onClick={() => setSelectedAdjustment(adjustment)}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono font-bold">{adjustment.number}</p><p className="mt-1 truncate text-xs text-muted-foreground">{adjustment.warehouse?.name || 'Sin almacén'}</p></div><Badge className={`shrink-0 text-[10px] ${getStatusBadge(adjustment.status)}`}>{adjustment.status === 'APPROVED' ? 'Aprobado' : 'Borrador'}</Badge></div>{auditGenerated && <Badge variant="outline" className="mt-3 w-fit border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {adjustment.auditNumber || 'vinculada'} · aprobar en Manager global</Badge>}<div className={`mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs ${canViewInventoryCost ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Razón</p><p className="truncate">{REASON_OPTIONS.find((reason) => reason.value === adjustment.reason)?.label || adjustment.reason}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Artículos</p><p className="font-bold tabular-nums">{adjustment.items?.length || 0}</p></div>{canViewInventoryCost && <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Costo</p><p className="font-bold tabular-nums">{adjustment.items?.[0] ? `${adjustment.items[0].currency} ${adjustment.items[0].unitCost || 0}` : '—'}</p></div>}</div>{adjustment.status === 'DRAFT' && auditGenerated && <p className="mt-3 border-t border-border/40 pt-3 text-[10px] font-semibold leading-relaxed text-amber-700">Este borrador solo puede aprobarse desde el panel del Manager global.</p>}{adjustment.status === 'DRAFT' && !auditGenerated && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && <div className="mt-3 flex justify-end border-t border-border/40 pt-3"><Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-emerald-500" onClick={(e) => { e.stopPropagation(); handleApproveAdjustment(adjustment.id); }} disabled={isApproving}>{isApproving ? <div className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle className="size-3.5" />} Aprobar</Button></div>}</Card>; })}
         </div>
 
-        <div className="hidden overflow-x-auto rounded-lg border lg:block" data-tour="stock-table">
-        <Table>
+        <div className="hidden overflow-x-auto rounded-lg border xl:block" data-tour="stock-table">
+        <Table className="min-w-[1160px]">
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead className="font-black text-[10px] uppercase tracking-widest w-28"><span className="inline-flex items-center gap-1">Número<ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} /></span></TableHead>
@@ -503,7 +586,6 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 <TableCell className="text-xs text-muted-foreground" data-tour="inventory-adjustment-form-title">
                   <div className="flex items-center gap-2">
                     <span>Auto</span>
-                    <InventoryViewTutorial label="Cómo crear ajuste" targetPrefix="inventory-adjustment-form" copy={{ data: { description: 'Selecciona almacén, razón, producto, cantidad real, costo y moneda.' }, actions: { description: 'Guarda el ajuste como borrador para revisarlo y aprobarlo.' } }} />
                   </div>
                 </TableCell>
                 <TableCell data-tour="inventory-adjustment-form-data">
@@ -596,7 +678,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 const isApproving = approvingId === adj.id;
                 return (
                   <TableRow key={adj.id} className="group cursor-pointer hover:bg-muted/30" onClick={() => setSelectedAdjustment(adj)}>
-                    <TableCell className="font-mono text-xs">{adj.number}</TableCell>
+                    <TableCell className="font-mono text-xs"><div className="flex flex-col items-start gap-1"><span>{adj.number}</span>{isAuditGeneratedAdjustment(adj) && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {adj.auditNumber || 'vinculada'}</Badge>}</div></TableCell>
                     <TableCell className="text-sm">{adj.warehouse?.name || '-'}</TableCell>
                     <TableCell className="text-xs">{REASON_OPTIONS.find((r) => r.value === adj.reason)?.label || adj.reason}</TableCell>
                     <TableCell className="text-xs">
@@ -621,7 +703,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && (
+                      {adj.status === 'DRAFT' && isAuditGeneratedAdjustment(adj) ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-amber-700">Manager global</span>
+                      ) : adj.status === 'DRAFT' && canPerform('INVENTORY_ADJUSTMENTS', 'approve') && (
                         <Button 
                           size="sm" 
                           variant="ghost" 
@@ -651,7 +735,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       </div>}
 
       <div className="mt-3 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-        Los ajustes en borrador deben ser aprobados para aplicar cambios al stock
+        Los ajustes en borrador deben ser aprobados para aplicar cambios al stock. Los generados desde auditoría solo se aprueban en el panel del Manager global.
       </div>
         </div>
         {selectedAdjustment && (
@@ -663,16 +747,175 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
         )}
       </div>
 
+      <Dialog open={auditPickerOpen} onOpenChange={setAuditPickerOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] !max-w-2xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+              <ClipboardCheck className="size-5 text-primary" /> Ajuste desde auditoría
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Selecciona una auditoría pendiente. El sistema reconocerá automáticamente los faltantes y sobrantes y creará un ajuste como borrador.
+            </DialogDescription>
+          </DialogHeader>
+
+          {auditsForAdjustment.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/60 p-8 text-center text-xs text-muted-foreground">
+              <ClipboardCheck className="mx-auto mb-2 size-8 opacity-30" />
+              <p className="font-semibold">No hay auditorías pendientes</p>
+              <p className="mt-1">Registra una auditoría con productos inspeccionados para crear un ajuste desde aquí.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {auditsForAdjustment.map((audit: any) => {
+                const items = normalizeAuditItems(audit.items);
+                const differences = items.filter((item: any) => auditDifference(item) !== 0);
+                const shortages = differences.filter((item: any) => auditDifference(item) < 0);
+                const surpluses = differences.filter((item: any) => auditDifference(item) > 0);
+                const isGenerating = auditAdjustingId === audit.id;
+                return (
+                  <div key={audit.id} className="rounded-xl border border-border/50 bg-card p-3 shadow-sm">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-bold">{audit.number}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {audit.auditDate ? new Date(audit.auditDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'Fecha no disponible'}
+                          {' · '}{audit.warehouse?.name || warehouses.find((warehouse: any) => warehouse.id === audit.warehouseId)?.name || 'Bodega no disponible'}
+                        </p>
+                      </div>
+                      {audit.adjustmentId ? (
+                        <Badge variant="outline" className="w-fit border-orange-200 bg-orange-50 text-[9px] font-bold text-orange-700">Ajuste ya generado</Badge>
+                      ) : differences.length > 0 ? (
+                        <Badge variant="outline" className="w-fit border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-700">Requiere ajuste</Badge>
+                      ) : (
+                        <Badge variant="outline" className="w-fit border-emerald-200 bg-emerald-50 text-[9px] font-bold text-emerald-700">Sin diferencias</Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/40 pt-3 text-xs sm:grid-cols-4">
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="font-bold tabular-nums">{items.length}</p></div>
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Diferencias</p><p className="font-bold tabular-nums">{differences.length}</p></div>
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-red-600">Faltantes</p><p className="font-bold tabular-nums text-red-600">{shortages.length}</p></div>
+                      <div><p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Sobrantes</p><p className="font-bold tabular-nums text-emerald-600">{surpluses.length}</p></div>
+                    </div>
+
+                    {differences.length > 0 && (
+                      <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-2.5 text-[10px] text-amber-900">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                        <span>Se generará un borrador con los {differences.length} productos que tienen diferencia. El stock todavía no cambiará.</span>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 gap-1.5 text-xs"
+                        onClick={() => requestCreateAdjustmentFromAudit(audit)}
+                        disabled={isGenerating || Boolean(audit.adjustmentId)}
+                      >
+                        {isGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle className="size-3.5" />}
+                        {audit.adjustmentId ? 'Ajuste generado' : differences.length > 0 ? 'Crear ajuste borrador' : 'Marcar revisada'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAuditPickerOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(auditConfirmation)}
+        onOpenChange={(open) => {
+          if (!open && !auditAdjustingId) {
+            setAuditConfirmation(null);
+            setAuditPickerOpen(true);
+          }
+        }}
+        title={auditConfirmationDifferences.length > 0 ? '¿Crear ajuste borrador?' : '¿Marcar auditoría como revisada?'}
+        description={auditConfirmation
+          ? `Auditoría ${auditConfirmation.number}: ${auditConfirmationDifferences.length > 0 ? `se encontraron ${auditConfirmationDifferences.length} producto(s) con diferencia.` : 'no se encontraron diferencias.'}`
+          : ''}
+        confirmLabel={auditConfirmationDifferences.length > 0 ? 'Crear borrador' : 'Marcar revisada'}
+        cancelLabel="Cancelar"
+        variant="warning"
+        contentClassName="!max-w-[520px]"
+        loading={Boolean(auditAdjustingId)}
+        onConfirm={confirmCreateAdjustmentFromAudit}
+      >
+        <div className="mt-4 space-y-3 text-left">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-border/50 bg-muted/20 p-2.5 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Diferencias</p>
+              <p className="mt-1 text-lg font-black tabular-nums">{auditConfirmationDifferences.length}</p>
+            </div>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-red-700">{auditConfirmationShortages.length}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-emerald-700">{auditConfirmationSurpluses.length}</p>
+            </div>
+          </div>
+          {auditConfirmationDifferences.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos a ajustar</p>
+                <span className="text-[10px] text-muted-foreground">Sistema → físico</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-background/70">
+                {auditConfirmationDifferences.map((item: any, index: number) => {
+                  const difference = auditDifference(item);
+                  const originalStock = auditOriginalStock(item);
+                  const countedStock = Number(item.countedStock ?? 0);
+                  return (
+                    <div key={`${item.productId || item.code || 'item'}-${index}`} className="flex items-center justify-between gap-3 border-b border-border/40 px-3 py-2.5 last:border-b-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold">{item.name || 'Producto sin nombre'}</p>
+                        <p className="font-mono text-[10px] text-muted-foreground">{item.code || '—'}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-right">
+                        <span className="font-mono text-[10px] text-muted-foreground">{originalStock} → {countedStock}</span>
+                        <Badge variant="outline" className={`text-[10px] font-bold ${difference < 0 ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                          {difference > 0 ? '+' : ''}{difference}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <p className="leading-relaxed">
+              {auditConfirmationDifferences.length > 0
+                ? 'Se creará un ajuste como borrador. El stock no cambiará hasta que lo apruebes desde Ajustes.'
+                : 'La auditoría se marcará como revisada y no se generará ningún movimiento de stock.'}
+            </p>
+          </div>
+        </div>
+      </ConfirmDialog>
+
       <Dialog open={isSerialAdjustOpen} onOpenChange={setIsSerialAdjustOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader data-tour="inventory-serial-adjust-title">
-            <DialogTitle>Ajustar IMEI / Series</DialogTitle>
-            <DialogDescription>
+        <DialogContent
+          className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+          style={{ width: 'calc(100vw - 2rem)', maxWidth: '520px', maxHeight: 'calc(100dvh - 2rem)' }}
+        >
+          <DialogHeader className="border-b border-border/60 px-5 pb-3 pt-5 pr-12" data-tour="inventory-serial-adjust-title">
+            <DialogTitle className="text-base font-black tracking-tight">Ajustar IMEI / Series</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
               Alta o baja puntual de IMEI con movimiento auditado.
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo ajustar IMEI o series" targetPrefix="inventory-serial-adjust" copy={{ data: { description: 'Define agregar o remover, producto, almacén, IMEI o serie y motivo.' }, actions: { description: 'Guarda el ajuste para registrar el movimiento auditado.' } }} />
+            <InventoryViewTutorial compact label="Cómo ajustar IMEI o series" targetPrefix="inventory-serial-adjust" copy={{ data: { description: 'Define agregar o remover, producto, almacén, IMEI o serie y motivo.' }, actions: { description: 'Guarda el ajuste para registrar el movimiento auditado.' } }} />
           </DialogHeader>
-          <div className="space-y-3" data-tour="inventory-serial-adjust-data">
+          <div className="min-h-0 overflow-y-auto px-5 py-4" data-tour="inventory-serial-adjust-data">
+            <div className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
                 <p className="text-[10px] text-muted-foreground mb-1">Acción</p>
@@ -727,8 +970,9 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 placeholder="Motivo del ajuste"
               />
             </div>
+            </div>
           </div>
-          <DialogFooter data-tour="inventory-serial-adjust-actions">
+          <DialogFooter className="border-t border-border/60 px-5 py-4" data-tour="inventory-serial-adjust-actions">
             <Button variant="outline" onClick={() => setIsSerialAdjustOpen(false)}>Cancelar</Button>
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -742,16 +986,20 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       </Dialog>
 
       <Dialog open={isReceptionOpen} onOpenChange={setIsReceptionOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader data-tour="inventory-stock-reception-title">
-            <DialogTitle>Registrar Recepción de Stock</DialogTitle>
-            <DialogDescription>
+        <DialogContent
+          className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
+          style={{ width: 'calc(100vw - 2rem)', maxWidth: '650px', maxHeight: 'calc(100dvh - 2rem)' }}
+        >
+          <DialogHeader className="border-b border-border/60 px-5 pb-3 pt-5 pr-12" data-tour="inventory-stock-reception-title">
+            <DialogTitle className="text-base font-black tracking-tight">Registrar Recepción de Stock</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
               Registra entrada por producto, distribuye unidades por bodega y agrega IMEI/series.
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo registrar recepción de stock" targetPrefix="inventory-stock-reception" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Selecciona producto, cantidad, costo y moneda de la recepción.' }, items: { description: 'Distribuye las unidades por bodega y registra los IMEI o series cuando corresponda.' }, actions: { description: 'Guarda la recepción para actualizar las existencias.' } }} />
+            <InventoryViewTutorial compact label="Cómo registrar recepción de stock" targetPrefix="inventory-stock-reception" stepKeys={['title', 'data', 'items', 'actions']} copy={{ data: { description: 'Selecciona producto, cantidad, costo y moneda de la recepción.' }, items: { description: 'Distribuye las unidades por bodega y registra los IMEI o series cuando corresponda.' }, actions: { description: 'Guarda la recepción para actualizar las existencias.' } }} />
           </DialogHeader>
 
-          <div className="space-y-4" data-tour="inventory-stock-reception-data">
+          <div className="min-h-0 overflow-y-auto px-5 py-4" data-tour="inventory-stock-reception-data">
+            <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <p className="text-[10px] text-muted-foreground mb-1">Producto</p>
@@ -862,9 +1110,10 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
                 placeholder="Ej. Recepción OC-2026-001 / Lote abril"
               />
             </div>
+            </div>
           </div>
 
-          <DialogFooter data-tour="inventory-stock-reception-actions">
+          <DialogFooter className="border-t border-border/60 px-5 py-4" data-tour="inventory-stock-reception-actions">
             <Button variant="outline" onClick={() => { setIsReceptionOpen(false); resetReception(); }}>
               Cancelar
             </Button>
@@ -882,4 +1131,3 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
     </Card>
   );
 }
-

@@ -58,6 +58,13 @@ export const inventoryService = {
 
   // ==================== TRANSFERS ====================
   getTransfers: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/transfers', { params: filters as any, signal }),
+  getTransferAccountingPreflight: (
+    fromId: string,
+    toId: string,
+    options?: { items?: Array<{ variantId: string; quantity: number }>; date?: string },
+  ) => options?.items
+    ? api.post<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { fromId, toId, ...options })
+    : api.get<{ ready: boolean; errors: string[]; autoGenerationEnabled: boolean; warehouses: any[] }>('/inventory/transfers/accounting-preflight', { params: { fromId, toId } }),
   getTransfer: (id: string) => api.get<any>(`/inventory/transfers/${id}`),
   createTransfer: (data: { fromId: string; toId: string; carrier?: string; items: { variantId: string; quantity: number }[] }) => 
     api.post<any>('/inventory/transfers', data),
@@ -126,6 +133,7 @@ export const inventoryService = {
   // ==================== AUDITORÍAS (INVENTARIO SELECTIVO) ====================
   getAudits: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/audits', { params: filters as any, signal }),
   getAudit: (id: string) => api.get<any>(`/inventory/audits/${id}`),
+  createAdjustmentFromAudit: (id: string) => api.post<any>(`/inventory/audits/${id}/adjustment`, {}),
   createAudit: (data: {
     auditDate: string;
     warehouseId?: string | null;

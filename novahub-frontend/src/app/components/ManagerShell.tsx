@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -42,6 +43,7 @@ import {
   ClipboardList,
   CalendarDays,
   CircleDollarSign,
+  Bell,
   Receipt,
   Repeat2,
   CreditCard,
@@ -59,6 +61,9 @@ import { persistThemeMode, readPersistedDarkMode } from "../utils/theme-mode";
 import { Button } from "./ui/button";
 import { BrandLogo } from "./BrandLogo";
 import { cn } from "./ui/utils";
+import { notificationsService } from "../services/notifications.service";
+import { playNotificationSound } from "../utils/notificationSound";
+import { useQuery } from "@tanstack/react-query";
 import { formatCurrencyDescriptor, getCurrencyMetadata } from "../utils/currency";
 import {
   DropdownMenu,
@@ -473,6 +478,54 @@ export function ManagerShell({
         (branch) => branch.businessUnitId === selectedBusinessUnitId,
       )
     : branches;
+  const managerNotificationsQuery = useQuery({
+    queryKey: ["manager-notifications", group?.id, user?.id],
+    queryFn: ({ signal }) => notificationsService.getManagerInbox(group!.id, signal),
+    enabled: Boolean(group?.id && user?.id),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+  const managerNotifications = managerNotificationsQuery.data || [];
+  const unreadManagerNotifications = managerNotifications.filter((notification) => !notification.read);
+  const managerNotificationIdsRef = useRef<Set<string> | null>(null);
+  const managerNotificationScopeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!managerNotificationsQuery.isFetched) return;
+
+    const scope = `${group?.id || ""}:${user?.id || ""}`;
+    const currentIds = new Set(managerNotifications.map((notification) => notification.id));
+
+    // The first response only establishes the baseline; the sound is reserved
+    // for notifications that arrive after the Manager has opened the panel.
+    if (managerNotificationScopeRef.current !== scope) {
+      managerNotificationScopeRef.current = scope;
+      managerNotificationIdsRef.current = currentIds;
+      return;
+    }
+
+    const newUnreadNotifications = managerNotifications.filter(
+      (notification) => !notification.read && !managerNotificationIdsRef.current?.has(notification.id),
+    );
+    managerNotificationIdsRef.current = currentIds;
+    if (newUnreadNotifications.length > 0) playNotificationSound();
+  }, [group?.id, managerNotificationScopeRef, managerNotifications, managerNotificationsQuery.isFetched, user?.id]);
+
+  const markManagerNotificationRead = async (id: string) => {
+    if (!group?.id) return;
+    await notificationsService.markManagerAsRead(group.id, id);
+    await managerNotificationsQuery.refetch();
+  };
+
+  const openManagerNotification = (notification: { id: string; metadata?: unknown }) => {
+    void markManagerNotificationRead(notification.id);
+    const metadata = notification.metadata && typeof notification.metadata === 'object' && !Array.isArray(notification.metadata)
+      ? notification.metadata as { navigation?: { module?: string; filter?: string } }
+      : {};
+    if (metadata.navigation?.module !== 'manager') return;
+    onSectionChange('inventory');
+    onInventoryViewChange(metadata.navigation.filter === 'transfers' ? 'transfers' : 'adjustments');
+  };
 
   useEffect(() => {
     if (section !== "inventory" && section !== "sales" && section !== "purchases" && section !== "finances" && section !== "accounting" && section !== "reports" && section !== "hr")
@@ -720,6 +773,49 @@ export function ManagerShell({
                     </DropdownMenu>
                   </div>
                 )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative size-10 rounded-xl"
+                      aria-label="Notificaciones del Manager"
+                      title="Notificaciones del Manager"
+                    >
+                      <Bell className="size-5" />
+                      {unreadManagerNotifications.length > 0 && (
+                        <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-white ring-2 ring-background">
+                          {unreadManagerNotifications.length > 9 ? '9+' : unreadManagerNotifications.length}
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-1rem)] rounded-xl p-2">
+                    <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Notificaciones del Manager
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="max-h-80 overflow-y-auto">
+                      {managerNotifications.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-xs text-muted-foreground">No hay notificaciones nuevas.</p>
+                      ) : managerNotifications.slice(0, 8).map((notification) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className="items-start gap-2 rounded-lg p-3"
+                          onClick={() => openManagerNotification(notification)}
+                        >
+                          <span className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg ${notification.read ? 'bg-muted text-muted-foreground' : 'bg-amber-100 text-amber-700'}`}>
+                            <Bell className="size-3.5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-bold">{notification.title}</span>
+                            <span className="mt-0.5 block line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{notification.message}</span>
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="ghost"
                   size="icon"

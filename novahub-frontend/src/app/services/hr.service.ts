@@ -34,6 +34,7 @@ export const hrService = {
   // ===== PAYROLL =====
   getPayrolls: (filters?: any, signal?: AbortSignal) => api.get('/hr/payroll', withSignal(filters, signal)),
   createPayroll: (data: any) => api.post('/hr/payroll', data),
+  updatePayroll: (id: string, data: any) => api.patch(`/hr/payroll/${id}`, data),
   bulkProcessPayroll: (data: any) => api.post('/hr/payroll/bulk-process', data),
   calculatePayroll: (data: any) => api.post('/hr/payroll/calculate', data),
   getPayrollPeriods: (signal?: AbortSignal) => api.get('/hr/payroll/periods', withSignal(undefined, signal)),
@@ -59,6 +60,7 @@ export const hrService = {
   // ===== LEAVE REQUESTS =====
   getLeaveRequests: (filters?: any, signal?: AbortSignal) => api.get('/hr/leave/requests', withSignal(filters, signal)),
   createLeaveRequest: (data: any) => api.post('/hr/leave/requests', data),
+  updateLeaveRequest: (id: string, data: any) => api.patch(`/hr/leave/requests/${id}`, data),
   approveLeaveRequest: (id: string, approvedBy: string) => api.put(`/hr/leave/requests/${id}/approve`, { approvedBy }),
   rejectLeaveRequest: (id: string, rejectionReason: string) => api.put(`/hr/leave/requests/${id}/reject`, { rejectionReason }),
 

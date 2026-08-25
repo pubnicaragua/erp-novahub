@@ -70,11 +70,11 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
             <h3 className="text-sm font-black uppercase tracking-widest">Pérdidas de Inventario</h3>
           </div>
         </div>
-        <div className="erp-list-toolbar flex flex-wrap items-center gap-2" data-tour="inventory-losses-actions">
-          <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, almacén y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
-          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Desde" />
-          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-8 w-36 text-[10px]" aria-label="Hasta" />
-          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>
+        <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="inventory-losses-actions">
+          <InventoryViewTutorial label="Cómo consultar pérdidas" targetPrefix="inventory-losses" copy={{ data: { description: 'Filtra las pérdidas por período y revisa el valor, cantidad, razón, bodega y cuenta contable.' }, actions: { description: 'Usa los filtros para revisar el historial de mermas y su vínculo contable.' } }} />
+          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-9 w-full text-[10px] sm:w-36" aria-label="Desde" />
+          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-9 w-full text-[10px] sm:w-36" aria-label="Hasta" />
+          <Button variant="outline" size="sm" className="h-9 w-full text-[10px] font-bold sm:w-auto" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>
             Limpiar
           </Button>
         </div>
@@ -111,13 +111,81 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
+          <div className="space-y-3 p-3 lg:hidden">
+            {loading ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">Cargando...</div>
+            ) : rows.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
+                No hay pérdidas registradas en el período.
+              </div>
+            ) : rows.map((row: any) => {
+              const warehouse = warehouses.find((w: any) => w.id === row.warehouseId);
+              const totalQty = (row.items || []).reduce((sum: number, item: any) => sum + Number(item.lossQuantity || 0), 0);
+              return (
+                <div key={row.id} className="min-w-0 rounded-2xl border border-border/50 bg-card p-3 shadow-sm">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs font-bold">{row.number}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}</p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 border-red-500/20 bg-red-500/5 text-[9px] font-bold uppercase tracking-wider text-red-500">
+                      {REASON_LABELS[row.reason] || row.reason}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Bodega</p>
+                      <p className="mt-1 truncate font-medium">{warehouse?.name || row.warehouse?.name || '—'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad perdida</p>
+                      <p className="mt-1 font-mono font-bold text-red-600">-{fmtQty(totalQty)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1 border-t border-border/40 pt-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Productos con merma</p>
+                    {(row.items || []).map((item: any) => (
+                      <div key={item.productId} className="flex min-w-0 items-center gap-1.5 text-[10px]">
+                        <span className="shrink-0 font-mono text-muted-foreground">{item.code}</span>
+                        <span className="min-w-0 truncate">{item.name}</span>
+                        <span className="ml-auto shrink-0 font-mono text-red-500">-{fmtQty(item.lossQuantity)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-3 border-t border-border/40 pt-3">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta contable</p>
+                      {row.account ? (
+                        <button
+                          type="button"
+                          onClick={() => toast.info(`${row.account.code} · ${row.account.name}`, { description: 'Cuenta que recibe la contrapartida de la pérdida (vinculada por código).' })}
+                          className="mt-1 flex max-w-full items-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary/10"
+                          title="Cuenta vinculada por código"
+                        >
+                          <BookOpenCheck className="size-3.5 shrink-0" />
+                          <span className="truncate">{row.account.code}</span>
+                          <ExternalLink className="size-3 shrink-0 opacity-60" />
+                        </button>
+                      ) : <span className="text-[10px] text-muted-foreground/50">Sin vínculo</span>}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Valor</p>
+                      <p className="mt-1 font-mono text-xs font-bold text-red-600">{formatCurrentAmount(Number(row.totalLoss || 0))}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto lg:block">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Ajuste</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Razón</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Productos con merma</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Cantidad perdida</TableHead>
                 {canViewInventoryCost && <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Valor de pérdida</TableHead>}
@@ -176,6 +244,7 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -185,9 +254,9 @@ export function InventoryLossesView({ warehouses, warehouseId }: InventoryLosses
           <span>·</span>
           <span>{meta.total} pérdida(s)</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
-          <Button variant="outline" size="sm" className="h-8" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+          <Button variant="outline" size="sm" className="h-8 w-full" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+          <Button variant="outline" size="sm" className="h-8 w-full" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
         </div>
       </div>
     </div>

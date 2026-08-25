@@ -39,8 +39,8 @@ type AccountInfo = {
 }
 
 const STATUS_META: Record<string, { label: string; tone: 'success' | 'warn' | 'danger' | 'muted'; description: string }> = {
-  VINCULADO: { label: 'Vinculado', tone: 'success', description: 'El almacén tiene una cuenta contable activa que acepta movimientos.' },
-  PENDIENTE: { label: 'Pendiente', tone: 'warn', description: 'El almacén aún no tiene una cuenta contable vinculada. Usa el botón Configurar.' },
+  VINCULADO: { label: 'Vinculado', tone: 'success', description: 'La bodega tiene una cuenta contable activa que acepta movimientos.' },
+  PENDIENTE: { label: 'Pendiente', tone: 'warn', description: 'La bodega aún no tiene una cuenta contable vinculada. Usa el botón Configurar.' },
   CUENTA_INACTIVA: { label: 'Cuenta inactiva', tone: 'danger', description: 'La cuenta vinculada está inactiva. Vincula una cuenta activa.' },
   CUENTA_NO_POSTEABLE: { label: 'No posteable', tone: 'danger', description: 'La cuenta vinculada no acepta movimientos. Debe ser una cuenta de detalle que acepte posteos.' },
 }
@@ -85,13 +85,13 @@ const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
     target: '[data-tour="config-header"]',
     title: 'Configuración contable de Inventario',
     description: 'Esta vista conecta las bodegas de la sucursal con las cuentas de inventario del Plan de Cuentas, para que los movimientos de mercadería se registren automáticamente en Contabilidad.',
-    tip: 'La lógica es una jerarquía: Cuenta control → Cuenta de sucursal → Cuenta de almacén.',
+    tip: 'La lógica es una jerarquía: Cuenta control → Cuenta de sucursal → Cuenta de bodega.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="config-tab-general"]',
     title: 'Cuenta control y reglas',
-    description: 'Aquí eliges la cuenta control de Inventario (por ejemplo 1105). Es el ancla de la rama: bajo ella se cuelgan las cuentas agrupadoras de cada sucursal y las cuentas posteables de cada almacén. También puedes exigir que cada almacén tenga su propia cuenta.',
+    description: 'Aquí eliges la cuenta control de Inventario (por ejemplo 1105). Es el ancla de la rama: bajo ella se cuelgan las cuentas agrupadoras de cada sucursal y las cuentas posteables de cada bodega. También puedes exigir que cada bodega tenga su propia cuenta.',
     placement: 'bottom',
   },
   {
@@ -103,13 +103,13 @@ const CONFIG_INVENTORY_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="config-tab-contable"]',
     title: 'Vinculación contable',
-    description: 'Tabla de cada almacén con su sucursal, su cuenta contable y su estado. El botón Configurar abre dos opciones: crear automáticamente la cuenta de sucursal + almacén, o vincular una cuenta existente.',
+    description: 'Tabla de cada bodega con su sucursal, su cuenta contable y su estado. El botón Configurar abre dos opciones: crear automáticamente la cuenta de sucursal + bodega, o vincular una cuenta existente.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="config-tab-estado"]',
     title: 'Estado de vinculación',
-    description: 'Resumen del avance: cuántas sucursales y almacenes existen, cuántos ya tienen cuenta vinculada, cuántos están pendientes y cuáles tienen errores en su cuenta.',
+    description: 'Resumen del avance: cuántas sucursales y bodegas existen, cuántas ya tienen cuenta vinculada, cuántas están pendientes y cuáles tienen errores en su cuenta.',
     placement: 'bottom',
   },
 ];
@@ -238,11 +238,20 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
     return flatAccounts.find((a: any) => a.notes === `INV_GROUP:${branchId}`) || null
   }
 
-  // Solo cuentas llamadas exactamente "Inventario". Si la guardada no coincide
-  // (legacy), se muestra en el trigger pero no se ofrece en la lista.
+  // La cuenta control puede llamarse "Inventario", "Inventario de
+  // Mercancias", "Mercaderia", "Existencias", etc. Incluimos cuentas de
+  // Activo relacionadas con inventario, sean agrupadoras o de detalle.
   const inventoryControlOptions = useMemo(() => {
     const opts = activeAccounts
-      .filter((a: any) => String(a.name || '').trim().toLowerCase() === 'inventario')
+      .filter((a: any) => {
+        const normalizedName = String(a.name || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase()
+        return ['inventario', 'mercancia', 'mercaderia', 'existencia']
+          .some((keyword) => normalizedName.includes(keyword))
+      })
       .map((a: any) => ({ label: `${a.code} - ${a.name}`, value: a.code, description: a.code }));
     const current = flatAccounts.find((a: any) => a.code === controlAccountId);
     if (current && !opts.some((o) => o.value === current.code)) {
@@ -254,15 +263,18 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
   const saveControlAccount = async () => {
     setConfigLoading(true)
     try {
-      const cfg = await contabilidadService.getConfig()
-      const config = cfg?.config || cfg || {}
-      const accountMappings = {
-        ...(config.accountMappings || {}),
-        inventory: { ...(config.accountMappings?.inventory || {}), control: controlAccountId },
-      }
-      await api.put('/accounting/config', {
-        accountMappings,
-        inventory: { ...(config.inventory || {}), requiresAccountPerWarehouse: requiresPerWarehouse },
+      await contabilidadService.updateConfig({
+        // Este formulario solo modifica la cuenta control. El backend usa el
+        // parche para validar este campo sin volver a bloquear el guardado por
+        // una cuenta histórica inválida de otro módulo (por ejemplo,
+        // supplierInvoice.inventory).
+        accountMappings: { inventory: { control: controlAccountId } },
+        accountMappingPatch: {
+          moduleId: 'inventory',
+          fieldKey: 'control',
+          value: controlAccountId,
+        },
+        inventory: { requiresAccountPerWarehouse: requiresPerWarehouse },
       })
       await queryClient.invalidateQueries({ queryKey: ['accounting'] })
       toast.success('Configuración contable guardada')
@@ -291,22 +303,44 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const openConfig = (wh: any, branch?: any) => {
     const info = linkInfo(wh)
-    if (info.status === 'VINCULADO') return
     setConfigTarget(wh)
     setConfigBranch(null)
-    setConfigMode('auto')
+    setConfigMode(info.accountId ? 'existing' : 'auto')
     setExistingAccountId(info.accountId || '')
     setBranchAccountId('')
   }
 
-  const buildHierarchyPreview = (wh: any, _branchOverride?: any) => {
+  const branchForWarehouse = useCallback((warehouse: any) => branches.find((branch: any) =>
+    branch.id === warehouse.clientTenantId ||
+    branch.warehouseId === warehouse.id ||
+    (Array.isArray(branch.warehouses) && branch.warehouses.some((linked: any) => linked.id === warehouse.id)),
+  ) || (Array.isArray(warehouse.branches) ? warehouse.branches.map((link: any) => branches.find((branch: any) => branch.id === link.id)).find(Boolean) : null), [branches])
+
+  const buildHierarchyPreview = (wh: any, branchOverride?: any) => {
     const control = flatAccounts.find((a: any) => a.code === controlAccountId)
+    const branch = branchOverride || branchForWarehouse(wh)
     const info = linkInfo(wh)
     const whAccount = info.accountId ? flatAccounts.find((a: any) => a.id === info.accountId) : undefined
-    return [
+    const levels = [
       { code: control?.code, name: control?.name || 'Inventario', exists: !!control, note: 'Cuenta control (consolida)' },
-      { code: whAccount?.code, name: whAccount?.name || `Inventario Bodega ${wh?.name || ''}`, exists: !!whAccount, note: 'Cuenta de la bodega (recibe movimientos)' },
     ]
+    if (branch) {
+      const branchGroup = flatAccounts.find((a: any) => a.notes === `INV_GROUP:${branch.id}`)
+      const branchLabel = String(branch.name || '').toLowerCase().startsWith('sucursal') ? branch.name : `Sucursal ${branch.name}`
+      levels.push({
+        code: branchGroup?.code,
+        name: branchGroup?.name || `Inventario ${branchLabel}`,
+        exists: !!branchGroup,
+        note: 'Cuenta de sucursal (agrupa)',
+      })
+    }
+    levels.push({
+      code: whAccount?.code,
+      name: whAccount?.name || `Inventario Bodega ${wh?.name || ''}`,
+      exists: !!whAccount,
+      note: 'Cuenta de la bodega (recibe movimientos)',
+    })
+    return levels
   }
 
   const runConfigure = async () => {
@@ -328,7 +362,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       setConfigBranch(null)
       await refresh()
     } catch (e: any) {
-      toast.error(getApiErrorMessage(e, 'Error al configurar el almacén'))
+      toast.error(getApiErrorMessage(e, 'Error al configurar la bodega'))
     } finally {
       setConfigSaving(false)
     }
@@ -363,7 +397,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   const controlAccount = flatAccounts.find((a: any) => a.code === controlAccountId)
   const exampleWarehouse = warehouses.find((w: any) => w.accountingStatus === 'VINCULADO') || warehouses[0]
-  const hierarchyPreview = exampleWarehouse ? buildHierarchyPreview(exampleWarehouse) : null
+  const hierarchyPreview = exampleWarehouse ? buildHierarchyPreview(exampleWarehouse, branchForWarehouse(exampleWarehouse)) : null
 
   const branchGroups = useMemo(() => {
     const groups: { branch: any; warehouses: any[] }[] = []
@@ -372,14 +406,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
       if (existing) existing.warehouses.push(wh)
       else groups.push({ branch: branch || { id: 'sin-sucursal', name: 'Sin sucursal' }, warehouses: [wh] })
     }
-    const branchForWarehouse = (warehouse: any) => branches.find((branch: any) =>
-      branch.id === warehouse.clientTenantId ||
-      branch.warehouseId === warehouse.id ||
-      (Array.isArray(branch.warehouses) && branch.warehouses.some((linked: any) => linked.id === warehouse.id)),
-    ) || (Array.isArray(warehouse.branches) ? warehouse.branches.map((link: any) => branches.find((branch: any) => branch.id === link.id)).find(Boolean) : null)
     for (const wh of warehouses) upsert(branchForWarehouse(wh), wh)
     return groups.sort((a, b) => a.branch.name.localeCompare(b.branch.name))
-  }, [warehouses, branches])
+  }, [warehouses, branchForWarehouse])
 
   if (loading) {
     return (
@@ -391,32 +420,32 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3" data-tour="config-header">
-        <div>
-          <h3 className="flex items-center gap-2 font-black uppercase tracking-tight italic">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between" data-tour="config-header">
+        <div className="min-w-0">
+          <h3 className="flex items-start gap-2 text-base font-black uppercase leading-tight tracking-tight italic sm:text-lg">
             <Settings2 className="size-5 text-primary" /> Configuración contable de Inventario
           </h3>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Conecta sucursales y almacenes con el Plan de Cuentas para registrar los movimientos en Contabilidad
+          <p className="mt-1 text-[10px] font-bold uppercase leading-relaxed tracking-widest text-muted-foreground">
+            Conecta sucursales y bodegas con el Plan de Cuentas para registrar los movimientos en Contabilidad
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowTutorial(true)}>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-1 size-3.5" /> Cómo configurar inventario
           </Button>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
+          <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={cn('mr-1 size-3.5', refreshing && 'animate-spin')} /> Actualizar
           </Button>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl border border-border/40 bg-muted/40 p-1.5">
-          <TabsTrigger value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
-      <TabsTrigger value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Bodegas</TabsTrigger>
-          <TabsTrigger value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
-          <TabsTrigger value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
-          {isManufacturing && <TabsTrigger value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
+        <TabsList className="flex h-auto w-full max-w-full flex-nowrap justify-start gap-1.5 overflow-x-auto rounded-2xl border border-border/40 bg-muted/40 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="general" data-tour="config-tab-general"><Building2 className="size-4 mr-1.5" /> General</TabsTrigger>
+          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="almacenes" data-tour="config-tab-almacenes"><Link2 className="size-4 mr-1.5" /> Bodegas</TabsTrigger>
+          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="contable" data-tour="config-tab-contable"><Settings2 className="size-4 mr-1.5" /> Configuración Contable</TabsTrigger>
+          <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="estado" data-tour="config-tab-estado"><Activity className="size-4 mr-1.5" /> Estado de Vinculación</TabsTrigger>
+          {isManufacturing && <TabsTrigger className="!flex-none !whitespace-nowrap px-3 py-2 text-xs sm:text-sm" value="costos"><Factory className="size-4 mr-1.5" /> Centros de Costos</TabsTrigger>}
         </TabsList>
 
         {/* General */}
@@ -427,10 +456,10 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               <div className="mb-4">
                 <h4 className="font-bold">Cuenta control de Inventario</h4>
                 <p className="text-xs text-muted-foreground">
-                  Es el ancla de la rama contable de inventario. Los movimientos se registran en las cuentas de cada almacén
+                  Es el ancla de la rama contable de inventario. Los movimientos se registran en las cuentas de cada bodega
                   (nivel más bajo) y se consolidan automáticamente aquí en el Plan de Cuentas:
                   <span className="mt-1 block font-mono text-[10px] text-primary/80">
-                    Cuenta control → Cuenta de sucursal (agrupa) → Cuenta de almacén (recibe movimientos)
+                    Cuenta control → Cuenta de sucursal (agrupa) → Cuenta de bodega (recibe movimientos)
                   </span>
                 </p>
               </div>
@@ -443,7 +472,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                     onChange={setControlAccountId}
                     placeholder="Selecciona la cuenta control de Inventario"
                     searchPlaceholder="Buscar por código o nombre..."
-                    emptyMessage="No hay cuentas con el nombre 'Inventario' en el Plan de Cuentas."
+                    emptyMessage="No hay cuentas de inventario en el Plan de Cuentas."
                   />
                   {controlAccount && (
                     <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -454,8 +483,8 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-border/40 p-3">
                   <div>
-                    <p className="text-sm font-semibold">Exigir cuenta por almacén</p>
-                    <p className="text-xs text-muted-foreground">Al activarlo, los movimientos de un almacén sin cuenta vinculada serán bloqueados y aparecerá como pendiente en las tablas de vinculación.</p>
+                    <p className="text-sm font-semibold">Exigir cuenta por bodega</p>
+                    <p className="text-xs text-muted-foreground">Al activarlo, los movimientos de una bodega sin cuenta vinculada serán bloqueados y aparecerá como pendiente en las tablas de vinculación.</p>
                   </div>
                   <Switch checked={requiresPerWarehouse} onCheckedChange={setRequiresPerWarehouse} />
                 </div>
@@ -471,7 +500,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               <Card className="p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h4 className="flex items-center gap-2 font-bold"><Activity className="size-4 text-primary" /> Estado de vinculación</h4>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{linkedCount} de {warehouses.length} almacenes vinculados</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{linkedCount} de {warehouses.length} bodegas vinculadas</span>
                 </div>
                 <div className="mb-4 h-2 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
@@ -501,7 +530,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 <Card className="p-5">
                   <h4 className="mb-1 flex items-center gap-2 font-bold"><GitBranch className="size-4 text-primary" /> Así se ve en el Plan de Cuentas</h4>
                   <p className="mb-3 text-xs text-muted-foreground">
-                    Ejemplo con el almacén <span className="font-semibold text-foreground">{exampleWarehouse?.name}</span>{exampleWarehouse && exampleWarehouse.primaryBranch ? ` (sucursal ${exampleWarehouse.primaryBranch.name})` : ''}:
+                    Ejemplo con la bodega <span className="font-semibold text-foreground">{exampleWarehouse?.name}</span>{exampleWarehouse && exampleWarehouse.primaryBranch ? ` (sucursal ${exampleWarehouse.primaryBranch.name})` : ''}:
                   </p>
                   <div className="space-y-0">
                     {hierarchyPreview.map((level, i) => (
@@ -538,7 +567,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                           <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold">
                             <Building2 className="size-3.5 shrink-0 text-muted-foreground" /> {branch.name}
                           </p>
-                          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{whs.length} almacén{whs.length !== 1 ? 'es' : ''}</span>
+                          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{whs.length} bodega{whs.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="space-y-1.5">
                           {whs.map((wh: any) => (
@@ -570,14 +599,101 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         {/* Configuración Contable */}
         <TabsContent value="contable" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
-            Cada almacén necesita una cuenta contable de inventario para registrar sus movimientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + almacén) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+            Cada bodega necesita una cuenta contable de inventario para registrar sus movimientos. Usa <span className="font-semibold text-foreground">Configurar</span> para crearla automáticamente (sucursal + bodega) o vincular una existente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
           </p>
-          <Card className="p-4">
+          <Card className="p-3 sm:p-4">
+            <div className="space-y-3 lg:hidden">
+              {branchGroups.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No hay bodegas. Crea una desde la pestaña <span className="font-semibold text-foreground">Bodegas</span> para poder configurar su cuenta contable.
+                </div>
+              ) : branchGroups.map(({ branch, warehouses: groupWarehouses }) => {
+                const isCollapsed = collapsedBranches.has(branch.id)
+                const linkedInGroup = groupWarehouses.filter((w: any) => linkInfo(w, branch.id).status === 'VINCULADO').length
+                return (
+                  <div key={branch.id} className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 bg-muted/40 px-3 py-3 text-left transition-colors hover:bg-muted/60"
+                      onClick={() => toggleBranchCollapse(branch.id)}
+                      aria-expanded={!isCollapsed}
+                    >
+                      {isCollapsed
+                        ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                        : <ChevronDown className="size-4 shrink-0 text-muted-foreground" />}
+                      <Building2 className="size-4 shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold">{branch.name}</span>
+                      <span className="shrink-0 text-right text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">
+                        {linkedInGroup}/{groupWarehouses.length} vinculadas
+                      </span>
+                    </button>
+
+                    {!isCollapsed && (
+                      <div className="space-y-2 p-2.5">
+                        {groupWarehouses.map((wh: any) => {
+                          const whLinks = Array.isArray(wh.branches) ? wh.branches : []
+                          const isPrimaryInGroup = whLinks.some((b: any) => b.id === branch.id && b.isPrimary)
+                          const isShared = whLinks.length > 1
+                          const info = linkInfo(wh, branch.id)
+                          const actionLabel = info.status === 'VINCULADO'
+                            ? 'Editar'
+                            : info.status === 'CUENTA_INACTIVA' || info.status === 'CUENTA_NO_POSTEABLE'
+                              ? 'Corregir'
+                              : 'Configurar'
+                          return (
+                            <div key={wh.id} className="rounded-xl border border-border/50 bg-muted/15 p-3">
+                              <div className="flex min-w-0 items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="break-words text-sm font-semibold">{wh.name}</p>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {isPrimaryInGroup && <Badge variant="outline" className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">Principal</Badge>}
+                                    {!isPrimaryInGroup && isShared && <Badge variant="outline" className="bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600">Compartido</Badge>}
+                                  </div>
+                                </div>
+                                <StatusBadge status={info.status} />
+                              </div>
+                              <div className="mt-3 border-t border-border/40 pt-2">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cuenta contable</p>
+                                <p className="mt-1 break-words font-mono text-[11px] text-foreground">
+                                  {info.account ? `${info.account.code} - ${info.account.name}` : 'Sin cuenta configurada'}
+                                </p>
+                              </div>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 w-full gap-1 text-[10px] font-black uppercase tracking-widest"
+                                  onClick={() => openConfig(wh, branch)}
+                                >
+                                  <Settings2 className="size-3.5" /> {actionLabel}
+                                </Button>
+                                {info.status === 'VINCULADO' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 w-full gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                                    onClick={() => setUnlinkTarget({ wh, branch })}
+                                  >
+                                    <Unlink className="size-3.5" /> Desvincular
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Sucursal</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Cuenta Contable</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Acción</TableHead>
@@ -624,9 +740,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                             <span className="flex items-center gap-1.5">
                               <span className="truncate">{wh.name}</span>
                               {isPrimaryInGroup ? (
-                                <Badge variant="outline" className="shrink-0 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary" title="Este almacén es el principal de esta sucursal">Principal</Badge>
+                              <Badge variant="outline" className="shrink-0 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary" title="Esta bodega es la principal de esta sucursal">Principal</Badge>
                               ) : isShared ? (
-                                <Badge variant="outline" className="shrink-0 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600" title="Este almacén también pertenece a otra sucursal. Puede tener su propia cuenta en cada sucursal.">Compartido</Badge>
+                              <Badge variant="outline" className="shrink-0 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600" title="Esta bodega también pertenece a otra sucursal. Puede tener su propia cuenta en cada sucursal.">Compartido</Badge>
                               ) : null}
                             </span>
                           </TableCell>
@@ -635,21 +751,22 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                           </TableCell>
                           <TableCell><StatusBadge status={info.status} /></TableCell>
                           <TableCell className="text-right">
-                            {info.status === 'VINCULADO' ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
-                                onClick={() => setUnlinkTarget({ wh, branch })}
-                                title={`Desvincular la cuenta contable del almacén ${wh.name} en ${branch.name}`}
-                              >
-                                <Unlink className="size-3.5" /> Desvincular
+                            <div className="flex justify-end gap-1.5">
+                              <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh, branch)} title={`${info.status === 'VINCULADO' ? 'Editar' : 'Configurar'} la cuenta contable de la bodega ${wh.name} en ${branch.name}`}>
+                                <Settings2 className="size-3.5" /> {info.status === 'VINCULADO' ? 'Editar' : info.status === 'CUENTA_INACTIVA' || info.status === 'CUENTA_NO_POSTEABLE' ? 'Corregir' : 'Configurar'}
                               </Button>
-                            ) : (
-                              <Button variant="outline" size="sm" className="h-8 gap-1 text-[10px] font-black uppercase tracking-widest" onClick={() => openConfig(wh, branch)} title={`Configurar la cuenta contable del almacén ${wh.name} en ${branch.name}`}>
-                                <Settings2 className="size-3.5" /> {info.status === 'CUENTA_INACTIVA' || info.status === 'CUENTA_NO_POSTEABLE' ? 'Corregir' : 'Configurar'}
-                              </Button>
-                            )}
+                              {info.status === 'VINCULADO' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1 border-red-500/20 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-500/10 hover:text-red-600"
+                                  onClick={() => setUnlinkTarget({ wh, branch })}
+                                  title={`Desvincular la cuenta contable de la bodega ${wh.name} en ${branch.name}`}
+                                >
+                                  <Unlink className="size-3.5" /> Desvincular
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       )})}
@@ -658,13 +775,14 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 })}
               </TableBody>
             </Table>
+            </div>
           </Card>
         </TabsContent>
 
         {/* Estado de Vinculación */}
         <TabsContent value="estado" className="m-0 mt-4">
           <p className="mb-3 text-xs text-muted-foreground">
-            Resumen del vínculo entre almacenes y sus cuentas contables. Pasa el cursor sobre cada estado para ver su significado.
+            Resumen del vínculo entre bodegas y sus cuentas contables. Pasa el cursor sobre cada estado para ver su significado.
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Card className="p-4"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sucursales</p><p className="text-2xl font-black">{branches.length}</p></Card>
@@ -678,7 +796,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Sucursal</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Bodega</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Cuenta</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                 </TableRow>
@@ -731,9 +849,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
           <DialogHeader data-tour="inventory-config-modal-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
             <DialogDescription>
-              Vincula este almacén con su cuenta contable de inventario{configBranch ? <> en la sucursal <span className="font-semibold text-foreground">{configBranch.name}</span></> : null}. Elige la cuenta agrupadora de la sucursal y la cuenta posteable del almacén; si faltan, el sistema las crea automáticamente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
+              Vincula esta bodega con su cuenta contable de inventario{configBranch ? <> en la sucursal <span className="font-semibold text-foreground">{configBranch.name}</span></> : null}. Elige la cuenta agrupadora de la sucursal y la cuenta posteable de la bodega; si faltan, el sistema las crea automáticamente. Las cuentas quedan visibles en <span className="font-mono text-[10px]">Contabilidad → Plan de Cuentas</span>.
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo vincular almacén a contabilidad" targetPrefix="inventory-config-modal" copy={{ data: { description: 'Elige crear la cuenta automáticamente o vincular una cuenta de Activo existente.' }, actions: { description: 'Confirma para guardar la configuración contable del almacén.' } }} />
+            <InventoryViewTutorial label="Cómo vincular bodega a contabilidad" targetPrefix="inventory-config-modal" copy={{ data: { description: 'Elige crear la cuenta automáticamente o vincular una cuenta de Activo existente.' }, actions: { description: 'Confirma para guardar la configuración contable de la bodega.' } }} />
           </DialogHeader>
           <div className="space-y-4 py-2" data-tour="inventory-config-modal-data">
             <div className="space-y-2">
@@ -747,7 +865,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-black uppercase tracking-widest leading-tight">Crear automáticamente</span>
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Crea cuenta de sucursal + almacén si faltan</span>
+                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Crea cuenta de sucursal + bodega si faltan</span>
                 </span>
               </Button>
               <Button
@@ -760,7 +878,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-black uppercase tracking-widest leading-tight">Vincular existente</span>
-                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Elige la cuenta de sucursal y la del almacén</span>
+                  <span className="mt-0.5 block text-[10px] font-normal normal-case leading-snug opacity-80">Elige la cuenta de sucursal y la de la bodega</span>
                 </span>
               </Button>
             </div>
@@ -829,9 +947,9 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                   )}
                 </div>
 
-                {/* Cuenta del almacén (posteo) */}
+                {/* Cuenta de la bodega (posteo) */}
                 <div className="space-y-2">
-                  <Label>Cuenta del almacén (recibe movimientos)</Label>
+                  <Label>Cuenta de la bodega (recibe movimientos)</Label>
                   {linkableAccounts.length === 0 ? (
                     <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
@@ -875,7 +993,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
         description={(() => {
           if (!unlinkTarget) return ''
           const info = linkInfo(unlinkTarget.wh, unlinkTarget.branch?.id)
-          return `Se quitará la cuenta ${info.account ? `${info.account.code} - ${info.account.name}` : 'vinculada'} del almacén "${unlinkTarget.wh.name}"${unlinkTarget.branch ? ` en la sucursal ${unlinkTarget.branch.name}` : ''}. El almacén pasará a estado Pendiente y podrás configurar otra cuenta cuando lo necesites.`
+          return `Se quitará la cuenta ${info.account ? `${info.account.code} - ${info.account.name}` : 'vinculada'} de la bodega "${unlinkTarget.wh.name}"${unlinkTarget.branch ? ` en la sucursal ${unlinkTarget.branch.name}` : ''}. La bodega pasará a estado Pendiente y podrás configurar otra cuenta cuando lo necesites.`
         })()}
         confirmLabel="Desvincular"
         variant="destructive"

@@ -1,7 +1,9 @@
 import React from 'react';
 import { useState } from 'react';
-import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send } from 'lucide-react';
+import { DollarSign, Download, Calculator, CheckCircle, Building2, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wallet, Receipt, Send, Pencil } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { toast } from 'sonner';
 import { hrService } from '../../services/hr.service';
 import { Combobox } from '../ui/Combobox';
@@ -85,6 +87,51 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [editingPayroll, setEditingPayroll] = useState<any | null>(null);
+  const [payrollForm, setPayrollForm] = useState({ periodStart: '', periodEnd: '', notes: '' });
+  const [payrollSaveLoading, setPayrollSaveLoading] = useState(false);
+
+  const toDateInputValue = (value: unknown) => {
+    if (!value) return '';
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+  };
+
+  const handleOpenEditPayroll = (payroll: any) => {
+    setEditingPayroll(payroll);
+    setPayrollForm({
+      periodStart: toDateInputValue(payroll.periodStart),
+      periodEnd: toDateInputValue(payroll.periodEnd),
+      notes: payroll.notes || '',
+    });
+  };
+
+  const handleSavePayroll = async () => {
+    if (!editingPayroll || !payrollForm.periodStart || !payrollForm.periodEnd) {
+      toast.error('Completa las fechas del período');
+      return;
+    }
+    if (payrollForm.periodEnd < payrollForm.periodStart) {
+      toast.error('La fecha final debe ser posterior o igual a la inicial');
+      return;
+    }
+    try {
+      setPayrollSaveLoading(true);
+      await hrService.updatePayroll(editingPayroll.id, {
+        periodStart: new Date(`${payrollForm.periodStart}T00:00:00`).toISOString(),
+        periodEnd: new Date(`${payrollForm.periodEnd}T23:59:59.999`).toISOString(),
+        notes: payrollForm.notes || null,
+      });
+      toast.success('Nómina actualizada');
+      setEditingPayroll(null);
+      onRefresh();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || error?.message || 'Error al actualizar la nómina';
+      toast.error(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setPayrollSaveLoading(false);
+    }
+  };
 
   const handleProcessPayroll = async () => {
     try {
@@ -377,6 +424,18 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                             )}
                             {String(payroll.paymentStatus || 'PENDING') === 'REQUESTED' && <span className="px-2 text-[10px] font-black uppercase text-amber-600">Solicitud enviada</span>}
                             {String(payroll.paymentStatus || 'PENDING') === 'APPROVED' && <span className="px-2 text-[10px] font-black uppercase text-sky-600">Aprobada en Contabilidad</span>}
+                            {canPerform('HR_PAYROLL', 'edit') && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => { e.stopPropagation(); handleOpenEditPayroll(payroll); }}
+                                className="h-7 px-3 text-xs text-primary hover:text-primary hover:bg-primary/10 font-semibold"
+                                title="Editar nómina"
+                              >
+                                <Pencil className="size-3.5 mr-1" />
+                                Editar
+                              </Button>
+                            )}
                             {canPerform('HR_PAYROLL', 'delete') && (
                               <Button
                                 size="sm"
@@ -501,6 +560,11 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
                         </Button>
                       )}
                       {String(payroll.paymentStatus || 'PENDING') !== 'PENDING' && <span className="flex flex-1 items-center justify-center text-[10px] font-black uppercase text-amber-600">Solicitud {String(payroll.paymentStatus).toLowerCase()}</span>}
+                      {canPerform('HR_PAYROLL', 'edit') && (
+                        <Button size="sm" variant="outline" onClick={() => handleOpenEditPayroll(payroll)} className="px-3 text-primary border-primary/30 hover:bg-primary/10 rounded-xl h-8" title="Editar nómina">
+                          <Pencil className="size-3.5" />
+                        </Button>
+                      )}
                       {canPerform('HR_PAYROLL', 'delete') && (
                         <Button size="sm" variant="outline" onClick={() => setPendingDeleteId(payroll.id)} className="px-3 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 rounded-xl h-8">
                           <Trash2 className="size-3.5" />
@@ -581,6 +645,35 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         </div>
       )}
 
+      <Dialog open={editingPayroll !== null} onOpenChange={(open) => { if (!open && !payrollSaveLoading) setEditingPayroll(null); }}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Editar nómina</DialogTitle>
+            <DialogDescription>
+              Actualiza el período y las notas de una nómina pendiente. Los montos calculados se conservan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="payroll-period-start" className="text-sm font-medium">Inicio del período</label>
+              <Input id="payroll-period-start" type="date" value={payrollForm.periodStart} onChange={(e) => setPayrollForm((current) => ({ ...current, periodStart: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="payroll-period-end" className="text-sm font-medium">Fin del período</label>
+              <Input id="payroll-period-end" type="date" value={payrollForm.periodEnd} onChange={(e) => setPayrollForm((current) => ({ ...current, periodEnd: e.target.value }))} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label htmlFor="payroll-notes" className="text-sm font-medium">Notas</label>
+              <Input id="payroll-notes" value={payrollForm.notes} onChange={(e) => setPayrollForm((current) => ({ ...current, notes: e.target.value }))} placeholder="Observaciones opcionales" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPayroll(null)} disabled={payrollSaveLoading}>Cancelar</Button>
+            <Button onClick={handleSavePayroll} disabled={payrollSaveLoading}>{payrollSaveLoading ? 'Guardando…' : 'Guardar cambios'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog 
         open={pendingDeleteId !== null} 
         onOpenChange={open => { if (!open) setPendingDeleteId(null); }} 
@@ -594,4 +687,3 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     </div>
   );
 }
-

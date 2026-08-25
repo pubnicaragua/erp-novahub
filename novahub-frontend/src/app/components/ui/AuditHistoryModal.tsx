@@ -24,6 +24,7 @@ const actionColors: Record<string, string> = {
   DELETE: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
   STATUS_CHANGE: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
   PAYMENT: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
+  INVENTORY_AUDIT: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
   DUPLICATE_OVERRIDE: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
 };
 
@@ -33,6 +34,7 @@ const actionLabels: Record<string, string> = {
   DELETE: 'Eliminación',
   STATUS_CHANGE: 'Cambio de Estado',
   PAYMENT: 'Pago',
+  INVENTORY_AUDIT: 'Auditoría de inventario',
   DUPLICATE_OVERRIDE: 'Continuación tras advertencia de duplicado',
 };
 
@@ -110,6 +112,17 @@ const detailKeyLabels: Record<string, string> = {
   amount: 'Monto',
   name: 'Nombre',
   fields_updated: 'Campos actualizados',
+  warehouses: 'Bodegas',
+  warehouseCount: 'Cantidad de bodegas',
+  initialStock: 'Stock inicial',
+  copiedFrom: 'Producto original',
+  sourceCode: 'Código original',
+  auditId: 'Auditoría',
+  auditNumber: 'Número de acta',
+  auditDate: 'Fecha de auditoría',
+  systemStock: 'Stock del sistema',
+  countedStock: 'Stock contado',
+  difference: 'Diferencia',
   confirmedCandidateIds: 'Ventas similares confirmadas',
   similarSales: 'Ventas similares detectadas',
   matchedCriteria: 'Criterios coincidentes',

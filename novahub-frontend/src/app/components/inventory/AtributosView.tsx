@@ -195,14 +195,14 @@ function AtributosTab() {
         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
           Los atributos se vinculan al crear un producto variable
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar atributo..."
-            className="h-10 w-full rounded-xl text-xs sm:w-56"
+            className="h-9 w-full rounded-xl sm:w-44"
           />
-          <Button onClick={openCreate} size="sm" className="h-10 rounded-xl px-3 text-xs font-bold">
+          <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo
           </Button>
         </div>
@@ -463,14 +463,14 @@ function CategoriasTab() {
         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
           Organiza tus productos por categoría
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar categoría..."
-            className="h-10 w-full rounded-xl text-xs sm:w-56"
+            className="h-9 w-full rounded-xl sm:w-44"
           />
-          <Button onClick={openCreate} size="sm" className="h-10 rounded-xl px-3 text-xs font-bold">
+          <Button onClick={openCreate} size="sm" className="h-10 w-full rounded-xl px-3 text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Plus className="mr-1 size-3.5" /> Nuevo
           </Button>
         </div>

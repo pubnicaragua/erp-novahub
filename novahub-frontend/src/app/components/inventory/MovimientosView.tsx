@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package } from 'lucide-react';
+import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -61,9 +61,88 @@ export function formatMovementReference(reference: string | null | undefined): {
 const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="movements-title"]', title: 'Movimientos de inventario', description: 'Consulta las entradas, salidas, transferencias y ajustes que modifican las existencias.', placement: 'bottom' },
   { target: '[data-tour="movements-filters"]', title: 'Buscar y filtrar', description: 'Busca por producto o referencia y combina el tipo de movimiento con el almacén. Al cambiar un criterio se reinicia la página.', placement: 'bottom' },
-  { target: '[data-tour="movements-table"]', title: 'Detalle del movimiento', description: 'Cada registro muestra fecha, tipo, producto, almacén, cantidad y referencia de origen.', placement: 'top' },
+  { target: '[data-tour="movements-table"]', title: 'Detalle del movimiento', description: 'Haz clic en una fila para abrir el detalle del movimiento y consultar su origen y destino cuando corresponda.', placement: 'top' },
   { target: '[data-tour="movements-pagination"]', title: 'Paginación', description: 'Selecciona la cantidad de registros por página y utiliza los controles para revisar todo el historial.', placement: 'top' },
 ];
+
+function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: () => void }) {
+  const transferDetails = movement.transferDetails;
+  const quantity = Number(movement.quantity || 0);
+  const unitCost = Number(movement.baseCost ?? movement.unitCost ?? 0);
+  const currency = String(movement.currency || 'NIO').toUpperCase();
+  const formatMoney = (value: number) => {
+    try {
+      return new Intl.NumberFormat('es-NI', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
+    } catch {
+      return `${currency} ${value.toLocaleString('es-NI', { maximumFractionDigits: 2 })}`;
+    }
+  };
+  const typeLabel = TYPE_OPTIONS.find((option) => option.value === movement.type)?.label || movement.type || 'Movimiento';
+  const isEntry = movement.type === 'IN';
+
+  return (
+    <Card className="h-fit min-w-0 overflow-hidden rounded-2xl border-border/60 bg-background/90 shadow-sm lg:sticky lg:top-4">
+      <div className="flex items-start justify-between gap-3 border-b border-border/50 px-4 py-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
+          <h3 className="mt-1 truncate text-base font-black uppercase italic tracking-tight">Detalle del movimiento</h3>
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            {isEntry ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
+            <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+          </div>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg" onClick={onClose} aria-label="Cerrar detalle del movimiento">
+          <X className="size-4" />
+        </Button>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+          <p className="truncate text-sm font-black" title={movement.product?.name || undefined}>{movement.product?.name || 'Producto sin nombre'}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Código: <span className="font-semibold text-foreground">{movement.product?.code || '—'}</span></p>
+          {movement.variant && <p className="mt-1 truncate text-xs text-muted-foreground" title={movement.variant.name || movement.variant.sku || undefined}>Variante: <span className="font-semibold text-foreground">{movement.variant.name || movement.variant.sku || '—'}</span></p>}
+        </div>
+
+        <div className="grid min-w-0 grid-cols-2 gap-3 text-xs">
+          <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><CalendarDays className="size-3" /> Fecha</p><p className="mt-1 font-semibold">{formatDateEs(movement.date, true)}</p></div>
+          <div className="min-w-0"><p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Warehouse className="size-3" /> Bodega afectada</p><p className="mt-1 truncate font-semibold" title={movement.warehouse?.name || undefined}>{movement.warehouse?.name || '—'}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Cantidad</p><p className={`mt-1 font-mono font-bold ${isEntry ? 'text-emerald-600' : movement.type === 'OUT' ? 'text-rose-500' : 'text-primary'}`}>{movement.type === 'OUT' ? '-' : '+'}{quantity}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock</p><p className="mt-1 font-mono font-semibold">{movement.previousQty != null ? Number(movement.previousQty) : '—'} → {movement.resultingQty != null ? Number(movement.resultingQty) : '—'}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo unitario</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? formatMoney(unitCost) : '—'}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo total</p><p className="mt-1 font-mono font-semibold">{unitCost > 0 ? formatMoney(unitCost * quantity) : '—'}</p></div>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-border/50 px-3 py-3 text-xs">
+          <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><UserRound className="size-3" /> Usuario</p>
+          <p className="font-semibold">{movement.user?.name || movement.userName || 'Movimiento automático'}</p>
+          <p className="break-words text-muted-foreground">Referencia: <span className="font-semibold text-foreground">{movement.reference || '—'}</span></p>
+        </div>
+
+        {transferDetails && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-primary">
+              <ArrowRightLeft className="size-3.5" />
+              Origen y destino de la transferencia
+            </div>
+            <div className="mt-3 space-y-3 text-xs">
+              <div className="rounded-lg border border-border/50 bg-background/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Origen</p>
+                <p className="mt-1 font-bold">{transferDetails.origin.warehouseName}</p>
+                <p className="mt-1 text-muted-foreground">Sucursal: <span className="font-semibold text-foreground">{transferDetails.origin.branchName || 'Almacén corporativo'}</span></p>
+              </div>
+              <div className="flex justify-center text-primary"><ArrowRightLeft className="size-4" /></div>
+              <div className="rounded-lg border border-border/50 bg-background/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Destino</p>
+                <p className="mt-1 font-bold">{transferDetails.destination.warehouseName}</p>
+                <p className="mt-1 text-muted-foreground">Sucursal: <span className="font-semibold text-foreground">{transferDetails.destination.branchName || 'Almacén corporativo'}</span></p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
   const [showTutorial, setShowTutorial] = useState(false);
@@ -72,6 +151,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   const [warehouseFilter, setWarehouseFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selectedMovement, setSelectedMovement] = useState<any | null>(null);
 
   const filteredMovements = movements.filter(m => {
     const matchesSearch = !searchTerm || 
@@ -210,9 +290,11 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         <div className="erp-toolbar-primary-group flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" size="sm" data-toolbar-role="help" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={() => setShowTutorial(true)}><CircleHelp className="size-4" /> Cómo consultar movimientos</Button><Button variant="outline" size="sm" data-toolbar-role="print" className="flex-1 gap-2 rounded-xl font-bold sm:flex-none" onClick={handleExport}><Download className="size-4" /> Exportar</Button></div>
       </div>
 
+      <div className={`grid min-w-0 gap-4 ${selectedMovement ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : 'grid-cols-1'}`}>
+        <div className="min-w-0">
       <div className="space-y-3 lg:hidden" data-tour="movements-table">
         {filteredData.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredData.map((move: any) => (
-          <Card key={move.id} className="min-w-0 rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm">
+          <Card key={move.id} role="button" tabIndex={0} onClick={() => setSelectedMovement(move)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedMovement(move); } }} className={`min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedMovement?.id === move.id ? 'border-primary/50 bg-primary/5' : ''}`}>
             <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
             <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock Ant. → Res.</p><p className="tabular-nums text-muted-foreground">{move.previousQty != null ? Number(move.previousQty) : '—'} → <span className="font-medium text-foreground">{move.resultingQty != null ? Number(move.resultingQty) : '—'}</span></p></div></div>
           </Card>
@@ -243,14 +325,14 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
           <TableBody>
             {filteredData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   <History className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">No hay movimientos</p>
                 </TableCell>
               </TableRow>
             ) : (
               filteredData.map((move: any) => (
-                <TableRow key={move.id} className="hover:bg-muted/30">
+                <TableRow key={move.id} className={`cursor-pointer hover:bg-muted/30 ${selectedMovement?.id === move.id ? 'bg-primary/5' : ''}`} onClick={() => setSelectedMovement(move)}>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDateEs(move.date, true)}
                   </TableCell>
@@ -294,6 +376,9 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
           <span>Pág. {pagination.page}/{pagination.totalPages}</span>
           <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => pagination.onPageChange(Math.min(pagination.totalPages, pagination.page + 1))} disabled={pagination.page >= pagination.totalPages}>›</button>
         </span>}
+      </div>
+        </div>
+        {selectedMovement && <MovementDetailsPanel movement={selectedMovement} onClose={() => setSelectedMovement(null)} />}
       </div>
       {showTutorial && <GuidedTour steps={MOVEMENTS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Movimientos de inventario" allowTargetInteraction />}
     </Card>

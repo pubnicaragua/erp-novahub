@@ -36,6 +36,11 @@ export const notificationsService = {
   },
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),
   markAllAsRead: () => api.patch('/notifications/inbox/read-all', {}),
+  getManagerInbox: async (groupId: string, signal?: AbortSignal) => {
+    const data = await api.get<InboxNotificationDto[]>(`/notifications/manager-inbox/${groupId}`, { signal });
+    return data.map(mapInboxNotification);
+  },
+  markManagerAsRead: (groupId: string, id: string) => api.patch<{ success: boolean }>(`/notifications/manager-inbox/${groupId}/${id}/read`, {}),
   delete: (id: string) => api.delete(`/notifications/inbox/${id}`),
   getViewAlertReadIds: async (namespace: string, signal?: AbortSignal) => {
     const data = await api.get<{ itemIds?: string[] }>('/notifications/view-alerts/read', {

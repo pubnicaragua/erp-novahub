@@ -5,6 +5,7 @@ import {
   ChevronRight, ChevronDown, FolderTree,
   RefreshCw, X, Loader2, FileSpreadsheet, ChevronsDownUp, ChevronsUpDown,
   Info, Activity, ArrowDownLeft, ArrowUpRight,
+  ArrowRightLeft,
   ChevronsLeft, ChevronsRight, Settings2, Check, Ban, CircleCheck, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -63,6 +64,12 @@ interface AccountTransaction {
   debit: number | string;
   credit: number | string;
   createdAt?: string;
+  transferDetails?: {
+    id: string;
+    number: string;
+    origin: { branchName?: string | null; warehouseName: string };
+    destination: { branchName?: string | null; warehouseName: string };
+  };
 }
 
 const ACCOUNT_COLUMN_DEFS = [
@@ -1088,6 +1095,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             const debit = Number(selectedTransaction.debit ?? 0);
             const credit = Number(selectedTransaction.credit ?? 0);
             const movement = debit - credit;
+            const transferDetails = selectedTransaction.transferDetails;
 
             return (
               <div className="space-y-4">
@@ -1107,6 +1115,27 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                     <p className="mt-1 break-words text-sm font-semibold">{selectedTransaction.reference || 'Sin referencia'}</p>
                   </div>
                 </div>
+
+                {transferDetails && (
+                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-primary">
+                      <ArrowRightLeft className="size-3.5" />
+                      Procedencia de la transferencia
+                    </div>
+                    <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+                      <div className="min-w-0 rounded-lg border border-border/50 bg-background/70 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Origen</p>
+                        <p className="mt-1 truncate text-sm font-bold" title={transferDetails.origin.warehouseName}>{transferDetails.origin.warehouseName}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground" title={transferDetails.origin.branchName || undefined}>Sucursal: {transferDetails.origin.branchName || 'Almacén corporativo'}</p>
+                      </div>
+                      <div className="min-w-0 rounded-lg border border-border/50 bg-background/70 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Destino</p>
+                        <p className="mt-1 truncate text-sm font-bold" title={transferDetails.destination.warehouseName}>{transferDetails.destination.warehouseName}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground" title={transferDetails.destination.branchName || undefined}>Sucursal: {transferDetails.destination.branchName || 'Almacén corporativo'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">

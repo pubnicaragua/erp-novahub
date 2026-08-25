@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { CalendarDays, ClipboardCheck, Clock3, Download, Eye, FileDown, Package, Search, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Download, Eye, FileDown, Loader2, Package, Search, Scale, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { enterpriseGroupsService, type ManagerInventoryAdjustmentsResponse } from '../../services/enterprise-groups.service';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import type { ManagerInventoryView } from './manager-inventory.types';
@@ -76,6 +78,8 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedAdjustment, setSelectedAdjustment] = useState<ManagerInventoryAdjustmentsResponse['data'][number] | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<ManagerInventoryAdjustmentsResponse['data'][number] | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -124,7 +128,26 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
     }
   };
 
-  const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['tenant-module'] }); };
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['manager-inventory-adjustments'] }); };
+
+  const approveAuditAdjustment = async () => {
+    if (!pendingApproval) return;
+    const target = pendingApproval;
+    setApprovingId(target.id);
+    try {
+      await enterpriseGroupsService.approveInventoryAdjustment(groupId, target.id);
+      toast.success(`Ajuste ${target.number} aprobado y aplicado al stock`);
+      setPendingApproval(null);
+      setSelectedAdjustment(null);
+      refresh();
+      await query.refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo aprobar el ajuste');
+      throw error;
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   return (
     <div className="min-w-0 space-y-5">
@@ -168,7 +191,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           {query.isLoading && <div className="p-10 text-center text-sm text-muted-foreground">Cargando ajustes consolidados…</div>}
           {query.isError && <div className="p-10 text-center text-sm text-destructive">No se pudieron cargar los ajustes. {query.error.message}</div>}
           {!query.isLoading && !query.isError && !rows.length && <div className="p-10 text-center text-sm text-muted-foreground">No hay ajustes para los filtros seleccionados.</div>}
-          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table overflow-x-auto"><Table className="min-w-[980px]"><TableHeader><TableRow><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro / sucursal</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell className="font-bold">{row.number}</TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell><div className="min-w-0"><p className="font-semibold">{row.branchName || '—'}</p><p className="text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-rose-600' : row.differenceUnits > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell className="text-right"><Button type="button" variant="ghost" size="sm" className="rounded-lg" onClick={() => setSelectedAdjustment(row)}><Eye className="mr-1.5 size-4" />Ver detalle</Button></TableCell></TableRow>)}</TableBody></Table></div>}
+          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table overflow-x-auto"><Table className="!min-w-[1200px]"><TableHeader><TableRow><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro / sucursal</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead className="!min-w-[7rem] !whitespace-nowrap">Estado</TableHead><TableHead data-actions-column="true" className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell className="font-bold"><div className="flex flex-col items-start gap-1"><span>{row.number}</span>{row.auditGenerated && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {row.auditNumber || 'vinculada'}</Badge>}</div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell><div className="min-w-0"><p className="font-semibold">{row.branchName || '—'}</p><p className="text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-rose-600' : row.differenceUnits > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell className="!min-w-[7rem] !whitespace-nowrap"><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell data-actions-column="true" className="text-right"><div className="flex justify-end gap-2">{row.auditGenerated && String(row.status).toUpperCase() === 'DRAFT' && <Button type="button" size="sm" className="shrink-0 gap-1.5 rounded-lg whitespace-nowrap" onClick={() => setPendingApproval(row)} disabled={Boolean(approvingId)}><CheckCircle2 className="size-4" />Aprobar</Button>}<Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-lg whitespace-nowrap" onClick={() => setSelectedAdjustment(row)}><Eye className="mr-1.5 size-4" />Ver detalle</Button></div></TableCell></TableRow>)}</TableBody></Table></div>}
           {meta && meta.totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-4 text-sm"><span className="text-muted-foreground">Página {meta.page} de {meta.totalPages}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Anterior</Button><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page >= meta.totalPages} onClick={() => setPage((current) => Math.min(meta.totalPages, current + 1))}>Siguiente</Button></div></div>}
         </CardContent>
       </Card>
@@ -178,6 +201,32 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           {selectedAdjustment && <><DialogHeader><DialogTitle className="text-xl font-black uppercase italic tracking-tight">Detalle del ajuste {selectedAdjustment.number}</DialogTitle><DialogDescription>Consulta de solo lectura. La operación pertenece a {selectedAdjustment.branchName || 'la sucursal seleccionada'}.</DialogDescription></DialogHeader><div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-4"><InfoItem label="Fecha" value={formatDate(selectedAdjustment.date)} /><InfoItem label="Rubro" value={selectedAdjustment.businessUnitName || '—'} /><InfoItem label="Sucursal" value={selectedAdjustment.branchName || '—'} /><InfoItem label="Almacén / bodega" value={selectedAdjustment.warehouseName || '—'} /><InfoItem label="Motivo" value={reasonLabel(selectedAdjustment.reason)} /><InfoItem label="Estado" value={statusLabel(selectedAdjustment.status)} /><InfoItem label="Variación" value={formatNumber(selectedAdjustment.differenceUnits)} />{canViewInventoryCost && <InfoItem label="Impacto" value={formatCurrency(selectedAdjustment.impactAmount, selectedAdjustment.currency || 'NIO')} />}</div>{selectedAdjustment.notes && <div className="rounded-2xl border border-border/60 p-4 text-sm"><p className="mb-1 text-xs font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="whitespace-pre-wrap">{selectedAdjustment.notes}</p></div>}<div className="min-w-0 overflow-x-auto rounded-2xl border border-border/60"><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Existencia actual</TableHead><TableHead>Existencia real</TableHead><TableHead>Diferencia</TableHead>{canViewInventoryCost && <><TableHead>Costo unitario</TableHead><TableHead>Impacto</TableHead></>}</TableRow></TableHeader><TableBody>{selectedAdjustment.items.map((item) => <TableRow key={item.id}><TableCell><p className="font-semibold">{item.productName || 'Producto'}</p><p className="text-xs text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell><TableCell>{formatNumber(item.currentStock)}</TableCell><TableCell>{formatNumber(item.actualStock)}</TableCell><TableCell className={item.difference < 0 ? 'font-bold text-rose-600' : item.difference > 0 ? 'font-bold text-emerald-600' : ''}>{item.difference > 0 ? '+' : ''}{formatNumber(item.difference)}</TableCell>{canViewInventoryCost && <><TableCell>{formatCurrency(item.unitCost ?? item.baseCost, item.currency || 'NIO')}</TableCell><TableCell>{formatCurrency(item.impactAmount, item.currency || 'NIO')}</TableCell></>}</TableRow>)}</TableBody></Table></div></>}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingApproval)}
+        onOpenChange={(open) => { if (!open && !approvingId) setPendingApproval(null); }}
+        title="¿Aprobar ajuste de auditoría?"
+        description={pendingApproval ? `Se aplicará el ajuste ${pendingApproval.number} y se actualizará la auditoría ${pendingApproval.auditNumber || 'vinculada'}.` : ''}
+        confirmLabel="Aprobar y aplicar"
+        cancelLabel="Cancelar"
+        variant="default"
+        contentClassName="!max-w-[520px]"
+        loading={Boolean(approvingId)}
+        onConfirm={approveAuditAdjustment}
+      >
+        {pendingApproval && <div className="mt-4 space-y-3 text-left">
+          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+            <p className="text-xs leading-relaxed text-muted-foreground">Esta acción se ejecuta desde el Manager global. Registrará los movimientos de inventario y conservará la evidencia original de la auditoría.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-border/50 bg-muted/20 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Productos</p><p className="mt-1 text-lg font-black tabular-nums">{pendingApproval.itemCount}</p></div>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-red-700">Faltantes</p><p className="mt-1 text-lg font-black tabular-nums text-red-700">{formatNumber(pendingApproval.decreasedUnits)}</p></div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 text-center"><p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Sobrantes</p><p className="mt-1 text-lg font-black tabular-nums text-emerald-700">{formatNumber(pendingApproval.increasedUnits)}</p></div>
+          </div>
+          {approvingId && <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Aplicando movimientos…</div>}
+        </div>}
+      </ConfirmDialog>
     </div>
   );
 }

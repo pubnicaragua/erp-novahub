@@ -34,6 +34,13 @@ function StatCard({ label, value, className, valueClassName }: { label: string; 
 function TransferDetail({ data }: { data: any }) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const totalUnits = items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+  const status = String(data?.status || 'PENDING').toUpperCase();
+  const statusLabel = status === 'COMPLETED' ? 'Completada' : status === 'PENDING' ? 'Pendiente' : status === 'IN_TRANSIT' ? 'En tránsito' : status === 'CANCELLED' ? 'Cancelada' : status;
+  const statusClass = status === 'COMPLETED'
+    ? 'bg-emerald-500/10 text-emerald-600'
+    : status === 'CANCELLED'
+      ? 'bg-red-500/10 text-red-600'
+      : 'bg-amber-500/10 text-amber-600';
 
   return (
     <div className="space-y-5">
@@ -45,8 +52,8 @@ function TransferDetail({ data }: { data: any }) {
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Unidades</p>
             <p className="mt-1 text-2xl font-black tabular-nums tracking-tight">{totalUnits}</p>
           </div>
-          <Badge variant="outline" className="shrink-0 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-600">
-            <Check className="mr-1 size-3" /> Completada
+          <Badge variant="outline" className={`shrink-0 ${statusClass} text-[9px] font-black uppercase tracking-widest`}>
+            {status === 'COMPLETED' && <Check className="mr-1 size-3" />} {statusLabel}
           </Badge>
         </div>
       </div>

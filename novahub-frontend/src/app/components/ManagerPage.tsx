@@ -263,7 +263,11 @@ export function ManagerPage() {
   );
   const approveTransferMutation = useMutation({
     mutationFn: (transferId: string) => enterpriseGroupsService.updateTransferStatus(groupId, transferId, 'COMPLETED'),
-    onSuccess: () => { toast.success('Transferencia aprobada y ejecutada'); void transfersQuery.refetch(); },
+    onSuccess: () => {
+      const isRepair = String(transferToApprove?.status || '').toUpperCase() === 'COMPLETED';
+      toast.success(isRepair ? 'Contabilidad de la transferencia sincronizada' : 'Transferencia aprobada y ejecutada');
+      void transfersQuery.refetch();
+    },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -338,9 +342,13 @@ export function ManagerPage() {
       <ConfirmDialog
         open={Boolean(transferToApprove)}
         onOpenChange={(open) => { if (!open) setTransferToApprove(null); }}
-        title="¿Deseas aprobar esta transferencia?"
-        description={transferToApprove ? `Se aprobará la transferencia ${transferToApprove.number || ''} y se ejecutará el movimiento de inventario de ${transferToApprove.from?.name || 'el origen'} hacia ${transferToApprove.to?.name || 'el destino'}.` : ''}
-        confirmLabel="Sí, aprobar transferencia"
+        title={String(transferToApprove?.status || '').toUpperCase() === 'COMPLETED' ? '¿Deseas sincronizar la contabilidad?' : '¿Deseas aprobar esta transferencia?'}
+        description={transferToApprove
+          ? String(transferToApprove.status || '').toUpperCase() === 'COMPLETED'
+            ? `Se revisará el asiento de la transferencia ${transferToApprove.number || ''} y se hará visible el movimiento en las cuentas de origen y destino. El inventario no se moverá otra vez.`
+            : `Se aprobará la transferencia ${transferToApprove.number || ''} y se ejecutará el movimiento de inventario de ${transferToApprove.from?.name || 'el origen'} hacia ${transferToApprove.to?.name || 'el destino'}.`
+          : ''}
+        confirmLabel={String(transferToApprove?.status || '').toUpperCase() === 'COMPLETED' ? 'Sí, sincronizar' : 'Sí, aprobar transferencia'}
         cancelLabel="Cancelar"
         variant="warning"
         loading={approveTransferMutation.isPending}
@@ -577,7 +585,12 @@ function TransfersContent({ data, loading, canApprove, approvingId, onApprove }:
     <Card className="min-w-0 rounded-3xl border-border/60"><CardHeader><CardTitle className="flex items-center gap-2 text-lg font-black uppercase italic tracking-tight"><ArrowRightLeft className="size-5 text-primary" /> Transferencias entre sucursales del grupo</CardTitle></CardHeader><CardContent>
       {loading ? <div className="p-8 text-center text-muted-foreground">Cargando transferencias...</div> : <>
         {!data.length && <p className="py-6 text-center text-sm text-muted-foreground">No hay transferencias registradas en el grupo.</p>}
-        <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Número</TableHead><TableHead>Fecha</TableHead><TableHead>Origen</TableHead><TableHead>Destino</TableHead><TableHead>Estado</TableHead><TableHead>Items</TableHead><TableHead>Acción</TableHead></TableRow></TableHeader><TableBody>{data.map((t) => <TableRow key={t.id} className={`cursor-pointer ${selectedTransfer?.id === t.id ? 'bg-primary/5' : ''}`} onClick={() => setSelectedTransfer(t)}><TableCell className="font-mono font-bold">{t.number}</TableCell><TableCell>{new Date(t.date).toLocaleDateString('es-NI')}</TableCell><TableCell>{t.from?.name || '-'}</TableCell><TableCell>{t.to?.name || '-'}</TableCell><TableCell>{statusBadge(t.status)}</TableCell><TableCell>{(t.items || []).length} producto(s)</TableCell><TableCell className="text-right">{canApprove && String(t.status).toUpperCase() === 'PENDING' && <Button type="button" size="sm" className="rounded-xl" disabled={Boolean(approvingId)} onClick={(event) => { event.stopPropagation(); onApprove(t); }}>{approvingId === t.id ? 'Aprobando…' : 'Aprobar'}</Button>}</TableCell></TableRow>)}</TableBody></Table>
+        <Table containerClassName="overflow-x-auto"><TableHeader><TableRow><TableHead>Número</TableHead><TableHead>Fecha</TableHead><TableHead>Origen</TableHead><TableHead>Destino</TableHead><TableHead>Estado</TableHead><TableHead>Items</TableHead><TableHead>Acción</TableHead></TableRow></TableHeader><TableBody>{data.map((t) => {
+          const transferStatus = String(t.status || '').toUpperCase();
+          const isPending = transferStatus === 'PENDING';
+          const isCompleted = transferStatus === 'COMPLETED';
+          return <TableRow key={t.id} className={`cursor-pointer ${selectedTransfer?.id === t.id ? 'bg-primary/5' : ''}`} onClick={() => setSelectedTransfer(t)}><TableCell className="font-mono font-bold">{t.number}</TableCell><TableCell>{new Date(t.date).toLocaleDateString('es-NI')}</TableCell><TableCell>{t.from?.name || '-'}</TableCell><TableCell>{t.to?.name || '-'}</TableCell><TableCell>{statusBadge(t.status)}</TableCell><TableCell>{(t.items || []).length} producto(s)</TableCell><TableCell className="text-right">{canApprove && (isPending || isCompleted) && <Button type="button" size="sm" variant={isCompleted ? 'outline' : 'default'} className="rounded-xl" disabled={Boolean(approvingId)} onClick={(event) => { event.stopPropagation(); onApprove(t); }}>{approvingId === t.id ? (isCompleted ? 'Sincronizando…' : 'Aprobando…') : (isCompleted ? 'Sincronizar' : 'Aprobar')}</Button>}</TableCell></TableRow>;
+        })}</TableBody></Table>
       </>}
     </CardContent></Card>
     {selectedTransfer && <InventoryDetailPanel kind="transfer" data={selectedTransfer} onClose={() => setSelectedTransfer(null)} />}
