@@ -339,7 +339,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const { formatConvertedAmount: formatCurrency, displayCurrency, baseCurrency, exchangeRate: globalRate, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canPayPos = canPerform('RETAIL_POS', 'pay');
-  const canPrintPos = canPerform('RETAIL_POS', 'print');
+  // El comprobante se genera localmente después de un cobro POS exitoso.
+  // Todo usuario que puede cobrar debe poder imprimir su voucher/ticket,
+  // aunque su rol granular no tenga el flag histórico `print`.
+  const canPrintPos = canPayPos || canPerform('RETAIL_POS', 'print');
   const canCreateCustomer = canPerform('SALES_CLIENTS', 'create');
   const queryClient = useQueryClient();
   const [registers, setRegisters] = useState<CashRegister[]>([]);
@@ -379,6 +382,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [createdTicketCart, setCreatedTicketCart] = useState<CartItem[]>([]);
   const [createdPaymentLines, setCreatedPaymentLines] = useState<PosPaymentLine[]>([]);
   const [createdExchangeRate, setCreatedExchangeRate] = useState(1);
+  const [createdPaymentCurrency, setCreatedPaymentCurrency] = useState<PaymentCurrency>(displayCurrency);
+  const [createdOperationLabel, setCreatedOperationLabel] = useState('Factura emitida correctamente');
   const [companyName, setCompanyName] = useState('Empresa');
   const [duplicateMatches, setDuplicateMatches] = useState<PotentialDuplicateSale[]>([]);
   const [cashQueue, setCashQueue] = useState<InvoiceCashQueue[]>([]);
@@ -590,6 +595,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const submitCashQueuePayment = async () => {
     if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmitting) return;
+    const queueReceipt = queueInvoice;
     const { totalBase, paidBase } = getQueuePaymentSummary();
     if (paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
     if (queuePayments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) { toast.error('La referencia es obligatoria para transferencia, tarjeta y cheque.'); return; }
@@ -600,6 +606,31 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setQueueSubmitting(true);
     try {
       await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments }, createIdempotencyKey('invoice-cash-queue'));
+      const paidInvoice: PosInvoice = {
+        ...queueReceipt.invoice,
+        date: queueReceipt.invoice.date || new Date().toISOString(),
+        subtotal: Number(queueReceipt.invoice.subtotal ?? queueReceipt.invoice.total ?? 0),
+        taxAmount: Number(queueReceipt.invoice.taxAmount || 0),
+        discountAmount: Number(queueReceipt.invoice.discountAmount || 0),
+        total: Number(queueReceipt.invoice.total || 0),
+        status: 'PAID',
+        register: queueReceipt.register ? { ...queueReceipt.register } as CashRegister : undefined,
+      };
+      const receiptCart: CartItem[] = (queueReceipt.invoice.items || []).map((item) => ({
+        productId: item.id,
+        description: item.description,
+        quantity: Number(item.quantity || 0),
+        unitPrice: Number(item.unitPrice || 0),
+        lineTotal: Number(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)),
+        taxRate: 0,
+        discount: 0,
+      }));
+      setCreatedInvoice(paidInvoice);
+      setCreatedTicketCart(receiptCart);
+      setCreatedPaymentLines([...appliedPayments]);
+      setCreatedExchangeRate(Number((queueReceipt.invoice as any).exchangeRate || activeSession.exchangeRateUSD || 1));
+      setCreatedPaymentCurrency(queueReceipt.invoice.currency);
+      setCreatedOperationLabel('Cobro realizado correctamente');
       toast.success(`Factura ${queueInvoice.invoice.number} cobrada en caja.${changeBase > 0.005 ? ` Cambio: ${baseCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(changeBase)}` : ''}`);
       setQueueInvoice(null);
       setQueuePayments([]);
@@ -1304,6 +1335,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setCreatedInvoice(created);
       setCreatedPaymentLines([...payments]);
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
+      setCreatedPaymentCurrency(paymentCurrency);
+      setCreatedOperationLabel('Factura emitida correctamente');
       setShowPayment(false);
       setDuplicateMatches([]);
       checkoutIdempotencyKey.current = null;
@@ -2034,7 +2067,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-border/50 pb-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Factura emitida correctamente</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">{createdOperationLabel}</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
                 <p className="mt-1 text-xs font-bold text-primary">Caja: {createdInvoice.register?.code || 'N/D'}</p>
@@ -2072,8 +2105,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <p className="mt-2 text-2xl font-black text-primary">{formatCurrency(Number(createdInvoice.total))}</p>
                 {Number(createdInvoice.discountAmount) > 0 && <p className="mt-1 text-[11px] text-rose-600">Descuento: - {formatCurrency(Number(createdInvoice.discountAmount))}</p>}
                 <p className="mt-1 text-[11px] text-muted-foreground">IVA: {formatCurrency(Number(createdInvoice.taxAmount))}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Recibido (base): C$ {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || paymentCurrency) === 'USD' ? createdExchangeRate : 1), 0))}</p>
-                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || paymentCurrency) === 'USD' ? createdExchangeRate : 1), 0) - Number(createdInvoice.total) * (paymentCurrency === 'USD' ? createdExchangeRate : 1)))}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Recibido (base): C$ {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || createdPaymentCurrency) === 'USD' ? createdExchangeRate : 1), 0))}</p>
+                <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || createdPaymentCurrency) === 'USD' ? createdExchangeRate : 1), 0) - Number(createdInvoice.total) * (createdPaymentCurrency === 'USD' ? createdExchangeRate : 1)))}</p>
               </div>
             </div>
 
@@ -2081,10 +2114,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               <Button variant="outline" onClick={() => setCreatedInvoice(null)} className="rounded-xl font-black">Cerrar</Button>
               {canPrintPos && (
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, paymentCurrency, createdExchangeRate, companyName, 'ticket')} className="gap-2 rounded-xl font-black">
-                    <Receipt className="size-4" /> Ticket
+                  <Button variant="outline" onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, 'ticket')} className="gap-2 rounded-xl font-black">
+                    <Receipt className="size-4" /> Imprimir voucher
                   </Button>
-                  <Button onClick={() => printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, paymentCurrency, createdExchangeRate, companyName, 'letter')} className="gap-2 rounded-xl font-black">
+                  <Button onClick={() => void printPosTicket(createdInvoice, createdTicketCart, createdPaymentLines, createdPaymentCurrency, createdExchangeRate, companyName, 'letter')} className="gap-2 rounded-xl font-black">
                     <Receipt className="size-4" /> Imprimir
                   </Button>
                 </div>

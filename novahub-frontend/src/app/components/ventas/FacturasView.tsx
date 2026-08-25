@@ -36,7 +36,6 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
-import { InvoiceCashQueueBell } from './caja/InvoiceCashQueueBell';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -1677,7 +1676,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
               />
             </div>
-            {canPerform('RETAIL_POS', 'read') && <InvoiceCashQueueBell onItemSelect={() => window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'ventas', subModule: 'facturacion-caja' } }))} />}
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_INVOICES', 'create') && (
               <Button onClick={startNewInvoice} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">

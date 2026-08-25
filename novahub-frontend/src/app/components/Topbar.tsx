@@ -32,6 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 
 import { useAuth, type Module } from '../contexts/AuthContext';
@@ -81,6 +82,17 @@ function getAvatarInitials(name?: string) {
   return initials.map((part) => part[0]).join('').toUpperCase();
 }
 
+function getNotificationDetail(notification: { title?: string | null; message?: string | null }) {
+  const message = String(notification.message || '').trim();
+  if (message) return message;
+
+  const title = String(notification.title || '').trim();
+  if (/factura/i.test(title)) return 'Revisa el cliente, vencimiento y saldo pendiente de las facturas relacionadas.';
+  if (/crédito|credito|nota de crédito|nota de credito/i.test(title)) return 'Revisa el vencimiento, saldo y aplicación del crédito relacionado.';
+  if (/suspendida por mora|suspensi[oó]n/i.test(title)) return 'La cuenta requiere atención. Revisa la suscripción y la causa de la suspensión.';
+  return 'Abre esta notificación para consultar el detalle.';
+}
+
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
   const { user, logout } = useAuth();
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
@@ -105,6 +117,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
   const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
   const notificationIdsRef = useRef<Set<string> | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -550,14 +563,16 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu
+        <Popover
+          open={notificationsOpen}
           onOpenChange={(open) => {
+            setNotificationsOpen(open);
             if (open && unreadCount > 0) {
               void markAllAsRead();
             }
           }}
         >
-          <DropdownMenuTrigger asChild>
+          <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
@@ -571,48 +586,82 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 </Badge>
               )}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel className="flex justify-between items-center">
-              <span>Notificaciones</span>
-              <span className="text-xs text-muted-foreground font-normal cursor-pointer hover:underline" onClick={() => onNavigate('notificaciones')}>Ver todas</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="flex flex-col gap-1 p-2 max-h-[300px] overflow-y-auto">
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl"
+            style={{ maxHeight: 'var(--radix-popover-content-available-height)' }}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-foreground">Notificaciones</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Alertas y novedades de tu empresa</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                onClick={() => {
+                  setNotificationsOpen(false);
+                  onNavigate('notificaciones');
+                }}
+              >
+                Ver todas
+              </button>
+            </div>
+            <div
+              className="topbar-notifications-scroll flex flex-col gap-1.5 overflow-y-auto overscroll-contain p-2.5"
+              style={{ maxHeight: 'min(360px, calc(var(--radix-popover-content-available-height) - 7rem))' }}
+            >
               {notifications.length > 0 ? (
-                notifications.slice(0, 5).map((n) => (
-                  <DropdownMenuItem 
-                    key={n.id} 
-                    className="group flex cursor-pointer flex-col items-start gap-1 border-b border-border/50 p-3 text-foreground last:border-0 hover:bg-accent hover:text-accent-foreground focus:bg-primary focus:text-primary-foreground data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground"
-                    onClick={() => {
-                      void markAsRead(n.id);
-                      navigateToNotification(n);
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                       <span className={`h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-muted-foreground/60 group-data-[highlighted]:bg-primary-foreground/70' : 'bg-primary group-data-[highlighted]:bg-primary-foreground'}`} />
-                       <span className="line-clamp-1 text-sm font-medium text-foreground group-data-[highlighted]:text-primary-foreground">{n.title}</span>
-                    </div>
-                    <span className="ml-4 line-clamp-2 text-xs text-foreground/70 group-data-[highlighted]:text-primary-foreground/90">
-                      {n.message?.startsWith('TAREA:') ? n.message.split(':').slice(2).join(':') : 
-                       n.message?.startsWith('RECORDATORIO:') ? n.message.split(':').slice(2).join(':') : 
-                       n.message}
-                    </span>
-                  </DropdownMenuItem>
-                ))
+                notifications.slice(0, 5).map((n) => {
+                  const detail = getNotificationDetail(n);
+                  const readableDetail = detail.startsWith('TAREA:')
+                    ? detail.split(':').slice(2).join(':')
+                    : detail.startsWith('RECORDATORIO:')
+                      ? detail.split(':').slice(2).join(':')
+                      : detail;
+                  return (
+                    <button
+                      type="button"
+                      key={n.id}
+                      className="group flex w-full items-start gap-3 rounded-xl border border-border/50 bg-background/50 p-3 text-left transition-colors hover:border-primary/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        void markAsRead(n.id);
+                        navigateToNotification(n);
+                      }}
+                    >
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-muted-foreground/60' : 'bg-primary'}`} />
+                      <div className="min-w-0 flex-1">
+                        <span className="block break-words text-sm font-semibold leading-5 text-foreground">{n.title}</span>
+                        <span className="mt-1 block break-words text-xs leading-4 text-muted-foreground">{readableDetail}</span>
+                      </div>
+                    </button>
+                  );
+                })
               ) : (
-                <DropdownMenuItem className="py-2 justify-center text-sm text-muted-foreground" onClick={() => onNavigate('notificaciones')}>
-                  Sin notificaciones nuevas.
-                </DropdownMenuItem>
-              )}
-              {notifications.length > 5 && (
-                 <DropdownMenuItem className="py-2 justify-center text-xs text-primary font-medium" onClick={() => onNavigate('notificaciones')}>
-                    Ver {notifications.length - 5} más
-                 </DropdownMenuItem>
+                <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                  No hay notificaciones nuevas.
+                </div>
               )}
             </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            {notifications.length > 5 && (
+              <div className="border-t border-border/60 bg-muted/10 p-2">
+                <button
+                  type="button"
+                  className="w-full rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    onNavigate('notificaciones');
+                  }}
+                >
+                  Ver {notifications.length - 5} más
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
 
         {/* User Menu */}
         <DropdownMenu>

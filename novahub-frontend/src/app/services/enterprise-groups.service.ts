@@ -575,6 +575,7 @@ export const enterpriseGroupsService = {
       businessUnitId?: string;
       branchId?: string;
       warehouseId?: string;
+      warehouseType?: 'BODEGA' | 'ALMACEN';
       status?: string;
       search?: string;
       type?: string;

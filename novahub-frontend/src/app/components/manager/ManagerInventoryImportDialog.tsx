@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import type { Worksheet } from 'exceljs';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   enterpriseGroupsService,
@@ -273,7 +273,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       onBack();
       onImported();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(`Importación detenida; no se aplicaron cambios. ${error.message}`),
   });
 
   const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -478,13 +478,16 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     }
   };
 
-  const validForImport = Boolean(preview && !previewDirty && preview.summary.errorRows === 0 && preview.summary.validRows === preview.summary.totalRows && preview.summary.validRows > 0);
+  const hasLinkableImage = !imageArchiveEntries.size || rows.some((row) => imageArchiveEntries.has(productImageKey(rowCode(row))));
+  const validForImport = Boolean(preview && !previewDirty && preview.summary.errorRows === 0 && preview.summary.validRows === preview.summary.totalRows && preview.summary.validRows > 0 && hasLinkableImage);
   const importBlockReason = previewDirty
     ? 'Valida nuevamente los cambios de la previsualización antes de confirmar.'
     : preview && preview.summary.errorRows > 0
       ? `Corrige las ${preview.summary.errorRows} fila(s) con error antes de confirmar.`
       : preview && preview.summary.validRows === 0
         ? 'No hay filas válidas para importar.'
+        : imageArchiveEntries.size > 0 && !hasLinkableImage
+          ? 'El ZIP/RAR no contiene ninguna imagen cuyo nombre coincida con un SKU de la importación.'
         : !preview
           ? 'Previsualiza el archivo para habilitar la confirmación.'
           : '';
@@ -504,7 +507,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
     </div>
 
     <div className="overflow-hidden rounded-[24px] border border-border/60 bg-card shadow-sm">
-      <div className="min-h-0 overflow-y-auto p-4 sm:p-5 md:p-6">
+      <div className="p-4 sm:p-5 md:p-6">
       <div className="mb-5 flex min-w-0 items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Configuración</p><p className="mt-1 text-xs text-muted-foreground">Moneda, stock y archivos de la importación.</p></div>
         <Popover>
@@ -571,6 +574,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
 function PreviewPanel({
   preview,
   draftRows,
+  imageArchiveEntries,
   categories,
   preparedCategoryNames,
   onRowUpdate,
@@ -590,6 +594,8 @@ function PreviewPanel({
   isDirty: boolean;
   isRevalidating: boolean;
 }) {
+  const tableScrollerRef = useRef<HTMLDivElement>(null);
+  const [tableScroll, setTableScroll] = useState({ canScrollLeft: false, canScrollRight: false });
   const hasErrors = preview.errors.length > 0;
   const locationOptions = Array.from(new Map(preview.locations.map((location) => {
     const label = displayLocationLabel(location);
@@ -610,17 +616,51 @@ function PreviewPanel({
     [...imageArchiveEntries.keys()].filter((code) => imageCodesInPreview.has(code)),
   );
   const unmatchedImageCount = [...imageArchiveEntries.keys()].filter((code) => !imageCodesInPreview.has(code)).length;
+  const imageLinkSummary = !imageArchiveEntries.size
+    ? { label: 'Sin archivo de imágenes', detail: 'La importación no tiene imágenes para vincular.', className: 'text-muted-foreground' }
+    : matchedImageCodes.size === imageArchiveEntries.size
+      ? { label: 'Listas para vincular', detail: `${matchedImageCodes.size} imagen(es) coinciden con un SKU de la importación y se vincularán al confirmar.`, className: 'text-emerald-700 dark:text-emerald-300' }
+      : matchedImageCodes.size > 0
+        ? { label: 'Vinculación parcial', detail: `${matchedImageCodes.size} de ${imageArchiveEntries.size} imagen(es) coinciden con un SKU; ${unmatchedImageCount} se omitirá(n) por no tener coincidencia.`, className: 'text-amber-700 dark:text-amber-300' }
+        : { label: 'No se puede vincular', detail: 'Ninguna imagen coincide con los SKU de la importación. Corrige los nombres del ZIP/RAR antes de confirmar.', className: 'text-destructive' };
+
+  useEffect(() => {
+    const scroller = tableScrollerRef.current;
+    if (!scroller) return undefined;
+    const syncTableScroll = () => {
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      setTableScroll({
+        canScrollLeft: scroller.scrollLeft > 2,
+        canScrollRight: maxScrollLeft - scroller.scrollLeft > 2,
+      });
+    };
+    syncTableScroll();
+    scroller.addEventListener('scroll', syncTableScroll, { passive: true });
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncTableScroll) : null;
+    resizeObserver?.observe(scroller);
+    return () => {
+      scroller.removeEventListener('scroll', syncTableScroll);
+      resizeObserver?.disconnect();
+    };
+  }, [preview.rows.length, imageArchiveEntries.size]);
+
+  const scrollPreviewTable = (direction: -1 | 1) => {
+    const scroller = tableScrollerRef.current;
+    if (!scroller) return;
+    const amount = Math.max(320, Math.round(scroller.clientWidth * 0.72));
+    scroller.scrollBy({ left: direction * amount, behavior: 'smooth' });
+  };
   const imageStatusFor = (row: ManagerInventoryImportPreview['rows'][number]) => {
     if (!imageArchiveEntries.size) return { label: 'Sin ZIP/RAR', detail: 'No se cargó un archivo de imágenes', variant: 'outline' as const };
     const code = productImageKey(String(valueFor(row, 'code', row.code) || ''));
     const file = imageArchiveEntries.get(code);
     return file
-      ? { label: 'SKU vinculado', detail: `${file.name} · se cargará al confirmar`, variant: 'default' as const }
+      ? { label: 'Imagen vinculada', detail: `${file.name} · se puede vincular al confirmar`, variant: 'default' as const }
       : { label: 'Sin coincidencia', detail: 'No hay imagen con este SKU', variant: 'destructive' as const };
   };
   const renderImageStatus = (row: ManagerInventoryImportPreview['rows'][number]) => {
     const status = imageStatusFor(row);
-    return <div className="min-w-44 space-y-1"><Badge variant={status.variant} className="whitespace-nowrap">{status.label}</Badge><p className={`max-w-52 break-words text-[10px] leading-4 ${status.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>{status.detail}</p></div>;
+    return <div className="w-full min-w-0 space-y-1"><Badge variant={status.variant} className="whitespace-nowrap">{status.label}</Badge><p className={`break-words whitespace-normal text-[10px] leading-4 ${status.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>{status.detail}</p></div>;
   };
   const inputClass = 'h-9 w-full min-w-0 rounded-lg border-border/70 bg-background/70 text-xs';
   const currentLocationOptions = (row: ManagerInventoryImportPreview['rows'][number]) => {
@@ -676,21 +716,37 @@ function PreviewPanel({
     <div className="flex min-w-0 items-start gap-3 rounded-xl border border-primary/20 bg-primary/[0.05] p-3 text-xs">
       <ImageIcon className="mt-0.5 size-4 shrink-0 text-primary" />
       <div className="min-w-0">
-        <p className="font-black text-foreground">Vínculo de imágenes por SKU</p>
-        {!imageArchiveEntries.size
-          ? <p className="mt-1 text-muted-foreground">No se cargó ZIP/RAR. Si agregas uno, el nombre de cada imagen debe coincidir con el SKU de Productos. La carga real ocurre al confirmar.</p>
-          : <p className="mt-1 text-muted-foreground">{matchedImageCodes.size} de {imageArchiveEntries.size} SKU(s) del archivo coinciden con la hoja Productos y quedarán vinculados al confirmar.{unmatchedImageCount ? ` ${unmatchedImageCount} archivo(s) no coinciden y no se importarán.` : ''}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-black text-foreground">Vínculo de imágenes por SKU</p>
+          <Badge variant={matchedImageCodes.size > 0 ? 'default' : imageArchiveEntries.size ? 'destructive' : 'outline'} className="rounded-full">{imageLinkSummary.label}</Badge>
+        </div>
+        <p className={`mt-1 ${imageLinkSummary.className}`}>{imageLinkSummary.detail}</p>
       </div>
     </div>
 
     {isDirty && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] p-3 text-xs text-amber-800 dark:text-amber-200"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><p>Edita directamente los campos de la tabla. Para una categoría nueva, escríbela y pulsa su botón <span className="font-bold">+</span>; quedará preparada y se creará al confirmar. Luego pulsa <span className="font-bold">Validar cambios</span>. Las bodegas y almacenes no se crean desde esta importación: si falta una ubicación, créala o actívala desde su módulo y vuelve a descargar la plantilla.</p></div>}
 
-    {hasErrors && <div className="max-h-32 overflow-y-auto rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">{preview.errors.slice(0, 50).map((error, index) => <p key={`${error}-${index}`} className="flex gap-2 py-0.5"><AlertTriangle className="mt-0.5 size-3 shrink-0" />{error}</p>)}{preview.errors.length > 50 && <p className="pt-1 font-bold">Se muestran los primeros 50 errores.</p>}</div>}
+    {hasErrors && <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">{preview.errors.slice(0, 50).map((error, index) => <p key={`${error}-${index}`} className="flex gap-2 py-0.5"><AlertTriangle className="mt-0.5 size-3 shrink-0" />{error}</p>)}{preview.errors.length > 50 && <p className="pt-1 font-bold">Se muestran los primeros 50 errores.</p>}</div>}
 
-    <div className="hidden overflow-x-auto rounded-xl border border-border/60 lg:block">
-      <table className="min-w-[1640px] w-full text-left text-xs">
+    <div className="hidden items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 lg:flex">
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Desplazamiento de la previsualización</p>
+        <p className="mt-1 text-xs text-muted-foreground">Usa las flechas para recorrer las columnas sin bajar hasta la tabla.</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => scrollPreviewTable(-1)} disabled={!tableScroll.canScrollLeft} aria-controls="manager-inventory-import-preview-table" aria-label="Desplazar la previsualización hacia la izquierda" title="Desplazar hacia la izquierda">
+          <ArrowLeft className="size-4" /><span className="sr-only">Anterior</span>
+        </Button>
+        <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => scrollPreviewTable(1)} disabled={!tableScroll.canScrollRight} aria-controls="manager-inventory-import-preview-table" aria-label="Desplazar la previsualización hacia la derecha" title="Desplazar hacia la derecha">
+          <ArrowRight className="size-4" /><span className="sr-only">Siguiente</span>
+        </Button>
+      </div>
+    </div>
+
+    <div ref={tableScrollerRef} id="manager-inventory-import-preview-table" className="hidden max-w-full overflow-x-auto rounded-xl border border-border/60 lg:block">
+      <table className="w-full min-w-[2240px] table-fixed text-left text-xs">
         <thead className="bg-muted/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-          <tr><th className="px-2 py-2">Fila</th><th className="min-w-32 px-2 py-2">SKU</th><th className="min-w-56 px-2 py-2">Nombre</th><th className="min-w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="min-w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="min-w-48 px-2 py-2">Imagen por SKU</th><th className="min-w-64 px-2 py-2">Estado / observación</th></tr>
+          <tr><th className="w-14 px-2 py-2">Fila</th><th className="w-32 px-2 py-2">SKU</th><th className="w-56 px-2 py-2">Nombre</th><th className="w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="w-60 px-2 py-2">Imagen por SKU</th><th className="w-80 px-2 py-2">Estado / observación</th></tr>
         </thead>
         <tbody>
           {preview.rows.slice(0, 100).map((row) => {
@@ -709,7 +765,7 @@ function PreviewPanel({
               <td className="px-2 py-2 font-bold">{formatNumber(row.currentQty)}</td>
               <td className="px-2 py-2 font-black text-primary">{formatNumber(row.resultingQty)}</td>
               <td className="px-2 py-2">{renderImageStatus(row)}</td>
-              <td className="px-2 py-2"><div>{renderStatus(row)}</div><p className={`mt-1 max-w-64 break-words ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p></td>
+              <td className="w-80 px-2 py-2"><div className="min-w-0">{renderStatus(row)}</div><p className={`mt-1 break-words whitespace-normal ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p></td>
             </tr>;
           })}
         </tbody>

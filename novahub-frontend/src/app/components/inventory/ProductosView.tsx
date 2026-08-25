@@ -2392,59 +2392,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </Button>
           )}
         </div>
-=======
-          {/* Acciones — todo en la misma fila */}
-          <div className="erp-toolbar-actions">
-          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-1 size-3.5" /> Cómo
-          </Button>
-          {!isServiceView && canPerform('INVENTORY', 'edit') && !initialImportCompleted && products.length === 0 && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
-              <Upload className="mr-1 size-3.5" /> Importar productos
-            </Button>
-          )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'edit') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setBulkImageModalOpen(true)} title="Actualizar imágenes masivamente por SKU">
-              <ImageIcon className="mr-1 size-3.5" /> Imágenes
-            </Button>
-          )}
-          {!isServiceView && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
-              <PackageSearch className="size-3.5 mr-1" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
-            </Button>
-          )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setLabelModalOpen(true)} title="Imprimir etiquetas con código de barras">
-              <Barcode className="mr-1 size-3.5" /> Etiquetas
-            </Button>
-          )}
-          {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3.5 mr-1" /> Nuevo
-            </Button>
-          )}
-          {isServiceView && canPerform('INVENTORY_PRODUCTS', 'create') && (
-            <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="size-3.5 mr-1" /> Nuevo
-            </Button>
-          )}
-
-          {/* Checkbox + Limpiar */}
-          {!selectedBranchId && !isServiceView && (
-            <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-xl border border-input px-3" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
-              <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-3.5" />
-              <span className="text-sm font-normal text-muted-foreground whitespace-nowrap">Todos alm.</span>
-            </label>
-          )}
-          {(warehouseFilters.length > 0 || searchTerm || stockFilter !== 'all' || availabilityFilter !== 'all' || (!isServiceView && effectiveProductStatusFilter !== 'ALL') || effectiveUnitFilter || effectiveTaxRateFilter || effectiveStockStatusFilter || !showAllWarehouseProducts) && (
-            <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-xl border border-input px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground" onClick={() => {
-              setSearchTerm(''); setCategoryFilters([]); setWarehouseFilters([]); onCategoryChange?.([]); onWarehouseChange?.([]); setStockFilter('all'); setAvailabilityFilter('all'); setLocalProductStatusFilter('ALL'); onProductStatusFilterChange?.('ALL'); setLocalUnitFilter(''); onUnitChange?.(''); setLocalTaxRateFilter(''); onTaxRateChange?.(''); setLocalStockStatusFilter(''); onStockStatusChange?.(''); setShowAllWarehouseProducts(true);
-            }}>
-              <X className="size-3.5 mr-1" /> Limpiar
-            </Button>
-          )}
-          </div>
->>>>>>> 56f90025fd3ac71cf29c1a710fe237de54667ed5
       </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}

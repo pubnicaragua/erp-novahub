@@ -201,6 +201,28 @@ th .column-filter-menu .column-filter-icon,
   opacity: 1 !important;
 }
 
+/* The notification panel owns the only scrollable region in the topbar.
+   Keep the thumb subtle so it does not compete with the notification cards. */
+.topbar-notifications-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--primary) 55%, transparent) transparent;
+}
+
+.topbar-notifications-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.topbar-notifications-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.topbar-notifications-scroll::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 55%, transparent);
+  background-clip: padding-box;
+}
+
 /* Sales module responsive guardrails. Keep layouts within the viewport and
    let dense data wrap instead of creating a second horizontal scrollbar. */
 .sales-module,
