@@ -34,6 +34,7 @@ import { InventoryAuditsView } from './inventory/InventoryAuditsView';
 import { InventoryLossesView } from './inventory/InventoryLossesView';
 import { AtributosView } from './inventory/AtributosView';
 import { LinkedWarehouseProductsView } from './inventory/LinkedWarehouseProductsView';
+import { api } from '../services/api';
 import { inventoryService } from '../services/inventario.service';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
@@ -74,6 +75,61 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const tenantKey = user?.tenantId || 'anonymous';
   const branchScopeEnabled = Boolean(selectedBranchId);
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
+  const linkedWarehousesQuery = useQuery({
+    queryKey: ['inventory', 'linked-warehouses', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => api.get<{ sources?: any[] }>('/inventory/warehouse-supply-requests/options', {
+      params: selectedBranchId ? { branchId: selectedBranchId } : undefined,
+      signal,
+    }),
+    enabled: Boolean(user) && canReadInventory && ['productos', 'servicios'].includes(activeTab),
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const linkedWarehouseOptions = useMemo(() => {
+    const response: any = linkedWarehousesQuery.data;
+    const sources = response?.sources || response?.data?.sources || [];
+    return Array.isArray(sources) ? sources.filter((warehouse: any) => warehouse?.isActive !== false) : [];
+  }, [linkedWarehousesQuery.data]);
+  const allBranchWarehouseIds = useMemo(() => [...new Set(
+    (allBranches || []).flatMap((branch: any) => [
+      branch?.warehouseId,
+      ...((branch?.warehouses || []) as any[]).map((warehouse: any) => warehouse?.id),
+    ].filter(Boolean)),
+  )], [allBranches]);
+  const linkedInventoryQuery = useQuery({
+    queryKey: ['inventory', 'linked-inventory', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => api.get<{ levels?: any[] }>('/inventory/warehouse-supply-requests/inventory', {
+      params: selectedBranchId ? { branchId: selectedBranchId } : undefined,
+      signal,
+    }),
+    enabled: Boolean(user) && canReadInventory && ['productos', 'servicios'].includes(activeTab),
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const sharedInventoryLevelsByCode = useMemo(() => {
+    const response: any = linkedInventoryQuery.data;
+    const levels = response?.levels || response?.data?.levels || [];
+    const byCode = new Map<string, any[]>();
+    if (!Array.isArray(levels)) return byCode;
+    for (const level of levels) {
+      if (level?.warehouse?.scopeType !== 'BUSINESS_UNIT') continue;
+      const code = String(level?.product?.code || '').trim().toUpperCase();
+      if (!code) continue;
+      const current = byCode.get(code) || [];
+      current.push(level);
+      byCode.set(code, current);
+    }
+    return byCode;
+  }, [linkedInventoryQuery.data]);
+  const productScopeWarehouseIds = useMemo(() => [...new Set([
+    ...(branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds),
+    ...linkedWarehouseOptions.map((warehouse: any) => warehouse.id),
+  ].filter(Boolean))], [allBranchWarehouseIds, branchScopeEnabled, branchWarehouseIds, linkedWarehouseOptions]);
+  const productScopeWarehouseIdSet = useMemo(() => new Set(productScopeWarehouseIds), [productScopeWarehouseIds]);
+  const linkedWarehouseIdSet = useMemo(
+    () => new Set(linkedWarehouseOptions.map((warehouse: any) => warehouse.id).filter(Boolean)),
+    [linkedWarehouseOptions],
+  );
   const [searchState, setSearchState] = useState<Record<string, string>>({});
   const [debouncedSearchState, setDebouncedSearchState] = useState<Record<string, string>>({});
   const [statusState, setStatusState] = useState<Record<string, string>>({});
@@ -114,6 +170,9 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const scopeWarehouseParam = branchScopeEnabled && branchWarehouseIdSet.size > 0
     ? [...branchWarehouseIdSet].join(',')
     : undefined;
+  const productScopeWarehouseParam = branchScopeEnabled && productScopeWarehouseIdSet.size > 0
+    ? [...productScopeWarehouseIdSet].join(',')
+    : undefined;
   const scopeNoWarehouseParam = branchScopeEnabled ? '__none__' : undefined;
 
   const inScope = useCallback((warehouseId?: string | null) => {
@@ -129,8 +188,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   const isProductInScope = useCallback((product: any) => {
     if (!branchScopeEnabled) return true;
-    return productWarehouseIds(product).some((warehouseId) => branchWarehouseIdSet.has(warehouseId));
-  }, [branchScopeEnabled, branchWarehouseIdSet]);
+    return productWarehouseIds(product).some((warehouseId) => productScopeWarehouseIdSet.has(warehouseId));
+  }, [branchScopeEnabled, productScopeWarehouseIdSet]);
 
   // Al cambiar de sucursal se reinician las páginas y los filtros de almacén.
   const handleBranchChange = useCallback((branchId: string) => {
@@ -179,16 +238,46 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     retry: 1,
     placeholderData: keepPreviousData,
   } as const;
+  const withSharedWarehouseLevels = useCallback((product: any) => {
+    const code = String(product?.code || '').trim().toUpperCase();
+    const sharedLevels = sharedInventoryLevelsByCode.get(code) || [];
+    if (!sharedLevels.length) return product;
+    const currentLevels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+    const currentWarehouseIds = new Set(currentLevels.map((level: any) => String(level?.warehouseId || level?.warehouse?.id || '')));
+    const extraLevels = sharedLevels.filter((level: any) => {
+      const warehouseId = String(level?.warehouseId || level?.warehouse?.id || '');
+      return warehouseId && !currentWarehouseIds.has(warehouseId);
+    }).map((level: any) => ({
+      ...level,
+      __sharedWarehouseLevel: true,
+    }));
+    return extraLevels.length > 0
+      ? { ...product, __sharedWarehouseLevelsMerged: true, stockLevels: [...currentLevels, ...extraLevels] }
+      : product;
+  }, [sharedInventoryLevelsByCode]);
   const productsQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId],
+    queryKey: ['inventory', 'products', tenantKey, activeTab, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').page, pageFor(activeTab === 'servicios' ? 'servicios' : 'productos').pageSize, searchFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productStatusFor(activeTab === 'servicios' ? 'servicios' : 'productos'), productFilters[activeTab === 'servicios' ? 'servicios' : 'productos'], selectedBranchId, productScopeWarehouseIds.join(',')],
     queryFn: ({ signal }) => {
       const section = activeTab === 'servicios' ? 'servicios' : 'productos';
       const page = pageFor(section);
       const filters = productFilters[section] || { categoryIds: [], warehouseIds: [] };
+      const selectedWarehouseIds = filters.warehouseIds.filter((id) => productScopeWarehouseIdSet.has(id));
+      const selectedLinkedWarehouse = selectedWarehouseIds.some((id) => linkedWarehouseIdSet.has(id));
+      const localWarehouseFallbackIds = branchScopeEnabled ? branchWarehouseIds : allBranchWarehouseIds;
       const requestedWarehouseIds = branchScopeEnabled
-        ? (filters.warehouseIds.length > 0 ? filters.warehouseIds.filter((id) => branchWarehouseIdSet.has(id)) : [...branchWarehouseIdSet])
-        : filters.warehouseIds;
+        ? (selectedWarehouseIds.length > 0
+          ? [...new Set([
+            ...selectedWarehouseIds,
+            ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
+          ])]
+          : [...productScopeWarehouseIdSet])
+        : (selectedWarehouseIds.length > 0
+          ? [...new Set([
+            ...selectedWarehouseIds,
+            ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
+          ])]
+          : []);
       return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', page: page.page, pageSize: page.pageSize, search: searchFor(section), status: activeTab === 'servicios' ? undefined : productStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
     enabled: Boolean(user) && canReadInventory && ['productos', 'servicios'].includes(activeTab),
@@ -203,8 +292,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   // listado principal es paginado (50/página) y no debe limitar los totales.
   const productsSummaryQuery = useQuery({
     ...commonQueryOptions,
-    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId],
-    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: scopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
+    queryKey: ['inventory', 'products-summary', tenantKey, activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', selectedBranchId, productScopeWarehouseIds.join(',')],
+    queryFn: ({ signal }) => inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', report: true, page: 1, pageSize: 5000, warehouseId: productScopeWarehouseParam || scopeNoWarehouseParam, includeInactive: true }, signal),
     enabled: Boolean(user) && canReadInventory && ['productos', 'servicios'].includes(activeTab),
   });
   const warehousesQuery = useQuery({
@@ -274,7 +363,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
     products: toList(productsQuery.data || productCatalogQuery.data).map((product: any) => ({
       ...product,
       itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
-    })).filter((product: any) => isProductInScope(product)),
+    })).map(withSharedWarehouseLevels).filter((product: any) => isProductInScope(product)),
     warehouses: toList(warehousesQuery.data),
     categories: categories.filter((category: any) => category.type === 'PRODUCT'),
     serviceCategories: categories.filter((category: any) => category.type === 'SERVICE'),
@@ -289,8 +378,14 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   };
   const scopedWarehouses = data.warehouses.filter((warehouse: any) =>
     !branchScopeEnabled || branchWarehouseIdSet.has(warehouse.id));
+  const productWarehouseOptions = Array.from(new Map([
+    ...scopedWarehouses,
+    ...linkedWarehouseOptions,
+  ].map((warehouse: any) => [warehouse.id, warehouse])).values());
   const activeQueries = [
     ...(productsQuery.isEnabled ? [productsQuery] : []),
+    ...(linkedWarehousesQuery.isEnabled ? [linkedWarehousesQuery] : []),
+    ...(linkedInventoryQuery.isEnabled ? [linkedInventoryQuery] : []),
     ...(productCatalogQuery.isEnabled ? [productCatalogQuery] : []),
     ...(warehousesQuery.isEnabled ? [warehousesQuery] : []),
     ...(categoriesQuery.isEnabled ? [categoriesQuery] : []),
@@ -353,7 +448,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const summaryProducts = toList(productsSummaryQuery.data).map((product: any) => ({
     ...product,
     itemType: String(product.itemType || product.type || 'PRODUCT').toUpperCase(),
-  })).filter((product: any) => isProductInScope(product));
+  })).map(withSharedWarehouseLevels).filter((product: any) => isProductInScope(product));
 
   useEffect(() => {
     const nextTab = activeSubModule === 'dashboard' ? 'productos' : activeSubModule;
@@ -511,7 +606,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                   <div className="mb-5 w-full overflow-x-auto custom-scrollbar">
                     <TabsList className="flex h-auto w-max gap-1.5 rounded-2xl border border-border/40 bg-muted/20 p-1.5">
                       <TabsTrigger value="branch" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Package className="size-4" />Productos de la sucursal</TabsTrigger>
-                      <TabsTrigger value="linkedWarehouses" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Warehouse className="size-4" />Productos de las bodegas</TabsTrigger>
+                      <TabsTrigger value="linkedWarehouses" className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Warehouse className="size-4" />Productos de los Almacenes</TabsTrigger>
                     </TabsList>
                   </div>
                   <TabsContent value="branch" className="m-0">
@@ -526,6 +621,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         branches={allBranches}
                         categories={data.categories}
                         warehouses={scopedWarehouses}
+                        productWarehouseOptions={productWarehouseOptions}
                         series={data.series}
                         movements={data.movements}
                         onRefresh={() => fetchData('products')}
@@ -539,7 +635,8 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
                         initialStockFilter={productTarget?.stockFilter}
                         onClearTargetProduct={() => setProductTarget(null)}
                         selectedBranchId={selectedBranchId}
-                        branchWarehouseIds={branchWarehouseIds}
+                        branchWarehouseIds={productScopeWarehouseIds}
+                        stockWarehouseIds={branchWarehouseIds}
                         isSidebarCollapsed={isSidebarCollapsed}
                       />
                     </motion.div>

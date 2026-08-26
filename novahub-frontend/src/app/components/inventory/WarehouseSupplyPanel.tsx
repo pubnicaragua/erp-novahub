@@ -154,7 +154,7 @@ export function WarehouseSupplyPanel() {
         <Send className="mr-1 size-3.5" /> Solicitar abastecimiento
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[min(94vw,960px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto rounded-3xl p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black"><Warehouse className="size-5 text-primary" /> Abastecimiento por rubro</DialogTitle>
             <DialogDescription>

@@ -8,7 +8,6 @@ import { enterpriseGroupsService, type ManagerInventoryAdjustmentsResponse } fro
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -60,13 +59,14 @@ export function ManagerInventorySubnav({ value, onChange }: { value: ManagerInve
   );
 }
 
-export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, branches, warehouses, canViewInventoryCost, embedded = false, refreshKey = 0 }: {
+export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branchId, warehouses, canViewInventoryCost, onDetail, embedded = false, refreshKey = 0 }: {
   groupId: string;
   businessUnitId?: string;
   branchId?: string;
   branches: BranchOption[];
   warehouses: WarehouseOption[];
   canViewInventoryCost: boolean;
+  onDetail?: (row: ManagerInventoryAdjustmentsResponse['data'][number]) => void;
   embedded?: boolean;
   refreshKey?: number;
 }) {
@@ -77,7 +77,6 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedAdjustment, setSelectedAdjustment] = useState<ManagerInventoryAdjustmentsResponse['data'][number] | null>(null);
   const [pendingApproval, setPendingApproval] = useState<ManagerInventoryAdjustmentsResponse['data'][number] | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -138,7 +137,6 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
       await enterpriseGroupsService.approveInventoryAdjustment(groupId, target.id);
       toast.success(`Ajuste ${target.number} aprobado y aplicado al stock`);
       setPendingApproval(null);
-      setSelectedAdjustment(null);
       refresh();
       await query.refetch();
     } catch (error) {
@@ -191,16 +189,11 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
           {query.isLoading && <div className="p-10 text-center text-sm text-muted-foreground">Cargando ajustes consolidados…</div>}
           {query.isError && <div className="p-10 text-center text-sm text-destructive">No se pudieron cargar los ajustes. {query.error.message}</div>}
           {!query.isLoading && !query.isError && !rows.length && <div className="p-10 text-center text-sm text-muted-foreground">No hay ajustes para los filtros seleccionados.</div>}
-          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table overflow-x-auto"><Table className="!min-w-[1200px]"><TableHeader><TableRow><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro / sucursal</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead className="!min-w-[7rem] !whitespace-nowrap">Estado</TableHead><TableHead data-actions-column="true" className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell className="font-bold"><div className="flex flex-col items-start gap-1"><span>{row.number}</span>{row.auditGenerated && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {row.auditNumber || 'vinculada'}</Badge>}</div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell><div className="min-w-0"><p className="font-semibold">{row.branchName || '—'}</p><p className="text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-rose-600' : row.differenceUnits > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell className="!min-w-[7rem] !whitespace-nowrap"><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell data-actions-column="true" className="text-right"><div className="flex justify-end gap-2">{row.auditGenerated && String(row.status).toUpperCase() === 'DRAFT' && <Button type="button" size="sm" className="shrink-0 gap-1.5 rounded-lg whitespace-nowrap" onClick={() => setPendingApproval(row)} disabled={Boolean(approvingId)}><CheckCircle2 className="size-4" />Aprobar</Button>}<Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-lg whitespace-nowrap" onClick={() => setSelectedAdjustment(row)}><Eye className="mr-1.5 size-4" />Ver detalle</Button></div></TableCell></TableRow>)}</TableBody></Table></div>}
+          {!query.isLoading && !query.isError && rows.length > 0 && <div className="sales-responsive-table overflow-x-auto"><Table className="!min-w-[1200px]"><TableHeader><TableRow><TableHead>Ajuste</TableHead><TableHead>Fecha</TableHead><TableHead>Rubro / sucursal</TableHead><TableHead>Almacén / bodega</TableHead><TableHead>Motivo</TableHead><TableHead>Productos</TableHead><TableHead>Variación</TableHead>{canViewInventoryCost && <TableHead>Impacto</TableHead>}<TableHead className="!min-w-[7rem] !whitespace-nowrap">Estado</TableHead><TableHead data-actions-column="true" className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id}><TableCell className="font-bold"><div className="flex flex-col items-start gap-1"><span>{row.number}</span>{row.auditGenerated && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800">Auditoría {row.auditNumber || 'vinculada'}</Badge>}</div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(row.date)}</TableCell><TableCell><div className="min-w-0"><p className="font-semibold">{row.branchName || '—'}</p><p className="text-xs text-muted-foreground">{row.businessUnitName || 'Sin rubro'}</p></div></TableCell><TableCell>{row.warehouseName || '—'}</TableCell><TableCell>{reasonLabel(row.reason)}</TableCell><TableCell>{formatNumber(row.itemCount)}</TableCell><TableCell><span className={row.differenceUnits < 0 ? 'font-bold text-rose-600' : row.differenceUnits > 0 ? 'font-bold text-emerald-600' : 'text-muted-foreground'}>{row.differenceUnits > 0 ? '+' : ''}{formatNumber(row.differenceUnits)}</span></TableCell>{canViewInventoryCost && <TableCell className="whitespace-nowrap">{formatCurrency(row.impactAmount, row.currency || 'NIO')}</TableCell>}<TableCell className="!min-w-[7rem] !whitespace-nowrap"><Badge variant={statusVariant(String(row.status))}>{statusLabel(row.status)}</Badge></TableCell><TableCell data-actions-column="true" className="text-right"><div className="flex justify-end gap-2">{row.auditGenerated && String(row.status).toUpperCase() === 'DRAFT' && <Button type="button" size="sm" className="shrink-0 gap-1.5 rounded-lg whitespace-nowrap" onClick={() => setPendingApproval(row)} disabled={Boolean(approvingId)}><CheckCircle2 className="size-4" />Aprobar</Button>}<Button type="button" variant="ghost" size="sm" className="shrink-0 rounded-lg whitespace-nowrap" onClick={() => onDetail?.(row)}><Eye className="mr-1.5 size-4" />Ver detalle</Button></div></TableCell></TableRow>)}</TableBody></Table></div>}
           {meta && meta.totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-4 text-sm"><span className="text-muted-foreground">Página {meta.page} de {meta.totalPages}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Anterior</Button><Button type="button" variant="outline" size="sm" className="rounded-lg" disabled={meta.page >= meta.totalPages} onClick={() => setPage((current) => Math.min(meta.totalPages, current + 1))}>Siguiente</Button></div></div>}
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(selectedAdjustment)} onOpenChange={(open) => !open && setSelectedAdjustment(null)}>
-        <DialogContent className="!max-w-4xl rounded-3xl">
-          {selectedAdjustment && <><DialogHeader><DialogTitle className="text-xl font-black uppercase italic tracking-tight">Detalle del ajuste {selectedAdjustment.number}</DialogTitle><DialogDescription>Consulta de solo lectura. La operación pertenece a {selectedAdjustment.branchName || 'la sucursal seleccionada'}.</DialogDescription></DialogHeader><div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-4"><InfoItem label="Fecha" value={formatDate(selectedAdjustment.date)} /><InfoItem label="Rubro" value={selectedAdjustment.businessUnitName || '—'} /><InfoItem label="Sucursal" value={selectedAdjustment.branchName || '—'} /><InfoItem label="Almacén / bodega" value={selectedAdjustment.warehouseName || '—'} /><InfoItem label="Motivo" value={reasonLabel(selectedAdjustment.reason)} /><InfoItem label="Estado" value={statusLabel(selectedAdjustment.status)} /><InfoItem label="Variación" value={formatNumber(selectedAdjustment.differenceUnits)} />{canViewInventoryCost && <InfoItem label="Impacto" value={formatCurrency(selectedAdjustment.impactAmount, selectedAdjustment.currency || 'NIO')} />}</div>{selectedAdjustment.notes && <div className="rounded-2xl border border-border/60 p-4 text-sm"><p className="mb-1 text-xs font-black uppercase tracking-widest text-muted-foreground">Notas</p><p className="whitespace-pre-wrap">{selectedAdjustment.notes}</p></div>}<div className="min-w-0 overflow-x-auto rounded-2xl border border-border/60"><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead>Existencia actual</TableHead><TableHead>Existencia real</TableHead><TableHead>Diferencia</TableHead>{canViewInventoryCost && <><TableHead>Costo unitario</TableHead><TableHead>Impacto</TableHead></>}</TableRow></TableHeader><TableBody>{selectedAdjustment.items.map((item) => <TableRow key={item.id}><TableCell><p className="font-semibold">{item.productName || 'Producto'}</p><p className="text-xs text-muted-foreground">{item.productCode || '—'}{item.variantName ? ` · ${item.variantName}` : ''}</p></TableCell><TableCell>{formatNumber(item.currentStock)}</TableCell><TableCell>{formatNumber(item.actualStock)}</TableCell><TableCell className={item.difference < 0 ? 'font-bold text-rose-600' : item.difference > 0 ? 'font-bold text-emerald-600' : ''}>{item.difference > 0 ? '+' : ''}{formatNumber(item.difference)}</TableCell>{canViewInventoryCost && <><TableCell>{formatCurrency(item.unitCost ?? item.baseCost, item.currency || 'NIO')}</TableCell><TableCell>{formatCurrency(item.impactAmount, item.currency || 'NIO')}</TableCell></>}</TableRow>)}</TableBody></Table></div></>}
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={Boolean(pendingApproval)}
@@ -237,8 +230,4 @@ function MetricCard({ label, value, icon: Icon, tone = 'text-primary bg-primary/
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
   return <label className="min-w-0 space-y-1.5 text-xs font-bold text-muted-foreground"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full min-w-0 rounded-md border border-border bg-background px-3 text-sm font-normal text-foreground outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"><option value="">Todos</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 truncate text-sm font-semibold">{value}</p></div>;
 }

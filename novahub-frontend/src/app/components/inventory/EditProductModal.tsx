@@ -329,7 +329,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
 
   return (
     <Dialog open={!!product} onOpenChange={(v) => { if (!isSaving && !v) onClose(); }}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,780px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden">
         <DialogHeader data-tour="inventory-product-edit-title">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Package className="size-5 text-primary" /> Editar {isService ? 'Servicio' : 'Producto'}

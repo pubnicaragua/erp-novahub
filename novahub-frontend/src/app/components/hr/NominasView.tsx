@@ -149,11 +149,24 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       }
 
       const result: any = await hrService.bulkProcessPayroll(payload);
-      toast.success(`Nómina procesada: ${result.count} registros creados`);
+      const alreadyProcessed = Number(result?.alreadyProcessed || 0);
+      const createdCount = Number(result?.count || 0);
+      if (createdCount === 0 && alreadyProcessed > 0) {
+        toast.info('La nómina ya fue procesada para el período seleccionado.');
+      } else if (alreadyProcessed > 0) {
+        toast.success(`Nómina procesada: ${createdCount} registros creados. ${alreadyProcessed} ya habían sido procesados.`);
+      } else {
+        toast.success(`Nómina procesada: ${createdCount} registros creados`);
+      }
       onRefresh();
     } catch (error: any) {
-      const msg = error?.response?.data?.message || 'Error al procesar nómina';
-      toast.error(typeof msg === 'string' ? msg : msg[0] || 'Error al procesar nómina');
+      const msg = error?.response?.data?.message || error?.message || 'Error al procesar nómina';
+      const message = Array.isArray(msg) ? msg[0] || 'Error al procesar nómina' : msg;
+      if (/ya (fue procesada|existe una nómina)/i.test(message)) {
+        toast.info('La nómina ya fue procesada para el período seleccionado.');
+      } else {
+        toast.error(message);
+      }
     }
   };
 

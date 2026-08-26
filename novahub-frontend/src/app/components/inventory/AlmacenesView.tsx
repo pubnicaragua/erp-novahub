@@ -649,7 +649,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
     </Card>
     {/* Modal de Gestión de Cajas */}
     <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
-      <DialogContent className="sm:max-w-5xl max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-5xl max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col">
         <DialogHeader className="flex flex-row items-center justify-between" data-tour="inventory-pos-manager-title">
           <div>
             <DialogTitle className="flex items-center gap-2 text-lg font-black"><Banknote className="size-5 text-primary" /> Puntos de Venta (Cajas)</DialogTitle>

@@ -713,7 +713,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
       {/* Create/Edit dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,760px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto">
           <DialogHeader data-tour="mobiliario-form-title">
             <DialogTitle>{editing ? `Editar activo: ${editing.code}` : 'Registrar activo (Mobiliario y Equipos)'}</DialogTitle>
             <DialogDescription>Control operativo del bien. La contabilización (costo, depreciación) se hace desde Contabilidad → Activos Fijos.</DialogDescription>
@@ -854,7 +854,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
       {/* Import dialog */}
       <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportOpen(false); setImportResult(null); } }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,760px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto">
           <DialogHeader data-tour="mobiliario-import-title">
             <DialogTitle>Importar Mobiliario y Equipos</DialogTitle>
             <DialogDescription>

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck, Plus, Trash2, Eye, Paperclip, Upload, UserCheck, Warehouse as WarehouseIcon, X, ChevronLeft,
-  PauseCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, Layers3, AlertTriangle, Loader2,
+  PauseCircle, CheckCircle2, RotateCcw, XCircle, ListPlus, AlertTriangle, Loader2, Search, SlidersHorizontal,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import type { SalesPaginationControls } from '../../types';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { MultiSelectFilter } from './MultiSelectFilter';
 
 interface InventoryAuditsViewProps {
   audits: any[];
@@ -35,6 +36,8 @@ interface AuditItemDraft {
   productId: string;
   code: string;
   name: string;
+  categoryId?: string;
+  categoryName?: string;
   systemStock: number;
   countedStock: number;
   difference: number;
@@ -171,7 +174,6 @@ function toLocalDateTime(value: Date): string {
 }
 
 const ACCEPTED_ACTA = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp';
-const BULK_ALL_CATEGORIES = '__all_categories__';
 const BULK_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUDIT_ITEMS = 500;
 
@@ -243,7 +245,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   });
   const [actaFile, setActaFile] = useState<File | null>(null);
   const [items, setItems] = useState<AuditItemDraft[]>([]);
-  const [bulkCategoryId, setBulkCategoryId] = useState(BULK_ALL_CATEGORIES);
+  const [bulkCategoryIds, setBulkCategoryIds] = useState<string[]>([]);
+  const [inventoryProductSearch, setInventoryProductSearch] = useState('');
+  const [inventoryStockFilter, setInventoryStockFilter] = useState<'all' | 'available' | 'out'>('all');
 
   const warehouseById = useMemo(() => new Map(warehouses.map((warehouse: any) => [String(warehouse.id), warehouse])), [warehouses]);
   const selectedWarehouseFamilyIds = useMemo(
@@ -308,9 +312,35 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }, [productOptions]);
 
+  const filteredProductOptions = useMemo(() => {
+    const search = inventoryProductSearch.trim().toLocaleLowerCase();
+    return productOptions.filter((product) => {
+      const matchesSearch = !search
+        || String(product.code || '').toLocaleLowerCase().includes(search)
+        || String(product.name || '').toLocaleLowerCase().includes(search);
+      const matchesCategory = bulkCategoryIds.length === 0 || bulkCategoryIds.includes(product.categoryId);
+      const matchesStock = inventoryStockFilter === 'all'
+        || (inventoryStockFilter === 'available' && Number(product.stock || 0) > 0)
+        || (inventoryStockFilter === 'out' && Number(product.stock || 0) <= 0);
+      return matchesSearch && matchesCategory && matchesStock;
+    });
+  }, [bulkCategoryIds, inventoryProductSearch, inventoryStockFilter, productOptions]);
+
   const totalContado = items.reduce((acc, item) => acc + (Number.isFinite(item.countedStock) ? item.countedStock : 0), 0);
   const totalDiferencia = items.reduce((acc, item) => acc + (Number.isFinite(item.difference) ? item.difference : 0), 0);
   const itemsWithProduct = items.filter((item) => item.productId);
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; items: AuditItemDraft[] }>();
+    items.forEach((item) => {
+      const product = products.find((candidate: any) => candidate.id === item.productId);
+      const categoryId = String(item.categoryId || product?.categoryId || product?.category?.id || BULK_UNCATEGORIZED);
+      const categoryName = item.categoryName || product?.category?.name || 'Sin categoría';
+      const group = groups.get(categoryId) || { id: categoryId, name: categoryName, items: [] };
+      group.items.push(item);
+      groups.set(categoryId, group);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [items, products]);
   const canSave = Boolean(form.auditDate && form.warehouseId) && form.supervisors.length > 0 && itemsWithProduct.length > 0;
 
   const updateForm = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
@@ -323,16 +353,25 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     }).length;
 
     updateForm({ warehouseId });
-    setBulkCategoryId(BULK_ALL_CATEGORIES);
+    setBulkCategoryIds([]);
+    setInventoryProductSearch('');
+    setInventoryStockFilter('all');
     setItems((current) => current.map((item) => {
       if (!item.productId) return item;
       const product = products.find((candidate: any) => candidate.id === item.productId);
       if (!product || !productWarehouseIds(product).some((id) => nextFamilyIds.has(id))) {
-        return { ...item, productId: '', code: '', name: '', systemStock: 0, countedStock: 0, difference: 0 };
+        return { ...item, productId: '', code: '', name: '', categoryId: undefined, categoryName: undefined, systemStock: 0, countedStock: 0, difference: 0 };
       }
       const nextSystemStock = productStockForWarehouses(product, nextFamilyIds);
       const nextCountedStock = item.countedStock === item.systemStock ? nextSystemStock : item.countedStock;
-      return { ...item, systemStock: nextSystemStock, countedStock: nextCountedStock, difference: nextCountedStock - nextSystemStock };
+      return {
+        ...item,
+        categoryId: product.categoryId || product.category?.id || BULK_UNCATEGORIZED,
+        categoryName: product.category?.name || 'Sin categoría',
+        systemStock: nextSystemStock,
+        countedStock: nextCountedStock,
+        difference: nextCountedStock - nextSystemStock,
+      };
     }));
     if (invalidItems > 0) {
       toast.info('Se limpiaron los productos que no pertenecen al nuevo alcance de la bodega.');
@@ -414,11 +453,13 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     setItems((current) => current.filter((item) => item.key !== key));
   };
 
-  const makeAuditItem = (product: { id: string; code?: string; name?: string; stock?: number }, index: number): AuditItemDraft => ({
+  const makeAuditItem = (product: { id: string; code?: string; name?: string; stock?: number; categoryId?: string; categoryName?: string }, index: number): AuditItemDraft => ({
     key: `item-${Date.now()}-${index}-${product.id}`,
     productId: product.id,
     code: product.code || '',
     name: product.name || '',
+    categoryId: product.categoryId || BULK_UNCATEGORIZED,
+    categoryName: product.categoryName || 'Sin categoría',
     systemStock: Number(product.stock || 0),
     countedStock: Number(product.stock || 0),
     difference: 0,
@@ -448,15 +489,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
 
   const addAllProducts = () => addProductsInBulk(productOptions, 'al acta');
 
-  const addProductsByCategory = () => {
-    if (bulkCategoryId === BULK_ALL_CATEGORIES) {
-      addAllProducts();
-      return;
-    }
-    const category = productCategoryOptions.find((option) => option.id === bulkCategoryId);
-    const categoryProducts = productOptions.filter((product) => product.categoryId === bulkCategoryId);
-    addProductsInBulk(categoryProducts, `de la categoría “${category?.name || 'seleccionada'}”`);
-  };
+  const addFilteredProducts = () => addProductsInBulk(filteredProductOptions, 'según los filtros de Inventario');
 
   const selectProduct = (key: string, productId: string) => {
     const product = productOptions.find((p) => p.id === productId);
@@ -465,6 +498,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       productId,
       code: product?.code || '',
       name: product?.name || '',
+      categoryId: product?.categoryId || BULK_UNCATEGORIZED,
+      categoryName: product?.categoryName || 'Sin categoría',
       systemStock: product?.stock || 0,
       countedStock: product?.stock || 0,
       difference: 0,
@@ -619,7 +654,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     });
     setActaFile(null);
     setItems([]);
-    setBulkCategoryId(BULK_ALL_CATEGORIES);
+    setBulkCategoryIds([]);
+    setInventoryProductSearch('');
+    setInventoryStockFilter('all');
   };
 
   const closeCreateView = () => {
@@ -906,48 +943,105 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 </Button>
               </div>
               <div className="min-w-0 space-y-3 p-3">
-                <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex min-w-0 items-start gap-2">
+                <div className="rounded-xl border border-primary/15 bg-primary/5 p-3.5">
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <div className="flex min-w-0 items-start gap-2.5">
                       <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <ListPlus className="size-4" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-widest">Carga masiva</p>
-                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Agrega de una vez todos los productos disponibles o solo los de una categoría.</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest">Cargar desde Inventario</p>
+                          <Badge variant="outline" className="border-primary/20 bg-background/60 text-[9px] text-primary">{filteredProductOptions.length} visibles</Badge>
+                        </div>
+                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                          Busca y agrega productos disponibles en la bodega seleccionada. Los filtros solo afectan la carga masiva y la lista de selección.
+                        </p>
                       </div>
                     </div>
-                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                      <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-9 gap-1.5 text-[10px]" onClick={addAllProducts}>
-                        <ListPlus className="size-3.5" /> Todos ({productOptions.length})
-                      </Button>
-                      <div className="flex min-w-0 gap-2">
-                        <Select value={bulkCategoryId} onValueChange={setBulkCategoryId} disabled={!form.warehouseId || productCategoryOptions.length === 0}>
-                          <SelectTrigger className="h-9 min-w-0 flex-1 text-[10px] sm:w-48 sm:flex-none"><Layers3 className="mr-1.5 size-3.5 shrink-0" /><SelectValue placeholder="Por categoría" /></SelectTrigger>
-                          <SelectContent className="max-w-[calc(100vw-2rem)]">
-                            <SelectItem value={BULK_ALL_CATEGORIES} className="text-[10px]">Todas las categorías</SelectItem>
-                            {productCategoryOptions.map((category) => (
-                              <SelectItem key={category.id} value={category.id} className="max-w-full truncate text-[10px]">{category.name}</SelectItem>
-                            ))}
+
+                    <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1.5fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto]">
+                      <div className="min-w-0 space-y-1">
+                        <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Search className="size-3" /> Buscar producto</Label>
+                        <Input
+                          value={inventoryProductSearch}
+                          onChange={(event) => setInventoryProductSearch(event.target.value)}
+                          placeholder="Código o nombre..."
+                          disabled={!form.warehouseId}
+                          className="h-9 bg-background/80 text-xs"
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Categorías <span className="font-medium normal-case tracking-normal">(puedes elegir varias)</span></Label>
+                        <MultiSelectFilter
+                          options={productCategoryOptions.map((category) => ({ value: category.id, label: category.name }))}
+                          selected={bulkCategoryIds}
+                          onChange={setBulkCategoryIds}
+                          label="Todas"
+                          placeholder="Buscar categorías..."
+                          searchable
+                          className="h-9 w-full justify-between bg-background/80 px-2 text-[10px]"
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><SlidersHorizontal className="size-3" /> Existencia</Label>
+                        <Select value={inventoryStockFilter} onValueChange={(value: 'all' | 'available' | 'out') => setInventoryStockFilter(value)} disabled={!form.warehouseId}>
+                          <SelectTrigger className="h-9 min-w-0 bg-background/80 text-[10px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all" className="text-[10px]">Con y sin existencia</SelectItem>
+                            <SelectItem value="available" className="text-[10px]">Con existencia</SelectItem>
+                            <SelectItem value="out" className="text-[10px]">Sin existencia</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-9 shrink-0 gap-1.5 text-[10px]" onClick={addProductsByCategory}>
-                          <Plus className="size-3.5" /> Agregar
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!form.warehouseId || (!inventoryProductSearch && bulkCategoryIds.length === 0 && inventoryStockFilter === 'all')}
+                        className="h-9 gap-1.5 self-end text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => { setInventoryProductSearch(''); setBulkCategoryIds([]); setInventoryStockFilter('all'); }}
+                      >
+                        <RotateCcw className="size-3.5" /> Limpiar
+                      </Button>
+                    </div>
+
+                    <div className="flex min-w-0 flex-col gap-2 border-t border-primary/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 text-[10px] text-muted-foreground">
+                        {form.warehouseId
+                          ? <><span className="font-semibold text-foreground">{selectedWarehouse?.name || 'Bodega seleccionada'}</span><span className="mx-1.5">·</span>Mostrando {filteredProductOptions.length} de {productOptions.length} productos del Inventario.{bulkCategoryIds.length > 0 ? ` ${bulkCategoryIds.length} categorías seleccionadas.` : ''}</>
+                          : 'Selecciona una bodega arriba para cargar sus productos.'}
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                        <Button type="button" variant="outline" size="sm" disabled={!form.warehouseId || filteredProductOptions.length === 0} className="h-9 gap-1.5 text-[10px]" onClick={addFilteredProducts}>
+                          <ListPlus className="size-3.5" /> Agregar filtrados ({filteredProductOptions.length})
+                        </Button>
+                        <Button type="button" variant="secondary" size="sm" disabled={!form.warehouseId || productOptions.length === 0} className="h-9 gap-1.5 text-[10px]" onClick={addAllProducts}>
+                          <ListPlus className="size-3.5" /> Agregar todos ({productOptions.length})
                         </Button>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3 md:hidden">
-                  {items.map((item) => (
-                    <div key={item.key} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
+                  {groupedItems.map((group) => (
+                    <div key={`mobile-category-${group.id}`} className="space-y-2">
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-primary">Categoría</p>
+                          <p className="truncate text-xs font-bold">{group.name}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 text-[9px]">{group.items.length} productos</Badge>
+                      </div>
+                      {group.items.map((item) => (
+                        <div key={item.key} className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3">
                       <div className="flex min-w-0 items-start gap-2">
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Producto</Label>
                           <Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}>
-                            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona una bodega'} /></SelectTrigger>
+                            <SelectTrigger className="h-9 w-full min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto' : 'Selecciona una bodega'} /></SelectTrigger>
                             <SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
-                              {productOptions.length > 0 ? productOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_mobile__" disabled className="text-[10px]">No hay productos en este alcance</SelectItem>}
+                              {filteredProductOptions.length > 0 ? filteredProductOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_mobile__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}
                             </SelectContent>
                           </Select>
                         </div>
@@ -958,6 +1052,8 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         <div><Label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Contado</Label><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="mt-1 h-8 w-full text-right font-mono text-xs" /></div>
                         <div className="text-right"><p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Diferencia</p><p className={cn('mt-2 font-mono text-xs font-bold tabular-nums', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</p></div>
                       </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                   {items.length === 0 && <p className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</p>}
@@ -967,14 +1063,26 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                   <Table containerClassName="overflow-x-auto" className="min-w-[680px]">
                     <TableHeader><TableRow><TableHead className="text-[9px] font-black uppercase tracking-widest">Producto</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Stock sistema</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Cantidad contada</TableHead><TableHead className="text-right text-[9px] font-black uppercase tracking-widest">Diferencia</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
                     <TableBody>
-                      {items.map((item) => (
-                        <TableRow key={item.key}>
-                          <TableCell className="min-w-[220px]"><Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Buscar producto...' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{productOptions.length > 0 ? productOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay productos en este alcance</SelectItem>}</SelectContent></Select></TableCell>
-                          <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
-                          <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
-                          <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
-                          <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
-                        </TableRow>
+                      {groupedItems.map((group) => (
+                        <Fragment key={`desktop-category-${group.id}`}>
+                          <TableRow className="bg-primary/5 hover:bg-primary/5">
+                            <TableCell colSpan={5} className="py-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-primary">{group.name}</span>
+                                <Badge variant="outline" className="text-[9px]">{group.items.length} productos</Badge>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {group.items.map((item) => (
+                            <TableRow key={item.key}>
+                              <TableCell className="min-w-[220px]"><Select value={item.productId} onValueChange={(v) => selectProduct(item.key, v)} disabled={!form.warehouseId}><SelectTrigger className="h-8 min-w-0 text-[10px]"><SelectValue placeholder={form.warehouseId ? 'Selecciona un producto' : 'Selecciona una bodega'} /></SelectTrigger><SelectContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">{filteredProductOptions.length > 0 ? filteredProductOptions.map((p) => <SelectItem key={p.id} value={p.id} className="max-w-full truncate text-[10px]">{p.code} · {p.name}</SelectItem>) : <SelectItem value="__empty_desktop__" disabled className="text-[10px]">No hay coincidencias con estos filtros</SelectItem>}</SelectContent></Select></TableCell>
+                              <TableCell className="text-right"><span className="font-mono text-xs text-muted-foreground">{fmtQty(item.systemStock)}</span></TableCell>
+                              <TableCell className="text-right"><Input type="number" min={0} value={Number.isFinite(item.countedStock) ? item.countedStock : ''} onChange={(e) => updateCounted(item.key, Number(e.target.value))} className="ml-auto h-8 w-28 text-right font-mono text-xs" /></TableCell>
+                              <TableCell className="text-right"><span className={cn('font-mono text-xs font-bold', item.difference < 0 ? 'text-red-600' : item.difference > 0 ? 'text-emerald-600' : 'text-muted-foreground')}>{item.difference > 0 ? '+' : ''}{fmtQty(item.difference)}</span></TableCell>
+                              <TableCell className="text-right"><Button variant="ghost" size="icon" aria-label="Quitar producto" className="size-7 hover:text-destructive" onClick={() => removeItem(item.key)}><X className="size-3.5" /></Button></TableCell>
+                            </TableRow>
+                          ))}
+                        </Fragment>
                       ))}
                       {items.length === 0 && <TableRow><TableCell colSpan={5} className="py-6 text-center text-[10px] text-muted-foreground">Agrega productos al acta para registrar el conteo físico.</TableCell></TableRow>}
                     </TableBody>
@@ -1137,7 +1245,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       )}
 
       <Dialog open={!!comparisonAudit} onOpenChange={(open) => { if (!open) closeComparisonDialog(); }}>
-        <DialogContent className="w-[calc(100vw-1rem)] !max-w-4xl min-w-0 max-h-[90vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-4xl min-w-0 max-h-[min(88vh,calc(100dvh-3rem))] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
               <AlertTriangle className="size-5 text-amber-500" />
@@ -1249,7 +1357,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       </Dialog>
 
       <Dialog open={!!detailAudit} onOpenChange={(open) => { if (!open) setDetailAudit(null); }}>
-        <DialogContent className="w-[calc(100vw-1rem)] !max-w-3xl min-w-0 max-h-[85vh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-3xl min-w-0 max-h-[min(88vh,calc(100dvh-3rem))] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
           <DialogHeader data-tour="inventory-audit-detail-title">
             <DialogTitle className="text-lg font-black uppercase tracking-tight">
               {detailAudit?.number} · Acta de Inspección

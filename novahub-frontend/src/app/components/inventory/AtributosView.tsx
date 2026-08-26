@@ -274,7 +274,7 @@ function AtributosTab() {
 
       {/* Modal crear/editar */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!saving) setModalOpen(v); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,520px)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <Tag className="size-5 text-primary" />
@@ -538,7 +538,7 @@ function CategoriasTab() {
 
       {/* Modal crear/editar */}
       <Dialog open={modalOpen} onOpenChange={(v) => { if (!saving) setModalOpen(v); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,520px)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <Layers className="size-5 text-primary" />

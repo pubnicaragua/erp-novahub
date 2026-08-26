@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, PackageSearch, Warehouse } from 'lucide-react';
 import { api, getApiErrorMessage } from '../../services/api';
-import { Badge } from '../ui/badge';
+import { resolveStorageReferences } from '../../services/storage.service';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { ProductThumbnail } from '../ui/ProductImage';
 
 type LinkedWarehouse = {
   id: string;
@@ -23,7 +24,7 @@ type WarehouseLevel = {
   reserved: number | string;
   available: number | string;
   minStock?: number | string;
-  product?: { id: string; code: string; name: string; type?: string } | null;
+  product?: { id: string; code: string; name: string; type?: string; imageUrl?: string | null } | null;
   variant?: { id: string; sku?: string | null; name?: string | null } | null;
   warehouse?: { id: string; name: string } | null;
 };
@@ -92,9 +93,9 @@ export function LinkedWarehouseProductsView({ selectedBranchId }: { selectedBran
         warehouseId: selectedWarehouseId,
         ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
       },
-    }).then((response) => {
+    }).then(async (response) => {
       if (cancelled) return;
-      const inventory = unwrap(response) || {};
+      const inventory = await resolveStorageReferences(unwrap(response) || {});
       setLevels(Array.isArray(inventory.levels) ? inventory.levels : []);
     }).catch((requestError: unknown) => {
       if (cancelled) return;
@@ -152,7 +153,7 @@ export function LinkedWarehouseProductsView({ selectedBranchId }: { selectedBran
 
               {loadingLevels && <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 size-5 animate-spin" />Cargando productos de {warehouse.name}…</div>}
               {!loadingLevels && !levels.length && <Card className="rounded-2xl border-dashed"><CardContent className="p-10 text-center text-sm text-muted-foreground"><PackageSearch className="mx-auto mb-3 size-9 opacity-30" /><p>Este almacén no tiene productos registrados para la sucursal.</p></CardContent></Card>}
-              {!loadingLevels && levels.length > 0 && <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm"><CardHeader className="border-b border-border/40 bg-muted/10 py-4"><CardTitle className="text-base font-black">Inventario de {warehouse.name}</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table className="min-w-[760px]"><TableHeader><TableRow className="bg-muted/30"><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Variante</TableHead><TableHead className="text-right">Existencia</TableHead><TableHead className="text-right">Reservado</TableHead><TableHead className="text-right">Disponible</TableHead><TableHead className="text-right">Mínimo</TableHead></TableRow></TableHeader><TableBody>{levels.map((level) => <TableRow key={level.id}><TableCell className="font-mono font-bold">{level.product?.code || '—'}</TableCell><TableCell className="font-semibold">{level.product?.name || 'Producto'}</TableCell><TableCell>{level.variant?.sku || level.variant?.name || 'Estándar'}</TableCell><TableCell className="text-right font-bold tabular-nums">{numberFormat.format(Number(level.quantity || 0))}</TableCell><TableCell className="text-right tabular-nums">{numberFormat.format(Number(level.reserved || 0))}</TableCell><TableCell className="text-right font-bold tabular-nums text-emerald-600">{numberFormat.format(Number(level.available ?? Number(level.quantity || 0) - Number(level.reserved || 0)))}</TableCell><TableCell className="text-right tabular-nums">{numberFormat.format(Number(level.minStock || 0))}</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>}
+              {!loadingLevels && levels.length > 0 && <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm"><CardHeader className="border-b border-border/40 bg-muted/10 py-4"><CardTitle className="text-base font-black">Inventario de {warehouse.name}</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table className="min-w-[900px]"><TableHeader><TableRow className="bg-muted/30"><TableHead>Código</TableHead><TableHead className="w-[280px]">Producto</TableHead><TableHead>Variante</TableHead><TableHead className="text-right">Existencia</TableHead><TableHead className="text-right">Reservado</TableHead><TableHead className="text-right">Disponible</TableHead><TableHead className="text-right">Mínimo</TableHead></TableRow></TableHeader><TableBody>{levels.map((level) => { const productName = level.product?.name || 'Producto'; return <TableRow key={level.id}><TableCell className="font-mono font-bold">{level.product?.code || '—'}</TableCell><TableCell className="max-w-[280px]"><div className="flex min-w-0 items-center gap-2.5"><ProductThumbnail src={level.product?.imageUrl} alt={productName} size="sm" fit="contain" className="bg-background" /><span className="min-w-0 truncate font-semibold" title={productName}>{productName}</span></div></TableCell><TableCell>{level.variant?.sku || level.variant?.name || 'Estándar'}</TableCell><TableCell className="text-right font-bold tabular-nums">{numberFormat.format(Number(level.quantity || 0))}</TableCell><TableCell className="text-right tabular-nums">{numberFormat.format(Number(level.reserved || 0))}</TableCell><TableCell className="text-right font-bold tabular-nums text-emerald-600">{numberFormat.format(Number(level.available ?? Number(level.quantity || 0) - Number(level.reserved || 0)))}</TableCell><TableCell className="text-right tabular-nums">{numberFormat.format(Number(level.minStock || 0))}</TableCell></TableRow>; })}</TableBody></Table></div></CardContent></Card>}
             </TabsContent>
           ))}
         </Tabs>

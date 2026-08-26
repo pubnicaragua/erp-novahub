@@ -748,7 +748,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       </div>
 
       <Dialog open={auditPickerOpen} onOpenChange={setAuditPickerOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] !max-w-2xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-2xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
               <ClipboardCheck className="size-5 text-primary" /> Ajuste desde auditoría
@@ -905,7 +905,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <Dialog open={isSerialAdjustOpen} onOpenChange={setIsSerialAdjustOpen}>
         <DialogContent
           className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
-          style={{ width: 'calc(100vw - 2rem)', maxWidth: '520px', maxHeight: 'calc(100dvh - 2rem)' }}
+          style={{ width: 'calc(100vw - 2rem)', maxWidth: '520px', maxHeight: 'min(88vh, calc(100dvh - 3rem))' }}
         >
           <DialogHeader className="border-b border-border/60 px-5 pb-3 pt-5 pr-12" data-tour="inventory-serial-adjust-title">
             <DialogTitle className="text-base font-black tracking-tight">Ajustar IMEI / Series</DialogTitle>
@@ -988,7 +988,7 @@ export function ControlStockView({ adjustments, warehouses, products, series = [
       <Dialog open={isReceptionOpen} onOpenChange={setIsReceptionOpen}>
         <DialogContent
           className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
-          style={{ width: 'calc(100vw - 2rem)', maxWidth: '650px', maxHeight: 'calc(100dvh - 2rem)' }}
+          style={{ width: 'calc(100vw - 2rem)', maxWidth: '650px', maxHeight: 'min(88vh, calc(100dvh - 3rem))' }}
         >
           <DialogHeader className="border-b border-border/60 px-5 pb-3 pt-5 pr-12" data-tour="inventory-stock-reception-title">
             <DialogTitle className="text-base font-black tracking-tight">Registrar Recepción de Stock</DialogTitle>

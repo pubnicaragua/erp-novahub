@@ -107,6 +107,8 @@ export interface ManagerInventoryAdjustmentRow {
   status: string;
   reason: string;
   notes?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: { id: string; name?: string | null; email?: string | null } | null;
   auditGenerated?: boolean;
   auditId?: string | null;
   auditNumber?: string | null;

@@ -263,7 +263,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Barcode className="size-5" /> Imprimir Etiquetas

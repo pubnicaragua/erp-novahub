@@ -374,7 +374,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,780px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden">
         <DialogHeader data-tour="inventory-product-add-title">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Package className="size-5 text-primary" /> Agregar {catalogItemType === 'SERVICE' ? 'servicios' : 'productos'}

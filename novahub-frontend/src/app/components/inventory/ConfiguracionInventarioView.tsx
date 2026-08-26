@@ -845,7 +845,7 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
 
       {/* Dialog de configuración */}
       <Dialog open={!!configTarget} onOpenChange={(open) => { if (!open) { setConfigTarget(null); setConfigBranch(null); } }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[min(94vw,720px)] max-h-[min(88vh,calc(100dvh-3rem))] overflow-y-auto rounded-3xl p-5 sm:p-6">
           <DialogHeader data-tour="inventory-config-modal-title">
             <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar {configTarget?.name}</DialogTitle>
             <DialogDescription>

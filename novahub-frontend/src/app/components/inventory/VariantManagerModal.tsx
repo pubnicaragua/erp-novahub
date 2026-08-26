@@ -169,7 +169,7 @@ export function VariantManagerModal({ open, onOpenChange, product, onRefresh }: 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[min(88vh,calc(100dvh-3rem))] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="size-5 text-primary" />

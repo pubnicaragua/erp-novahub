@@ -67,7 +67,7 @@ const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Productos muestra el total, disponibles, stock bajo y sin stock. Servicios muestra categorías, promedio semanal y precio promedio. Las tarjetas de existencias filtran la lista; los valores de referencia solo informan.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, almacén o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes cargar imágenes masivamente en cualquier momento, iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o Bodegas cuando corresponda.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'La importación inicial solo se habilita cuando la empresa todavía no tiene productos. La carga masiva de imágenes permanece disponible después y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'El botón para importar productos permanece disponible en esta vista. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
   { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
 ];
@@ -77,7 +77,7 @@ export type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 const PRODUCT_TABLE_WIDTHS = {
   selector: '40px',
   code: '112px',
-  name: '192px',
+  name: '224px',
   category: '144px',
   unit: '112px',
   min: '80px',
@@ -104,6 +104,7 @@ interface ProductosViewProps {
   summaryProducts?: any[];
   categories: any[];
   warehouses?: any[];
+  productWarehouseOptions?: any[];
   branches?: any[];
   series?: any[];
   movements?: any[];
@@ -124,6 +125,7 @@ interface ProductosViewProps {
   onClearTargetProduct?: () => void;
   selectedBranchId?: string;
   branchWarehouseIds?: string[];
+  stockWarehouseIds?: string[];
   unitFilter?: string;
   taxRateFilter?: string;
   stockStatusFilter?: string;
@@ -381,11 +383,15 @@ function ImportPreviewPage({
   );
 }
 
-export function ProductosView({ products, summaryProducts, categories, warehouses = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
+  const stockWarehouseIdSet = useMemo(
+    () => new Set(stockWarehouseIds.length > 0 ? stockWarehouseIds : warehouses.map((warehouse: any) => warehouse.id).filter(Boolean)),
+    [stockWarehouseIds, warehouses],
+  );
   const [stockByProduct, setStockByProduct] = useState<Record<string, Record<string, number>>>({});
   const refreshStockMap = useCallback(async () => {
     try {
@@ -423,6 +429,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     [...warehouses, ...importAddedWarehouses].forEach((warehouse: any) => unique.set(warehouse.id || warehouse.name, warehouse));
     return Array.from(unique.values());
   }, [warehouses, importAddedWarehouses]);
+  const displayWarehouseOptions = productWarehouseOptions.length > 0 ? productWarehouseOptions : warehouses;
+  const warehouseNamesForProduct = useCallback((product: any) => {
+    const names = new Set<string>();
+    const productWarehouses = [
+      ...(Array.isArray(product?.stockLevels) ? product.stockLevels : []),
+      ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs : []),
+    ];
+    for (const item of productWarehouses) {
+      const warehouseId = item?.warehouseId || item?.warehouse?.id;
+      if (!warehouseId || (selectedBranchId && !branchWarehouseIdSet.has(warehouseId))) continue;
+      const warehouseName = item?.warehouse?.name || displayWarehouseOptions.find((warehouse: any) => warehouse.id === warehouseId)?.name;
+      if (warehouseName) names.add(warehouseName);
+    }
+    return Array.from(names);
+  }, [branchWarehouseIdSet, displayWarehouseOptions, selectedBranchId]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
@@ -740,26 +761,24 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     pagination?.onPageChange(1);
   }, [searchTerm, warehouseFilters, stockFilter, availabilityFilter, effectiveProductStatusFilter, effectiveUnitFilter, effectiveTaxRateFilter, effectiveStockStatusFilter, showAllWarehouseProducts, catalogItemType]);
 
-  // Stock visible según el filtro de sucursal: con sucursal seleccionada solo
-  // suma el stock de los almacenes vinculados a esa sucursal; sin filtro (todas
-  // las sucursales) muestra el stock total del producto. Prioriza el mapa real
-  // de /inventory/stock (fresco tras transferencias) y cae a stockLevels o
-  // product.stock si el listado no trae niveles.
+  // La celda Stock muestra únicamente las existencias locales de la sucursal;
+  // los almacenes corporativos pueden aparecer en la distribución, pero no se
+  // mezclan en este total operativo.
   const getProductStock = (product: any) => {
+    const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    if (levels.length > 0 && stockWarehouseIdSet.size > 0) {
+      return levels
+        .filter((l: any) => stockWarehouseIdSet.has(l.warehouseId || l.warehouse?.id))
+        .reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0);
+    }
     const perWarehouse = stockByProduct[product?.id];
     if (perWarehouse) {
-      if (selectedBranchId) {
+      if (stockWarehouseIdSet.size > 0) {
         let total = 0;
-        for (const warehouseId of branchWarehouseIdSet) total += perWarehouse[warehouseId] || 0;
+        for (const warehouseId of stockWarehouseIdSet) total += perWarehouse[warehouseId] || 0;
         return total;
       }
       return Object.values(perWarehouse).reduce((sum, quantity) => sum + quantity, 0);
-    }
-    const levels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
-    if (selectedBranchId) {
-      return levels
-        .filter((l: any) => branchWarehouseIdSet.has(l.warehouseId || l.warehouse?.id))
-        .reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0);
     }
     if (levels.length > 0) {
       return Number(product.stock ?? levels.reduce((sum: number, l: any) => sum + Number(l.quantity || 0), 0));
@@ -791,11 +810,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     const stock = getProductStock(p);
     const pMinStock = Number(p.minStock || 0);
     const stockThreshold = pMinStock > 0 ? pMinStock : 10;
-    const matchesStock = stockFilter === 'all'
+    const matchesKpiStock = stockFilter === 'all'
       || (stockFilter === 'available' && pType === 'PRODUCT' && stock > stockThreshold)
       || (stockFilter === 'available' && pType === 'PRODUCT' && stockThreshold <= 0 && stock > 0)
       || (stockFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
       || (stockFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
+    const matchesStockStatus = !effectiveStockStatusFilter
+      || (effectiveStockStatusFilter === 'available' && pType === 'PRODUCT' && stock > 0)
+      || (effectiveStockStatusFilter === 'low' && pType === 'PRODUCT' && stock > 0 && stock <= stockThreshold)
+      || (effectiveStockStatusFilter === 'out' && pType === 'PRODUCT' && stock <= 0);
+    const matchesStock = matchesKpiStock && matchesStockStatus;
     const matchesStatus = isServiceView || effectiveProductStatusFilter === 'ALL'
       || (effectiveProductStatusFilter === 'ACTIVE' && p.isActive !== false)
       || (effectiveProductStatusFilter === 'INACTIVE' && p.isActive === false);
@@ -853,7 +877,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       low: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter(isLow).length,
       out: catalogItemType === 'SERVICE' ? 0 : stockProducts.filter((p: any) => getProductStock(p) <= 0).length,
     };
-  }, [products, summaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet]);
+  }, [products, summaryProducts, catalogItemType, stockByProduct, selectedBranchId, branchWarehouseIdSet, stockWarehouseIdSet]);
 
   const serviceSummary = useMemo(() => {
     const source = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
@@ -2165,7 +2189,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   return (
     <>
-      <Card className={importPreviewOpen ? `fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 max-w-none flex-col overflow-hidden rounded-none border-0 bg-background p-4 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}` : 'rounded-xl border bg-card p-4'}>
+      <Card className={importPreviewOpen ? `fixed left-1/2 top-1/2 z-40 flex h-[min(88vh,calc(100dvh-3rem))] w-[calc(100vw-2rem)] max-w-[1200px] min-h-0 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-border/80 bg-background p-4 shadow-2xl sm:p-6 ${isSidebarCollapsed ? 'lg:left-[calc(50%+36px)]' : 'lg:left-[calc(50%+135px)]'}` : 'rounded-xl border bg-card p-4'}>
       {importPreviewOpen ? (
         <ImportPreviewPage
           importData={importData}
@@ -2205,7 +2229,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <div>
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
           </div>
-          <p className="text-xs font-medium text-muted-foreground">{warehouses.length} almacenes registrados</p>
+          <p className="text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} almacenes visibles</p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
           {[
@@ -2236,7 +2260,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         </div>
         {!isServiceView && selectedBranchId && (() => {
           const selectedBranch = (branches || []).find((b: any) => b.id === selectedBranchId) || null;
-          const linkedWarehouses = warehouses.filter((w: any) => branchWarehouseIdSet.has(w.id));
+          const linkedWarehouses = displayWarehouseOptions.filter((w: any) => branchWarehouseIdSet.has(w.id));
           if (!selectedBranch && linkedWarehouses.length === 0) return null;
           return (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -2290,7 +2314,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             label="Bodegas"
             placeholder="Buscar bodegas..."
             searchable
-            options={warehouses.map((w: any) => ({ value: w.id, label: w.name }))}
+            options={displayWarehouseOptions.map((w: any) => ({ value: w.id, label: w.name }))}
             selected={warehouseFilters}
             onChange={(value) => { setWarehouseFilters(value); onWarehouseChange?.(value); }}
             className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest"
@@ -2371,7 +2395,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
             <CircleHelp className="mr-2 size-4" /> Cómo
           </Button>
-          {!isServiceView && canPerform('INVENTORY', 'edit') && !initialImportCompleted && products.length === 0 && (
+          {!isServiceView && canPerform('INVENTORY', 'edit') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
               <Upload className="mr-2 size-4" /> Importar productos
             </Button>
@@ -2406,9 +2430,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </Card>
         ) : paginatedProducts.map((product) => {
           const status = getStockStatus(product);
-          const warehousesForProduct = isServiceView
-            ? (product.warehouseCatalogs || []).map((catalog: any) => catalog.warehouse?.name).filter(Boolean)
-            : (product.stockLevels || []).map((level: any) => level.warehouse?.name).filter(Boolean);
+          const warehousesForProduct = warehouseNamesForProduct(product);
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
@@ -2580,6 +2602,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 }
                 
                 const status = getStockStatus(product);
+                const warehouseNames = warehouseNamesForProduct(product);
                  return (
                    <TableRow 
                       key={product.id} 
@@ -2597,7 +2620,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                      </TableCell>
                      <TableCell className="font-mono text-xs text-muted-foreground">{product.code}</TableCell>
                     <TableCell>
-                      <div className="flex min-w-[190px] items-center gap-3">
+                      <div className="flex w-full min-w-0 items-center gap-2.5 overflow-hidden">
                         {product.imageUrl ? (
                           <button
                             type="button"
@@ -2609,15 +2632,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             aria-label={`Ver imagen de ${product.name}`}
                             title="Ver imagen"
                           >
-                            <ProductThumbnail src={product.imageUrl} alt={product.name} size="md" />
+                            <ProductThumbnail src={product.imageUrl} alt={product.name} size="sm" />
                           </button>
                         ) : (
-                          <ProductThumbnail src={undefined} alt={product.name} size="md" />
+                          <ProductThumbnail src={undefined} alt={product.name} size="sm" />
                         )}
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 overflow-hidden">
                           <button
                             type="button"
-                            className="truncate font-medium text-sm hover:text-primary underline-offset-2 hover:underline"
+                            className="block min-w-0 max-w-full flex-1 truncate text-left text-sm font-medium hover:text-primary underline-offset-2 hover:underline"
                             onClick={(e) => {
                               e.stopPropagation();
                               setProductDetail(product);
@@ -2663,36 +2686,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </Badge>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {(() => {
-                            const warehouseNames = product.stockLevels && product.stockLevels.length > 0
-                              ? Array.from(new Set(
-                                  product.stockLevels
-                                    .filter((sl: any) => Number(sl.quantity) > 0)
-                                    .map((sl: any) => sl.warehouse?.name)
-                                    .filter(Boolean)
-                                ))
-                              : [];
-                            if (warehouseNames.length > 0) {
-                              return warehouseNames.map((whName: any, idx: number) => (
-                                <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
-                                  {whName}
-                                </Badge>
-                              ));
-                            }
-                            const catalogNames = Array.from(new Set(
-                              (product.warehouseCatalogs || [])
-                                .map((wc: any) => wc.warehouse?.name)
-                                .filter(Boolean)
-                            ));
-                            if (catalogNames.length > 0) {
-                              return catalogNames.map((whName: any, idx: number) => (
-                                <Badge key={idx} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
-                                  {whName}
-                                </Badge>
-                              ));
-                            }
-                            return <span className="text-[10px] text-muted-foreground">-</span>;
-                          })()}
+                          {warehouseNames.length > 0
+                            ? warehouseNames.map((whName: string) => (
+                              <Badge key={whName} variant="secondary" className="text-[9px] bg-muted/50 font-medium">
+                                {whName}
+                              </Badge>
+                            ))
+                            : <span className="text-[10px] text-muted-foreground">-</span>}
                         </div>
                       )}
                     </TableCell>
@@ -2819,7 +2819,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         onConfirm={handleConfirmStatusChange}
       />
       <Dialog open={categoryModalOpen} onOpenChange={(open) => { setCategoryModalOpen(open); if (!open) setPendingCategoryRowIndex(null); }}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,520px)]">
           <DialogHeader data-tour="inventory-category-title">
             <DialogTitle>Nueva categoría</DialogTitle>
             <DialogDescription>Crea una categoría para usarla de inmediato en productos.</DialogDescription>
@@ -3082,7 +3082,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
         }
       }}>
-        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[1100px] sm:!max-w-[1100px] max-h-[90vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(94vw,1000px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col">
           <DialogHeader data-tour="inventory-import-title">
             <DialogTitle>Importar Productos</DialogTitle>
             <DialogDescription>

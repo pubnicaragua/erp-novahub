@@ -77,6 +77,9 @@ select.erp-filter-select:focus-visible,
 [data-slot="dialog-content"],
 [data-slot="drawer-content"] {
   min-width: 0;
+}
+
+[data-slot="drawer-content"] {
   max-width: 100%;
 }
 
@@ -101,9 +104,9 @@ select.erp-filter-select:focus-visible,
    horizontal overflow. */
 @media (max-width: 639px) {
   [data-slot="dialog-content"] {
-    width: calc(100% - 1rem) !important;
-    max-width: calc(100% - 1rem) !important;
-    max-height: calc(100dvh - 1rem) !important;
+    width: calc(100% - 2rem) !important;
+    max-width: calc(100% - 2rem) !important;
+    max-height: min(88vh, calc(100dvh - 2rem)) !important;
     padding: 1rem !important;
   }
 

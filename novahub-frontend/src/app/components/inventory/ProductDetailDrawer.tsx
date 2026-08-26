@@ -264,7 +264,8 @@ export function ProductDetailDrawer({
     setLevelDrafts(next);
   }, [detail]);
 
-  const saveLevelMinMax = async (item: { warehouseId: string; variantId?: string | null; quantity: number }) => {
+  const saveLevelMinMax = async (item: { warehouseId: string; variantId?: string | null; quantity: number; readOnly?: boolean }) => {
+    if (item.readOnly) return;
     const draft = levelDrafts[String(item.warehouseId)];
     if (!draft) return;
     const minStock = Math.max(0, Number(draft.minStock) || 0);
@@ -319,7 +320,22 @@ export function ProductDetailDrawer({
         const resp: any = await inventoryService.getProduct(productId, controller.signal);
         const product = resp?.data?.data || resp?.data || resp;
         if (cancelled) return;
-        setDetail(product);
+        // El producto de la tabla puede traer niveles de almacenes corporativos
+        // autorizados para la sucursal. El endpoint de detalle consulta el
+        // registro local y, por eso, no siempre devuelve esos niveles. Los
+        // conservamos al combinar ambos resultados por ID de almacén.
+        const detailLevels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+        const snapshotLevels = Array.isArray(productSnapshot?.stockLevels) ? productSnapshot.stockLevels : [];
+        const detailWarehouseIds = new Set(
+          detailLevels.map((level: any) => String(level?.warehouseId || level?.warehouse?.id || '')).filter(Boolean),
+        );
+        const sharedSnapshotLevels = snapshotLevels.filter((level: any) => {
+          const warehouseId = String(level?.warehouseId || level?.warehouse?.id || '');
+          return Boolean(level?.__sharedWarehouseLevel) && warehouseId && !detailWarehouseIds.has(warehouseId);
+        });
+        setDetail(sharedSnapshotLevels.length > 0
+          ? { ...product, stockLevels: [...detailLevels, ...sharedSnapshotLevels], __sharedWarehouseLevelsMerged: true }
+          : product);
 
         // Intentar traer movimientos frescos para el kardex
         try {
@@ -400,6 +416,7 @@ export function ProductDetailDrawer({
             quantity: Number(level.quantity || 0),
             minStock: level.minStock != null ? Number(level.minStock) : undefined,
             maxStock: level.maxStock != null ? Number(level.maxStock) : undefined,
+            __sharedWarehouseLevel: Boolean(level.__sharedWarehouseLevel),
           };
         })
         .sort((a: { quantity: number }, b: { quantity: number }) => b.quantity - a.quantity);
@@ -478,7 +495,7 @@ export function ProductDetailDrawer({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden"
+        className="w-[calc(100%-1rem)] sm:max-w-3xl p-0 flex flex-col gap-0 overflow-hidden"
       >
         {/* ===== Tabs envuelve header + contenido para que Radix comparta contexto ===== */}
         <Tabs
@@ -812,18 +829,20 @@ export function ProductDetailDrawer({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {stockByWarehouse.map((item: { warehouseId: string; variantId?: string | null; warehouseName: string; quantity: number; minStock?: number; maxStock?: number }) => {
+                          {stockByWarehouse.map((item: { warehouseId: string; variantId?: string | null; warehouseName: string; quantity: number; minStock?: number; maxStock?: number; __sharedWarehouseLevel?: boolean }) => {
                             const pct = totalStockByWarehouse > 0
                               ? Math.round((item.quantity / totalStockByWarehouse) * 100)
                               : 0;
                             const draft = levelDrafts[String(item.warehouseId)];
                             const isSavingLevel = savingLevelId === String(item.warehouseId);
+                            const isReadOnlyLevel = Boolean(item.__sharedWarehouseLevel);
                             return (
                               <TableRow key={`${item.warehouseId}-${item.warehouseName}`}>
                                 <TableCell>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <Warehouse className="size-3.5 text-muted-foreground" />
                                     <span className="text-sm font-medium">{item.warehouseName}</span>
+                                    {isReadOnlyLevel && <Badge variant="outline" className="text-[9px] text-sky-600">Corporativo</Badge>}
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -848,7 +867,8 @@ export function ProductDetailDrawer({
                                       onChange={(e) => setLevelDrafts((prev) => ({ ...prev, [String(item.warehouseId)]: { minStock: e.target.value, maxStock: draft?.maxStock ?? (item.maxStock != null ? String(item.maxStock) : '0') } }))}
                                       onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
                                       aria-label={`Stock mínimo en ${item.warehouseName}`}
-                                      title="Stock mínimo editable"
+                                      title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Stock mínimo editable'}
+                                      disabled={isReadOnlyLevel}
                                       className="h-8 w-16 min-w-0 text-right text-xs"
                                     />
                                     <span className="text-muted-foreground">/</span>
@@ -859,7 +879,8 @@ export function ProductDetailDrawer({
                                       onChange={(e) => setLevelDrafts((prev) => ({ ...prev, [String(item.warehouseId)]: { minStock: draft?.minStock ?? (item.minStock != null ? String(item.minStock) : '0'), maxStock: e.target.value } }))}
                                       onKeyDown={(e) => { if (e.key === 'Enter') void saveLevelMinMax(item); }}
                                       aria-label={`Stock máximo en ${item.warehouseName}`}
-                                      title="Stock máximo editable"
+                                      title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Stock máximo editable'}
+                                      disabled={isReadOnlyLevel}
                                       className="h-8 w-16 min-w-0 text-right text-xs"
                                     />
                                   </div>
@@ -870,8 +891,8 @@ export function ProductDetailDrawer({
                                     variant="ghost"
                                     size="icon"
                                     className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
-                                    disabled={isSavingLevel}
-                                    title="Guardar mínimo y máximo de esta bodega"
+                                    disabled={isSavingLevel || isReadOnlyLevel}
+                                    title={isReadOnlyLevel ? 'Nivel corporativo de solo lectura' : 'Guardar mínimo y máximo de esta bodega'}
                                     aria-label={`Guardar niveles de ${item.warehouseName}`}
                                     onClick={() => void saveLevelMinMax(item)}
                                   >
@@ -884,7 +905,7 @@ export function ProductDetailDrawer({
                         </TableBody>
                       </Table>
                       <div className="border-t border-border/40 bg-muted/20 px-4 py-2 text-[10px] text-muted-foreground">
-                        El stock se administra mediante movimientos y ajustes. El mínimo y el máximo son configurables por bodega (Enter o el botón de guardar para aplicar).
+                        El stock se administra mediante movimientos y ajustes. El mínimo y el máximo son configurables por bodega; los niveles corporativos se muestran como solo lectura.
                       </div>
                     </Card>
                   )}
