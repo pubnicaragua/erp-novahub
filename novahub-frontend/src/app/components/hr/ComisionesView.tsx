@@ -1,18 +1,18 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BadgeDollarSign, Download, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Download, ChevronDown, ChevronRight, RefreshCw, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { cn } from '../ui/utils';
 import { hrService } from '../../services/hr.service';
-import { formatDateEs } from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,11 +38,44 @@ const formatCommissionDate = (value: string | Date | undefined) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  return new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    .format(date)
+    .replace(', ', ' ');
+};
+
+const fmtNumber = (value: unknown) =>
+  new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0);
+
+const getCommissionLines = (item: any, baseCurrency: string) => {
+  if (Array.isArray(item.invoice?.commissionLines) && item.invoice.commissionLines.length) {
+    return item.invoice.commissionLines;
+  }
+
+  return [{
+    seller: item.seller?.name || '',
+    date: item.invoice?.date,
+    brand: '—',
+    code: '—',
+    quantity: 1,
+    price1: Number(item.invoice?.total || 0),
+    totalP1: Number(item.invoice?.total || 0),
+    salePrice: Number(item.invoice?.total || 0),
+    totalSale: Number(item.invoice?.total || 0),
+    difference: 0,
+    priceType: 'Precio Normal',
+    invoiceNumber: item.invoice?.number || '',
+    customer: item.invoice?.customer || 'Cliente General',
+    paymentForm: 'Contado',
+    paymentDetail: 'Pendiente',
+    status: item.invoice?.status || item.status,
+    currency: item.invoice?.currency || baseCurrency,
+  }];
 };
 
 export function ComisionesView() {
   const { canPerform } = useAuth();
+  // The backend protects this endpoint with the HR read permission.
+  // Keep the query aligned with that guard so a visible tab cannot silently render zeros.
   const canViewHr = canPerform('HR', 'view');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -68,12 +101,18 @@ export function ComisionesView() {
     enabled: canViewHr,
   });
 
-  const report = query.data as any;
+  const rawReport = query.data as any;
+  const report = rawReport?.data ?? rawReport;
   const baseCurrency: string = report?.baseCurrency || 'NIO';
   const sellers: any[] = report?.sellers || [];
   const summary = report?.summary || {};
 
   const sellerOptions = sellers.map((s) => s.seller);
+
+  useEffect(() => {
+    if (sellerId === 'ALL') return;
+    setExpanded(new Set([sellerId]));
+  }, [sellerId]);
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -245,14 +284,26 @@ export function ComisionesView() {
         ))}
       </div>
 
-      {query.isLoading ? (
+      {query.isError ? (
+        <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>No se pudo cargar el reporte de comisiones</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <span>{query.error instanceof Error ? query.error.message : 'El servidor no devolvió el detalle de comisiones.'}</span>
+            <Button variant="outline" size="sm" onClick={() => query.refetch()} className="gap-2">
+              <RefreshCw className="size-3.5" /> Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : query.isLoading ? (
         <div className="flex items-center justify-center h-40">
           <div className="size-10 border-4 border-muted border-t-indigo-500 rounded-full animate-spin" />
         </div>
       ) : sellers.length === 0 ? (
         <Card>
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No hay comisiones de vendedores para los filtros seleccionados.
+          <CardContent className="space-y-2 p-10 text-center">
+            <p className="text-sm font-semibold text-foreground">No hay comisiones de vendedores para los filtros seleccionados.</p>
+            <p className="text-xs text-muted-foreground">Verifica que el empleado esté marcado como vendedor y que existan facturas con comisión generada.</p>
           </CardContent>
         </Card>
       ) : (
@@ -282,8 +333,12 @@ export function ComisionesView() {
                 {sellers.map((s) => {
                   const isOpen = expanded.has(s.seller.id);
                   return (
-                    <>
-                      <TableRow key={s.seller.id} className="cursor-pointer" onClick={() => toggleExpand(s.seller.id)}>
+                    <Fragment key={s.seller.id}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onClick={() => toggleExpand(s.seller.id)}
+                        aria-expanded={isOpen}
+                      >
                         <TableCell>{isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2.5">
@@ -306,46 +361,55 @@ export function ComisionesView() {
                       {isOpen && (
                         <TableRow>
                           <TableCell colSpan={8} className="p-0 border-0">
-                            <div className="bg-muted/20 px-6 py-4">
-                              <Table>
+                            <div className="space-y-3 bg-muted/20 px-4 py-4 sm:px-6">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">
+                                Detalle de ventas y comisiones de {s.seller.name}
+                              </p>
+                              <div className="overflow-x-auto rounded-xl border border-border/50 bg-background/70">
+                              <Table className="min-w-[1560px]">
                                 <TableHeader>
                                   <TableRow className="hover:bg-transparent">
-                                    <TableHead className="text-[10px] uppercase tracking-widest">Factura</TableHead>
-                                    <TableHead className="text-[10px] uppercase tracking-widest">Fecha</TableHead>
-                                    <TableHead className="text-[10px] uppercase tracking-widest">Cliente</TableHead>
-                                    <TableHead className="text-right text-[10px] uppercase tracking-widest">Total venta</TableHead>
-                                    <TableHead className="text-right text-[10px] uppercase tracking-widest">Comisión</TableHead>
-                                    <TableHead className="text-center text-[10px] uppercase tracking-widest">Estado</TableHead>
-                                    <TableHead className="text-[10px] uppercase tracking-widest">Nómina</TableHead>
+                                    {['Vendedor', 'Fecha', 'Marca', 'Código', 'Cantidad', 'Precio1', 'Total P1', 'Precio Venta', 'Total Venta', 'Diferencia', 'Tipo Precio', 'Factura', 'Cliente', 'Forma de Pago', 'Forma de Pago Detallada', 'Estado'].map((heading) => (
+                                      <TableHead key={heading} className="whitespace-nowrap text-[10px] uppercase tracking-widest">{heading}</TableHead>
+                                    ))}
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {(report?.items || [])
-                                    .filter((i: any) => i.seller?.id === s.seller.id)
-                                    .map((item: any) => (
-                                      <TableRow key={item.id}>
-                                        <TableCell className="text-sm font-semibold">{item.invoice?.number || '—'}</TableCell>
-                                        <TableCell className="text-sm">{item.invoice?.date ? formatDateEs(item.invoice.date) : '—'}</TableCell>
-                                        <TableCell className="text-sm">{item.invoice?.customer || '—'}</TableCell>
-                                        <TableCell className="text-right text-sm">{fmt(item.invoice?.totalBase ?? 0, baseCurrency)}</TableCell>
-                                        <TableCell className="text-right text-sm font-semibold">
-                                          {item.commissionType === 'PERCENTAGE' ? `${item.rate}%` : fmt(item.amount, baseCurrency)} → {fmt(item.amountBase, baseCurrency)}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                          <Badge className={cn('text-[9px] font-black uppercase tracking-widest border', STATUS_TONES[item.status])}>
-                                            {STATUS_LABELS[item.status] || item.status}
+                                    .filter((item: any) => item.seller?.id === s.seller.id)
+                                    .flatMap((item: any) => getCommissionLines(item, baseCurrency).map((line: any, index: number) => ({ item, line, index })))
+                                    .map(({ item, line, index }: any) => (
+                                      <TableRow key={`${item.id}-${index}`}>
+                                        <TableCell className="whitespace-nowrap text-sm font-semibold">{line.seller || item.seller?.name || '—'}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm">{formatCommissionDate(line.date) || '—'}</TableCell>
+                                        <TableCell className="text-sm">{line.brand || '—'}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm">{line.code || '—'}</TableCell>
+                                        <TableCell className="text-right text-sm">{fmtNumber(line.quantity)}</TableCell>
+                                        <TableCell className="text-right text-sm">{fmtNumber(line.price1)}</TableCell>
+                                        <TableCell className="text-right text-sm">{fmtNumber(line.totalP1)}</TableCell>
+                                        <TableCell className="text-right text-sm">{fmtNumber(line.salePrice)}</TableCell>
+                                        <TableCell className="text-right text-sm font-semibold">{fmtNumber(line.totalSale)}</TableCell>
+                                        <TableCell className="text-right text-sm font-semibold text-primary">{fmtNumber(line.difference)}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm">{line.priceType || 'Precio Normal'}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm font-semibold">{line.invoiceNumber || item.invoice?.number || '—'}</TableCell>
+                                        <TableCell className="min-w-[220px] text-sm">{line.customer || item.invoice?.customer || 'Cliente General'}</TableCell>
+                                        <TableCell className="whitespace-nowrap text-sm">{line.paymentForm || 'Contado'}</TableCell>
+                                        <TableCell className="min-w-[190px] text-sm">{line.paymentDetail || 'Pendiente'}</TableCell>
+                                        <TableCell>
+                                          <Badge className={cn('whitespace-nowrap text-[9px] font-black uppercase tracking-widest border', STATUS_TONES[line.status] || 'bg-muted text-muted-foreground border-border')}>
+                                            {STATUS_LABELS[line.status] || line.status || 'Pendiente'}
                                           </Badge>
                                         </TableCell>
-                                        <TableCell className="text-sm">{item.payroll?.periodStart ? `${formatDateEs(item.payroll.periodStart)} - ${formatDateEs(item.payroll.periodEnd)}` : '—'}</TableCell>
                                       </TableRow>
                                     ))}
                                 </TableBody>
                               </Table>
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </TableBody>

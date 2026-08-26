@@ -16,7 +16,6 @@ import { toast } from 'sonner';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { invoicesService } from '../../services/ventas.service';
-import { supplierInvoicesService } from '../../services/compras.service';
 import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -66,7 +65,7 @@ export function InvoiceAuditView() {
 
   const [auditModal, setAuditModal] = useState<{ invoiceIds: string[]; observations: string; results: AuditResult[] | null; saving: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<{ id: string; number: string; reason: string; saving: boolean } | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ id: string; number: string; decision: 'APPROVE' | 'REJECT'; reason: string; saving: boolean } | null>(null);
 
   const listQuery = useQuery({
     queryKey: ['invoice-audit', kind, search, auditStatus, dateFrom, dateTo, page],
@@ -89,6 +88,13 @@ export function InvoiceAuditView() {
     }, signal),
     staleTime: 30_000, gcTime: 5 * 60_000, retry: 1,
     enabled: canViewInvoiceAudit,
+  });
+
+  const cancellationRequestsQuery = useQuery({
+    queryKey: ['invoice-cancellation-requests'],
+    queryFn: ({ signal }) => invoicesService.getCancellationRequests('PENDING', signal),
+    staleTime: 10_000, gcTime: 5 * 60_000, retry: 1,
+    enabled: canViewInvoiceAudit && kind === 'SALE',
   });
 
   const data = listQuery.data as any;
@@ -129,6 +135,9 @@ export function InvoiceAuditView() {
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['accounting'] });
+    queryClient.invalidateQueries({ queryKey: ['invoice-audit'] });
+    queryClient.invalidateQueries({ queryKey: ['invoice-audit-history'] });
+    queryClient.invalidateQueries({ queryKey: ['invoice-cancellation-requests'] });
   };
 
   const openAuditModal = () => setAuditModal({ invoiceIds: [...selected], observations: '', results: null, saving: false });
@@ -164,24 +173,26 @@ export function InvoiceAuditView() {
     }
   };
 
-  const handleCancel = async () => {
-    if (!cancelTarget) return;
+  const reviewCancellationRequest = async () => {
+    if (!reviewTarget) return;
+    if (reviewTarget.decision === 'REJECT' && !reviewTarget.reason.trim()) {
+      toast.error('Escribe el motivo del rechazo');
+      return;
+    }
     try {
-      setCancelTarget((t) => (t ? { ...t, saving: true } : t));
-      const reason = cancelTarget.reason.trim() || 'Anulada desde auditoría de facturas';
-      if (kind === 'SALE') {
-        await invoicesService.cancel(cancelTarget.id, reason);
+      setReviewTarget((t) => (t ? { ...t, saving: true } : t));
+      const result = await invoicesService.reviewCancellationRequest(reviewTarget.id, reviewTarget.decision, reviewTarget.reason.trim() || undefined);
+      if (reviewTarget.decision === 'APPROVE') {
+        const journalReversed = Boolean((result as any)?.reversal?.journalReversed);
+        toast.success(journalReversed ? 'Solicitud aprobada: factura anulada y asiento revertido' : 'Solicitud aprobada: factura anulada');
       } else {
-        await supplierInvoicesService.cancel(cancelTarget.id, reason);
+        toast.success('Solicitud de anulación rechazada');
       }
-      const result = await contabilidadService.cancelAuditedInvoice({ kind, invoiceId: cancelTarget.id, reason });
-      const journalReversed = Boolean((result as any)?.journalReversed);
-      toast.success(journalReversed ? 'Factura anulada y asiento contable revertido' : 'Factura anulada (no tenía asiento contable pendiente)');
-      setCancelTarget(null);
+      setReviewTarget(null);
       refreshAll();
     } catch (e: any) {
-      toast.error(e?.message || 'No se pudo anular la factura');
-      setCancelTarget((t) => (t ? { ...t, saving: false } : t));
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo procesar la solicitud');
+      setReviewTarget((t) => (t ? { ...t, saving: false } : t));
     }
   };
 
@@ -220,7 +231,7 @@ export function InvoiceAuditView() {
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest">Auditoría de Facturas</h3>
             <p className="text-[10px] text-muted-foreground">
-              Selecciona facturas de venta o compra, valida su proceso, envía a corregir o anula (revirtiendo el asiento contable). La factura corregida se crea nuevamente en su módulo; no se reemite sobre la misma.
+              Valida facturas, envía anomalías a corrección y procesa solicitudes de anulación. La factura corregida se crea nuevamente en su módulo; no se reemite sobre la misma.
             </p>
           </div>
         </div>
@@ -265,6 +276,54 @@ export function InvoiceAuditView() {
               <ShieldCheck className="size-4" /> Auditar seleccionadas ({selected.size})
             </Button>
           </div>
+
+          {kind === 'SALE' && (
+            <Card className="rounded-2xl border-amber-500/30 bg-amber-500/[0.04]">
+              <CardContent className="p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-widest text-foreground">Solicitudes de anulación</h4>
+                    <p className="mt-1 text-[11px] text-muted-foreground">La factura permanece activa hasta que Contabilidad apruebe la solicitud.</p>
+                  </div>
+                  <Badge variant="outline" className="rounded-lg border-amber-500/30 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                    {cancellationRequestsQuery.data?.length || 0} pendientes
+                  </Badge>
+                </div>
+                {cancellationRequestsQuery.isLoading ? (
+                  <div className="rounded-xl border border-dashed border-border/60 py-5 text-center text-xs text-muted-foreground">Cargando solicitudes…</div>
+                ) : cancellationRequestsQuery.isError ? (
+                  <div className="rounded-xl border border-dashed border-destructive/30 py-5 text-center text-xs text-destructive">No se pudieron cargar las solicitudes.</div>
+                ) : !cancellationRequestsQuery.data?.length ? (
+                  <div className="rounded-xl border border-dashed border-border/60 py-5 text-center text-xs text-muted-foreground">No hay solicitudes pendientes.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {cancellationRequestsQuery.data.map((request: any) => (
+                      <div key={request.id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/70 p-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs font-black">{request.invoice?.number || 'Factura'}</span>
+                            <Badge variant="outline" className="rounded-md text-[9px]">{request.requestedBy?.name || 'Usuario'}</Badge>
+                            <span className="text-[10px] text-muted-foreground">{request.createdAt ? new Date(request.createdAt).toLocaleString('es-NI') : ''}</span>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-muted-foreground" title={request.reason}>{request.reason}</p>
+                        </div>
+                        {canPerform('ACCOUNTING_INVOICE_AUDIT', 'approve') && (
+                          <div className="flex shrink-0 gap-2">
+                            <Button size="sm" className="h-8 rounded-lg bg-destructive px-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-destructive/90" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'APPROVE', reason: '', saving: false })}>
+                              <CheckCircle2 className="mr-1.5 size-3.5" /> Aprobar y anular
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setReviewTarget({ id: request.id, number: request.invoice?.number || '', decision: 'REJECT', reason: '', saving: false })}>
+                              <X className="mr-1.5 size-3.5" /> Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="rounded-2xl border-border/50">
             <CardContent className="p-0">
@@ -313,9 +372,6 @@ export function InvoiceAuditView() {
                             <>
                               <Button variant="ghost" size="icon" className="size-8 rounded-lg text-sky-600 hover:bg-sky-500/10 hover:text-sky-600" disabled={busyId === item.id} onClick={() => handleSendToCorrect(item)} title="Enviar a corregir">
                                 {busyId === item.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                              </Button>
-                              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={busyId === item.id} onClick={() => setCancelTarget({ id: item.id, number: item.number, reason: '', saving: false })} title="Anular factura y revertir asiento">
-                                <Ban className="size-3.5" />
                               </Button>
                             </>
                           )}
@@ -488,25 +544,29 @@ export function InvoiceAuditView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelTarget?.saving) setCancelTarget(null); }}>
+      <Dialog open={!!reviewTarget} onOpenChange={(open) => { if (!open && !reviewTarget?.saving) setReviewTarget(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg font-black uppercase tracking-tight">Anular factura {cancelTarget?.number}</DialogTitle>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">
+              {reviewTarget?.decision === 'APPROVE' ? '¿Aprobar anulación?' : '¿Rechazar solicitud?'} {reviewTarget?.number}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              La factura se anulará en {kind === 'SALE' ? 'Ventas' : 'Compras'} y su asiento contable se revertirá automáticamente (si existe).
+              {reviewTarget?.decision === 'APPROVE'
+                ? 'La factura se anulará y se revertirá su asiento contable si existe. Esta acción requiere autorización de Contabilidad.'
+                : 'La factura seguirá activa y el solicitante recibirá el motivo del rechazo.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Motivo de anulación</Label>
-            <textarea value={cancelTarget?.reason || ''} onChange={(e) => setCancelTarget((t) => (t ? { ...t, reason: e.target.value } : t))} rows={3}
+            <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{reviewTarget?.decision === 'REJECT' ? 'Motivo del rechazo *' : 'Observación de aprobación (opcional)'}</Label>
+            <textarea value={reviewTarget?.reason || ''} onChange={(e) => setReviewTarget((t) => (t ? { ...t, reason: e.target.value } : t))} rows={3}
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary/50"
-              placeholder="Ej: Factura mal emitida, se creará la corregida en Ventas…" />
+              placeholder={reviewTarget?.decision === 'REJECT' ? 'Ej: La factura debe corregirse antes de solicitar la anulación…' : 'Observación interna…'} />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl" disabled={cancelTarget?.saving} onClick={() => setCancelTarget(null)}>Cancelar</Button>
-            <Button className="gap-2 rounded-xl bg-destructive text-white hover:bg-destructive/90" disabled={cancelTarget?.saving} onClick={handleCancel}>
-              {cancelTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
-              Anular y revertir asiento
+            <Button variant="outline" className="rounded-xl" disabled={reviewTarget?.saving} onClick={() => setReviewTarget(null)}>Cancelar</Button>
+            <Button className={cn('gap-2 rounded-xl text-white', reviewTarget?.decision === 'APPROVE' ? 'bg-destructive hover:bg-destructive/90' : 'bg-primary hover:bg-primary/90')} disabled={reviewTarget?.saving || (reviewTarget?.decision === 'REJECT' && !reviewTarget.reason.trim())} onClick={reviewCancellationRequest}>
+              {reviewTarget?.saving ? <Loader2 className="size-4 animate-spin" /> : reviewTarget?.decision === 'APPROVE' ? <Ban className="size-4" /> : <X className="size-4" />}
+              {reviewTarget?.decision === 'APPROVE' ? 'Aprobar y anular' : 'Rechazar solicitud'}
             </Button>
           </DialogFooter>
         </DialogContent>

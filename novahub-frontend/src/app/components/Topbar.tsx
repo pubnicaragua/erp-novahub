@@ -48,7 +48,6 @@ import { usersService } from '../services/users.service';
 import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 import { getPasswordError } from '../utils/accountValidation';
-import { playNotificationSound } from '../utils/notificationSound';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 
 interface TopbarProps {
@@ -116,30 +115,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
   }, [isBranchManagerSession, branch?.id]);
   const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
   const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
-  const notificationIdsRef = useRef<Set<string> | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const currentIds = new Set(notifications.map((notification) => notification.id));
-    if (!notificationIdsRef.current) {
-      notificationIdsRef.current = currentIds;
-      return;
-    }
-
-    const newNotifications = notifications.filter((notification) => !notificationIdsRef.current?.has(notification.id) && !notification.read);
-    notificationIdsRef.current = currentIds;
-    if (newNotifications.length === 0) return;
-
-    const first = newNotifications[0];
-    playNotificationSound();
-    toast.info(first.title || 'Nueva notificación', {
-      description: first.message || 'Tienes una novedad pendiente de revisar.',
-      duration: 6000,
-    });
-  }, [notifications]);
 
   const SEARCH_CATALOG = [
     { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
