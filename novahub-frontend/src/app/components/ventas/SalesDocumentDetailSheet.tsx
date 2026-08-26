@@ -15,6 +15,7 @@ export interface SalesDocumentPanelLine {
   quantity?: number;
   unitPriceLabel?: string;
   totalLabel?: string;
+  secondaryLabel?: string;
 }
 
 export interface SalesDocumentPanelMeta {
@@ -27,6 +28,7 @@ export interface SalesDocumentPanelData {
   number: string;
   title: string;
   customerName: string;
+  hideCustomer?: boolean;
   status: string;
   sourceLabel?: string;
   totalLabel: string;
@@ -47,7 +49,7 @@ interface SalesDocumentDetailSheetProps {
   onGoToBranch?: () => void;
   onWhatsApp?: () => void;
   hasWhatsApp?: boolean;
-  onDownloadPdf: (format: PdfDownloadFormat) => void;
+  onDownloadPdf?: (format: PdfDownloadFormat) => void;
 }
 
 const statusLabels: Record<string, string> = {
@@ -163,13 +165,13 @@ export function SalesDocumentDetailSheet({
                 {onWhatsApp && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} title={hasWhatsApp ? 'Preparar mensaje en WhatsApp' : 'El cliente no tiene teléfono registrado'} onClick={onWhatsApp}>
                   <MessageCircle className="size-4 shrink-0" /> WhatsApp
                 </Button>}
-                <PdfDownloadButton onDownload={onDownloadPdf} />
+                {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} />}
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">
                 <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información general</p>
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
-                  <div className="flex min-w-0 gap-2"><UserRound className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="mt-1 break-words font-semibold">{document.customerName}</p></div></div>
+                  {!document.hideCustomer && <div className="flex min-w-0 gap-2"><UserRound className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="mt-1 break-words font-semibold">{document.customerName}</p></div></div>}
                   {!!document.metadata?.length && document.metadata.map((detail) => (
                     <div key={`${detail.label}-${detail.value}`} className="flex min-w-0 gap-2"><CalendarDays className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">{detail.label}</p><p className="mt-1 break-words font-semibold">{detail.value}</p></div></div>
                   ))}
@@ -187,6 +189,7 @@ export function SalesDocumentDetailSheet({
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-foreground">{line.description || 'Artículo sin descripción'}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{line.quantity ?? 0}{line.unitPriceLabel ? ` × ${line.unitPriceLabel}` : ''}</p>
+                        {line.secondaryLabel && <p className="mt-1 text-[11px] font-medium text-muted-foreground">{line.secondaryLabel}</p>}
                       </div>
                       {line.totalLabel && <p className="shrink-0 text-sm font-black tabular-nums">{line.totalLabel}</p>}
                     </div>

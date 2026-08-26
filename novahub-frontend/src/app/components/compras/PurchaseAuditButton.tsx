@@ -9,13 +9,13 @@ interface PurchaseAuditButtonProps {
   title?: string;
 }
 
-export function PurchaseAuditButton({ entity, entityId, title = 'Historial de Auditoria' }: PurchaseAuditButtonProps) {
+export function PurchaseAuditButton({ entity, entityId, title = 'Historial de auditoría' }: PurchaseAuditButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <Button
-        title="Auditoria"
+        title="Auditoría"
         variant="ghost"
         size="icon"
         className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500"

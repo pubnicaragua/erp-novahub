@@ -108,15 +108,14 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'purchaseReceipt', label: 'Recepciones de compra pagadas', icon: Package,
-    description: 'Solo al registrar el pago de la recepción → inventario/gasto + IVA acreditable + retenciones + medio de pago',
+    description: 'Solo al registrar el pago → la cuenta de Inventario/Gasto se toma de la bodega destino; las demás cuentas salen de esta configuración',
     fields: [
-      { key: 'inventory', label: 'Inventario / Gasto', side: 'debit', description: 'Se debita el costo del inventario o gasto', defaultCode: '1200', defaultName: 'Inventario', defaultType: 'ASSET' },
-      { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
-      { key: 'irWithholdingPayable', label: 'IR retenido por pagar', side: 'credit', description: 'Se acredita el IR retenido al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
-      { key: 'ivaWithholdingPayable', label: 'IVA retenido por pagar', side: 'credit', description: 'Se acredita el IVA retenido al proveedor', defaultCode: '2110', defaultName: 'IVA Retenido por Pagar', defaultType: 'LIABILITY' },
-      { key: 'otherWithholdingPayable', label: 'Otras retenciones por pagar', side: 'credit', description: 'Se acreditan retenciones fiscales distintas de IR e IVA', defaultCode: '2130', defaultName: 'Otras Retenciones por Pagar', defaultType: 'LIABILITY' },
-      { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
-      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se acredita cuando la factura pagada sale de caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se utiliza para registrar pagos a proveedores: se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
+      { key: 'irWithholdingPayable', label: 'IR retenido por pagar', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores: se acredita el IR retenido al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
+      { key: 'ivaWithholdingPayable', label: 'IVA retenido por pagar', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores: se acredita el IVA retenido al proveedor', defaultCode: '2110', defaultName: 'IVA Retenido por Pagar', defaultType: 'LIABILITY' },
+      { key: 'otherWithholdingPayable', label: 'Otras retenciones por pagar', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores: se acreditan otras retenciones fiscales', defaultCode: '2130', defaultName: 'Otras Retenciones por Pagar', defaultType: 'LIABILITY' },
+      { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores: se acredita la deuda con el proveedor', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
+      { key: 'cash', label: 'Efectivo / Caja', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores realizados desde caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
     ],
   },
   {
@@ -737,6 +736,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           ...supplierInvoiceMapping,
           ...(mergedMappings.purchaseReceipt || {}),
         }
+        delete mergedMappings.purchaseReceipt.inventory
+        delete mergedMappings.purchaseReceipt.inTransit
       }
       accountMappingsRef.current = mergedMappings
       setAccountMappings(mergedMappings)

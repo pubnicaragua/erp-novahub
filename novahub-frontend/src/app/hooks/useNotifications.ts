@@ -14,7 +14,10 @@ export function useNotifications() {
         ['notifications', 'inbox'],
         signal => notificationsService.getAll(signal),
         {
-            refetchInterval: 30000,
+            // Las alertas de Compras deben aparecer casi en tiempo real para
+            // que la aprobación de una solicitud/orden no dependa de una
+            // ventana de espera de 30 segundos.
+            refetchInterval: 5000,
             refetchIntervalInBackground: false,
         },
     );

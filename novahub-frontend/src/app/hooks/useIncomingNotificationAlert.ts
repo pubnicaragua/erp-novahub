@@ -4,7 +4,7 @@ import { playNotificationSound } from '../utils/notificationSound';
 import { toast } from 'sonner';
 
 /**
- * Detecta notificaciones entrantes nuevas (polling cada 30s) y:
+ * Detecta notificaciones entrantes nuevas (polling cada 5s) y:
  * - Reproduce un sonido corto.
  * - Si la pestaña está en segundo plano, dispara una Notification del navegador.
  * Montar una sola vez (p.ej. en DashboardLayout).

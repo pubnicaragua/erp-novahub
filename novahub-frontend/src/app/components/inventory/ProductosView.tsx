@@ -562,6 +562,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [solicitudEmployeeId, setSolicitudEmployeeId] = useState('');
   const [solicitudEmployeesLoading, setSolicitudEmployeesLoading] = useState(false);
   const [solicitudProductSearch, setSolicitudProductSearch] = useState('');
+  const [solicitudCategoryFilter, setSolicitudCategoryFilter] = useState('ALL');
+  const [solicitudStockFilter, setSolicitudStockFilter] = useState<'ALL' | 'AVAILABLE' | 'LOW' | 'OUT'>('ALL');
+  const [solicitudWarehouseFilter, setSolicitudWarehouseFilter] = useState('ALL');
   const [solicitudCatalogProducts, setSolicitudCatalogProducts] = useState<any[]>([]);
   const [solicitudCatalogLoading, setSolicitudCatalogLoading] = useState(false);
 
@@ -583,6 +586,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   useEffect(() => {
     if (!solicitudOpen) return;
+
+    // El resumen de inventario ya trae el catálogo completo con sus niveles
+    // por bodega. Usarlo aquí evita que el modal quede limitado a la página
+    // actual de productos y evita una segunda fuente de datos incompleta.
+    const summaryCatalog = (summaryProducts || []).filter((product: any) =>
+      String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
+    );
+    if (summaryCatalog.length > 0) {
+      setSolicitudCatalogProducts(summaryCatalog);
+      setSolicitudCatalogLoading(false);
+      return;
+    }
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
@@ -615,34 +630,119 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [products, solicitudOpen, solicitudProductSearch]);
+  }, [products, summaryProducts, solicitudOpen]);
+
+  const getSolicitudProductSnapshot = (product: any, warehouseIdOverride?: string) => {
+    // El stock de una solicitud siempre es el de una bodega concreta. El
+    // filtro de bodega tiene prioridad y, si no se usa, se toma la bodega
+    // destino de la solicitud. Nunca se cae al stock global del producto.
+    const selectedWarehouseId = warehouseIdOverride || (solicitudWarehouseFilter !== 'ALL'
+      ? solicitudWarehouseFilter
+      : solicitudWarehouseId);
+    const stockLevels = Array.isArray(product?.stockLevels) ? product.stockLevels : [];
+    const levels = stockLevels.length > 0
+      ? stockLevels
+      : (Array.isArray(product?.allocations) ? product.allocations : []);
+    const matchingLevels = selectedWarehouseId
+      ? levels.filter((level: any) => String(level?.warehouseId || level?.warehouse?.id || '') === selectedWarehouseId)
+      : levels;
+    const perWarehouse = stockByProduct[product?.id] || {};
+    if (!selectedWarehouseId) return { currentStock: null, minStock: null };
+    const currentStock = selectedWarehouseId
+      ? (matchingLevels.length > 0
+        ? matchingLevels.reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0)
+        : Number(perWarehouse[selectedWarehouseId] || 0))
+      : 0;
+    const minStock = matchingLevels.length > 0
+      ? Math.max(...matchingLevels.map((level: any) => Number(level?.minStock ?? product?.minStock ?? 0)))
+      : 0;
+    return { currentStock, minStock };
+  };
+
+  const filteredSolicitudProducts = useMemo(() => {
+    const search = solicitudProductSearch.trim().toLowerCase();
+    return solicitudCatalogProducts.filter((product: any) => {
+      const categoryId = String(product?.categoryId || product?.category?.id || '');
+      const categoryName = String(product?.category?.name || product?.categoryName || '');
+      const productWarehouseIds = [
+        ...(Array.isArray(product?.warehouseCatalogs) ? product.warehouseCatalogs.map((entry: any) => entry.warehouseId || entry.warehouse?.id) : []),
+        ...(Array.isArray(product?.stockLevels) ? product.stockLevels.map((entry: any) => entry.warehouseId || entry.warehouse?.id) : []),
+        ...(Array.isArray(product?.allocations) ? product.allocations.map((entry: any) => entry.warehouseId || entry.warehouse?.id) : []),
+      ].filter(Boolean).map(String);
+      const snapshot = getSolicitudProductSnapshot(product);
+      const threshold = snapshot.minStock > 0 ? snapshot.minStock : 2;
+      const matchesSearch = !search
+        || String(product?.name || '').toLowerCase().includes(search)
+        || String(product?.code || '').toLowerCase().includes(search)
+        || categoryName.toLowerCase().includes(search);
+      const matchesCategory = solicitudCategoryFilter === 'ALL' || categoryId === solicitudCategoryFilter;
+      const matchesWarehouse = solicitudWarehouseFilter === 'ALL'
+        || productWarehouseIds.length === 0
+        || productWarehouseIds.includes(solicitudWarehouseFilter);
+      const matchesStock = solicitudStockFilter === 'ALL'
+        || (snapshot.currentStock !== null && (
+          (solicitudStockFilter === 'OUT' && snapshot.currentStock <= 0)
+          || (solicitudStockFilter === 'LOW' && snapshot.currentStock > 0 && snapshot.currentStock <= threshold)
+          || (solicitudStockFilter === 'AVAILABLE' && snapshot.currentStock > 0 && snapshot.currentStock > threshold)
+        ));
+      return matchesSearch && matchesCategory && matchesWarehouse && matchesStock;
+    });
+  }, [solicitudCatalogProducts, solicitudProductSearch, solicitudCategoryFilter, solicitudStockFilter, solicitudWarehouseFilter, stockByProduct, stockWarehouseIdSet]);
+
+  const solicitudCategories = useMemo(() => {
+    const categoriesById = new Map<string, string>();
+    solicitudCatalogProducts.forEach((product: any) => {
+      const id = String(product?.categoryId || product?.category?.id || '');
+      const name = String(product?.category?.name || product?.categoryName || '').trim();
+      if (id && name) categoriesById.set(id, name);
+    });
+    return [...categoriesById.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [solicitudCatalogProducts]);
 
   const buildSolicitudItems = (list: any[]) => list.map((p: any) => {
-    const minStock = Number(p.minStock ?? 0);
-    const currentStock = Number(p.stock ?? 0);
+    const { currentStock, minStock } = getSolicitudProductSnapshot(p);
     const suggested = minStock > 0 ? minStock * 2 : 4;
     return {
       productId: p.id,
       productName: p.name,
       code: p.code ?? '',
-      currentStock,
-      minStock,
-      quantity: Math.max(1, Math.ceil(suggested - currentStock)),
+      currentStock: Number(currentStock ?? 0),
+      minStock: Number(minStock ?? 0),
+      quantity: Math.max(1, Math.ceil(suggested - Number(currentStock ?? 0))),
     };
   });
 
   const openLowStockSolicitud = () => {
-    const lowStock = products.filter((p: any) =>
-      String(p.itemType || p.type || 'PRODUCT').toUpperCase() === 'PRODUCT' &&
-      Number(p.stock ?? 0) <= (Number(p.minStock ?? 0) > 0 ? Number(p.minStock) : 2),
-    );
+    const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+    const lowStock = catalog.filter((p: any) => {
+      if (String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'PRODUCT') return false;
+      const stockLevels = Array.isArray(p?.stockLevels) ? p.stockLevels : [];
+      const levels = stockLevels.length > 0 ? stockLevels : (Array.isArray(p?.allocations) ? p.allocations : []);
+      return levels.some((level: any) => {
+        const quantity = Number(level?.quantity || 0);
+        const minimum = Number(level?.minStock || 0);
+        return quantity <= (minimum > 0 ? minimum : 2);
+      });
+    });
     loadSolicitudEmployees();
-    setSolicitudProducts(buildSolicitudItems(lowStock));
     setSolicitudWarehouseId('');
+    setSolicitudWarehouseFilter('ALL');
+    // La bodega destino todavía no está seleccionada; las cantidades y el
+    // stock se recalculan al elegirla y antes de enviar la solicitud.
+    setSolicitudProducts(lowStock.map((product: any) => ({
+      productId: product.id,
+      productName: product.name,
+      code: product.code ?? '',
+      currentStock: 0,
+      minStock: 0,
+      quantity: 1,
+    })));
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
     setSolicitudPriority('NORMAL');
     setSolicitudProductSearch('');
+    setSolicitudCategoryFilter('ALL');
+    setSolicitudStockFilter('ALL');
     setSolicitudOpen(true);
   };
 
@@ -650,12 +750,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
     loadSolicitudEmployees();
     const selected = products.filter((p: any) => selectedIds.has(p.id));
-    setSolicitudProducts(buildSolicitudItems(selected));
     setSolicitudWarehouseId('');
+    setSolicitudWarehouseFilter('ALL');
+    setSolicitudProducts(buildSolicitudItems(selected));
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
     setSolicitudPriority('NORMAL');
     setSolicitudProductSearch('');
+    setSolicitudCategoryFilter('ALL');
+    setSolicitudStockFilter('ALL');
     setSolicitudOpen(true);
   };
 
@@ -665,16 +768,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       : item));
   };
 
-  const addSolicitudProduct = (product: any) => {
+  const toggleSolicitudProduct = (product: any) => {
     const item = buildSolicitudItems([product])[0];
     if (!item) return;
     setSolicitudProducts(prev => prev.some(existing => existing.productId === item.productId)
-      ? prev
+      ? prev.filter(existing => existing.productId !== item.productId)
       : [...prev, item]);
-  };
-
-  const removeSolicitudProduct = (productId: string) => {
-    setSolicitudProducts(prev => prev.filter(item => item.productId !== productId));
   };
 
   const handleCreateSolicitud = async () => {
@@ -683,14 +782,21 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setSolicitudCreating(true);
     try {
       if (!solicitudEmployeeId) { setSolicitudCreating(false); toast.error('Selecciona el empleado solicitante'); return; }
-      const items = solicitudProducts.map(item => ({
+      const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : solicitudCatalogProducts;
+      const items = solicitudProducts.map(item => {
+        const product = catalog.find((candidate: any) => String(candidate.id) === String(item.productId));
+        const snapshot = product
+          ? getSolicitudProductSnapshot(product, solicitudWarehouseId)
+          : { currentStock: item.currentStock, minStock: item.minStock };
+        return {
         productId: item.productId,
         description: item.productName,
         quantity: item.quantity,
         warehouseId: solicitudWarehouseId,
-        currentStock: item.currentStock,
-        minStock: item.minStock,
-      }));
+        currentStock: Number(snapshot.currentStock ?? 0),
+        minStock: Number(snapshot.minStock ?? 0),
+      };
+      });
       await purchaseRequestsService.create({
         status: 'PENDING_APPROVAL',
         priority: solicitudPriority,
@@ -3464,122 +3570,100 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-3">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <label htmlFor="solicitud-product-search" className="text-xs font-black uppercase tracking-wide">Agregar productos</label>
-                  <p className="text-[11px] text-muted-foreground">Busca por nombre o código y agrégalos a la solicitud.</p>
+                  <label htmlFor="solicitud-product-search" className="text-xs font-black uppercase tracking-wide">Productos</label>
+                  <p className="text-[11px] text-muted-foreground">Marca el check para incluir un producto y habilitar la cantidad a solicitar.</p>
                 </div>
-                <Badge variant="secondary" className="w-fit text-[10px]">{solicitudCatalogProducts.length} resultados</Badge>
+                <Badge variant="secondary" className="w-fit text-[10px]">{filteredSolicitudProducts.length} de {solicitudCatalogProducts.length}</Badge>
               </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="solicitud-product-search"
-                  value={solicitudProductSearch}
-                  onChange={(event) => setSolicitudProductSearch(event.target.value)}
-                  placeholder="Buscar producto por nombre o código..."
-                  className="h-10 bg-background pl-9 pr-9"
-                  disabled={solicitudCreating}
-                  autoComplete="off"
-                />
-                {solicitudProductSearch && (
-                  <button
-                    type="button"
-                    className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => setSolicitudProductSearch('')}
-                    aria-label="Limpiar búsqueda de productos"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                )}
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <div className="relative md:col-span-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="solicitud-product-search"
+                    value={solicitudProductSearch}
+                    onChange={(event) => setSolicitudProductSearch(event.target.value)}
+                    placeholder="Buscar por nombre o código..."
+                    className="h-9 bg-background pl-9 pr-9"
+                    disabled={solicitudCreating}
+                    autoComplete="off"
+                  />
+                  {solicitudProductSearch && (
+                    <button type="button" className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setSolicitudProductSearch('')} aria-label="Limpiar búsqueda de productos">
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+                <Select value={solicitudCategoryFilter} onValueChange={setSolicitudCategoryFilter} disabled={solicitudCreating}>
+                  <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todas las categorías</SelectItem>
+                    {solicitudCategories.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={solicitudStockFilter} onValueChange={(value) => setSolicitudStockFilter(value as typeof solicitudStockFilter)} disabled={solicitudCreating}>
+                  <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Todos los niveles de stock" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos los niveles de stock</SelectItem>
+                    <SelectItem value="AVAILABLE">Sobre el mínimo</SelectItem>
+                    <SelectItem value="LOW">Bajo el mínimo</SelectItem>
+                    <SelectItem value="OUT">Sin existencia</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-background/70 p-1">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Filtrar stock por bodega</label>
+                <Select value={solicitudWarehouseFilter} onValueChange={setSolicitudWarehouseFilter} disabled={solicitudCreating}>
+                  <SelectTrigger className="h-8 w-full bg-background text-xs sm:w-72"><SelectValue placeholder="Todas las bodegas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todas las bodegas</SelectItem>
+                    {warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-border/60 bg-background/70">
                 {solicitudCatalogLoading ? (
-                  <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" /> Buscando productos...
-                  </div>
-                ) : solicitudCatalogProducts.length > 0 ? (
-                  <div className="grid gap-1 sm:grid-cols-2">
-                    {solicitudCatalogProducts.map((product: any) => {
-                      const isAdded = solicitudProducts.some(item => item.productId === product.id);
-                      return (
-                        <div key={product.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg px-2.5 py-2 hover:bg-muted/50">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">{product.name}</p>
-                            <p className="truncate font-mono text-[10px] text-muted-foreground">
-                              {product.code || 'Sin código'} · Stock: {Number(product.stock ?? 0)}
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant={isAdded ? 'secondary' : 'outline'}
-                            size="sm"
-                            className="h-8 shrink-0 gap-1 px-2 text-[10px] font-bold"
-                            onClick={() => addSolicitudProduct(product)}
-                            disabled={isAdded || solicitudCreating}
-                            aria-label={isAdded ? `${product.name} ya agregado` : `Agregar ${product.name}`}
-                          >
-                            {isAdded ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
-                            {isAdded ? 'Agregado' : 'Agregar'}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="px-3 py-6 text-center text-xs text-muted-foreground">No se encontraron productos.</p>
-                )}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold">Productos</label>
-                <Badge variant="secondary" className="text-[10px]">{solicitudProducts.length} items</Badge>
-              </div>
-              {solicitudProducts.length > 0 ? (
-                <div className="overflow-x-auto border rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando productos...</div>
+                ) : filteredSolicitudProducts.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12 text-center font-black text-[10px] uppercase">Sel.</TableHead>
                         <TableHead className="font-black text-[10px] uppercase">Producto</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase text-right">Stock</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase text-right">Min</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase text-right w-28">Cantidad a solicitar</TableHead>
-                        <TableHead className="w-10" />
+                        <TableHead className="font-black text-[10px] uppercase">Categoría</TableHead>
+                        <TableHead className="text-right font-black text-[10px] uppercase">Stock</TableHead>
+                        <TableHead className="text-right font-black text-[10px] uppercase">Min</TableHead>
+                        <TableHead className="w-32 text-right font-black text-[10px] uppercase">Cantidad</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {solicitudProducts.map((item) => (
-                        <TableRow key={item.productId}>
-                          <TableCell className="font-medium text-xs min-w-0">
-                            <span className="truncate block">{item.productName}</span>
-                            <span className="text-muted-foreground font-mono text-[10px]">{item.code}</span>
-                          </TableCell>
-                          <TableCell className={`text-right text-xs tabular-nums ${item.currentStock <= item.minStock ? 'text-orange-500 font-bold' : ''}`}>{item.currentStock}</TableCell>
-                          <TableCell className="text-right text-xs tabular-nums">{item.minStock}</TableCell>
-                          <TableCell className="text-right">
-                            <Input type="number" min={1} className="h-8 w-24 ml-auto text-right text-xs" value={item.quantity}
-                              onChange={(e) => updateSolicitudQuantity(item.productId, Number(e.target.value))} disabled={solicitudCreating} />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => removeSolicitudProduct(item.productId)}
-                              disabled={solicitudCreating}
-                              aria-label={`Quitar ${item.productName}`}
-                            >
-                              <X className="size-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredSolicitudProducts.map((product: any) => {
+                        const selectedItem = solicitudProducts.find((item) => item.productId === product.id);
+                        const snapshot = getSolicitudProductSnapshot(product);
+                        const isSelected = Boolean(selectedItem);
+                        return (
+                          <TableRow key={product.id} className={isSelected ? 'bg-primary/[0.06]' : undefined}>
+                            <TableCell className="text-center">
+                              <Checkbox checked={isSelected} onCheckedChange={() => toggleSolicitudProduct(product)} disabled={solicitudCreating} aria-label={`Seleccionar ${product.name}`} />
+                            </TableCell>
+                            <TableCell className="min-w-0 font-medium text-xs">
+                              <span className="block truncate">{product.name}</span>
+                              <span className="font-mono text-[10px] text-muted-foreground">{product.code || 'Sin código'}</span>
+                            </TableCell>
+                            <TableCell className="max-w-32 truncate text-xs text-muted-foreground">{product.category?.name || product.categoryName || 'Sin categoría'}</TableCell>
+                            <TableCell className={`text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
+                            <TableCell className="text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
+                            <TableCell className="text-right">
+                              <Input type="number" min={1} className="ml-auto h-8 w-24 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No hay productos.</p>
-              )}
+                ) : (
+                  <p className="px-3 py-8 text-center text-xs text-muted-foreground">No se encontraron productos con los filtros seleccionados.</p>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter data-tour="inventory-request-actions">
