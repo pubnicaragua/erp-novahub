@@ -49,6 +49,8 @@ export const tenantsService = {
     password: string;
     role?: string;
     avatar?: string | null;
+    departmentId?: string | null;
+    employeeId?: string | null;
   }) => api.post(`/tenants/${data.clientTenantId}/users`, data),
   updateUser: (tenantId: string, userId: string, data: {
     name?: string;

@@ -140,6 +140,8 @@ export interface PosCustomer {
   email?: string;
   phone?: string;
   priceListId?: string | null;
+  balance?: number;
+  creditLimit?: number;
 }
 
 export interface PosInvoiceItem {
@@ -190,7 +192,7 @@ export interface PotentialDuplicateSale {
   similarityScore: number;
 }
 
-export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK';
+export type PosPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'CUSTOMER_BALANCE';
 export interface PosPaymentLine {
   method: PosPaymentMethod;
   amount: number;

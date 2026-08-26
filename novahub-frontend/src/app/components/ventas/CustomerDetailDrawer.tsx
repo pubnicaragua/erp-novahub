@@ -51,6 +51,7 @@ import { Label } from '../ui/label';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { getSalesInvoiceStatusColor, getSalesStatusColor } from '../../utils/salesStatus';
 import {
   Table,
   TableBody,
@@ -78,7 +79,9 @@ import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { exportCustomerTransactionsExcel, exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { paymentMethodLabel } from '../../utils/paymentMethods';
+import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
+import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { formatCustomerBalance, getCustomerBalancePresentation, getCustomerDebt } from '../../utils/customerBalance';
 import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
@@ -123,7 +126,7 @@ const getInvoiceStatusInfo = (status?: string) => {
   const normalized = String(status || '').toUpperCase();
   const labels: Record<string, string> = {
     DRAFT: 'Borrador',
-    PENDING: 'Pendiente de pago',
+    PENDING: 'En proceso',
     PARTIAL: 'Pago parcial',
     PAID: 'Pagada',
     OVERDUE: 'Vencida',
@@ -343,6 +346,8 @@ export function CustomerDetailDrawer({
 
   const creditLimit = Number(customer?.creditLimit ?? 0);
   const balance = Number(customer?.balance ?? 0);
+  const balancePresentation = getCustomerBalancePresentation(balance);
+  const customerDebt = getCustomerDebt(balance);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
 
   const downloadHistory = async (exportFormat: 'xlsx' | 'pdf') => {
@@ -357,7 +362,7 @@ export function CustomerDetailDrawer({
         rows: relatedTransactions.map(({ document: _document, ...row }) => row),
         customerName: customer.name || 'Cliente',
         branchName: customer.branchName,
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         primaryColor: themeConfig?.colors?.primary,
       };
@@ -385,7 +390,7 @@ export function CustomerDetailDrawer({
   const creditOutstanding = invoices
     .filter((inv) => ['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(String(inv.status || '').toUpperCase()))
     .reduce((sum, inv) => sum + toBaseValue(inv.balance, inv.currency, inv.exchangeRate), 0);
-  const creditUsagePct = creditLimit > 0 ? Math.min(100, (balance / creditLimit) * 100) : 0;
+  const creditUsagePct = creditLimit > 0 ? Math.min(100, (customerDebt / creditLimit) * 100) : 0;
   const visibleMovements = movementFilter === 'ALL'
     ? relatedTransactions
     : relatedTransactions.filter((transaction) => transaction.kind === movementFilter);
@@ -487,7 +492,7 @@ export function CustomerDetailDrawer({
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MetricCard label="Saldo" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} accent={balance < 0 ? 'text-destructive' : 'text-emerald-500'} loading={loading} />
+                  <MetricCard label={balancePresentation.label} value={formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={DollarSign} accent={balancePresentation.amountClassName} loading={loading} />
                   <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                   <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
@@ -504,8 +509,9 @@ export function CustomerDetailDrawer({
                   </div>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo deudor actual</p>
-                      <p className={`mt-1 font-mono text-sm font-black ${balance > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{formatConvertedAmount(balance, baseCurrency)}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{balancePresentation.label}</p>
+                      <p className={`mt-1 font-mono text-sm font-black ${balancePresentation.amountClassName}`}>{formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{balancePresentation.detail}</p>
                     </div>
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">De contado (pagado)</p>
@@ -574,7 +580,7 @@ export function CustomerDetailDrawer({
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Plazo de Crédito" value={creditDays > 0 ? `${creditDays} días` : 'Contado (0 días)'} icon={Clock} mono />
-                    <InfoField label="Saldo Deudor Actual" value={formatConvertedAmount(balance, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label={balancePresentation.label} value={formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={DollarSign} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
                   </div>
 
@@ -633,8 +639,8 @@ export function CustomerDetailDrawer({
                             </div>
                             <div className="flex shrink-0 items-center gap-3 text-right"><div><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className="size-4 text-primary" /></div>
                           </button>
-                          {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />}
-                          {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} />}
+                          {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
+                          {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
                         </Fragment>
                       ))}
                     </div>
@@ -735,6 +741,7 @@ interface InvoiceInlineDetailProps {
   onClose: () => void;
   formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
   tenantName?: string;
+  tenantLogo?: string;
 }
 
 interface EstimateInlineDetailProps {
@@ -742,9 +749,10 @@ interface EstimateInlineDetailProps {
   onClose: () => void;
   formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
   tenantName?: string;
+  tenantLogo?: string;
 }
 
-function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName }: EstimateInlineDetailProps) {
+function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, tenantLogo }: EstimateInlineDetailProps) {
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     const previewToastId = toast.loading('Preparando la previsualización de la cotización...');
     try {
@@ -752,6 +760,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName }: E
         document: estimate as any,
         tenantName: tenantName || 'Empresa',
         formatAmount: formatAmount as any,
+        tenantLogo,
         documentType: 'estimate',
         format,
       });
@@ -767,7 +776,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName }: E
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-black uppercase tracking-tight">Detalle de cotización</h3>
-            <Badge variant="outline" className="border-none bg-muted/50 text-[9px] font-black text-muted-foreground">{getTransactionStatus(estimate.status)}</Badge>
+            <Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesStatusColor(estimate.status)}`}>{getTransactionStatus(estimate.status)}</Badge>
           </div>
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{estimate.number}</p>
         </div>
@@ -813,7 +822,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName }: E
         <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate)}</span></p>
         <p className="text-muted-foreground">Descuento: <span className="font-bold text-foreground">{formatAmount(Number(estimate.discountAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>
         <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>
-        {Number((estimate as any).extraCostAmount || 0) > 0 && <p className="text-muted-foreground">{(estimate as any).extraCostDescription || 'Coste extra'}: <span className="font-bold text-foreground">{formatAmount(Number((estimate as any).extraCostAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>}
+         {normalizeSalesExtraCharges(estimate).filter((charge) => charge.amount > 0).map((charge, index) => <p key={charge.id} className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}: <span className="font-bold text-foreground">{formatAmount(charge.amount, estimate.currency, estimate.exchangeRate)}</span></p>)}
         {Number((estimate as any).deliveryAmount || 0) > 0 && <p className="text-muted-foreground">{(estimate as any).deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(Number((estimate as any).deliveryAmount || 0), estimate.currency, estimate.exchangeRate)}</span></p>}
         <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate)}</span></p>
       </div>
@@ -827,17 +836,20 @@ interface MovementInlineDetailProps {
   onClose: () => void;
   formatAmount: (amount: number, currency?: any, exchangeRate?: number) => string;
   tenantName?: string;
+  tenantLogo?: string;
 }
 
-function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName }: MovementInlineDetailProps) {
+function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, tenantLogo }: MovementInlineDetailProps) {
   const document = transaction.document || {};
   const items = Array.isArray(document.items) ? document.items : [];
+  const additionalCharges = normalizeSalesExtraCharges(document).filter((charge) => charge.amount > 0);
+  const deliveryAmount = Number(document.deliveryAmount || 0);
   const documentType = transaction.kind === 'Cotización' ? 'estimate' : transaction.kind === 'Orden de venta' ? 'order' : undefined;
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     if (!documentType) return;
     const previewToastId = toast.loading(`Preparando la previsualización de ${transaction.kind.toLowerCase()}...`);
     try {
-      await previewSalesTransactionPDF({ document, tenantName: tenantName || 'Empresa', formatAmount: formatAmount as any, documentType, format });
+      await previewSalesTransactionPDF({ document, tenantName: tenantName || 'Empresa', formatAmount: formatAmount as any, tenantLogo, documentType, format });
       toast.success('Previsualización abierta. Descargá el PDF desde el visor del navegador.', { id: previewToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo abrir la previsualización', { id: previewToastId });
@@ -846,7 +858,7 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName }
   return (
     <Card className="rounded-2xl border-primary/20 bg-primary/[0.03] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3 border-b border-border/40 pb-4">
-        <div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className="border-none bg-muted/50 text-[9px] font-black text-muted-foreground">{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
+        <div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-black uppercase tracking-tight">Detalle de {transaction.kind.toLowerCase()}</h3><Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesStatusColor(transaction.status)}`}>{getTransactionStatus(transaction.status)}</Badge></div><p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{transaction.number || 'Sin número'}</p></div>
         <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -856,13 +868,19 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName }
         <InfoField label="Líneas" value={String(items.length || '—')} icon={FileText} />
       </div>
       {items.length > 0 ? <div className="mt-5 overflow-x-auto rounded-xl border border-border/50 bg-background/40"><Table><TableHeader className="bg-muted/30"><TableRow><TableHead className="text-[10px] font-black uppercase tracking-widest">Concepto</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Cantidad</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Precio</TableHead><TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Total</TableHead></TableRow></TableHeader><TableBody>{items.map((item: any, index: number) => <TableRow key={item.id || `${transaction.id}-${index}`}><TableCell className="max-w-[16rem] text-xs font-bold">{item.description || 'Producto o servicio'}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{Number(item.quantity || 0)}</TableCell><TableCell className="text-right text-xs text-muted-foreground">{formatAmount(Number(item.unitPrice || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell><TableCell className="text-right text-xs font-black">{formatAmount(Number(item.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</TableCell></TableRow>)}</TableBody></Table></div> : <p className="mt-5 rounded-xl border border-dashed border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground">{transaction.description || 'Este movimiento no tiene líneas de detalle disponibles.'}</p>}
+      {(additionalCharges.length > 0 || deliveryAmount > 0) && <div className="mt-4 flex flex-col items-end gap-1 text-xs">
+        {additionalCharges.map((charge, index) => <p key={charge.id} className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}: <span className="font-bold text-foreground">{formatAmount(charge.amount, transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</span></p>)}
+        {deliveryAmount > 0 && <p className="text-muted-foreground">{document.deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(deliveryAmount, transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</span></p>}
+        <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(document.total || transaction.amount || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)}</span></p>
+      </div>}
       {document.notes && <p className="mt-4 rounded-xl border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground"><span className="font-bold text-foreground">Notas:</span> {document.notes}</p>}
     </Card>
   );
 }
 
-function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: InvoiceInlineDetailProps) {
+function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName, tenantLogo }: InvoiceInlineDetailProps) {
   const statusInfo = getInvoiceStatusInfo(invoice.status);
+  const paymentPresentation = getInvoicePaymentPresentation(invoice);
   const handleDownloadPdf = async (format: PdfDownloadFormat) => {
     const previewToastId = toast.loading('Preparando la previsualización de la factura...');
     try {
@@ -870,6 +888,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
         document: invoice as any,
         tenantName: tenantName || 'Empresa',
         formatAmount: formatAmount as any,
+        tenantLogo,
         documentType: 'invoice',
         format,
       });
@@ -884,7 +903,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-black uppercase tracking-tight">Detalle de factura</h3>
-            <Badge variant="outline" className="border-none bg-muted/50 text-[9px] font-black text-muted-foreground">{statusInfo.label}</Badge>
+            <Badge variant="outline" className={`border-none text-[9px] font-black ${getSalesInvoiceStatusColor(invoice.status)}`}>{statusInfo.label}</Badge>
           </div>
           <p className="mt-1 font-mono text-xs font-bold text-muted-foreground">{invoice.number}</p>
         </div>
@@ -906,7 +925,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
       {(invoice.paymentMethod || (invoice as any).paymentDetails) && (
         <div className="mt-4 rounded-xl border border-border/50 bg-muted/20 p-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-            <Banknote className="size-3" /> Forma de cobro: <span className="text-foreground">{paymentMethodLabel(invoice.paymentMethod)}</span>
+            <Banknote className="size-3" /> Modalidad / forma de cobro: <span className="text-foreground">{paymentPresentation.modalityLabel}{paymentPresentation.methodLabel ? ` · ${paymentPresentation.methodLabel}` : ''}</span>
           </p>
           {(() => {
             const details = (invoice as any).paymentDetails;
@@ -975,7 +994,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName }: Inv
       <div className="mt-4 flex flex-col items-end gap-1 text-xs">
         <p className="text-muted-foreground">Subtotal: <span className="font-bold text-foreground">{formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate)}</span></p>
         <p className="text-muted-foreground">Impuestos: <span className="font-bold text-foreground">{formatAmount(Number(invoice.taxAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>
-        {Number((invoice as any).extraCostAmount || 0) > 0 && <p className="text-muted-foreground">{(invoice as any).extraCostDescription || 'Coste extra'}: <span className="font-bold text-foreground">{formatAmount(Number((invoice as any).extraCostAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>}
+         {normalizeSalesExtraCharges(invoice).filter((charge) => charge.amount > 0).map((charge, index) => <p key={charge.id} className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}: <span className="font-bold text-foreground">{formatAmount(charge.amount, invoice.currency, invoice.exchangeRate)}</span></p>)}
         {Number((invoice as any).deliveryAmount || 0) > 0 && <p className="text-muted-foreground">{(invoice as any).deliveryDescription || 'Delivery'}: <span className="font-bold text-foreground">{formatAmount(Number((invoice as any).deliveryAmount || 0), invoice.currency, invoice.exchangeRate)}</span></p>}
         <p className="text-muted-foreground">Pagado: <span className="font-bold text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate)}</span></p>
         <p className="text-sm font-black">Total: <span className="text-primary">{formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)}</span></p>

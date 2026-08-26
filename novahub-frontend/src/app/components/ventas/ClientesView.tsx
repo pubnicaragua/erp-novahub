@@ -27,6 +27,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
+import { formatCustomerBalance, getCustomerBalancePresentation } from '../../utils/customerBalance';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -568,7 +569,20 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '140px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="text-xs font-bold tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span> },
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
-    { key: 'balance', header: 'Saldo deudor', width: '150px', render: (val) => <span className={cn('text-[13px] font-black tabular-nums', Number(val || 0) > 0 ? 'text-destructive' : 'text-primary')}>{formatConvertedAmount(val || 0, baseCurrency)}</span> },
+    {
+      key: 'balance',
+      header: 'Saldo del cliente',
+      width: '180px',
+      render: (val) => {
+        const presentation = getCustomerBalancePresentation(val);
+        return (
+          <div className="min-w-[9rem] leading-tight">
+            <span className={cn('block text-[9px] font-black uppercase tracking-widest', presentation.amountClassName)}>{presentation.label}</span>
+            <span className={cn('text-[13px] font-black tabular-nums', presentation.amountClassName)}>{formatCustomerBalance(val, (amount) => formatConvertedAmount(amount, baseCurrency))}</span>
+          </div>
+        );
+      },
+    },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -604,7 +618,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'department', label: 'Departamento' },
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
-    { key: 'balance', label: 'Saldo deudor' },
+    { key: 'balance', label: 'Saldo del cliente' },
     { key: 'status', label: 'Estado' },
   ];
   return (
@@ -614,7 +628,11 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Total Clientes" value={data.length} icon={Users} color="text-primary" bg="bg-primary/10" kind="filter" active={customerTypeFilter === 'ALL' && statusFilter === 'ALL'} onClick={() => { setCustomerTypeFilter('ALL'); setStatusFilter('ALL'); }} />
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
-        <SalesKpiCard title="Saldo" value={formatConvertedAmount(data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0), baseCurrency)} icon={CreditCard} color="text-primary" bg="bg-primary/10" />
+        {(() => {
+          const totalBalance = data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0);
+          const presentation = getCustomerBalancePresentation(totalBalance);
+          return <SalesKpiCard title="Saldo neto de clientes" value={formatCustomerBalance(totalBalance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={CreditCard} color={presentation.amountClassName} bg={presentation.softClassName} />;
+        })()}
       </div>
 
       {/* Main Content */}

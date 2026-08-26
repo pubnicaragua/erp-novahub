@@ -5,7 +5,7 @@ const withSignal = (params?: Record<string, any>, signal?: AbortSignal): HrGetOp
 
 export const hrService = {
   // ===== DEPARTMENTS =====
-  getDepartments: (signal?: AbortSignal) => api.get('/hr/departments', withSignal(undefined, signal)),
+  getDepartments: (signal?: AbortSignal, type?: 'HR' | 'ACCESS') => api.get('/hr/departments', withSignal(type ? { type } : undefined, signal)),
   getDepartmentHeadCandidates: (signal?: AbortSignal) => api.get('/hr/department-head-candidates', withSignal(undefined, signal)),
   getDepartment: (id: string, signal?: AbortSignal) => api.get(`/hr/departments/${id}`, withSignal(undefined, signal)),
   createDepartment: (data: any) => api.post('/hr/departments', data),

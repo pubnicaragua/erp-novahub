@@ -23,13 +23,13 @@ import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
-import { SalesIrSelector } from './SalesIrSelector';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 interface FacturasRecurrentesViewProps {
@@ -47,9 +47,9 @@ interface FacturasRecurrentesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Activa',     value: 'ACTIVE',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Pausada',    value: 'PAUSED',  color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Finalizada', value: 'EXPIRED', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Activa',     value: 'ACTIVE',  color: SALES_STATUS_COLORS.ACTIVE },
+  { label: 'Pausada',    value: 'PAUSED',  color: SALES_STATUS_COLORS.PAUSED },
+  { label: 'Finalizada', value: 'EXPIRED', color: SALES_STATUS_COLORS.EXPIRED },
 ];
 
 const frequencyOptions = [
@@ -179,7 +179,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const r = data.find(x => x.id === editingId);
       if (r) {
         setLocalDoc(JSON.parse(JSON.stringify(r)));
-        setLocalRates({ ...calculateRates(r), irRate: Number((r as any).irRate || 0), irTaxId: (r as any).irTaxId || '' });
+        setLocalRates({ ...calculateRates(r), irRate: 0, irTaxId: '' });
         setPricingMode((r.items || []).some((item: any) => Number(item.discount || 0) > 0 || Number(item.taxRate || 0) > 0) ? 'individual' : 'global');
       }
     } else if (!isCreating) {
@@ -245,11 +245,12 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const handleExportPDF = async (row: RecurringInvoice, format: PdfDownloadFormat = 'configured') => {
     const previewToastId = toast.loading('Preparando la previsualización de la factura recurrente...');
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       await previewSalesTransactionPDF({
         document: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
         tenantName,
         formatAmount: formatConvertedAmount as any,
+        tenantLogo: themeConfig?.logo,
         documentType: 'recurring',
         format,
       });
@@ -289,9 +290,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const taxRate = mode === 'individual' ? Math.max(0, Number(item.taxRate || 0)) : 0;
       const discount = gross * discountRate / 100;
       const tax = (gross - discount) * taxRate / 100;
-      const irRate = mode === 'individual' ? Math.max(0, Number(item.irRate || 0)) : 0;
-      const irAmount = (gross - discount) * irRate / 100;
-      return { ...item, discount: discountRate, taxRate, irRate, irAmount, total: gross - discount + tax - irAmount };
+      return { ...item, discount: discountRate, taxRate, irRate: 0, irTaxId: null, irAmount: 0, total: gross - discount + tax };
     });
     const subtotal = normalizedItems.reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const discountAmount = mode === 'global' ? subtotal * Number(rates.dRate || 0) / 100 : normalizedItems.reduce((acc: number, it: any) => {
@@ -302,8 +301,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       const gross = Number(it.quantity || 0) * Number(it.unitPrice || 0);
       return acc + (gross - gross * Number(it.discount || 0) / 100) * Number(it.taxRate || 0) / 100;
     }, 0);
-    const irAmount = mode === 'global' ? base * Number(rates.irRate || 0) / 100 : normalizedItems.reduce((acc: number, it: any) => acc + Number(it.irAmount || 0), 0);
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: Number(rates.irRate || 0), irAmount, total: base + taxAmount - irAmount };
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: 0, irAmount: 0, total: base + taxAmount };
   };
 
   const handleSave = async () => {
@@ -624,7 +622,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       }} className="w-full pr-6 text-left text-xs" />
                       <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
                     </div>
-                    <SalesIrSelector value={item.irTaxId} rate={Number(item.irRate || 0)} compact onChange={(option) => { const ni = [...(localDoc.items || [])] as any[]; ni[idx] = { ...ni[idx], irRate: Number(option?.rate || 0), irTaxId: option?.id || null }; const recalculated = recalcTotals(ni, 'individual'); setLocalDoc({ ...localDoc, ...recalculated }); }} />
                   </div>}
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}><Input type="number" min="0" value={Number(item.quantity) || ''} onChange={(e) => {
                     const ni = [...(localDoc.items || [])]; ni[idx] = { ...ni[idx], quantity: Number(e.target.value), total: Number(e.target.value) * Number(ni[idx].unitPrice || 0) };

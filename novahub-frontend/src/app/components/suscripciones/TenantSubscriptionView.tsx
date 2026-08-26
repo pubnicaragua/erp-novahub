@@ -110,7 +110,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [userEmailError, setUserEmailError] = useState('');
   const [checkingUserEmail, setCheckingUserEmail] = useState(false);
-  const [showEmployeeGuard, setShowEmployeeGuard] = useState(false);
   const [userDialogMode, setUserDialogMode] = useState<'plain' | 'withEmployee'>('plain');
   const [selectedCreateEmployeeId, setSelectedCreateEmployeeId] = useState('');
   const [activeTab, setActiveTab] = useState('general');
@@ -361,10 +360,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
       toast.error(userEmailError || 'Escribe un correo válido y disponible');
       return;
     }
-    if (userDialogMode === 'withEmployee' && !selectedCreateEmployeeId) {
-      toast.error('Selecciona el empleado a vincular');
-      return;
-    }
     try {
       setUploading(true);
       const createdResponse: any = await tenantsService.addUser({
@@ -373,23 +368,10 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         email: normalizeEmail(userForm.email),
         password: userForm.password,
         role: userForm.role,
+        employeeId: canViewEmployees && canEditEmployees ? (selectedCreateEmployeeId || null) : null,
       });
       const createdUser = createdResponse?.data || createdResponse;
-      const createdUserId = createdUser?.id || users.find((u) => normalizeEmail(u.email) === normalizeEmail(userForm.email))?.id;
-      let linked = false;
-      if (selectedCreateEmployeeId) {
-        if (createdUserId) {
-          try {
-            await tenantsService.linkUserToEmployee(tenant.id, createdUserId, selectedCreateEmployeeId);
-            linked = true;
-          } catch {
-            linked = false;
-          }
-        } else {
-          toast.error('Usuario creado pero no se pudo vincular el empleado automáticamente');
-        }
-      }
-      toast.success(linked ? 'Usuario creado y vinculado al empleado' : 'Usuario agregado correctamente');
+      toast.success(createdUser?.employee ? 'Usuario creado y vinculado al empleado' : 'Usuario agregado correctamente');
       setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' });
       setSelectedCreateEmployeeId('');
       setUserDialogMode('plain');
@@ -715,13 +697,13 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </TabsContent>
 
          <TabsContent value="team" className="space-y-4">
-          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} employees={employees} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} onLinkUserToEmployee={(user) => { setLinkingUser(user); setLinkingEmployeeId(''); }} /> : <>
+          {showOrgChartView ? <OrgChartView tenantId={tenant.id} tenantName={tenant.name} employees={employees} users={users} onBack={() => setShowOrgChartView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : showDepartmentsView ? <DepartmentsView tenantId={tenant.id} users={users} onBack={() => setShowDepartmentsView(false)} onDataChange={async () => { await refetchTenantData(); }} /> : <>
             <div className="flex justify-end">
              <div className="flex items-center gap-2">
               {canViewUsers && <Button data-tour="team-tutorial" variant="outline" className="gap-2 font-bold" onClick={() => setShowTeamTutorial(true)}>
                 <CircleHelp className="size-4" /> Tutorial
               </Button>}
-              {canViewUsers && canViewEmployees && canViewDepartments && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
+              {canViewUsers && canViewDepartments && <Button data-tour="team-departments" variant="outline" className="gap-2 font-bold" onClick={() => setShowDepartmentsView(true)}>
               <Building2 className="size-4" /> Departamentos
               </Button>}
               {canViewUsers && canViewEmployees && canViewOrgChart && <Button variant="outline" className="gap-2 font-bold" onClick={() => setShowOrgChartView(true)}>
@@ -737,7 +719,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><Users className="size-4 text-primary" /> Usuarios ({users.length})</CardTitle>
                   <CardDescription className="mt-1 text-xs">Administra las personas que tienen acceso a la empresa.</CardDescription>
                 </div>
-                {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => setShowEmployeeGuard(true)}>
+                {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={() => { setUserDialogMode('plain'); setSelectedCreateEmployeeId(''); setUserForm({ name: '', email: '', password: '', role: 'EMPLOYEE' }); setIsUserDialogOpen(true); }}>
                   <Plus className="size-4" /> Crear usuario
                 </Button>}
               </CardHeader>
@@ -795,7 +777,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                   </div>}
 
                    {canEditUsers && !isAdmin && !isManager && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-orange-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/10 hover:text-orange-500" onClick={() => handleOpenChangePassword(u)} title="Cambiar contraseña"><KeyRound className="size-3" /> Contraseña</Button>}
-                  {canEditEmployees && (u.employee ? <Button variant="outline" size="sm" className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title="Desvincular empleado"><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title="Vincular empleado"><Link2 className="size-3" /> Vincular empleado</Button>)}
+                  {canViewEmployees && (u.employee ? <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-500/10" onClick={() => void handleUnlinkEmployee(u)} title={canEditEmployees ? 'Desvincular empleado' : 'Vínculo gestionado por Recursos Humanos'}><UserRoundCheck className="size-3" /> Empleado vinculado</Button> : <Button variant="outline" size="sm" disabled={!canEditEmployees} className="h-8 gap-1.5 border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-600 hover:bg-amber-500/10" onClick={() => { setLinkingUser(u); setLinkingEmployeeId(''); }} title={canEditEmployees ? 'Vincular empleado' : 'Sin permiso para vincular'}><Link2 className="size-3" /> Vincular empleado</Button>)}
                   {(canViewUsers || canViewRoles) && <Button variant="outline" size="sm" className="h-8 gap-1.5 border-primary/10 text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary" onClick={() => handleViewPerms(u)}><Shield className="size-3" /> Permisos</Button>}
                   {canDeactivateUsers && <Button variant="ghost" size="sm" disabled={isCurrentUser} className={cn('h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest', isCurrentUser ? 'cursor-not-allowed text-muted-foreground/50' : u.isActive ? 'hover:bg-rose-500/10 hover:text-rose-500' : 'hover:bg-emerald-500/10 hover:text-emerald-500')} onClick={() => !isCurrentUser && toggleUserStatus(u.id, u.isActive)} title={isCurrentUser ? 'No puedes suspenderte a ti mismo' : u.isActive ? 'Suspender usuario' : 'Activar usuario'}>
                     {u.isActive ? <><X className="size-3" /> {isCurrentUser ? 'Tu usuario' : 'Suspender'}</> : <><Check className="size-3" /> Activar</>}
@@ -916,34 +898,6 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
         </DialogContent>
       </Dialog>
 
-      {/* Add Member Dialog */}
-      <Dialog open={showEmployeeGuard} onOpenChange={setShowEmployeeGuard}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-              <UserRoundCheck className="size-6 text-primary" />
-              ¿El empleado ya está creado?
-            </DialogTitle>
-            <DialogDescription>Necesitamos saber si esta persona ya tiene un registro de empleado en Recursos Humanos para vincularla automáticamente al crear el acceso.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <Button variant="outline" className="h-12 gap-2 font-bold" onClick={() => { setShowEmployeeGuard(false); setUserDialogMode('withEmployee'); setSelectedCreateEmployeeId(''); setUserForm((current) => ({ ...current, name: '', email: '' })); setIsUserDialogOpen(true); }}>
-              <Check className="size-4 text-emerald-500" /> Sí, existe
-            </Button>
-            <Button className="h-12 gap-2 font-bold" onClick={() => {
-              setShowEmployeeGuard(false);
-              pendingUserCreate.returnToUserModal = true;
-              window.dispatchEvent(new CustomEvent('navigate-module', { detail: { module: 'rh', subModule: 'empleados' } }));
-            }}>
-              <Plus className="size-4" /> No, crearlo
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowEmployeeGuard(false)}>Cancelar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isUserDialogOpen} onOpenChange={(open) => { setIsUserDialogOpen(open); if (!open) { setSelectedCreateEmployeeId(''); setUserDialogMode('plain'); } }}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
@@ -954,19 +908,19 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <DialogDescription>Asigna un nuevo integrante al equipo de {tenant.name}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {userDialogMode === 'withEmployee' && (
+            {canViewEmployees && (
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado (vinculación automática)</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Empleado (opcional)</Label>
                 <Select value={selectedCreateEmployeeId || '__none__'} onValueChange={(employeeId) => {
                   setSelectedCreateEmployeeId(employeeId === '__none__' ? '' : employeeId);
-                }}>
+                }} disabled={!canEditEmployees}>
                   <SelectTrigger className="bg-muted/10 h-11"><SelectValue placeholder="Selecciona un empleado o sin empleado" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__" className="text-[10px] font-bold uppercase">Sin empleado</SelectItem>
                     {employees.filter((employee: any) => !employee.user).map((employee: any) => <SelectItem key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName} · {employee.employeeNumber}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {!employees.some((employee: any) => !employee.user) && <p className="text-[10px] text-amber-600">No hay empleados sin vínculo disponibles para auto-vincular.</p>}
+                {!canEditEmployees ? <p className="text-[10px] text-muted-foreground">Solo lectura: solicita permiso de edición de empleados para vincular.</p> : !employees.some((employee: any) => !employee.user) && <p className="text-[10px] text-amber-600">No hay empleados sin vínculo disponibles para vincular.</p>}
               </div>
             )}
             <div className="space-y-2">
@@ -1031,7 +985,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
             <Button 
               className="bg-primary text-primary-foreground font-bold h-11 px-8" 
               onClick={handleAddUser}
-              disabled={uploading || checkingUserEmail || !!userEmailError || !isValidEmail(userForm.email) || !!getPasswordError(userForm.password) || (userDialogMode === 'withEmployee' && !selectedCreateEmployeeId)}
+              disabled={uploading || checkingUserEmail || !!userEmailError || !isValidEmail(userForm.email) || !!getPasswordError(userForm.password)}
             >
               {uploading ? 'Creando...' : 'Crear Acceso'}
             </Button>

@@ -57,9 +57,9 @@ export function resolveVariantPrice(
   if (variantId) {
     const variantItem = items.find(
       (item) =>
-        item.priceListId === priceListId &&
-        item.productId === productId &&
-        item.variantId === variantId
+        sameSalesId(item.priceListId, priceListId) &&
+        sameSalesId(item.productId, productId) &&
+        sameSalesId(item.variantId, variantId)
     );
     if (variantItem && Number(variantItem.basePrice) > 0) {
       return {
@@ -74,8 +74,8 @@ export function resolveVariantPrice(
 
   const parentItem = items.find(
     (item) =>
-      item.priceListId === priceListId &&
-      item.productId === productId &&
+      sameSalesId(item.priceListId, priceListId) &&
+      sameSalesId(item.productId, productId) &&
       (!item.variantId || item.variantId === null)
   );
   if (parentItem && Number(parentItem.basePrice) > 0) {

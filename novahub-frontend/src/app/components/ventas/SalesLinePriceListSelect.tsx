@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { priceListsService } from '../../services/price-lists.service';
@@ -16,6 +16,8 @@ interface SalesLinePriceListSelectProps {
   itemType?: string | null;
   value?: string | null;
   defaultPriceListId?: string | null;
+  /** Precio base del catálogo, usado únicamente como respaldo de Minorista mientras se sincroniza la matriz. */
+  fallbackPrice?: number;
   currency?: string;
   exchangeRate?: number;
   disabled?: boolean;
@@ -23,7 +25,7 @@ interface SalesLinePriceListSelectProps {
 }
 
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
-export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
+export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
   const { user, canPerform } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
@@ -43,7 +45,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
   ) || matrix.products.find((product: any) =>
     String(product.name || '').trim().toLowerCase() === String(productName || '').trim().toLowerCase(),
   );
-  const isService = String(itemType || matrixProduct?.itemType || matrixProduct?.type || '').toUpperCase() === 'SERVICE';
+  const isService = String(matrixProduct?.itemType || matrixProduct?.type || itemType || '').toUpperCase() === 'SERVICE';
 
   // Lista resuelta: la asignada al item, la de la orden, la default o la primera
   const requestedListId = value || defaultPriceListId || '';
@@ -70,7 +72,21 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
       const itemProductId = item.productId ?? item.product?.id;
       return (sameSalesId(itemProductId, pid) || sameSalesId(itemProductId, matrixProductId)) && (!item.variantId || item.variantId === null);
     });
-    if (!entry) return { unitPrice: 0, priceMissing: true };
+    if (!entry) {
+      const selectedList = lists.find((list: any) => sameSalesId(list.id, priceListId));
+      const canUseRetailFallback = (
+        String(selectedList?.code || '').toUpperCase() === 'RETAIL'
+        || String(selectedList?.name || '').trim().toLowerCase() === 'minorista'
+        || selectedList?.isDefault === true
+      ) && Number(fallbackPrice) > 0;
+      if (canUseRetailFallback) {
+        const unitPrice = String(currency).toUpperCase() === 'USD'
+          ? Number(fallbackPrice) / Math.max(Number(exchangeRate) || 1, 0.000001)
+          : Number(fallbackPrice);
+        return { unitPrice, priceMissing: false };
+      }
+      return { unitPrice: 0, priceMissing: true };
+    }
 
     const unitPrice = getSalesUnitPrice(entry, currency, exchangeRate);
     if (unitPrice === undefined) return { unitPrice: 0, priceMissing: true };

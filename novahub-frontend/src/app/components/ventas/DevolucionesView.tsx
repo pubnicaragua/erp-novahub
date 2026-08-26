@@ -28,6 +28,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
@@ -63,22 +64,20 @@ const buildInvoiceReturnItems = (invoice?: Invoice | null) => {
     const gross = roundMoney(originalQuantity * unitPrice);
     const discountRate = Number(source.discount || 0);
     const taxRate = Number(source.taxRate || 0);
-    const irRate = Number(source.irRate || invoice?.irRate || 0);
     const itemDiscount = roundMoney(gross * discountRate / 100);
     const net = roundMoney(Math.max(0, gross - itemDiscount));
     const itemTax = roundMoney(net * taxRate / 100);
-    const itemIr = roundMoney(net * irRate / 100);
-    return { source, originalQuantity, unitPrice, gross, discountRate, taxRate, irRate, itemDiscount, net, itemTax, itemIr };
+    return { source, originalQuantity, unitPrice, gross, discountRate, taxRate, irRate: 0, itemDiscount, net, itemTax, itemIr: 0 };
   });
   const discounts = allocateInvoiceAmount(Number(invoice?.discountAmount || 0), rows, 'itemDiscount', 'gross');
   const taxes = allocateInvoiceAmount(Number(invoice?.taxAmount || 0), rows, 'itemTax', 'net');
-  const irAmounts = allocateInvoiceAmount(Number(invoice?.irAmount || 0), rows, 'itemIr', 'net');
+  const irAmounts = allocateInvoiceAmount(0, rows, 'itemIr', 'net');
   const pricedRows = rows.map((row, index) => ({
     ...row,
     sourceDiscountAmount: discounts[index] || 0,
     sourceTaxAmount: taxes[index] || 0,
     sourceIrAmount: irAmounts[index] || 0,
-    sourceLineTotal: roundMoney(row.gross - (discounts[index] || 0) + (taxes[index] || 0) - (irAmounts[index] || 0)),
+    sourceLineTotal: roundMoney(row.gross - (discounts[index] || 0) + (taxes[index] || 0)),
   }));
   if (pricedRows.length) {
     const difference = roundMoney(Number(invoice?.total || 0) - pricedRows.reduce((sum, row) => sum + row.sourceLineTotal, 0));
@@ -118,14 +117,14 @@ const returnTotalsFor = (items: any[], invoice?: Invoice | null) => {
     subtotal: roundMoney(acc.subtotal + Number(item.sourceSubtotal || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
     discountAmount: roundMoney(acc.discountAmount + Number(item.sourceDiscountAmount || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
     taxAmount: roundMoney(acc.taxAmount + Number(item.sourceTaxAmount || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
-    irAmount: roundMoney(acc.irAmount + Number(item.sourceIrAmount || 0) * (Number(item.quantity || 0) / Math.max(1, Number(item.originalQuantity || item.quantity || 1)))),
+    irAmount: 0,
     total: roundMoney(acc.total + Number(item.total || 0)),
   }), { subtotal: 0, discountAmount: 0, taxAmount: 0, irAmount: 0, total: 0 });
   const isFull = Boolean(invoice?.items?.length)
     && invoice.items.length === items.length
     && items.every((item) => Number(item.quantity || 0) >= Number(item.originalQuantity || item.quantity || 0));
   return isFull && invoice
-    ? { subtotal: Number(invoice.subtotal || rows.subtotal), discountAmount: Number(invoice.discountAmount || 0), taxAmount: Number(invoice.taxAmount || 0), irAmount: Number(invoice.irAmount || 0), total: Number(invoice.total || 0) }
+    ? { subtotal: Number(invoice.subtotal || rows.subtotal), discountAmount: Number(invoice.discountAmount || 0), taxAmount: Number(invoice.taxAmount || 0), irAmount: 0, total: Number(invoice.total || 0) }
     : rows;
 };
 
@@ -145,10 +144,10 @@ interface DevolucionesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Pendiente',  value: 'PENDING',   color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'Aprobada',   value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Aplicada',   value: 'PROCESSED', color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Rechazada',  value: 'REJECTED',  color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Pendiente',  value: 'PENDING',   color: SALES_STATUS_COLORS.PENDING },
+  { label: 'Aprobada',   value: 'APPROVED',  color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
+  { label: 'Aplicada',   value: 'PROCESSED', color: SALES_STATUS_COLORS.PROCESSED },
+  { label: 'Rechazada',  value: 'REJECTED',  color: SALES_STATUS_COLORS.REJECTED },
 ];
 
 export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
@@ -252,8 +251,8 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           unitPrice: Number(item.unitPrice || 0),
           taxRate: Number(item.taxRate || 0),
           discount: Number(item.discount || 0),
-          irRate: Number(item.irRate || 0),
-          irTaxId: item.irTaxId || undefined,
+          irRate: 0,
+          irTaxId: undefined,
           priceListId: item.priceListId || undefined,
           total: Number(item.total || 0),
         })),
@@ -276,11 +275,12 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const handleExportPDF = async (row: SalesReturn, format: PdfDownloadFormat = 'configured') => {
     const previewToastId = toast.loading('Preparando la previsualización de la nota de crédito...');
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       await previewSalesTransactionPDF({
         document: { ...row, number: row.number, customer: row.customer },
         tenantName,
         formatAmount: formatConvertedAmount,
+        tenantLogo: themeConfig?.logo,
         documentType: 'return',
         format,
       });
@@ -463,7 +463,6 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                 <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">Subtotal</p><p className="mt-1 font-black">{formatConvertedAmount(editorTotals.subtotal, editorCurrency, localDoc?.exchangeRate)}</p></div>
                 <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">Descuento</p><p className="mt-1 font-black text-rose-500">-{formatConvertedAmount(editorTotals.discountAmount, editorCurrency, localDoc?.exchangeRate)}</p></div>
                 <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">IVA incluido</p><p className="mt-1 font-black">{formatConvertedAmount(editorTotals.taxAmount, editorCurrency, localDoc?.exchangeRate)}</p></div>
-                {editorTotals.irAmount > 0 && <div className="rounded-lg border border-border/50 bg-muted/10 p-2"><p className="text-muted-foreground">Retención</p><p className="mt-1 font-black text-amber-500">-{formatConvertedAmount(editorTotals.irAmount, editorCurrency, localDoc?.exchangeRate)}</p></div>}
               </div>
               <p className="text-[10px] text-muted-foreground italic">Al aplicar esta nota, el sistema actualiza la factura, el inventario y el saldo del cliente.</p>
             </CardContent>
@@ -481,8 +480,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
               const quantityRatio = returned / Math.max(1, Number(item.originalQuantity || returned || 1));
               const lineDiscountAmount = roundMoney(Number(item.sourceDiscountAmount || 0) * quantityRatio);
               const lineTaxAmount = roundMoney(Number(item.sourceTaxAmount || 0) * quantityRatio);
+              const product = item.productId ? products.find((candidate) => candidate.id === item.productId) : undefined;
+              const sku = product?.sku || item.sku || item.productSku || product?.code || item.productCode || item.code;
               return <div key={item.id || idx} className="grid min-w-0 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 xl:grid-cols-[minmax(210px,1.5fr)_100px_110px_130px_110px_minmax(190px,1fr)_100px] xl:items-end">
-                <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</p><p className="text-sm font-bold text-foreground">{item.description || 'Sin descripción'}</p><p className="mt-1 text-[10px] text-muted-foreground">Facturado: {Number(item.originalQuantity || 0)}</p></div>
+                <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{itemType === 'SERVICE' ? 'Servicio' : 'Producto'}</p><p className="text-sm font-bold text-foreground">{item.description || 'Sin descripción'}</p>{itemType !== 'SERVICE' && <p className="mt-1 text-[10px] font-semibold text-muted-foreground">SKU: {sku || 'Sin SKU'}</p>}<p className="mt-1 text-[10px] text-muted-foreground">Facturado: {Number(item.originalQuantity || 0)}</p></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Devuelve</p><Input type="number" inputMode="numeric" min="0" max={Math.floor(Number(item.originalQuantity || returned))} step="1" value={returned || ''} onChange={(event) => { const next = toWholeQuantity(event.target.value, Number(item.originalQuantity || returned)); const nextDiscarded = Math.max(0, next - toInventory); const sourceTotal = Number(item.sourceLineTotal ?? item.total ?? 0); const items = [...localDoc.items]; items[idx] = { ...items[idx], quantity: next, quantityDiscarded: nextDiscarded, total: roundMoney(sourceTotal * next / Math.max(1, Number(item.originalQuantity || returned || 1))) }; setLocalDoc({ ...localDoc, items, total: recalcTotal(items) }); }} /></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">A inventario</p><Input type="number" inputMode="numeric" min="0" max={returned} step="1" value={itemType === 'SERVICE' ? 0 : toInventory} disabled={itemType === 'SERVICE'} onChange={(event) => { const next = toWholeQuantity(event.target.value, returned); const items = [...localDoc.items]; items[idx] = { ...items[idx], quantityToInventory: next, quantityDiscarded: Math.max(0, returned - next) }; setLocalDoc({ ...localDoc, items }); }} /></div>
                 <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Se descarta</p><div className="flex h-9 items-center rounded-md border border-input bg-background px-3 text-xs font-black text-amber-500">{discarded}</div></div>
@@ -504,7 +505,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         <SalesKpiCard title="Saldo a favor generado" value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-rose-500" bg="bg-rose-500/10" />
         <SalesKpiCard title="Pendientes" value={data.filter(r => (r.status||'').toUpperCase() === 'PENDING').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
         <SalesKpiCard title="Aprobadas" value={data.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-muted-foreground" bg="bg-muted/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
+        <SalesKpiCard title="Rechazadas" value={data.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length} icon={XCircle} color="text-rose-500" bg="bg-rose-500/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">

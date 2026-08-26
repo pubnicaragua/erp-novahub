@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Clock3, Eye, FileText, History, UserRound } from 'lucide-react';
-import type { Invoice } from '../../types';
+import { Clock3, Eye, FileText, History, UserRound, Wallet } from 'lucide-react';
+import type { Invoice, PaymentReceived } from '../../types';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -8,6 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
+import { getSalesAdditionalCharges } from '../../utils/salesCharges';
+import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 
 type InvoiceSourceBadge = {
   label: string;
@@ -21,6 +24,8 @@ interface InvoiceDetailSheetProps {
   onClose: () => void;
   onOpenInvoice: (invoice: Invoice) => void;
   onDownloadPdf: (invoice: Invoice, format: PdfDownloadFormat) => void;
+  onDownloadPayment: (payment: PaymentReceived, invoice: Invoice, format: PdfDownloadFormat, remainingOverride?: number) => void;
+  getPaymentRemaining: (payment: PaymentReceived, invoice: Invoice) => number;
   getBalance: (invoice: Invoice) => number;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
   formatDate: (date: string) => string;
@@ -28,29 +33,34 @@ interface InvoiceDetailSheetProps {
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Borrador',
-  PENDING: 'Pendiente',
+  PENDING: 'En proceso',
   CREDIT: 'A crédito',
   PAID: 'Pagada',
   CANCELLED: 'Anulada',
   OVERDUE: 'Vencida',
   PARTIAL: 'Pago parcial',
+  ISSUED: 'Emitida',
+  APPLIED: 'Aplicada',
+  VOIDED: 'Anulada',
 };
 
-const statusClasses: Record<string, string> = {
-  DRAFT: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
-  PENDING: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  CREDIT: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
-  PAID: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  CANCELLED: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',
-  OVERDUE: 'bg-orange-500/10 text-orange-600 dark:text-orange-300',
-  PARTIAL: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-};
+const creditStatusLabel = (status?: string) => String(status || '').toUpperCase() === 'PAID'
+  ? 'Cancelado'
+  : statusLabels[String(status || '').toUpperCase()] || 'Registrada';
 
 const paymentMethodLabels: Record<string, string> = {
   CASH: 'Efectivo',
   CARD: 'Tarjeta',
   TRANSFER: 'Transferencia',
   CHECK: 'Cheque',
+  CREDIT: 'Crédito',
+  MIXED: 'Pago mixto',
+  OTHER: 'Otro',
+};
+
+const currencyLabels: Record<string, string> = {
+  NIO: 'Córdobas (NIO)',
+  USD: 'Dólares (USD)',
 };
 
 export function InvoiceDetailSheet({
@@ -60,6 +70,8 @@ export function InvoiceDetailSheet({
   onClose,
   onOpenInvoice,
   onDownloadPdf,
+  onDownloadPayment,
+  getPaymentRemaining,
   getBalance,
   formatAmount,
   formatDate,
@@ -70,6 +82,8 @@ export function InvoiceDetailSheet({
 
   const status = String(invoice.status || '').toUpperCase();
   const balance = getBalance(invoice);
+  const paymentPresentation = getInvoicePaymentPresentation(invoice);
+  const additionalCharges = getSalesAdditionalCharges(invoice);
 
   return (
     <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
@@ -85,8 +99,8 @@ export function InvoiceDetailSheet({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${statusClasses[status] || 'bg-muted text-muted-foreground'}`}>
-              {statusLabels[status] || invoice.status || 'Sin estado'}
+          <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesInvoiceStatusColor(status)}`}>
+              {statusLabels[status] || 'Sin estado'}
             </Badge>
             {sourceBadge && <Badge className={`border-none px-2 py-0.5 text-[10px] font-black ${sourceBadge.className}`}>{sourceBadge.label}</Badge>}
           </div>
@@ -115,7 +129,7 @@ export function InvoiceDetailSheet({
             </div>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
               <span>Pagado: <strong className="text-foreground">{formatAmount(Number(invoice.amountPaid || 0), invoice.currency, invoice.exchangeRate)}</strong></span>
-              <span>Moneda: <strong className="text-foreground">{invoice.currency || 'NIO'}</strong></span>
+              <span>Moneda: <strong className="text-foreground">{currencyLabels[String(invoice.currency || 'NIO').toUpperCase()] || 'No especificada'}</strong></span>
             </div>
           </section>
 
@@ -132,7 +146,7 @@ export function InvoiceDetailSheet({
               <div className="flex min-w-0 gap-2"><UserRound className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="mt-1 break-words font-semibold">{invoice.customer?.name || 'Varios'}</p></div></div>
               <div className="flex min-w-0 gap-2"><Clock3 className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Fecha de emisión</p><p className="mt-1 font-semibold">{formatDate(invoice.date)}</p></div></div>
               <div><p className="text-[10px] text-muted-foreground">Vencimiento</p><p className="mt-1 font-semibold">{formatDate(invoice.dueDate)}</p></div>
-              <div><p className="text-[10px] text-muted-foreground">Forma de pago</p><p className="mt-1 font-semibold">{paymentMethodLabels[String(invoice.paymentMethod || '').toUpperCase()] || invoice.paymentMethod || 'Sin especificar'}</p></div>
+              <div><p className="text-[10px] text-muted-foreground">Modalidad / forma de pago</p><p className="mt-1 font-semibold">{paymentPresentation.modalityLabel}{paymentPresentation.methodLabel ? ` · ${paymentPresentation.methodLabel}` : ''}</p></div>
               {invoice.sourceLabel && <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 break-words font-semibold">{invoice.sourceLabel}</p></div>}
             </div>
           </section>
@@ -155,6 +169,17 @@ export function InvoiceDetailSheet({
             </div>
           </section>
 
+          {additionalCharges.length > 0 && (
+            <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos adicionales</p>
+              <div className="mt-3 space-y-2 text-sm">
+                {additionalCharges.map((charge) => (
+                  <div key={charge.id} className="flex justify-between gap-3"><span className="text-muted-foreground">{charge.description}</span><span className="font-bold tabular-nums">{formatAmount(charge.amount, invoice.currency, invoice.exchangeRate)}</span></div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {invoice.notes && (
             <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notas</p>
@@ -169,7 +194,7 @@ export function InvoiceDetailSheet({
                 {invoice.creditNotes.map((credit) => (
                   <div key={credit.id} className="flex items-center justify-between gap-3 text-sm">
                     <span className="font-semibold">{credit.number}</span>
-                    <span className="text-right text-xs text-muted-foreground">{statusLabels[String(credit.status).toUpperCase()] || credit.status} · {formatAmount(Number(credit.total || 0), invoice.currency, invoice.exchangeRate)}</span>
+                    <span className="text-right text-xs text-muted-foreground">{creditStatusLabel(credit.status)} · {formatAmount(Number(credit.total || 0), invoice.currency, invoice.exchangeRate)}</span>
                   </div>
                 ))}
               </div>
@@ -178,6 +203,48 @@ export function InvoiceDetailSheet({
             </TabsContent>
 
             <TabsContent value="historial" className="mt-0 outline-none">
+              <section className="mb-4 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Pagos recibidos</p>
+                  <span className="text-[10px] font-black text-primary">{invoice.payments?.length || 0} registro{invoice.payments?.length === 1 ? '' : 's'}</span>
+                </div>
+                {invoice.payments?.length ? (
+                  <div className="mt-3 space-y-2">
+                    {invoice.payments.map((payment) => {
+                      const remainingAfterPayment = getPaymentRemaining(payment, invoice);
+                      const paidAfterPayment = Math.max(0, Number((Number(invoice.total || 0) - remainingAfterPayment).toFixed(2)));
+                      const isCreditPayment = Boolean(payment.creditNoteId || payment.creditNote || (payment as any).creditNoteNumber);
+                      const paymentStatus = isCreditPayment && remainingAfterPayment <= 0.01
+                        ? { label: 'Cancelado', className: 'bg-rose-500/10 text-rose-600 dark:text-rose-300' }
+                        : remainingAfterPayment > 0.01
+                          ? { label: 'Saldo pendiente', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-300' }
+                          : { label: 'Liquidado', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' };
+                      return (
+                        <div key={payment.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-border/50 bg-background/70 p-3">
+                          <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Wallet className="size-4" /></div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <span className="font-black">{payment.number}</span>
+                              <span className="font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatAmount(Number(payment.amount || 0), payment.currency, payment.exchangeRate)}</span>
+                            </div>
+                            <p className="mt-1 break-words text-[10px] text-muted-foreground">{formatDate(payment.date)} · {paymentMethodLabels[String(payment.method || '').toUpperCase()] || 'Sin especificar'}{payment.reference ? ` · Ref. ${payment.reference}` : ''}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+                              <span>Abonado acumulado: <strong className="text-foreground">{formatAmount(paidAfterPayment, invoice.currency, invoice.exchangeRate)}</strong></span>
+                              <span>Saldo después: <strong className={remainingAfterPayment > 0.01 ? 'text-orange-500' : 'text-emerald-600 dark:text-emerald-400'}>{formatAmount(remainingAfterPayment, invoice.currency, invoice.exchangeRate)}</strong></span>
+                            </div>
+                            <Badge className={`mt-2 border-none px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${paymentStatus.className}`}>{paymentStatus.label}</Badge>
+                          </div>
+                          <PdfDownloadButton onDownload={(format) => onDownloadPayment(payment, invoice, format, remainingAfterPayment)} />
+                        </div>
+                      );
+                    })}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+                      <span className="text-xs font-bold text-muted-foreground">Descargar historial completo de pagos</span>
+                      <PdfDownloadButton onDownload={(format) => onDownloadPayment({ ...invoice.payments![0], payments: invoice.payments } as PaymentReceived, invoice, format)} />
+                    </div>
+                  </div>
+                ) : <p className="mt-3 text-sm text-muted-foreground">Todavía no hay pagos recibidos para esta factura.</p>}
+              </section>
               <AuditHistoryModal
                 isOpen={activeTab === 'historial'}
                 onClose={() => setActiveTab('general')}

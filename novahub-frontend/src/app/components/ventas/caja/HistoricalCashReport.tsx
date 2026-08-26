@@ -73,7 +73,7 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
   const exportPdf = async () => {
     setExporting(true);
     try {
-      await generateHistoricalCashReportPDF({ report, tenantName: user?.tenantName || 'Nuestra Empresa' });
+      await generateHistoricalCashReportPDF({ report, tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa' });
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo generar el PDF del reporte.'));
     } finally {

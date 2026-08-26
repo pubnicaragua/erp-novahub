@@ -29,6 +29,7 @@ const STATUS_TONES: Record<string, string> = {
   PENDING: 'bg-amber-500/15 text-amber-500 border-amber-500/20',
   EARNED: 'bg-blue-500/15 text-blue-500 border-blue-500/20',
   PAID_IN_PAYROLL: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20',
+  CANCELLED: 'bg-rose-500/15 text-rose-500 border-rose-500/20',
 };
 
 const fmt = (value: number, currency: string) =>
@@ -313,6 +314,7 @@ export function ComisionesView() {
                                     <TableHead className="text-[10px] uppercase tracking-widest">Factura</TableHead>
                                     <TableHead className="text-[10px] uppercase tracking-widest">Fecha</TableHead>
                                     <TableHead className="text-[10px] uppercase tracking-widest">Cliente</TableHead>
+                                    <TableHead className="text-[10px] uppercase tracking-widest">Facturó</TableHead>
                                     <TableHead className="text-right text-[10px] uppercase tracking-widest">Total venta</TableHead>
                                     <TableHead className="text-right text-[10px] uppercase tracking-widest">Comisión</TableHead>
                                     <TableHead className="text-center text-[10px] uppercase tracking-widest">Estado</TableHead>
@@ -327,6 +329,7 @@ export function ComisionesView() {
                                         <TableCell className="text-sm font-semibold">{item.invoice?.number || '—'}</TableCell>
                                         <TableCell className="text-sm">{item.invoice?.date ? formatDateEs(item.invoice.date) : '—'}</TableCell>
                                         <TableCell className="text-sm">{item.invoice?.customer || '—'}</TableCell>
+                                        <TableCell className="text-sm">{item.invoice?.createdBy?.name || '—'}</TableCell>
                                         <TableCell className="text-right text-sm">{fmt(item.invoice?.totalBase ?? 0, baseCurrency)}</TableCell>
                                         <TableCell className="text-right text-sm font-semibold">
                                           {item.commissionType === 'PERCENTAGE' ? `${item.rate}%` : fmt(item.amount, baseCurrency)} → {fmt(item.amountBase, baseCurrency)}

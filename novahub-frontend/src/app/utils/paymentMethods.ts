@@ -6,9 +6,51 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia',
   CHECK: 'Cheque',
   CREDIT: 'Crédito',
+  CUSTOMER_BALANCE: 'Saldo a favor',
   OTHER: 'Otro',
   MIXED: 'Pago mixto',
 };
+
+const CREDIT_HISTORY_STATUSES = new Set(['ISSUED', 'PARTIAL', 'APPLIED', 'PAID']);
+
+/**
+ * Separa la modalidad comercial de la forma en que se liquidó una factura.
+ * Una factura puede haber recibido un abono directo y luego cobrarse mediante
+ * un crédito, por lo que paymentMethod por sí solo no alcanza para pintarla.
+ */
+export function getInvoicePaymentPresentation(invoice: {
+  paymentModality?: string | null;
+  paymentMethod?: string | null;
+  paymentMethodSummary?: string | null;
+  paymentMethods?: string[];
+  payments?: Array<{ method?: string | null }>;
+  creditNotes?: Array<{ status?: string | null; payments?: Array<{ method?: string | null }> }>;
+}) {
+  const relatedCredits = invoice.creditNotes || [];
+  const hasCreditHistory = String(invoice.paymentModality || '').toUpperCase() === 'CREDIT'
+    || String(invoice.paymentMethod || '').toUpperCase() === 'CREDIT'
+    || relatedCredits.some((credit) => CREDIT_HISTORY_STATUSES.has(String(credit.status || '').toUpperCase()));
+  const collectedMethods = [
+    ...(invoice.paymentMethods || []),
+    ...(invoice.payments || []).map((payment) => payment.method),
+    ...relatedCredits.flatMap((credit) => (credit.payments || []).map((payment) => payment.method)),
+  ]
+    .map((method) => String(method || '').toUpperCase())
+    .filter((method) => method && method !== 'CREDIT');
+  const uniqueMethods = [...new Set(collectedMethods)];
+  const method = invoice.paymentMethodSummary
+    ? String(invoice.paymentMethodSummary).toUpperCase()
+    : uniqueMethods.length > 1
+      ? 'MIXED'
+      : uniqueMethods[0] || (String(invoice.paymentMethod || '').toUpperCase() !== 'CREDIT' ? String(invoice.paymentMethod || '').toUpperCase() : null);
+
+  return {
+    isCredit: hasCreditHistory,
+    modalityLabel: hasCreditHistory ? 'A crédito' : 'Contado',
+    method,
+    methodLabel: method ? paymentMethodLabel(method) : null,
+  };
+}
 
 export function paymentMethodLabel(method?: string | null): string {
   const raw = String(method || '').trim();
@@ -21,7 +63,7 @@ export function paymentMethodLabel(method?: string | null): string {
 export function translatePaymentMethodText(value: unknown): string {
   if (value === null || value === undefined) return '';
 
-  return String(value).replace(/\b(CASH|CARD|TRANSFER|CHECK|CREDIT|OTHER)\b/gi, (match) =>
+  return String(value).replace(/\b(CASH|CARD|TRANSFER|CHECK|CREDIT|CUSTOMER_BALANCE|OTHER)\b/gi, (match) =>
     PAYMENT_METHOD_LABELS[match.toUpperCase()] || match,
   );
 }
@@ -41,7 +83,9 @@ export function requiresPaymentReference(method?: string | null): boolean {
  */
 export function requiresManualPaymentAccount(method?: string | null): boolean {
   const normalized = String(method || '').toUpperCase();
-  return !['CASH', 'CHECK'].includes(normalized) && !isBankPaymentMethod(normalized);
+  return normalized !== 'CUSTOMER_BALANCE'
+    && !['CASH', 'CHECK'].includes(normalized)
+    && !isBankPaymentMethod(normalized);
 }
 
 /** Indica si el método de pago es exclusivamente tarjeta. */

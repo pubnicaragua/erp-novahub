@@ -112,11 +112,12 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
           return { employees, departments, positions };
         }
         case 'departamentos': {
-          const [departments, users] = await Promise.all([
+          const [departments, employees, positions] = await Promise.all([
             hrService.getDepartments(signal),
-            hrService.getDepartmentHeadCandidates(signal),
+            hrService.getEmployees(page, signal),
+            hrService.getPositions(undefined, signal),
           ]);
-          return { departments, users };
+          return { departments, employees, positions };
         }
         case 'nominas': {
           const [payrolls, employees] = await Promise.all([
@@ -333,7 +334,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
               <TabsContent value="departamentos" className="m-0">
                 <DepartamentosView
                   departments={data.departments}
-                  users={data.users}
+                  employees={data.employees}
+                  positions={data.positions}
                   onRefresh={refreshData}
                 />
               </TabsContent>

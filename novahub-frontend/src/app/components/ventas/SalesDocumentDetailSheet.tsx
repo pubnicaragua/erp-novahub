@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { getSalesStatusColor } from '../../utils/salesStatus';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -90,29 +91,6 @@ const statusLabels: Record<string, string> = {
   POSTED: 'Registrada',
 };
 
-const statusClasses: Record<string, string> = {
-  DRAFT: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
-  IN_PROCESS: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  SENT: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  PENDING_REVIEW: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  CONFIRMED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  IN_PROGRESS: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  SHIPPED: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
-  DELIVERED: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  ACTIVE: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  PAUSED: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
-  EXPIRED: 'bg-orange-500/10 text-orange-600 dark:text-orange-300',
-  APPROVED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  PROCESSED: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  REJECTED: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',
-  ISSUED: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  PARTIAL: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  APPLIED: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
-  PAID: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
-  VOIDED: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',
-  CANCELLED: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',
-};
-
 export function SalesDocumentDetailSheet({
   document,
   entity,
@@ -129,7 +107,10 @@ export function SalesDocumentDetailSheet({
   if (!document) return null;
 
   const status = String(document.status || '').toUpperCase();
-  const statusLabel = statusLabels[status] || document.status || 'Sin estado';
+  const statusLabel = status === 'PAID' && entity === 'CREDIT_NOTE'
+    ? 'Cancelado'
+    : statusLabels[status] || document.status || 'Sin estado';
+  const statusColor = status === 'PAID' && entity === 'CREDIT_NOTE' ? 'CANCELLED' : status;
 
   return (
     <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
@@ -145,7 +126,7 @@ export function SalesDocumentDetailSheet({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${statusClasses[status] || 'bg-muted text-muted-foreground'}`}>
+            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesStatusColor(statusColor)}`}>
               {statusLabel}
             </Badge>
             {document.sourceLabel && <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{document.sourceLabel}</Badge>}

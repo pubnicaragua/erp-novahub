@@ -20,7 +20,7 @@ export interface KanbanColumn {
 const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: 'draft', label: 'Borrador', value: 'DRAFT', color: '#f59e0b' },
   { id: 'sent', label: 'Enviada', value: 'SENT', color: '#3b82f6' },
-  { id: 'in_progress', label: 'En Progreso', value: 'IN_PROGRESS', color: '#8b5cf6' },
+  { id: 'in_progress', label: 'En proceso', value: 'IN_PROGRESS', color: '#3b82f6' },
   { id: 'approved', label: 'Aprobada', value: 'APPROVED', color: '#10b981' },
   { id: 'rejected', label: 'Rechazada', value: 'REJECTED', color: '#ef4444' },
 ];

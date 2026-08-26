@@ -34,7 +34,9 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -57,10 +59,10 @@ interface OrdenesVentaViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador',       value: 'DRAFT',       color: 'bg-muted/20 text-muted-foreground' },
-  { label: 'En proceso',     value: 'IN_PROCESS',  color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aprobada',       value: 'APPROVED',    color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Cancelada',      value: 'CANCELLED',   color: 'bg-rose-500/10 text-rose-500' },
+  { label: 'Borrador',       value: 'DRAFT',       color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
+  { label: 'En proceso',     value: 'IN_PROCESS',  color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
+  { label: 'Aprobada',       value: 'APPROVED',    color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
+  { label: 'Cancelada',      value: 'CANCELLED',   color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 
 export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
@@ -244,7 +246,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       if (!secureDocumentUrl) {
         const { blob } = await generateEstimatePDF({
           estimate: { ...order, customer },
-          tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+          tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
           tenantLogo: themeConfig?.logo,
           formatAmount,
           documentType: 'order',
@@ -280,7 +282,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     try {
       await previewSalesTransactionPDF({
         document: { ...order, customer: customers.find((customer) => customer.id === order.customerId) || order.customer },
-        tenantName: user?.tenantName || 'Empresa',
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
         formatAmount,
         tenantLogo: themeConfig?.logo,
         documentType: 'order',
@@ -303,7 +305,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     summaryDetails: [
       { label: 'Moneda', value: order.currency || 'NIO' },
       { label: 'Líneas', value: String(order.items?.length || 0) },
-      ...(Number(order.extraCostAmount || 0) > 0 ? [{ label: order.extraCostDescription || 'Coste extra', value: formatConvertedAmount(Number(order.extraCostAmount), order.currency, order.exchangeRate) }] : []),
+      ...normalizeSalesExtraCharges(order)
+        .filter((charge) => charge.amount > 0)
+        .map((charge, index) => ({ label: charge.description || `Coste extra ${index + 1}`, value: formatConvertedAmount(charge.amount, order.currency, order.exchangeRate) })),
       ...(Number(order.deliveryAmount || 0) > 0 ? [{ label: order.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(order.deliveryAmount), order.currency, order.exchangeRate) }] : []),
     ],
     metadata: [
@@ -390,6 +394,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     commissionAmount: localDoc?.commissionAmount || 0,
     extraCostDescription: localDoc?.extraCostDescription || null,
     extraCostAmount: localDoc?.extraCostAmount || 0,
+    extraCharges: getSalesExtraChargesPayload(localDoc),
     deliveryDescription: localDoc?.deliveryDescription || null,
     deliveryAmount: localDoc?.deliveryAmount || 0,
     priceListId: localDoc?.priceListId || null,
@@ -398,9 +403,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     subtotal: localDoc?.subtotal,
     taxAmount: localDoc?.taxAmount,
     discountAmount: localDoc?.discountAmount,
-    irRate: localDoc?.irRate || 0,
-    irTaxId: localDoc?.irTaxId || null,
-    irAmount: localDoc?.irAmount || 0,
+    irRate: 0,
+    irTaxId: null,
+    irAmount: 0,
     total: localDoc?.total,
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
@@ -454,11 +459,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     }
   };
 
-  const handleApproveAndInvoice = async () => {
-    if (!localDoc) return;
-    const saved = await handleSaveOrder('APPROVED');
-    if (!saved) return;
-    await handleInvoiceOrder({ ...localDoc, status: 'APPROVED' as any });
+  const handleSaveCurrentOrder = () => {
+    const currentStatus = normalizeOrderStatus(localDoc?.status);
+    return handleSaveOrder(currentStatus === 'DRAFT' ? 'DRAFT' : 'IN_PROCESS');
   };
 
   const calculateRates = (doc: any) => {
@@ -472,9 +475,32 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
   };
 
-  const additionalChargesTotal = (doc: any = localDoc) => Math.max(0, Number(doc?.extraCostAmount || 0)) + Math.max(0, Number(doc?.deliveryAmount || 0));
+  const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
 
-  const updateAdditionalCharges = (updates: Partial<SalesOrder>) => {
+  const updateExtraCharges = (charges: SalesExtraChargeLine[]) => {
+    if (!localDoc) return;
+    const payload = getSalesExtraChargesPayload({ extraCharges: charges });
+    const legacyFields = getLegacySalesExtraCostFields(payload);
+    const nextDoc = { ...localDoc, extraCharges: charges, ...legacyFields } as SalesOrder;
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    void handleUpdate(localDoc.id, { extraCharges: payload, ...legacyFields, total } as Partial<SalesOrder>);
+  };
+
+  const editExtraChargeDescription = (index: number, description: string) => {
+    if (!localDoc) return;
+    setLocalDoc({
+      ...localDoc,
+      extraCharges: normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, description } : item),
+    });
+  };
+
+  const persistExtraCharges = () => {
+    if (localDoc) updateExtraCharges(normalizeSalesExtraCharges(localDoc));
+  };
+
+  const updateDelivery = (updates: Record<string, unknown>) => {
     if (!localDoc) return;
     const nextDoc = { ...localDoc, ...updates } as SalesOrder;
     const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
@@ -522,7 +548,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
         if (e) {
           setLocalRates(calculateRates(e));
-          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
         }
       } else {
         setLocalDoc(null);
@@ -542,6 +568,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         discountAmount: 0,
         extraCostDescription: null,
         extraCostAmount: 0,
+        extraCharges: [],
         deliveryDescription: null,
         deliveryAmount: 0,
         total: 0,
@@ -670,7 +697,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         return row.invoiceId ? (
           <Badge variant="outline" className={cn(
             'whitespace-nowrap border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-none',
-            status === 'PAID' ? 'bg-emerald-500/10 text-emerald-500' : status === 'PARTIAL' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted/20 text-muted-foreground',
+            getSalesStatusColor(status),
           )}>
             {labels[status] || status || 'Pendiente'}
           </Badge>
@@ -729,9 +756,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     Marcar En Proceso
                   </Button>
                 </>}
-                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_ORDERS', 'approve') && <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
-                  onClick={() => void handleApproveAndInvoice()}>
-                  Aprobar y enviar a Factura
+                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && <Button variant="outline" className="rounded-xl border-primary/30 font-black uppercase text-[10px] tracking-widest px-6"
+                  onClick={() => void handleSaveCurrentOrder()}>
+                  Guardar cambios
                 </Button>}
               </>
             )}
@@ -881,22 +908,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>Por producto</Button>
               </div>
-              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra</p>
-                  <Input value={localDoc?.extraCostDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, extraCostDescription: event.target.value } as SalesOrder)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { extraCostDescription: localDoc.extraCostDescription || null })} placeholder="Descripción variable" className="h-8 text-xs" />
-                  <Input type="number" min="0" step="0.01" value={localDoc?.extraCostAmount || ''} onChange={(event) => updateAdditionalCharges({ extraCostAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</p>
-                  <Input value={localDoc?.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value } as SalesOrder)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción opcional" className="h-8 text-xs" />
-                  <Input type="number" min="0" step="0.01" value={localDoc?.deliveryAmount || ''} onChange={(event) => updateAdditionalCharges({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
-                </div>
-              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                  <div className="flex min-w-[9rem] items-center justify-end gap-2"><span className="w-8 shrink-0 text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span><Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="w-28 h-8 text-right font-bold tabular-nums bg-muted/20" /></div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Descuento</span>
@@ -916,8 +931,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const tAmount = base * (localRates.tRate / 100);
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
-                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : <span className="text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}</span>} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
-                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}
+                    }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
+                    <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.discountAmount || 0))}</span>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -942,17 +957,17 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         Aplicar
                       </label>
                     ) : null}
-                    <span className="text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.taxAmount || 0))}</span>
+                    <span className="min-w-[7.5rem] text-right text-xs font-black tabular-nums">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.taxAmount || 0))}</span>
                   </div>
                 </div>
-                {Number(localDoc?.extraCostAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.extraCostDescription || 'Coste extra'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.extraCostAmount || 0))}</span></div>}
+                {normalizeSalesExtraCharges(localDoc).filter((charge) => charge.amount > 0).map((charge, index) => <div key={charge.id} className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(charge.amount)}</span></div>)}
                 {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatNumber2(Number(localDoc?.deliveryAmount || 0))}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
                     <div className="flex items-center gap-2 text-primary font-black">
                       {localDoc?.currency === 'USD' ? '$' : 'C$'} 
-                      <Input type="text" value={formatSalesAmount(localDoc?.total)} readOnly className="w-28 h-8 text-right font-black text-primary bg-muted/20" />
+                      <Input type="text" value={formatSalesAmount(localDoc?.total)} readOnly className="w-28 h-8 text-right font-black tabular-nums text-primary bg-muted/20" />
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
@@ -981,6 +996,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                  <Plus className="size-3 mr-2" /> Agregar coste extra
+                </Button>
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por orden de venta' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                  <Plus className="size-3 mr-2" /> Agregar delivery
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -1224,6 +1245,39 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 </div>
               )}
             </div>
+            {(normalizeSalesExtraCharges(localDoc).length > 0 || localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
+              <div className="mt-5 space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos adicionales</p>
+                    <p className="text-[9px] text-muted-foreground/70">Se suman al total en la moneda de la orden.</p>
+                  </div>
+                  <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? 'Dólares (US$)' : 'Córdobas (C$)'}</span>
+                </div>
+                {normalizeSalesExtraCharges(localDoc).map((charge, index) => (
+                  <div key={charge.id} data-item-layout="extra-charge" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
+                    <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Coste extra {index + 1}</span>
+                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
+                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                      <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
+                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeSalesExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>
+                  </div>
+                ))}
+                {(localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
+                  <div data-item-layout="delivery" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
+                    <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Delivery</span>
+                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
+                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                      <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
+                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1241,8 +1295,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title="Órdenes en Proceso" value={data.filter(o => normalizeOrderStatus(o.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
         <SalesKpiCard title={`Monto Aprobado (${baseCurrency})`} value={formatConvertedAmount(approvedAmountInDisplayCurrency, baseCurrency)} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
-        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-slate-500" bg="bg-slate-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
+        <SalesKpiCard title="Órdenes Aprobadas" value={data.filter(o => normalizeOrderStatus(o.status) === 'APPROVED').length} icon={Check} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="Órdenes en Borrador" value={data.filter(o => normalizeOrderStatus(o.status) === 'DRAFT').length} icon={Eye} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
@@ -1315,9 +1369,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
                     size="icon" 
-                    className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors"
+                    className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors"
+                    style={{ color: themeConfig?.colors?.primary || undefined }}
                   >
-                    <ArrowRightCircle className={cn('size-4 text-muted-foreground', invoicingOrderId === row.id && 'animate-pulse')} />
+                    <ArrowRightCircle className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
                 <Button type="button" title="Ver orden completa" aria-label="Ver orden completa" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setDetailOrder(null); setEditingId(row.id); }}><Eye className="size-4 text-muted-foreground" /></Button>

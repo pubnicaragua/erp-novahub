@@ -144,8 +144,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const handleCreateDepartment = async () => {
     if (!newDeptName.trim()) { toast.error('Ingresa un nombre'); return; }
     try {
-      const code = newDeptName.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
-      const createdDepartment: any = await hrService.createDepartment({ name: newDeptName.trim(), code });
+      const createdDepartment: any = await hrService.createDepartment({ name: newDeptName.trim() });
       const importRowIndex = pendingImportDepartmentRow;
       if (importRowIndex !== null && createdDepartment?.id) {
         setImportRows((current) => validateEmployeeImportRows(current.map((row, index) => index === importRowIndex ? { ...row, department: createdDepartment.name, departmentId: createdDepartment.id, positionId: '' } : row)));
@@ -649,8 +648,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const finishEmployeeImport = () => { setImportResult(null); setImportPreviewOpen(false); setImportRows([]); setImportFileName(''); };
   const createDepartmentFromImport = async (index: number, name: string) => {
     try {
-      const code = name.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
-      const createdDepartment: any = await hrService.createDepartment({ name: name.trim(), code });
+      const createdDepartment: any = await hrService.createDepartment({ name: name.trim() });
       setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, department: createdDepartment.name, departmentId: createdDepartment.id, positionId: '' } : row)));
       toast.success('Departamento creado y asignado a la fila');
       onRefresh();

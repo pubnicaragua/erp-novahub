@@ -7,7 +7,7 @@
 export type EntityStatus = 'active' | 'inactive' | 'archived' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type DocumentStatus = 'draft' | 'in_process' | 'sent' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'IN_PROCESS' | 'SENT' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 export type PaymentStatus = 'pending' | 'partial' | 'credit' | 'paid' | 'overdue' | 'refunded' | 'cancelled' | 'PENDING' | 'PARTIAL' | 'CREDIT' | 'PAID' | 'OVERDUE' | 'REFUNDED' | 'CANCELLED';
-export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER';
+export type PaymentMethod = 'cash' | 'transfer' | 'check' | 'card' | 'other' | 'customer_balance' | 'CASH' | 'TRANSFER' | 'CHECK' | 'CARD' | 'OTHER' | 'CUSTOMER_BALANCE';
 export type Currency = 'USD' | 'EUR' | 'GTQ' | 'HNL' | 'NIO' | 'CRC' | 'PAB';
 
 export interface PaginatedResponse<T> {
@@ -144,6 +144,7 @@ export interface Estimate {
   total: number;
   extraCostDescription?: string | null;
   extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description?: string | null; amount?: number }>;
   deliveryDescription?: string | null;
   deliveryAmount?: number;
   currency: Currency;
@@ -192,6 +193,7 @@ export interface SalesOrder {
   total: number;
   extraCostDescription?: string | null;
   extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description?: string | null; amount?: number }>;
   deliveryDescription?: string | null;
   deliveryAmount?: number;
   currency: Currency;
@@ -293,7 +295,12 @@ export interface Invoice {
     amountPaid: number;
     balance: number;
     dueDate?: string | null;
+    payments?: Array<{ method?: string | null }>;
   }>;
+  payments?: PaymentReceived[];
+  paymentModality?: string | null;
+  paymentMethodSummary?: string | null;
+  paymentMethods?: string[];
   notes?: string;
   paymentMethod?: string;
   sellerEmployeeId?: string | null;
@@ -471,7 +478,7 @@ export interface CreditNote {
   irTaxId?: string | null;
   irAmount?: number;
   invoiceId?: string;
-  invoice?: Pick<Invoice, 'id' | 'number' | 'status' | 'total' | 'balance' | 'currency'>;
+  invoice?: Pick<Invoice, 'id' | 'number' | 'status' | 'subtotal' | 'taxAmount' | 'discountAmount' | 'total' | 'amountPaid' | 'balance' | 'currency' | 'exchangeRate' | 'extraCostDescription' | 'extraCostAmount' | 'extraCharges' | 'deliveryDescription' | 'deliveryAmount' | 'baseTotal'>;
   salesReturnId?: string;
   date: string;
   dueDate?: string | null;

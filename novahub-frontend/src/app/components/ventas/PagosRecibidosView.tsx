@@ -16,8 +16,10 @@ import { Combobox } from '../ui/Combobox';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -27,6 +29,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
+import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -51,10 +54,16 @@ const methodOptions = [
   { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
+  { label: 'Saldo a favor', value: 'CUSTOMER_BALANCE', color: 'bg-emerald-500/10 text-emerald-500' },
 ];
 
+const currencyLabels: Record<string, string> = {
+  NIO: 'Córdobas (NIO)',
+  USD: 'Dólares (USD)',
+};
+
 type ReceivedPaymentLine = {
-  method: 'CASH' | 'TRANSFER' | 'CARD' | 'CHECK';
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'CHECK' | 'CUSTOMER_BALANCE';
   amount: number;
   currency: 'NIO' | 'USD';
   exchangeRate: number;
@@ -95,7 +104,10 @@ function groupReceivedPayments(
     const isMixed = methods.size > 1 || effective.some((row) => /pago mixto/i.test(String(row.notes || '')));
     const invoiceStatus = String(first.invoice?.status || first.creditNote?.status || '').toUpperCase();
     const hasPartialSettlement = children.length > 1 || ['PARTIAL', 'OVERDUE'].includes(invoiceStatus);
-    const paymentLabel = isMixed
+    const isCreditSettled = Boolean(first.creditNoteId || first.creditNote) && invoiceStatus === 'PAID';
+    const paymentLabel = isCreditSettled
+      ? 'Crédito cancelado'
+      : isMixed
       ? hasPartialSettlement && invoiceStatus === 'PAID' ? 'Pago mixto · liquidado' : hasPartialSettlement ? 'Pago mixto · parcial' : 'Pago mixto'
       : hasPartialSettlement && invoiceStatus === 'PAID' ? 'Pago parcial · liquidado' : hasPartialSettlement ? 'Pago parcial' : 'Pago único';
 
@@ -117,12 +129,14 @@ function groupReceivedPayments(
 export function PagosRecibidosView({ data, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const { themeConfig } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [paymentLines, setPaymentLines] = useState<ReceivedPaymentLine[]>([]);
+  const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -139,6 +153,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     line.currency,
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
   ), 0);
+  const paymentCustomerFavorBase = Math.max(
+    0,
+    Number(customers.find((customer) => customer.id === localDoc?.customerId)?.balance || 0),
+  );
+  const paymentCustomerFavorAppliedBase = paymentLines
+    .filter((line) => line.method === 'CUSTOMER_BALANCE')
+    .reduce((sum, line) => sum + toBaseAmount(
+      Number(line.amount || 0),
+      line.currency,
+      line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+    ), 0);
+  const paymentCustomerFavorExceeded = paymentCustomerFavorAppliedBase > paymentCustomerFavorBase + 0.01;
 
   const groupedPayments = useMemo(
     () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
@@ -182,6 +208,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     const initialLine = paymentLine('TRANSFER');
     setIsCreating(true);
     setPaymentLines([initialLine]);
+    setMixedPaymentEnabled(false);
     setLocalDoc({
       customerId: '',
       invoiceId: '',
@@ -207,6 +234,15 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       .map((line) => ({ ...line, amount: Number(line.amount || 0), reference: String(line.reference || '').trim() }))
       .filter((line) => line.amount > 0);
     if (!effectiveLines.length) { toast.error('Agrega al menos un medio de pago con monto mayor a 0'); return; }
+    const customerFavorAppliedBase = effectiveLines
+      .filter((line) => line.method === 'CUSTOMER_BALANCE')
+      .reduce((sum, line) => sum + toBaseAmount(
+        line.amount,
+        line.currency,
+        line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
+      ), 0);
+    if (customerFavorAppliedBase > paymentCustomerFavorBase + 0.01) { toast.error(`El saldo a favor disponible es de ${formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}`); return; }
+    if (customerFavorAppliedBase > 0.01 && !localDoc.invoiceId && !localDoc.creditNoteId) { toast.error('Selecciona una factura o crédito pendiente para aplicar el saldo a favor'); return; }
     if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
     if (effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
     if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
@@ -264,14 +300,14 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         await paymentsService.create(payload as any);
       }
       toast.success('Pago registrado', { id: saveToastId });
-      setIsCreating(false); setLocalDoc(null); setPaymentLines([]); onRefresh();
+      setIsCreating(false); setLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
   const handleExportPDF = async (row: PaymentReceived, format: PdfDownloadFormat = 'configured') => {
     const previewToastId = toast.loading('Preparando la previsualización del comprobante...');
     try {
-      const tenantName = user?.tenantName || 'Mi Empresa';
+      const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       const paymentRows = row.payments?.length ? row.payments : [row];
       const documentReference = row.invoice?.number || row.creditNote?.number || 'Anticipo';
       await previewSalesTransactionPDF({
@@ -290,6 +326,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         },
         tenantName,
         formatAmount: formatConvertedAmount,
+        tenantLogo: themeConfig?.logo,
         documentType: 'payment',
         format,
       });
@@ -356,7 +393,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       }
     },
     { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
-      if (!val) return <span className="text-xs text-muted-foreground">N/A</span>;
+      if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
       const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);
       const [y, m, d] = clean.split('-').map(Number);
       return <span className="text-xs font-medium text-muted-foreground">{(!y||!m||!d) ? val : formatDateEs(new Date(y, m-1, d))}</span>;
@@ -378,11 +415,11 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
 
   const rawMainMethod = groupedPayments.length > 0
     ? Object.entries(groupedPayments.reduce((acc, p) => { const m = (p.method || 'TRANSFER').toUpperCase(); acc[m] = (acc[m] || 0) + 1; return acc; }, {} as Record<string, number>))
-      .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A'
-    : 'N/A';
+      .sort(([, a], [, b]) => b - a)[0]?.[0] || 'SIN_DATOS'
+    : 'SIN_DATOS';
   
-  const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', 'N/A': 'N/A' };
-  const mainMethod = mainMethodMap[rawMainMethod] || rawMainMethod;
+  const mainMethodMap: Record<string, string> = { TRANSFER: 'Transferencia', CASH: 'Efectivo', CARD: 'Tarjeta', CHECK: 'Cheque', SIN_DATOS: 'Sin datos' };
+  const mainMethod = mainMethodMap[rawMainMethod] || 'Sin especificar';
 
   const totalCollectedInDisplayCurrency = groupedPayments.reduce(
     (acc, payment) => acc + (payment.baseAmount !== null && payment.baseAmount !== undefined
@@ -391,13 +428,30 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     0,
   );
 
+  const detailDocument = detailPayment?.invoice || detailPayment?.creditNote?.invoice || detailPayment?.creditNote;
+  const detailCharges = getSalesAdditionalCharges(detailDocument).filter((charge) => charge.amount > 0.001);
+  const detailTotal = Number(detailDocument?.total || 0);
+  const detailBalance = Math.max(0, Number(detailDocument?.balance ?? detailTotal - Number(detailDocument?.amountPaid || 0)));
+  const detailPaid = detailTotal > 0 ? Math.min(detailTotal, Math.max(0, detailTotal - detailBalance)) : 0;
+  const detailFinancialRows = [
+    { label: 'Subtotal', amount: Math.max(0, Number(detailDocument?.subtotal || 0)) },
+    { label: 'Descuento', amount: Math.max(0, Number(detailDocument?.discountAmount || 0)), negative: true },
+    { label: 'IVA', amount: Math.max(0, Number(detailDocument?.taxAmount || 0)) },
+    ...detailCharges.map((charge) => ({ label: charge.description || 'Coste extra', amount: charge.amount, negative: false })),
+  ].filter((row) => row.amount > 0.001);
+  const showDetailFinancials = Boolean(detailDocument && (detailFinancialRows.length || detailTotal > 0));
+  const detailCurrency = String(detailDocument?.currency || detailPayment?.currency || baseCurrency).toUpperCase();
+  const detailRate = Number(detailDocument?.exchangeRate || detailPayment?.exchangeRate || 1) || 1;
+  const detailIsCreditSettled = Boolean(detailPayment?.creditNoteId || detailPayment?.creditNote)
+    && String(detailPayment?.creditNote?.status || detailPayment?.invoice?.status || '').toUpperCase() === 'PAID';
+
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if (isCreating && localDoc) {
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { setIsCreating(false); setLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">Registrar Pago</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
@@ -406,7 +460,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'create') && canPerform('SALES_PAYMENTS', 'approve') && (
-            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={!paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
+            <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)}>
               Confirmar Pago
             </Button>
             )}
@@ -455,13 +509,23 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Formas de pago</p>
-                    <span className="text-[10px] font-black text-primary">Mixto permitido</span>
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      <Switch
+                        checked={mixedPaymentEnabled}
+                        onCheckedChange={(checked) => {
+                          setMixedPaymentEnabled(checked);
+                          if (!checked) setPaymentLines((current) => current.slice(0, 1));
+                        }}
+                        aria-label="Activar pago mixto"
+                      />
+                      Pago mixto
+                    </label>
                   </div>
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
-                        <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (paymentCustomerFavorBase > 0.01 && Boolean(localDoc.invoiceId || localDoc.creditNoteId))).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
+                        <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={line.method === 'CUSTOMER_BALANCE'} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                           const nextRate = paymentLineRate(nextCurrency);
@@ -470,6 +534,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                         <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="number" min="0" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} className="h-9 text-xs tabular-nums" /></div>
                         <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar medio de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                       </div>
+                      {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
                       {isBankPaymentMethod(line.method, true) && <BankAccountSelect value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" className="mt-2" />}
                       {isCardPaymentMethod(line.method) && line.bankAccountId && Number(line.cardCommissionPercent || 0) > 0 && (
                         <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
@@ -483,7 +548,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                       {requiresPaymentReference(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." className="h-9 text-xs" /></div>}
                     </div>
                   ))}
-                  <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
+                  {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
                 </div>
                 <div>
@@ -558,9 +623,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto recibido</p>
                 <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatConvertedAmount(Number(detailPayment.amount || 0), detailPayment.currency, detailPayment.exchangeRate)}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <Badge className="border-none bg-emerald-500/10 text-emerald-600">Registrado</Badge>
+                  <Badge className={cn('border-none', detailIsCreditSettled ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600')}>{detailIsCreditSettled ? 'Cancelado' : 'Registrado'}</Badge>
                   <Badge variant="outline" className="border-primary/20 text-primary">{detailPayment.paymentLabel || 'Pago único'}</Badge>
-                  <span>{detailPayment.currency || baseCurrency}</span>
+                  <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} />
@@ -587,6 +652,25 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {showDetailFinancials && detailDocument && (
+                <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.03] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Resumen del documento</p>
+                  <div className="space-y-2 text-sm">
+                    {detailFinancialRows.map((row) => (
+                      <div key={row.label} className="flex items-center justify-between gap-4">
+                        <span className="text-muted-foreground">{row.label}</span>
+                        <span className="font-semibold tabular-nums">{row.negative ? '- ' : ''}{formatConvertedAmount(row.amount, detailCurrency, detailRate)}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-border/50 pt-2">
+                      <div className="flex items-center justify-between gap-4"><span className="font-black">Monto total</span><span className="font-black tabular-nums text-primary">{formatConvertedAmount(detailTotal, detailCurrency, detailRate)}</span></div>
+                      <div className="mt-2 flex items-center justify-between gap-4"><span className="text-muted-foreground">Abonado</span><span className="font-semibold tabular-nums text-emerald-600">{formatConvertedAmount(detailPaid, detailCurrency, detailRate)}</span></div>
+                      <div className="mt-2 flex items-center justify-between gap-4"><span className="text-muted-foreground">Saldo pendiente</span><span className={cn('font-semibold tabular-nums', detailBalance > 0.001 ? 'text-amber-600' : 'text-emerald-600')}>{formatConvertedAmount(detailBalance, detailCurrency, detailRate)}</span></div>
+                    </div>
                   </div>
                 </div>
               )}

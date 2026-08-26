@@ -32,9 +32,11 @@ import { resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButt
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { EstimacionesKanban } from './EstimacionesKanban';
+import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -52,10 +54,10 @@ interface EstimacionesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Borrador',  value: 'DRAFT',     color: 'bg-amber-500/10 text-amber-500' },
-  { label: 'En proceso', value: 'IN_PROCESS', color: 'bg-blue-500/10 text-blue-500' },
-  { label: 'Aprobada', value: 'APPROVED',  color: 'bg-emerald-500/10 text-emerald-500' },
-  { label: 'Cancelada',value: 'CANCELLED', color: 'bg-muted/20 text-muted-foreground' },
+  { label: 'Borrador',  value: 'DRAFT',     color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
+  { label: 'En proceso', value: 'IN_PROCESS', color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
+  { label: 'Aprobada', value: 'APPROVED',  color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
+  { label: 'Cancelada',value: 'CANCELLED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 type EstimateWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
 const normalizeEstimateStatus = (status: unknown) => String(status || '').toUpperCase() === 'SENT' ? 'IN_PROCESS' : String(status || '').toUpperCase();
@@ -192,13 +194,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           subtotal: nextDoc.subtotal || 0,
           taxAmount: nextDoc.taxAmount || 0,
           discountAmount: nextDoc.discountAmount || 0,
-          irRate: (nextDoc as any).irRate || 0,
-          irTaxId: (nextDoc as any).irTaxId || null,
-          irAmount: (nextDoc as any).irAmount || 0,
+          irRate: 0,
+          irTaxId: null,
+          irAmount: 0,
           priceListId: nextDoc.priceListId || null,
           total: nextDoc.total || 0,
           extraCostDescription: nextDoc.extraCostDescription || null,
           extraCostAmount: nextDoc.extraCostAmount || 0,
+          extraCharges: getSalesExtraChargesPayload(nextDoc),
           deliveryDescription: nextDoc.deliveryDescription || null,
           deliveryAmount: nextDoc.deliveryAmount || 0,
           currency: nextDoc.currency || displayCurrency,
@@ -240,13 +243,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         subtotal: estimate.subtotal,
         taxAmount: estimate.taxAmount,
         discountAmount: estimate.discountAmount,
-        irRate: (estimate as any).irRate || 0,
-        irTaxId: (estimate as any).irTaxId || null,
-        irAmount: (estimate as any).irAmount || 0,
+        irRate: 0,
+        irTaxId: null,
+        irAmount: 0,
         priceListId: estimate.priceListId || null,
         total: estimate.total,
         extraCostDescription: estimate.extraCostDescription || null,
         extraCostAmount: estimate.extraCostAmount || 0,
+        extraCharges: getSalesExtraChargesPayload(estimate),
         deliveryDescription: estimate.deliveryDescription || null,
         deliveryAmount: estimate.deliveryAmount || 0,
         currency: estimate.currency,
@@ -257,13 +261,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         items: (estimate.items || []).map((item) => ({
           id: item.id,
           productId: item.productId,
+          productCode: (item as any).productCode || products.find((product) => product.id === item.productId)?.code,
           description: item.description,
           quantity: Number(item.quantity || 0),
           unitPrice: Number(item.unitPrice || 0),
           discount: Number((item as any).discount || 0),
           taxRate: Number((item as any).taxRate || 0),
-          irRate: Number((item as any).irRate || 0),
-          irAmount: Number((item as any).irAmount || 0),
+          irRate: 0,
+          irAmount: 0,
           total: Number(item.total || 0),
           itemType: (item as any).itemType || 'PRODUCT',
           priceListId: (item as any).priceListId || null,
@@ -286,20 +291,24 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     subtotal: localDoc?.subtotal,
     taxAmount: localDoc?.taxAmount,
     discountAmount: localDoc?.discountAmount,
-    irRate: (localDoc as any)?.irRate || 0,
-    irTaxId: (localDoc as any)?.irTaxId || null,
-    irAmount: (localDoc as any)?.irAmount || 0,
+    irRate: 0,
+    irTaxId: null,
+    irAmount: 0,
     priceListId: localDoc?.priceListId || null,
     total: localDoc?.total,
     extraCostDescription: localDoc?.extraCostDescription || null,
     extraCostAmount: localDoc?.extraCostAmount || 0,
+    extraCharges: getSalesExtraChargesPayload(localDoc),
     deliveryDescription: localDoc?.deliveryDescription || null,
     deliveryAmount: localDoc?.deliveryAmount || 0,
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
     notes: localDoc?.notes,
-    items: localDoc?.items || [],
+    items: (localDoc?.items || []).map((item: any) => ({
+      ...item,
+      productCode: item.productCode || item.code || products.find((product) => product.id === item.productId)?.code,
+    })),
     status,
   } as Partial<Estimate>);
 
@@ -368,7 +377,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         if (!secureDocumentUrl) {
           const { blob } = await generateEstimatePDF({
             estimate: { ...estimate, customer: currentCustomer },
-            tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+            tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
             tenantLogo: themeConfig?.logo,
             formatAmount: formatConvertedAmount,
             save: true,
@@ -414,7 +423,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     try {
       await previewSalesTransactionPDF({
         document: { ...estimate, customer: customers.find((customer) => customer.id === estimate.customerId) || estimate.customer },
-        tenantName: themeConfig?.tenantName || user?.tenantName || 'Empresa',
+        tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Empresa',
         tenantLogo: themeConfig?.logo,
         formatAmount: formatConvertedAmount as any,
         documentType: 'estimate',
@@ -436,7 +445,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     summaryDetails: [
       { label: 'Moneda', value: estimate.currency || 'NIO' },
       { label: 'Líneas', value: String(estimate.items?.length || 0) },
-      ...(Number(estimate.extraCostAmount || 0) > 0 ? [{ label: estimate.extraCostDescription || 'Coste extra', value: formatConvertedAmount(Number(estimate.extraCostAmount), estimate.currency, estimate.exchangeRate) }] : []),
+      ...normalizeSalesExtraCharges(estimate)
+        .filter((charge) => charge.amount > 0)
+        .map((charge, index) => ({ label: charge.description || `Coste extra ${index + 1}`, value: formatConvertedAmount(charge.amount, estimate.currency, estimate.exchangeRate) })),
       ...(Number(estimate.deliveryAmount || 0) > 0 ? [{ label: estimate.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(estimate.deliveryAmount), estimate.currency, estimate.exchangeRate) }] : []),
     ],
     metadata: [
@@ -470,6 +481,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       total: 0,
       extraCostDescription: null,
       extraCostAmount: 0,
+      extraCharges: [],
       deliveryDescription: null,
       deliveryAmount: 0,
       baseTotal: 0,
@@ -495,9 +507,32 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
   };
 
-  const additionalChargesTotal = (doc: any = localDoc) => Math.max(0, Number(doc?.extraCostAmount || 0)) + Math.max(0, Number(doc?.deliveryAmount || 0));
+  const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
 
-  const updateAdditionalCharges = (updates: Partial<Estimate>) => {
+  const updateExtraCharges = (charges: SalesExtraChargeLine[]) => {
+    if (!localDoc) return;
+    const payload = getSalesExtraChargesPayload({ extraCharges: charges });
+    const legacyFields = getLegacySalesExtraCostFields(payload);
+    const nextDoc = { ...localDoc, extraCharges: charges, ...legacyFields } as Estimate;
+    const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
+    const total = baseTotal + additionalChargesTotal(nextDoc);
+    setLocalDoc({ ...nextDoc, total });
+    void handleUpdate(localDoc.id, { extraCharges: payload, ...legacyFields, total } as Partial<Estimate>);
+  };
+
+  const editExtraChargeDescription = (index: number, description: string) => {
+    if (!localDoc) return;
+    setLocalDoc({
+      ...localDoc,
+      extraCharges: normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, description } : item),
+    });
+  };
+
+  const persistExtraCharges = () => {
+    if (localDoc) updateExtraCharges(normalizeSalesExtraCharges(localDoc));
+  };
+
+  const updateDelivery = (updates: Record<string, unknown>) => {
     if (!localDoc) return;
     const nextDoc = { ...localDoc, ...updates } as Estimate;
     const baseTotal = Number(localDoc.total || 0) - additionalChargesTotal(localDoc);
@@ -513,8 +548,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       const discount = gross * Number(line.discount || 0) / 100;
       const taxable = gross - discount;
       const tax = taxable * Number(line.taxRate || 0) / 100;
-      const ir = taxable * Number(line.irRate || 0) / 100;
-      return { ...line, irAmount: ir, total: taxable + tax - ir };
+      return { ...line, irRate: 0, irTaxId: null, irAmount: 0, total: taxable + tax };
     });
     const subtotal = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100, 0);
@@ -522,21 +556,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       return sum + (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100;
     }, 0);
-    const irAmount = pricedItems.reduce((sum: number, line: any) => {
-      const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      const net = gross - gross * Number(line.discount || 0) / 100;
-      return sum + net * Number(line.irRate || 0) / 100;
-    }, 0);
-    return { items: pricedItems, subtotal, discountAmount, taxAmount, irAmount, total: subtotal - discountAmount + taxAmount - irAmount + additionalChargesTotal() };
+    return { items: pricedItems, subtotal, discountAmount, taxAmount, irAmount: 0, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
-  const recalcGlobalTotals = (items: any[], dRate: number, tRate: number, irRate = 0) => {
-    const normalizedItems = items.map((line: any) => ({ ...line, total: Number(line.quantity || 0) * Number(line.unitPrice || 0) }));
+  const recalcGlobalTotals = (items: any[], dRate: number, tRate: number, _irRate = 0) => {
+    const normalizedItems = items.map((line: any) => ({ ...line, irRate: 0, irTaxId: null, irAmount: 0, total: Number(line.quantity || 0) * Number(line.unitPrice || 0) }));
     const subtotal = normalizedItems.reduce((sum: number, line: any) => sum + Number(line.total || 0), 0);
     const discountAmount = subtotal * Math.max(0, Math.min(100, Number(dRate || 0))) / 100;
     const base = subtotal - discountAmount;
     const taxAmount = base * Math.max(0, Number(tRate || 0)) / 100;
-    const irAmount = base * Math.max(0, Number(irRate || 0)) / 100;
-    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount, total: base + taxAmount - irAmount + additionalChargesTotal() };
+    return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount: 0, total: base + taxAmount + additionalChargesTotal() };
   };
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
@@ -549,8 +577,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           const cloned = JSON.parse(JSON.stringify(e));
           localDraftRef.current = null;
           setLocalDoc(cloned);
-          setLocalRates({ ...calculateRates(e), irRate: Number((e as any).irRate || 0), irTaxId: (e as any).irTaxId || '' });
-          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0 || Number(line.irRate || 0) !== 0) ? 'individual' : 'global');
+          setLocalRates({ ...calculateRates(e), irRate: 0, irTaxId: '' });
+          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
         } else if (localDraftRef.current?.id === editingId) {
           setLocalDoc(localDraftRef.current);
         }
@@ -753,26 +781,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 }}>Global</Button>
                 <Button type="button" size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => setPricingMode('individual')}>Por producto</Button>
               </div>
-              <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra</p>
-                  <Input value={localDoc?.extraCostDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, extraCostDescription: event.target.value } as Estimate)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { extraCostDescription: localDoc.extraCostDescription || null })} placeholder="Descripción variable" className="h-8 text-xs" />
-                  <Input type="number" min="0" step="0.01" value={localDoc?.extraCostAmount || ''} onChange={(event) => updateAdditionalCharges({ extraCostAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Delivery</p>
-                  <Input value={localDoc?.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value } as Estimate)} onBlur={() => localDoc && void handleUpdate(localDoc.id, { deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción opcional" className="h-8 text-xs" />
-                  <Input type="number" min="0" step="0.01" value={localDoc?.deliveryAmount || ''} onChange={(event) => updateAdditionalCharges({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 text-xs" />
-                </div>
-              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <div className="flex items-center gap-2">{localDoc?.currency === 'USD' ? '$' : 'C$'} <Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="w-28 h-8 text-right font-bold bg-muted/20" /></div>
+                  <div className="flex min-w-[9rem] items-center justify-end gap-2"><span className="w-8 shrink-0 text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span><Input type="text" value={formatSalesAmount(localDoc?.subtotal)} readOnly className="w-28 h-8 text-right font-bold tabular-nums bg-muted/20" /></div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Descuento</span>
-                  <div className="flex items-center gap-2 text-rose-500">
+                  <div className="flex min-w-[9rem] items-center justify-end gap-2 text-rose-500">
                     <div className="flex items-center mr-2">{pricingMode === 'global' ? <Input type="number" min="0" max="100" value={localRates.dRate || ''} placeholder="0" onChange={(e) => {
                       const newRate = Number(e.target.value);
                       const dAmount = Number(localDoc?.subtotal||0) * (newRate / 100);
@@ -789,12 +805,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const newTotal = base + tAmount + additionalChargesTotal();
                       handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: newTotal });
                     }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
-                    -{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}
+                    <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}</span>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">Impuesto (IVA)</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-[9rem] items-center justify-end gap-2">
                     {pricingMode === 'global' && <label className="flex h-8 items-center gap-1.5 rounded-md bg-muted/30 px-2 text-xs font-black">
                       <input type="checkbox" checked={Number(localRates.tRate || 0) > 0} onChange={(e) => {
                         const newRate = e.target.checked ? 15 : 0;
@@ -806,20 +822,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         void handleUpdate(localDoc!.id, { discountAmount: dAmount, taxAmount: tAmount, total: base + tAmount + additionalChargesTotal() } as any);
                       }} /> Aplicar
                     </label>}
-                    {localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.taxAmount)}
+                    <span className="min-w-[7.5rem] text-right text-xs font-black tabular-nums">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.taxAmount)}</span>
                   </div>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">IR</span>
-                </div>
-                {Number(localDoc?.extraCostAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.extraCostDescription || 'Coste extra'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.extraCostAmount)}</span></div>}
-                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="font-mono">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.deliveryAmount)}</span></div>}
+                {normalizeSalesExtraCharges(localDoc).filter((charge) => charge.amount > 0).map((charge, index) => <div key={charge.id} className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}</span><span className="min-w-[7.5rem] text-right font-mono tabular-nums">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(charge.amount)}</span></div>)}
+                {Number(localDoc?.deliveryAmount || 0) > 0 && <div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">{localDoc?.deliveryDescription || 'Delivery'}</span><span className="min-w-[7.5rem] text-right font-mono tabular-nums">{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.deliveryAmount)}</span></div>}
                 <div className="flex justify-between items-center text-base border-t pt-3 border-border/50">
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
                     <div className="flex items-center gap-2 text-primary font-black">
-                      {localDoc?.currency === 'USD' ? '$' : 'C$'} 
-                      <Input type="number" value={Number(localDoc?.total||0)} readOnly className="w-28 h-8 text-right font-black text-primary bg-muted/20" />
+                      <span className="w-8 shrink-0 text-right text-xs font-black">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span>
+                      <Input type="number" value={Number(localDoc?.total||0)} readOnly className="w-28 h-8 text-right font-black tabular-nums text-primary bg-muted/20" />
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
@@ -848,6 +861,12 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   setLocalDoc({ ...localDoc, items: newItems } as any);
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                  <Plus className="size-3 mr-2" /> Agregar coste extra
+                </Button>
+                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por cotización' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                  <Plus className="size-3 mr-2" /> Agregar delivery
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -874,6 +893,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         newItems[idx].productId = val;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
+                          newItems[idx].productCode = selectedProd.code;
                           const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
                           newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
@@ -900,8 +920,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                       disabled={!localDoc?.customerId}
                     /></div><SalesLinePriceListSelect
-                      productId={item.productId}
-                      productCode={products.find((product) => product.id === item.productId)?.code || item.code}
+                      productId={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.id || item.productId}
+                      productCode={(products.find((product) => product.id === item.productId) || products.find((product) => String(product.name).trim().toLowerCase() === String(item.description || '').trim().toLowerCase()))?.code || item.productCode || item.code}
                       productName={item.description}
                       itemType={item.itemType}
                       value={item.priceListId}
@@ -910,7 +930,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
                       onChange={(priceListId, result, source) => {
                       const nextItems = [...(localDoc.items || [])] as any[];
-                      nextItems[idx] = { ...nextItems[idx], priceListId, unitPrice: result.unitPrice ?? 0, priceMissing: result.priceMissing };
+                      const matchedProduct = products.find((product) => product.id === nextItems[idx].productId)
+                        || products.find((product) => String(product.name).trim().toLowerCase() === String(nextItems[idx].description || '').trim().toLowerCase());
+                      nextItems[idx] = { ...nextItems[idx], productId: matchedProduct?.id || nextItems[idx].productId, productCode: matchedProduct?.code || nextItems[idx].productCode || nextItems[idx].code, priceListId, unitPrice: result.unitPrice ?? 0, priceMissing: result.priceMissing };
                       const calculated = pricingMode === 'individual' ? recalcIndividualTotals(nextItems) : recalcGlobalTotals(nextItems, localRates.dRate, localRates.tRate, localRates.irRate);
                       setLocalDoc({ ...localDoc, ...calculated, priceListId });
                       if (source !== 'initial') void handleUpdate(localDoc!.id, { ...calculated, priceListId, items: calculated.items } as any);
@@ -1017,6 +1039,39 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 </div>
               )}
             </div>
+            {(normalizeSalesExtraCharges(localDoc).length > 0 || localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
+              <div className="mt-5 space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos adicionales</p>
+                    <p className="text-[9px] text-muted-foreground/70">Se suman al total en la moneda de la cotización.</p>
+                  </div>
+                  <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? 'Dólares (US$)' : 'Córdobas (C$)'}</span>
+                </div>
+                {normalizeSalesExtraCharges(localDoc).map((charge, index) => (
+                  <div key={charge.id} data-item-layout="extra-charge" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
+                    <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Coste extra {index + 1}</span>
+                    <Input value={charge.description} onChange={(event) => editExtraChargeDescription(index, event.target.value)} onBlur={persistExtraCharges} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
+                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                      <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
+                      <Input type="number" min="0" step="0.01" value={charge.amount || ''} onChange={(event) => updateExtraCharges(normalizeSalesExtraCharges(localDoc).map((item, itemIndex) => itemIndex === index ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Eliminar coste extra ${index + 1}`} className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateExtraCharges(normalizeSalesExtraCharges(localDoc).filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="size-3.5" /></Button>
+                  </div>
+                ))}
+                {(localDoc.deliveryDescription || Number(localDoc.deliveryAmount || 0) > 0) && (
+                  <div data-item-layout="delivery" className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
+                    <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Delivery</span>
+                    <Input value={localDoc.deliveryDescription || ''} onChange={(event) => setLocalDoc({ ...localDoc, deliveryDescription: event.target.value })} onBlur={() => updateDelivery({ deliveryDescription: localDoc.deliveryDescription || null })} placeholder="Descripción" className="h-8 min-w-0 flex-1 text-xs" />
+                    <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                      <span className="text-[10px] font-black text-muted-foreground">{localDoc.currency === 'USD' ? '$' : 'C$'}</span>
+                      <Input type="number" min="0" step="0.01" value={localDoc.deliveryAmount || ''} onChange={(event) => updateDelivery({ deliveryAmount: Math.max(0, Number(event.target.value) || 0) })} placeholder="Monto" className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0" />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Eliminar delivery" className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500" onClick={() => updateDelivery({ deliveryDescription: null, deliveryAmount: 0 })}><Trash2 className="size-3.5" /></Button>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1034,8 +1089,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="sales-list-kpis">
         <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-blue-500" bg="bg-blue-500/10" />
         <SalesKpiCard title="Tasa Conversión" value={`${((data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length / (data.length || 1)) * 100).toFixed(0)}%`} icon={TrendingUp} color="text-emerald-500" bg="bg-emerald-500/10" />
-        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-amber-500" bg="bg-amber-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
-        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-purple-500" bg="bg-purple-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
+        <SalesKpiCard title="En proceso" value={data.filter(e => normalizeEstimateStatus(e.status) === 'IN_PROCESS').length} icon={Clock} color="text-blue-500" bg="bg-blue-500/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Aprobadas" value={data.filter(e => (e.status||'').toUpperCase() === 'APPROVED').length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
       </div>
 
       <div className="flex flex-col gap-4">

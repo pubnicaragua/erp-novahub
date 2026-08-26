@@ -23,7 +23,7 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
     ['my-company-team-management', tenantId],
     async (signal) => {
       const [dRes, rRes] = await Promise.all([
-        api.get<any>('/hr/departments', { signal }),
+        api.get<any>('/hr/departments', { params: { type: 'ACCESS' }, signal }),
         api.get<any>('/roles', { signal }),
       ])
       return { departments: asList(dRes), roles: asList(rRes) }
@@ -45,8 +45,7 @@ export function TeamManagementPanel({ tenantId, tenantName }: TeamPanelProps) {
     const name = newDept.trim()
     if (!name) { toast.error('Escribe el nombre del departamento'); return }
     try {
-      const code = 'DEPT-' + name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + Math.floor(Math.random() * 100)
-      await api.post('/hr/departments', { name, code })
+      await api.post('/hr/departments', { name, type: 'ACCESS' })
       toast.success('Departamento creado')
       setNewDept('')
       load()

@@ -51,7 +51,7 @@ export function PdfDownloadButton({ onDownload, className, disabled = false, siz
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1.5 text-[9px] uppercase tracking-[0.16em] text-popover-foreground/75">
-          <ReceiptText className="size-3.5" /> Tickets
+          <ReceiptText className="size-3.5" /> Rollos / Voucher
         </DropdownMenuLabel>
         {rollOptions.map((option) => (
           <DropdownMenuItem key={option.value} onClick={() => onDownload(option.value)} className="gap-2 rounded-xl py-2 [&_svg]:text-primary data-[highlighted]:[&_svg]:!text-primary-foreground">

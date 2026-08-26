@@ -5,8 +5,33 @@ import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
 import { sanitizeHtml2CanvasOklch } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
+import { getSalesAdditionalCharges } from './salesCharges';
+import { paymentMethodLabel } from './paymentMethods';
 
 type PdfRgb = [number, number, number];
+
+type PdfPageSizeMm = { width: number; height: number };
+
+function basePdfPageSizeMm(paperSize: unknown): PdfPageSizeMm {
+  switch (String(paperSize || '').toUpperCase()) {
+    case 'A4':
+      return { width: 210, height: 297 };
+    case 'LEGAL':
+      return { width: 216, height: 356 };
+    case 'OFICIO':
+      return { width: 216, height: 330 };
+    case 'LETTER':
+    default:
+      return { width: 216, height: 279 };
+  }
+}
+
+export function pdfDesignPageSize(settings: Record<string, any>): PdfPageSizeMm {
+  const size = basePdfPageSizeMm(settings.paperSize);
+  return settings.orientation === 'landscape'
+    ? { width: size.height, height: size.width }
+    : size;
+}
 
 function pdfHexToRgb(value: unknown, fallback: PdfRgb): PdfRgb {
   if (typeof value !== 'string') return fallback;
@@ -31,16 +56,33 @@ export function pdfDesignColor(value: unknown, fallback: PdfRgb): PdfRgb {
 }
 
 export function pdfDesignPaper(settings: Record<string, any>) {
+  const paperSize = String(settings.paperSize || 'LETTER').toUpperCase();
   return {
-    format: settings.paperSize === 'A4'
+    format: paperSize === 'A4'
       ? 'a4'
-      : settings.paperSize === 'LEGAL'
+      : paperSize === 'LEGAL'
         ? 'legal'
-        : settings.paperSize === 'OFICIO'
+        : paperSize === 'OFICIO'
           ? [216, 330]
           : 'letter',
-    orientation: settings.orientation === 'landscape' ? 'landscape' : 'portrait',
+    orientation: String(settings.orientation || 'portrait').toLowerCase() === 'landscape' ? 'landscape' : 'portrait',
   } as any;
+}
+
+function fitPdfImage(doc: jsPDF, image: string, maxWidth: number, maxHeight: number) {
+  let ratio = 2;
+  try {
+    const properties = doc.getImageProperties(image);
+    if (Number(properties.width) > 0 && Number(properties.height) > 0) {
+      ratio = Number(properties.width) / Number(properties.height);
+    }
+  } catch {
+    // Si una imagen remota no expone sus dimensiones, se usa una proporción
+    // segura para que el PDF siga siendo descargable.
+  }
+  const width = Math.min(maxWidth, maxHeight * ratio);
+  const height = width / ratio;
+  return { width, height };
 }
 
 function paperSettingForDownload(format: Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>) {
@@ -54,7 +96,7 @@ function withPdfDownloadFormat(design: any, format: PdfDownloadFormat) {
     settings: {
       ...((design && design.settings) || {}),
       paperSize: paperSettingForDownload(format as Exclude<PdfDownloadFormat, 'configured' | 'roll-58' | 'roll-80'>),
-      orientation: 'portrait',
+      orientation: design?.settings?.orientation === 'landscape' ? 'landscape' : 'portrait',
     },
   };
 }
@@ -65,12 +107,67 @@ function htmlSafeColor(value: unknown, fallback: string) {
   return /oklch\(|oklab\(|color\(|lch\(|lab\(/i.test(color) ? fallback : color;
 }
 
+/**
+ * Los comprobantes térmicos se imprimen en monocromo. Si el logo configurado
+ * es una imagen a color, se rasteriza en escala de grises antes de incrustarlo
+ * en el PDF. Si el recurso remoto no permite leer sus píxeles, se omite para
+ * no entregar un rollo que mezcle color con contenido monocromático.
+ */
+async function toGrayscaleImageSource(source?: string | null): Promise<string | undefined> {
+  if (!source || typeof window === 'undefined') return undefined;
+  return new Promise(resolve => {
+    const image = new Image();
+    let settled = false;
+    let timeout = 0;
+    const finish = (value?: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(value);
+    };
+    timeout = window.setTimeout(() => finish(), 2500);
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      try {
+        const canvas = window.document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        if (!canvas.width || !canvas.height) return finish();
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return finish();
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+        for (let index = 0; index < pixels.data.length; index += 4) {
+          const luminance = Math.round(
+            pixels.data[index] * 0.299
+            + pixels.data[index + 1] * 0.587
+            + pixels.data[index + 2] * 0.114,
+          );
+          pixels.data[index] = luminance;
+          pixels.data[index + 1] = luminance;
+          pixels.data[index + 2] = luminance;
+        }
+        context.putImageData(pixels, 0, 0);
+        finish(canvas.toDataURL('image/png'));
+      } catch {
+        finish();
+      }
+    };
+    image.onerror = () => finish();
+    image.src = source;
+  });
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 }
 
 function htmlFieldStyle(field: any) {
   return `position:absolute;left:${Number(field.x) || 0}%;top:${Number(field.y) || 0}%;width:${Number(field.width) || 30}%;min-height:${Number(field.height) || 7}%;`;
+}
+
+function getSalesPdfAdditionalCharges(transaction: any): Array<{ label: string; amount: number }> {
+  return getSalesAdditionalCharges(transaction).map((charge) => ({ label: charge.description, amount: charge.amount }));
 }
 
 async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, formatAmount, tenantLogo, documentType, save }: { savedDesign: any; estimate: any; tenantName: string; formatAmount: (amount: number, currency: string, rate: number) => string; tenantLogo?: string; documentType: string; save: boolean }): Promise<{ doc: jsPDF; blob: Blob }> {
@@ -99,8 +196,9 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   const primary = htmlSafeColor(design.primaryColor, '#10b981');
   const text = htmlSafeColor(design.textColor, '#334155');
   const line = htmlSafeColor(design.lineColor, '#e2e8f0');
-  const pageWidthPx = design.orientation === 'landscape' ? 1123 : 794;
-  const pageHeightPx = design.orientation === 'landscape' ? 794 : 1123;
+  const pageSizeMm = pdfDesignPageSize(design);
+  const pageWidthPx = Math.round(pageSizeMm.width * 96 / 25.4);
+  const pageHeightPx = Math.round(pageSizeMm.height * 96 / 25.4);
   const headerLayout = String(design.headerLayout || 'split');
   const tableLayout = String(design.tableLayout || 'standard');
   const bannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
@@ -118,6 +216,10 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
   const headerBorder = bannerHeader ? 'none' : `1px solid ${line}`;
   const logoSource = design.logoUrl || tenantLogo || NOVAHUB_LOGO_DATA_URL;
   const logo = `<img src="${escapeHtml(logoSource)}" alt="NovaHub" style="position:absolute;left:${design.logoPosition === 'right' ? '78%' : design.logoPosition === 'center' ? '42%' : '8%'};top:4.5%;width:${Math.min(Number(design.logoSize) || 42, 78) / 2}%;max-height:10%;object-fit:contain;" />`;
+  const additionalChargesHtml = getSalesPdfAdditionalCharges(estimate)
+    .map((charge) => `<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>${escapeHtml(charge.label)}</span><span>${escapeHtml(formatAmount(charge.amount, estimate.currency, estimate.exchangeRate))}</span></div>`)
+    .join('');
+  const totalsHtml = `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div>${additionalChargesHtml}<div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:7px;margin-top:6px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`;
   const pageHtml = `<div id="pdf-template-canvas" style="position:relative;width:${pageWidthPx}px;height:${pageHeightPx}px;overflow:hidden;background:#fff;color:${text};font-family:${escapeHtml(design.fontFamily || 'Arial')};font-size:${Number(design.fontSize) || 9}px;box-sizing:border-box;">
     <div style="position:absolute;inset:0 0 auto;height:29%;background:${headerBackground};border-top:6px solid ${primary};border-bottom:${headerBorder};${headerLayout === 'double-band' ? `border-bottom:10px solid ${line};` : ''}${headerLayout === 'sidebar' ? `border-left:10px solid ${primary};` : ''}${headerLayout === 'boxed' ? `inset:2%;height:25%;border:1px solid ${line};border-radius:10px;` : ''}"></div>${design.watermark ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.06;transform:rotate(-25deg);font-size:64px;font-weight:800;color:#64748b;">${escapeHtml(design.watermark)}</div>` : ''}${logo}
     ${zone('company', `<strong>${escapeHtml(values.company)}</strong>`, 'font-size:1.18em;letter-spacing:.01em;')}
@@ -131,7 +233,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     ${zone('phone', escapeHtml(values.phone), 'font-size:.78em;opacity:.75;')}
     ${zone('email', escapeHtml(values.email), 'font-size:.78em;opacity:.75;')}
     ${zone('items', `<div style="overflow:hidden;border:${tableBorder};border-radius:${tableLayout === 'cards' ? 0 : 6}px;font-size:.78em;box-shadow:0 2px 10px rgba(15,23,42,.04);"><div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 6 : 10}px;background:${tableHeaderBackground};color:${tableHeaderColor};font-size:.92em;letter-spacing:.06em;text-transform:uppercase;font-weight:700;"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span></div>${rows}</div>`, 'padding:0;')}
-    ${zone('totals', `<div style="font-size:.78em;text-align:right;background:#f7fbf9;border-radius:6px;padding:10px 12px;"><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Subtotal</span><span>${escapeHtml(formatAmount(Number(estimate.subtotal || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Impuesto</span><span>${escapeHtml(formatAmount(Number(estimate.taxAmount || 0), estimate.currency, estimate.exchangeRate))}</span></div><div style="display:flex;justify-content:space-between;border-top:1px solid ${line};padding-top:7px;margin-top:6px;color:${primary};font-size:1.18em;font-weight:800;"><span>TOTAL</span><span>${escapeHtml(total)}</span></div></div>`)}
+    ${zone('totals', totalsHtml)}
     ${zone('legal', escapeHtml(values.legal).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('terms', escapeHtml(values.terms).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
     ${zone('notes', escapeHtml(values.notes).replace(/\n/g, '<br />'), 'font-size:.68em;opacity:.75;')}
@@ -152,8 +254,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
       logging: false,
       onclone: (clonedDoc) => sanitizeHtml2CanvasOklch('pdf-template-canvas', clonedDoc, primary),
     });
-    const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : design.paperSize === 'OFICIO' ? [216, 330] : 'letter';
-    const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const { format, orientation } = pdfDesignPaper(design);
     const doc = new jsPDF({ orientation, unit: 'mm', format });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -193,8 +294,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   // que la vista previa. El PDF original queda como referencia, no como fondo
   // para evitar duplicar textos y datos dinámicos.
   const design: any = savedDesign?.settings || {};
-  const format = design.paperSize === 'A4' ? 'a4' : design.paperSize === 'LEGAL' ? 'legal' : design.paperSize === 'OFICIO' ? [216, 330] : 'letter';
-  const orientation = design.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const { format, orientation } = pdfDesignPaper(design);
   const doc = new jsPDF({ orientation, unit: 'mm', format });
   
   // 1. Configuraciones iniciales y estilos base
@@ -213,14 +313,15 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const baseFontSize = Math.max(7, Math.min(13, Number(design.fontSize) || 9));
   const companyDisplayName = design.showCompanyName === false ? '' : (design.companyName || tenantName || 'Nuestra Empresa');
   const logoPosition = design.logoPosition || 'left';
-  const logoWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 42));
-  const logoHeight = logoWidth * 0.5;
-  const designLogo = design.logoUrl || resolvedTenantLogo;
   const headerLayout = design.headerLayout || 'split';
+  const logoMaxWidth = Math.max(18, Math.min(70, Number(design.logoSize) || 42));
+  const logoMaxHeight = headerLayout === 'compact' ? 17 : 21;
+  const designLogo = design.logoUrl || resolvedTenantLogo;
   const tableLayout = design.tableLayout || 'standard';
   const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
+  const isCenteredHeader = ['centered', 'editorial'].includes(headerLayout);
   const headerTextColor: PdfRgb = isBannerHeader ? [255, 255, 255] : textColor;
-  const headerHeight = headerLayout === 'compact' ? 42 : isBannerHeader ? 46 : 52;
+  const headerHeight = isCenteredHeader ? 64 : headerLayout === 'compact' ? 42 : isBannerHeader ? 46 : 52;
   const companyHeaderColor: PdfRgb = isBannerHeader ? [255, 255, 255] : primaryColor;
 
   // La vista previa usa una banda real para el layout corporativo. Antes el
@@ -247,29 +348,11 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.rect(0, headerHeight - 5, pageWidth, 5, 'F');
   }
   
-  // 2. Encabezado: marca a la izquierda y ficha documental a la derecha.
-  const logoX = logoPosition === 'center' ? (pageWidth - logoWidth) / 2 : logoPosition === 'right' ? rightEdge - logoWidth : margin;
+  // 2. Encabezado: la distribución elegida en la biblioteca también controla
+  // la posición real de la identidad y del título en el PDF.
+  const logoSize = designLogo ? fitPdfImage(doc, designLogo, logoMaxWidth, logoMaxHeight) : { width: 0, height: 0 };
+  const logoX = logoPosition === 'center' ? (pageWidth - logoSize.width) / 2 : logoPosition === 'right' ? rightEdge - logoSize.width : margin;
   const logoY = isBannerHeader ? 13 : 15;
-  const identityX = logoPosition === 'left' ? logoX + logoWidth + 6 : logoPosition === 'right' ? rightEdge : logoX;
-  const identityAlign = logoPosition === 'right' ? 'right' : 'left';
-  if (designLogo) {
-    try {
-      doc.addImage(designLogo, 'PNG', logoX, logoY, logoWidth, logoHeight);
-    } catch (error) {
-      console.warn('No se pudo incrustar el logo en el PDF', error);
-    }
-  }
-  doc.setTextColor(companyHeaderColor[0], companyHeaderColor[1], companyHeaderColor[2]);
-  doc.setFont(fontName, 'bold');
-  doc.setFontSize(designLogo ? 14 : 18);
-  if (companyDisplayName) doc.text(companyDisplayName, identityX, logoY + 8, { align: identityAlign as any });
-  
-  // Subtítulo / Identificadores de Empresa
-  doc.setFontSize(8.5);
-  doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
-  doc.setFont(fontName, 'normal');
-  if (design.slogan) doc.text(String(design.slogan), identityX, logoY + 14, { align: identityAlign as any });
-  if (design.fiscalInfo) doc.text(String(design.fiscalInfo), identityX, logoY + 19, { align: identityAlign as any });
   let docTypeStr = 'Cotización de Venta';
   if (documentType === 'order') docTypeStr = 'Orden de Venta';
   else if (documentType === 'invoice') docTypeStr = 'Factura';
@@ -277,31 +360,77 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   else if (documentType === 'payment') docTypeStr = 'Comprobante de Pago';
   else if (documentType === 'return') docTypeStr = 'Nota de Crédito';
   else if (documentType === 'credit-note') docTypeStr = 'Crédito';
-  doc.text(docTypeStr, identityX, logoY + (design.slogan || design.fiscalInfo ? 25 : 20), { align: identityAlign as any });
-  
-  // 3. Head - Top Right (Info de la Cotización)
-  doc.setFontSize(17);
-  doc.setTextColor(headerTextColor[0], headerTextColor[1], headerTextColor[2]);
-  doc.setFont(fontName, 'bold');
-  let titleStr = 'COTIZACIÓN';
-  if (documentType === 'order') titleStr = 'ORDEN DE VENTA';
-  else if (documentType === 'invoice') titleStr = 'FACTURA';
-  else if (documentType === 'recurring') titleStr = 'FACTURA RECURRENTE';
-  else if (documentType === 'payment') titleStr = 'PAGO RECIBIDO';
-  else if (documentType === 'return') titleStr = 'NOTA DE CRÉDITO';
-  else if (documentType === 'credit-note') titleStr = 'CRÉDITO';
-  doc.text(titleStr, rightEdge, 22, { align: 'right' });
-  
-  doc.setFontSize(8.5);
-  doc.setFont(fontName, 'normal');
-  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text(`Nº ${estimate.number || 'N/A'}`, rightEdge, headerLayout === 'compact' ? 29 : 29, { align: 'right' });
-  doc.text(`Fecha  ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 35 : 35, { align: 'right' });
-  
-  if (documentType === 'order') {
-    doc.text(`Entrega  ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 41 : 41, { align: 'right' });
+  if (isCenteredHeader) {
+    const centerX = pageWidth / 2;
+    const centeredLogoY = 8;
+    if (designLogo) {
+      try {
+        doc.addImage(designLogo, 'PNG', (pageWidth - logoSize.width) / 2, centeredLogoY, logoSize.width, logoSize.height);
+      } catch (error) {
+        console.warn('No se pudo incrustar el logo en el PDF', error);
+      }
+    }
+    let centeredY = centeredLogoY + (designLogo ? logoSize.height + 5 : 4);
+    doc.setTextColor(companyHeaderColor[0], companyHeaderColor[1], companyHeaderColor[2]);
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(designLogo ? 14 : 18);
+    if (companyDisplayName) {
+      doc.text(companyDisplayName, centerX, centeredY, { align: 'center' });
+      centeredY += 6;
+    }
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
+    if (design.slogan) { doc.text(String(design.slogan), centerX, centeredY, { align: 'center' }); centeredY += 5; }
+    if (design.fiscalInfo) { doc.text(String(design.fiscalInfo), centerX, centeredY, { align: 'center' }); centeredY += 5; }
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(headerTextColor[0], headerTextColor[1], headerTextColor[2]);
+    doc.text(docTypeStr, centerX, centeredY + 2, { align: 'center' });
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Nº ${estimate.number || 'N/A'} · ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, centerX, centeredY + 8, { align: 'center' });
   } else {
-    doc.text(`Válida hasta  ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, headerLayout === 'compact' ? 41 : 41, { align: 'right' });
+    const identityX = logoPosition === 'left' ? logoX + logoSize.width + 6 : logoPosition === 'right' ? rightEdge : logoX;
+    const identityAlign = logoPosition === 'right' ? 'right' : 'left';
+    if (designLogo) {
+      try {
+        doc.addImage(designLogo, 'PNG', logoX, logoY, logoSize.width, logoSize.height);
+      } catch (error) {
+        console.warn('No se pudo incrustar el logo en el PDF', error);
+      }
+    }
+    doc.setTextColor(companyHeaderColor[0], companyHeaderColor[1], companyHeaderColor[2]);
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(designLogo ? 14 : 18);
+    if (companyDisplayName) doc.text(companyDisplayName, identityX, logoY + 8, { align: identityAlign as any });
+    doc.setFontSize(8.5);
+    doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
+    doc.setFont(fontName, 'normal');
+    if (design.slogan) doc.text(String(design.slogan), identityX, logoY + 14, { align: identityAlign as any });
+    if (design.fiscalInfo) doc.text(String(design.fiscalInfo), identityX, logoY + 19, { align: identityAlign as any });
+    doc.text(docTypeStr, identityX, logoY + (design.slogan || design.fiscalInfo ? 25 : 20), { align: identityAlign as any });
+
+    // 3. Ficha documental alineada según el encabezado no centrado.
+    doc.setFontSize(17);
+    doc.setTextColor(headerTextColor[0], headerTextColor[1], headerTextColor[2]);
+    doc.setFont(fontName, 'bold');
+    let titleStr = 'COTIZACIÓN';
+    if (documentType === 'order') titleStr = 'ORDEN DE VENTA';
+    else if (documentType === 'invoice') titleStr = 'FACTURA';
+    else if (documentType === 'recurring') titleStr = 'FACTURA RECURRENTE';
+    else if (documentType === 'payment') titleStr = 'PAGO RECIBIDO';
+    else if (documentType === 'return') titleStr = 'NOTA DE CRÉDITO';
+    else if (documentType === 'credit-note') titleStr = 'CRÉDITO';
+    doc.text(titleStr, rightEdge, 22, { align: 'right' });
+    doc.setFontSize(8.5);
+    doc.setFont(fontName, 'normal');
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Nº ${estimate.number || 'N/A'}`, rightEdge, 29, { align: 'right' });
+    doc.text(`Fecha  ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, 35, { align: 'right' });
+    if (documentType === 'order') doc.text(`Entrega  ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, 41, { align: 'right' });
+    else doc.text(`Válida hasta  ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, 41, { align: 'right' });
   }
 
   // 4. Separador
@@ -314,7 +443,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   }
 
   // 5. Tarjeta de cliente: una jerarquía clara antes del detalle.
-  const customerBoxY = headerLayout === 'compact' ? 49 : 58;
+  const customerBoxY = isCenteredHeader ? 70 : headerLayout === 'compact' ? 49 : 58;
   const customerBoxH = headerLayout === 'compact' ? 23 : 27;
   doc.setFillColor(247, 251, 249);
   doc.setDrawColor(...lineColor);
@@ -350,7 +479,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const tableTheme = tableLayout === 'striped' || tableLayout === 'ledger' ? 'striped' : tableLayout === 'minimal' ? 'plain' : 'grid';
   const lightTableHeader = tableLayout === 'minimal';
   autoTable(doc, {
-    startY: headerLayout === 'compact' ? 79 : 92,
+    startY: isCenteredHeader ? 104 : headerLayout === 'compact' ? 79 : 92,
     head: [['Descripción', 'Cantidad', 'Precio U.', 'Total']],
     body: tableData,
     theme: tableTheme,
@@ -383,7 +512,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const rightX = rightEdge;
   const summaryX = Math.max(margin + 82, rightEdge - 72);
   const summaryTop = finalY + 7;
-  const summaryRows = 2 + (Number(estimate.discountAmount) > 0 ? 1 : 0) + (Number(estimate.taxAmount) > 0 ? 1 : 0) + (Number((estimate as any).irAmount || 0) > 0 ? 1 : 0);
+  const additionalChargeLines = getSalesPdfAdditionalCharges(estimate);
+  const summaryRows = 2 + (Number(estimate.discountAmount) > 0 ? 1 : 0) + (Number(estimate.taxAmount) > 0 ? 1 : 0) + additionalChargeLines.length;
   const summaryHeight = summaryRows * 6 + 14;
   doc.setFillColor(247, 251, 249);
   doc.setDrawColor(...lineColor);
@@ -415,12 +545,11 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     currentY += 7;
   }
 
-  // IR: se muestra únicamente el monto retenido, nunca el nombre ni el porcentaje.
-  if (Number((estimate as any).irAmount || 0) > 0) {
-    doc.text('IR:', labelX, currentY);
-    doc.text(`-${formatAmount(Number((estimate as any).irAmount), estimate.currency, estimate.exchangeRate)}`, rightX, currentY, { align: 'right' });
+  additionalChargeLines.forEach((charge) => {
+    doc.text(`${charge.label}:`, labelX, currentY);
+    doc.text(formatAmount(charge.amount, estimate.currency, estimate.exchangeRate), rightX, currentY, { align: 'right' });
     currentY += 7;
-  }
+  });
   
   // Total Line
   doc.setDrawColor(...lineColor);
@@ -510,6 +639,486 @@ function savePdfBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function getPaymentVoucherRows(transaction: any) {
+  const rows = Array.isArray(transaction?.payments) && transaction.payments.length
+    ? transaction.payments
+    : [transaction];
+  return rows.filter((row: any) => row && typeof row === 'object');
+}
+
+function getPaymentVoucherContext(transaction: any) {
+  const isCreditLink = Boolean(transaction?.creditNote || transaction?.creditNoteId);
+  const linkedDocument = isCreditLink
+    ? transaction?.creditNote || transaction?.invoice || null
+    : transaction?.invoice || transaction?.creditNote || null;
+  const linkedDocumentType = isCreditLink
+    ? 'Crédito'
+    : transaction?.invoice || transaction?.invoiceId
+      ? 'Factura'
+      : 'Anticipo';
+  const linkedDocumentNumber = linkedDocument?.number
+    || transaction?.invoiceNumber
+    || transaction?.creditNoteNumber
+    || (linkedDocumentType === 'Anticipo' ? 'Sin documento' : 'Sin número');
+  const explicitLabel = String(transaction?.paymentLabel || transaction?.operationLabel || '').trim();
+  const linkedStatus = String(linkedDocument?.status || '').toUpperCase();
+  const documentTotal = Number(linkedDocument?.total || 0);
+  const financialDocument = transaction?.invoice || linkedDocument?.invoice || linkedDocument || null;
+  const financialTotal = Number(financialDocument?.total || documentTotal || 0);
+  const financialCurrency = String(financialDocument?.currency || linkedDocument?.currency || transaction?.currency || 'NIO').toUpperCase();
+  const financialRate = Number(financialDocument?.exchangeRate || linkedDocument?.exchangeRate || transaction?.exchangeRate || 1) || 1;
+  const financialRows = [
+    { label: 'Subtotal', amount: Math.max(0, Number(financialDocument?.subtotal || 0)) },
+    { label: 'Descuento', amount: Math.max(0, Number(financialDocument?.discountAmount || 0)), negative: true },
+    { label: 'IVA', amount: Math.max(0, Number(financialDocument?.taxAmount || 0)) },
+    ...getSalesPdfAdditionalCharges(financialDocument).map((charge) => ({ label: charge.label, amount: charge.amount })),
+  ].filter((row) => row.amount > 0.001);
+  const paymentRows = getPaymentVoucherRows(transaction);
+  const linkedCurrency = String(linkedDocument?.currency || transaction?.currency || 'NIO').toUpperCase();
+  const linkedRate = Number(linkedDocument?.exchangeRate || transaction?.exchangeRate || 1) || 1;
+  const paidInLinkedCurrency = paymentRows.reduce((sum: number, row: any) => {
+    const amount = Number(row.amount || 0);
+    const rowCurrency = String(row.currency || transaction?.currency || linkedCurrency).toUpperCase();
+    if (rowCurrency === linkedCurrency) return sum + amount;
+    const baseAmount = Number(row.baseAmount ?? (rowCurrency === 'USD' ? amount * Number(row.exchangeRate || 1) : amount));
+    return sum + (linkedCurrency === 'USD' ? baseAmount / linkedRate : baseAmount);
+  }, 0);
+  const explicitBalance = transaction?.remaining ?? transaction?.pendingBalance;
+  const hasExplicitBalance = explicitBalance !== undefined && explicitBalance !== null && Number.isFinite(Number(explicitBalance));
+  const reportedBalance = hasExplicitBalance
+    ? Math.max(0, Number(explicitBalance))
+    : Number(linkedDocument?.balance || 0);
+  const linkedAmountPaid = Number(linkedDocument?.amountPaid);
+  const accumulatedLinkedPayment = Number.isFinite(linkedAmountPaid) ? Math.max(0, linkedAmountPaid) : 0;
+  const derivedBalance = documentTotal > 0
+    ? Math.max(0, documentTotal - Math.max(paidInLinkedCurrency, accumulatedLinkedPayment))
+    : 0;
+  const effectiveBalance = hasExplicitBalance || reportedBalance > 0.01 ? reportedBalance : derivedBalance;
+  const isCreditSettled = isCreditLink && effectiveBalance <= 0.01;
+  const isPartial = !isCreditSettled && (
+    effectiveBalance > 0.01
+    || (!hasExplicitBalance && (/parcial|abono/i.test(explicitLabel)
+      || linkedStatus === 'PARTIAL'
+      || (documentTotal > 0 && paidInLinkedCurrency + 0.01 < documentTotal)))
+  );
+  const accumulatedPaid = financialTotal > 0
+    ? Math.min(financialTotal, Math.max(0, financialTotal - effectiveBalance))
+    : paidInLinkedCurrency;
+  const operation = linkedDocument
+    ? isPartial ? 'ABONO PARCIAL' : 'PAGO COMPLETO'
+    : 'PAGO RECIBIDO';
+  const settlementLabel = isCreditSettled
+    ? 'Crédito cancelado'
+    : isPartial
+    ? (/parcial|abono/i.test(explicitLabel) ? explicitLabel : 'Pago parcial')
+    : explicitLabel || (linkedDocument ? 'Pago completo' : 'Pago recibido');
+  const statusLabel = isCreditSettled ? 'Cancelado' : isPartial ? 'Saldo pendiente' : linkedDocument ? 'Liquidado' : 'Registrado';
+
+  return {
+    linkedDocument,
+    linkedDocumentType,
+    linkedDocumentNumber,
+    operation,
+    settlementLabel,
+    statusLabel,
+    effectiveBalance,
+    financialDocument,
+    financialCurrency,
+    financialRate,
+    financialTotal,
+    financialRows,
+    accumulatedPaid,
+    isCreditSettled,
+  };
+}
+
+async function generateSalesPaymentVoucherPDF({
+  document: transaction,
+  tenantName,
+  formatAmount,
+  tenantLogo,
+  format,
+  settings,
+  save = true,
+}: {
+  document: any;
+  tenantName: string;
+  formatAmount: (amount: number, currency?: string, rate?: number) => string;
+  tenantLogo?: string;
+  format: PdfDownloadFormat;
+  settings: Record<string, any>;
+  save?: boolean;
+}) {
+  const rows = getPaymentVoucherRows(transaction);
+  const {
+    linkedDocument,
+    linkedDocumentType,
+    linkedDocumentNumber,
+    operation,
+    settlementLabel,
+    statusLabel,
+    effectiveBalance,
+    financialCurrency,
+    financialRate,
+    financialTotal,
+    financialRows,
+    accumulatedPaid,
+  } = getPaymentVoucherContext(transaction);
+  const linkedCurrency = linkedDocument?.currency || transaction?.currency || 'NIO';
+  const linkedRate = Number(linkedDocument?.exchangeRate || transaction?.exchangeRate || 1);
+  const voucherCurrency = transaction?.currency || linkedCurrency;
+  const voucherRate = Number(transaction?.exchangeRate || linkedRate || 1);
+  const voucherTotal = Number(transaction?.total ?? transaction?.amount ?? rows.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0));
+  const documentTotal = Number(linkedDocument?.total || 0);
+  const pendingBalance = effectiveBalance;
+  const changeAmount = Math.max(0, Number(transaction?.change ?? transaction?.changeAmount ?? 0));
+  const currencyCode = (value: unknown) => String(value || voucherCurrency || 'NIO').toUpperCase() === 'USD' ? 'USD' : 'NIO';
+  const money = (amount: unknown, currency = voucherCurrency, rate = voucherRate) => formatAmount(Number(amount || 0), currency, rate);
+  const isRoll = format === 'roll-58' || format === 'roll-80';
+  const primaryColor = isRoll ? [0, 0, 0] as PdfRgb : pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const textColor = isRoll ? [0, 0, 0] as PdfRgb : pdfDesignColor(settings.textColor, [31, 41, 55]);
+  const lineColor = isRoll ? [0, 0, 0] as PdfRgb : pdfDesignColor(settings.lineColor, [203, 213, 225]);
+  const selectedFont = String(settings.fontFamily || '').toLowerCase();
+  const fontName = selectedFont.includes('serif') ? 'times' : selectedFont.includes('mono') || selectedFont.includes('courier') ? 'courier' : 'helvetica';
+  const companyName = String(settings.companyName || tenantName || 'Nuestra Empresa');
+  const logo = isRoll
+    ? await toGrayscaleImageSource(settings.logoUrl || tenantLogo)
+    : settings.logoUrl || tenantLogo;
+
+  const methodRows = rows.map((row: any) => {
+    const rowCurrency = currencyCode(row.currency || voucherCurrency);
+    const reference = row.reference || transaction?.reference || 'Sin referencia';
+    const bank = row.bankAccount?.bankName || transaction?.bankAccount?.bankName || '';
+    return {
+      method: paymentMethodLabel(String(row.method || transaction?.method || '').toUpperCase()),
+      currency: rowCurrency,
+      amount: Number(row.amount || 0),
+      rate: Number(row.exchangeRate || voucherRate || 1),
+      reference: String(reference),
+      bank: String(bank),
+    };
+  });
+
+  if (isRoll) {
+    const width = format === 'roll-58' ? 58 : 80;
+    const margin = width === 58 ? 3 : 4;
+    const contentWidth = width - margin * 2;
+    const probe = new jsPDF({ unit: 'mm', format: [width, 1000], orientation: 'portrait' });
+    probe.setFont(fontName, 'normal');
+    const countLines = (value: unknown, size: number, maxWidth = contentWidth) => {
+      probe.setFontSize(size);
+      return Math.max(1, probe.splitTextToSize(String(value || ''), maxWidth).length);
+    };
+    const logoSize = logo ? fitPdfImage(probe, logo, width === 58 ? 30 : 38, 16) : { width: 0, height: 0 };
+    const customerName = transaction?.customer?.name || transaction?.customerName || 'Cliente general';
+    const notes = String(transaction?.notes || '').trim();
+    const headerHeight = logoSize.height + countLines(companyName, width === 58 ? 9 : 10) * 4 + (settings.slogan ? 4 : 0) + (settings.fiscalInfo ? 4 : 0) + 16;
+    const metaHeight = 5 * 4.2 + countLines(customerName, 7.2) * 3.5 + 12;
+    const detailHeight = 10 + methodRows.reduce((total: number, row: any) => total + 10 + countLines(`${row.method} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.5) * 3.2, 0);
+    const summaryHeight = 32 + financialRows.length * 4 + (changeAmount > 0.01 ? 4 : 0);
+    const notesHeight = notes ? countLines(`Notas: ${notes}`, 6.5, contentWidth) * 3.2 + 6 : 0;
+    const pageHeight = Math.max(150, margin + headerHeight + metaHeight + detailHeight + summaryHeight + notesHeight + 20);
+    const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
+    const primary = primaryColor;
+    let y = margin;
+    const drawRule = (color = lineColor, weight = 0.3) => {
+      doc.setDrawColor(color[0], color[1], color[2]);
+      doc.setLineWidth(weight);
+      doc.line(margin, y, width - margin, y);
+    };
+    const drawRow = (label: string, value: string, bold = false) => {
+      doc.setFont(fontName, bold ? 'bold' : 'normal');
+      doc.setFontSize(bold ? 8.2 : 6.8);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text(label, margin, y);
+      doc.text(value, width - margin, y, { align: 'right' });
+      y += bold ? 5 : 4;
+    };
+    const drawFinancialRow = (row: { label: string; amount: number; negative?: boolean }) => {
+      drawRow(row.label, `${row.negative ? '- ' : ''}${money(row.amount, financialCurrency, financialRate)}`);
+    };
+
+    if (logo) {
+      try {
+        doc.addImage(logo, 'PNG', (width - logoSize.width) / 2, y, logoSize.width, logoSize.height, undefined, 'FAST');
+        y += logoSize.height + 3;
+      } catch {
+        // El comprobante continúa aunque el logo configurado no sea compatible.
+      }
+    }
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(width === 58 ? 9 : 10.5);
+    doc.setTextColor(primary[0], primary[1], primary[2]);
+    doc.text(doc.splitTextToSize(companyName, contentWidth), width / 2, y, { align: 'center' });
+    y += countLines(companyName, width === 58 ? 9 : 10.5) * 4;
+    if (settings.slogan) {
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(6.2);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text(doc.splitTextToSize(String(settings.slogan), contentWidth), width / 2, y, { align: 'center' });
+      y += 4;
+    }
+    if (settings.fiscalInfo) {
+      doc.setFontSize(5.8);
+      doc.text(doc.splitTextToSize(String(settings.fiscalInfo), contentWidth), width / 2, y, { align: 'center' });
+      y += 4;
+    }
+    drawRule(primary, 0.45);
+    y += 4;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(width === 58 ? 8 : 9.5);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text('COMPROBANTE DE PAGO', width / 2, y, { align: 'center' });
+    y += 4;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(width === 58 ? 7.5 : 8.5);
+    doc.setTextColor(primary[0], primary[1], primary[2]);
+    doc.text(operation, width / 2, y, { align: 'center' });
+    y += 4;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Nº ${transaction?.number || transaction?.id || 'Sin número'}`, width / 2, y, { align: 'center' });
+    y += 3.8;
+    doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, width / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(6.5);
+    doc.text('CLIENTE', margin, y);
+    y += 3.3;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7.2);
+    doc.text(doc.splitTextToSize(String(customerName), contentWidth), margin, y);
+    y += countLines(customerName, 7.2) * 3.5 + 2;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(6.5);
+    doc.text(`${linkedDocumentType.toUpperCase()} APLICADO`, margin, y);
+    y += 3.3;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7.2);
+    doc.text(doc.splitTextToSize(linkedDocumentNumber, contentWidth), margin, y);
+    y += countLines(linkedDocumentNumber, 7.2) * 3.5 + 3;
+    drawRule();
+    y += 4;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(6.5);
+    doc.text('DETALLE DEL COBRO', margin, y);
+    y += 4;
+    methodRows.forEach((row: any) => {
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(6.8);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text(row.method, margin, y);
+      doc.text(money(row.amount, row.currency, row.rate), width - margin, y, { align: 'right' });
+      y += 3.5;
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(6.2);
+      doc.text(`Moneda: ${row.currency} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, margin, y);
+      y += countLines(`Moneda: ${row.currency} · ${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, 6.2) * 3.1 + 3;
+      drawRule();
+      y += 3;
+    });
+    if (financialRows.length) {
+      drawRule();
+      y += 4;
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text('RESUMEN DEL DOCUMENTO', margin, y);
+      y += 4;
+      financialRows.forEach(drawFinancialRow);
+    }
+    drawRow('Monto total', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate), true);
+    drawRow('Este pago', money(voucherTotal, voucherCurrency, voucherRate));
+    drawRow('Abonado', money(accumulatedPaid, financialCurrency, financialRate));
+    drawRow('Saldo pendiente', money(pendingBalance, financialCurrency, financialRate));
+    if (changeAmount > 0.01) drawRow('Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate));
+    y += 2;
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(primary[0], primary[1], primary[2]);
+    doc.text(`Estado: ${statusLabel}`, width / 2, y, { align: 'center' });
+    y += 5;
+    if (notes) {
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      const noteLines = doc.splitTextToSize(`Notas: ${notes}`, contentWidth);
+      doc.text(noteLines, margin, y);
+      y += noteLines.length * 3.2 + 3;
+    }
+    drawRule(primary, 0.45);
+    y += 4;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(doc.splitTextToSize(String(settings.footerText || `Documento generado por ${tenantName}`), contentWidth), width / 2, y, { align: 'center' });
+    const blob = doc.output('blob');
+    if (save) savePdfBlob(blob, `${transaction?.number || 'Pago'}_${format}.pdf`);
+    return { doc, blob };
+  }
+
+  const { format: paperFormat, orientation } = pdfDesignPaper(settings);
+  const doc = new jsPDF({ orientation, unit: 'mm', format: paperFormat });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = Math.max(10, Math.min(24, Number(settings.margins) || 14));
+  const rightEdge = pageWidth - margin;
+  const paymentHeaderLayout = String(settings.headerLayout || 'split');
+  const logoPosition = String(settings.logoPosition || 'left');
+  const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(paymentHeaderLayout);
+  const isCenteredHeader = ['centered', 'editorial'].includes(paymentHeaderLayout);
+  const headerHeight = isCenteredHeader ? 60 : isBannerHeader ? 43 : 40;
+  if (isBannerHeader) {
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+  }
+  const logoSize = logo ? fitPdfImage(doc, logo, Math.min(48, pageWidth * 0.24), isBannerHeader ? 18 : 22) : { width: 0, height: 0 };
+  const logoX = logoPosition === 'right' ? rightEdge - logoSize.width : logoPosition === 'center' ? (pageWidth - logoSize.width) / 2 : margin;
+  const logoY = isBannerHeader ? 10 : 12;
+  if (isCenteredHeader) {
+    const centerX = pageWidth / 2;
+    if (logo) {
+      try {
+        doc.addImage(logo, 'PNG', (pageWidth - logoSize.width) / 2, 7, logoSize.width, logoSize.height, undefined, 'FAST');
+      } catch {
+        // El resto del comprobante debe seguir disponible aunque falle el logo.
+      }
+    }
+    let centeredY = 7 + (logo ? logoSize.height + 5 : 5);
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(isBannerHeader ? 255 : textColor[0], isBannerHeader ? 255 : textColor[1], isBannerHeader ? 255 : textColor[2]);
+    doc.text(companyName, centerX, centeredY, { align: 'center' });
+    centeredY += 6;
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
+    if (settings.slogan) { doc.text(String(settings.slogan), centerX, centeredY, { align: 'center' }); centeredY += 5; }
+    if (settings.fiscalInfo) { doc.text(String(settings.fiscalInfo), centerX, centeredY, { align: 'center' }); centeredY += 5; }
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(isBannerHeader ? 255 : primaryColor[0], isBannerHeader ? 255 : primaryColor[1], isBannerHeader ? 255 : primaryColor[2]);
+    doc.text('COMPROBANTE DE PAGO', centerX, centeredY + 2, { align: 'center' });
+    doc.setFontSize(8.5);
+    doc.text(`${operation} · Nº ${transaction?.number || transaction?.id || 'Sin número'}`, centerX, centeredY + 8, { align: 'center' });
+    doc.setFont(fontName, 'normal');
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, centerX, centeredY + 14, { align: 'center' });
+  } else {
+    if (logo) {
+      try {
+        doc.addImage(logo, 'PNG', logoX, logoY, logoSize.width, logoSize.height, undefined, 'FAST');
+      } catch {
+        // El resto del comprobante debe seguir disponible aunque falle el logo.
+      }
+    }
+    const identityX = logoPosition === 'left' ? logoX + logoSize.width + 6 : logoPosition === 'right' ? rightEdge : pageWidth / 2;
+    const identityAlign = logoPosition === 'center' ? 'center' : logoPosition === 'right' ? 'right' : 'left';
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(isBannerHeader ? 255 : textColor[0], isBannerHeader ? 255 : textColor[1], isBannerHeader ? 255 : textColor[2]);
+    doc.text(companyName, identityX, logoY + 7, { align: identityAlign as any });
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(isBannerHeader ? 235 : 100, isBannerHeader ? 245 : 116, isBannerHeader ? 240 : 139);
+    if (settings.slogan) doc.text(String(settings.slogan), identityX, logoY + 13, { align: identityAlign as any });
+    if (settings.fiscalInfo) doc.text(String(settings.fiscalInfo), identityX, logoY + 18, { align: identityAlign as any });
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(17);
+    doc.setTextColor(isBannerHeader ? 255 : primaryColor[0], isBannerHeader ? 255 : primaryColor[1], isBannerHeader ? 255 : primaryColor[2]);
+    doc.text('COMPROBANTE DE PAGO', rightEdge, 24, { align: 'right' });
+    doc.setFontSize(9);
+    doc.text(operation, rightEdge, 31, { align: 'right' });
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text(`Nº ${transaction?.number || transaction?.id || 'Sin número'}`, rightEdge, 37, { align: 'right' });
+    doc.text(`Fecha ${transaction?.date ? new Date(transaction.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI')}`, rightEdge, 42, { align: 'right' });
+  }
+
+  let currentY = Math.max(headerHeight + 8, 52);
+  autoTable(doc, {
+    startY: currentY,
+    body: [
+      ['Cliente', transaction?.customer?.name || transaction?.customerName || 'Cliente general'],
+      [`${linkedDocumentType} aplicado`, linkedDocumentNumber],
+      ['Tipo de cobro', settlementLabel],
+      ['Estado', statusLabel],
+    ],
+    theme: 'plain',
+    columnStyles: { 0: { cellWidth: 42, fontStyle: 'bold', textColor: primaryColor }, 1: { cellWidth: 'auto', textColor } },
+    styles: { font: fontName, fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
+    tableWidth: pageWidth - margin * 2,
+  });
+  currentY = ((doc as any).lastAutoTable?.finalY || currentY + 30) + 7;
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Método', 'Moneda', 'Referencia / banco', 'Monto']],
+    body: methodRows.map((row: any) => [row.method, row.currency, `${row.reference}${row.bank ? ` · ${row.bank}` : ''}`, money(row.amount, row.currency, row.rate)]),
+    theme: String(settings.tableLayout || 'standard') === 'minimal' ? 'plain' : ['striped', 'ledger'].includes(String(settings.tableLayout || 'standard')) ? 'striped' : 'grid',
+    headStyles: { fillColor: String(settings.tableLayout || 'standard') === 'minimal' ? [248, 250, 252] : primaryColor, textColor: String(settings.tableLayout || 'standard') === 'minimal' ? textColor : 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+    bodyStyles: { textColor, fontSize: 8 },
+    columnStyles: { 0: { cellWidth: 35 }, 1: { cellWidth: 22, halign: 'center' }, 2: { cellWidth: 'auto' }, 3: { cellWidth: 34, halign: 'right' } },
+    styles: { font: fontName, cellPadding: String(settings.tableLayout || 'standard') === 'compact' ? 2 : 3.5, overflow: 'linebreak', lineColor, lineWidth: String(settings.tableLayout || 'standard') === 'minimal' ? 0 : 0.2 },
+    alternateRowStyles: ['striped', 'ledger', 'accent'].includes(String(settings.tableLayout || 'standard')) ? { fillColor: [248, 250, 252] } : undefined,
+    tableWidth: pageWidth - margin * 2,
+  });
+  currentY = ((doc as any).lastAutoTable?.finalY || currentY + 20) + 7;
+  if (financialRows.length) {
+    autoTable(doc, {
+      startY: currentY,
+      body: financialRows.map((row) => [row.label, `${row.negative ? '- ' : ''}${money(row.amount, financialCurrency, financialRate)}`]),
+      theme: 'plain',
+      columnStyles: { 0: { cellWidth: 58, textColor }, 1: { cellWidth: 'auto', halign: 'right', textColor } },
+      styles: { font: fontName, fontSize: 8, cellPadding: 2.2, overflow: 'linebreak' },
+      tableWidth: Math.min(95, pageWidth - margin * 2),
+      margin: { left: rightEdge - Math.min(95, pageWidth - margin * 2) },
+    });
+    currentY = ((doc as any).lastAutoTable?.finalY || currentY + financialRows.length * 5) + 5;
+  }
+  const summaryRows: string[][] = [
+    ['Monto total', money(financialTotal || documentTotal || voucherTotal, financialTotal ? financialCurrency : linkedCurrency, financialTotal ? financialRate : linkedRate)],
+    ['Este pago', money(voucherTotal, voucherCurrency, voucherRate)],
+    ['Abonado', money(accumulatedPaid, financialCurrency, financialRate)],
+    ['Saldo pendiente', money(pendingBalance, financialCurrency, financialRate)],
+  ];
+  if (changeAmount > 0.01) summaryRows.push(['Cambio / vuelto', money(changeAmount, voucherCurrency, voucherRate)]);
+  if (currentY + summaryRows.length * 8 + 35 > pageHeight - margin) {
+    doc.addPage();
+    currentY = margin;
+  }
+  autoTable(doc, {
+    startY: currentY,
+    body: summaryRows,
+    theme: 'plain',
+    columnStyles: { 0: { cellWidth: 58, fontStyle: 'bold', textColor: primaryColor }, 1: { cellWidth: 'auto', halign: 'right', fontStyle: 'bold', textColor } },
+    styles: { font: fontName, fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
+    tableWidth: Math.min(95, pageWidth - margin * 2),
+    margin: { left: rightEdge - Math.min(95, pageWidth - margin * 2) },
+  });
+  currentY = ((doc as any).lastAutoTable?.finalY || currentY + 25) + 7;
+  if (transaction?.notes) {
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.text('Notas', margin, currentY);
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(8);
+    doc.text(doc.splitTextToSize(String(transaction.notes), pageWidth - margin * 2), margin, currentY + 5);
+  }
+  doc.setFont(fontName, 'italic');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(String(settings.footerText || `Documento generado por ${tenantName}`), margin, pageHeight - 14);
+  doc.setFont(fontName, 'bold');
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.text(`Estado: ${statusLabel}`, rightEdge, pageHeight - 14, { align: 'right' });
+  const blob = doc.output('blob');
+  if (save) savePdfBlob(blob, `${transaction?.number || 'Pago'}_${format}.pdf`);
+  return { doc, blob };
+}
+
 async function generateSalesTicketPDF({
   document: transaction,
   tenantName,
@@ -535,29 +1144,33 @@ async function generateSalesTicketPDF({
   const items = Array.isArray(transaction.items) && transaction.items.length
     ? transaction.items
     : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
+  const additionalChargeLines = getSalesPdfAdditionalCharges(transaction);
   const estimatedItemHeight = items.reduce((height: number, item: any) => {
     const descriptionLines = Math.max(1, Math.ceil(String(item.description || item.name || 'Producto').length / (width === 58 ? 24 : 36)));
     return height + 8 + descriptionLines * 3.6;
   }, 0);
   const notesHeight = transaction.notes ? Math.min(24, Math.max(6, String(transaction.notes).length / (width === 58 ? 20 : 30) * 3.2)) : 0;
-  const pageHeight = Math.max(130, 83 + estimatedItemHeight + notesHeight);
+  const pageHeight = Math.max(140, 94 + estimatedItemHeight + additionalChargeLines.length * 3.5 + notesHeight);
   const doc = new jsPDF({ unit: 'mm', format: [width, pageHeight], orientation: 'portrait' });
-  const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
-  const textColor = pdfDesignColor(settings.textColor, [31, 41, 55]);
-  const lineColor = pdfDesignColor(settings.lineColor, [203, 213, 225]);
+  // Un rollo térmico debe ser monocromático independientemente de la paleta
+  // configurada para los documentos normales.
+  const primaryColor: PdfRgb = [0, 0, 0];
+  const textColor: PdfRgb = [0, 0, 0];
+  const lineColor: PdfRgb = [0, 0, 0];
   const selectedFont = String(settings.fontFamily || '').toLowerCase();
   const fontName = selectedFont.includes('serif') ? 'times' : selectedFont.includes('mono') || selectedFont.includes('courier') ? 'courier' : 'helvetica';
   const title = SALES_TRANSACTION_TITLES[documentType];
   const currency = transaction.currency;
   const rate = transaction.exchangeRate;
   const money = (value: unknown) => formatAmount(Number(value || 0), currency, rate);
-  const logo = settings.logoUrl || tenantLogo;
+  const logo = await toGrayscaleImageSource(settings.logoUrl || tenantLogo);
+  const logoSize = logo ? fitPdfImage(doc, logo, width - margin * 2, width === 58 ? 16 : 20) : { width: 0, height: 0 };
   let y = margin;
 
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', width / 2 - 10, y, 20, 10, undefined, 'FAST');
-      y += 13;
+      doc.addImage(logo, 'PNG', (width - logoSize.width) / 2, y, logoSize.width, logoSize.height, undefined, 'FAST');
+      y += logoSize.height + 3;
     } catch {
       // Un logo no compatible no debe impedir la descarga del comprobante.
     }
@@ -644,6 +1257,7 @@ async function generateSalesTicketPDF({
   drawTotal('Subtotal', transaction.subtotal ?? transaction.total);
   if (Number(transaction.discountAmount || 0) > 0) drawTotal('Descuento', -Number(transaction.discountAmount));
   if (Number(transaction.taxAmount || 0) > 0) drawTotal('IVA', transaction.taxAmount);
+  additionalChargeLines.forEach((charge) => drawTotal(charge.label, charge.amount));
   doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setLineWidth(0.55);
   doc.line(margin, y, width - margin, y);
@@ -744,6 +1358,18 @@ export async function generateSalesTransactionPDF({
 }) {
   const target = getPdfTemplateTarget(documentType).key;
   const design = designOverride || await pdfDocumentDesignService.active(target).catch(() => null);
+  if (documentType === 'payment') {
+    const paymentDesign = format === 'configured' ? design : withPdfDownloadFormat(design, format);
+    return generateSalesPaymentVoucherPDF({
+      document: transaction,
+      tenantName,
+      formatAmount,
+      tenantLogo,
+      format,
+      settings: paymentDesign?.settings || {},
+      save,
+    });
+  }
   if (format === 'roll-58' || format === 'roll-80') {
     return generateSalesTicketPDF({ document: transaction, tenantName, formatAmount, tenantLogo, documentType, format, settings: design?.settings || {}, save });
   }

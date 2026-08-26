@@ -24,6 +24,7 @@ import { exportManagerQuotesExcel, exportManagerQuotesPdf } from '../../utils/ma
 import { exportManagerSalesExcel, exportManagerSalesPdf } from '../../utils/managerSalesExport';
 import { exportCustomerTransactionsExcel, exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { formatCurrencyAmount, formatCurrencyDescriptor, getCurrencyMetadata } from '../../utils/currency';
+import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { ColumnFilterMenu, type ColumnSort, type ColumnSortType } from '../ui/ColumnFilterMenu';
@@ -37,6 +38,14 @@ type LayoutMode = 'table' | 'cards';
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
 const formatMoney = (value: unknown, currency?: string | null, includeCode = false) => formatCurrencyAmount(value, currency || 'NIO', includeCode);
+const additionalChargesLabel = (document: any, includeZero = false) => {
+  const charges = normalizeSalesExtraCharges(document)
+    .filter((charge) => includeZero || charge.amount > 0)
+    .map((charge, index) => `${charge.description || `Coste extra ${index + 1}`}: ${formatMoney(charge.amount, document.currency, true)}`);
+  const deliveryAmount = Number(document?.deliveryAmount || 0);
+  if (deliveryAmount > 0) charges.push(`${document?.deliveryDescription || 'Delivery'}: ${formatMoney(deliveryAmount, document.currency, true)}`);
+  return charges.join(' · ') || '—';
+};
 const formatDate = (value: unknown, includeTime = false) => {
   if (!value) return '—';
   const date = new Date(String(value));
@@ -695,6 +704,7 @@ function buildManagerQuotePanel(quote: any, history?: any[]): SalesDocumentPanel
       { label: 'Subtotal neto', value: formatMoney(quote.subtotal, currency) },
       { label: 'Impuestos', value: formatMoney(quote.taxAmount, currency) },
       { label: 'Descuento', value: formatMoney(quote.discountAmount, currency) },
+      ...(additionalChargesLabel(quote) !== '—' ? [{ label: 'Cargos adicionales', value: additionalChargesLabel(quote) }] : []),
       { label: 'Total en moneda funcional', value: formatMoney(quote.baseTotal, quote.baseCurrency, true) },
       { label: 'Tasa utilizada', value: quote.reportRateLabel || '1:1' },
       { label: 'Fuente de tasa', value: quote.reportRateSource || '—' },
@@ -737,10 +747,11 @@ function buildManagerSalesDocumentPanel(document: any, entity: string, history?:
         : entity === 'payments'
           ? [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Monto original / equivalencia', value: detailMoney(document.amount, document.reportAmount) }, { label: 'Forma de pago', value: statusLabel(document.method) }, { label: 'Documento', value: document.invoice?.number || document.creditNote?.number || document.relatedInvoiceNumber || document.reference || 'Anticipo' }]
           : [{ label: 'Sucursal', value: document.branchName || 'Sucursal no identificada' }, { label: 'Saldo pendiente', value: detailMoney(document.balance, document.reportBalance) }, ...(document.relatedInvoiceNumber ? [{ label: 'Factura origen', value: document.relatedInvoiceNumber }] : [])];
+  const chargeMetadata = additionalChargesLabel(document) !== '—' ? [{ label: 'Cargos adicionales', value: additionalChargesLabel(document) }] : [];
   const metadata = entity === 'orders'
-    ? [{ label: 'Fecha de la orden', value: formatDate(document.date) }, { label: 'Entrega estimada', value: formatDate(document.expectedDelivery) }, { label: 'Forma de pago', value: statusLabel(document.paymentMethod) }, ...(document.relatedInvoiceNumber ? [{ label: 'Factura relacionada', value: document.relatedInvoiceNumber }] : [])]
+    ? [{ label: 'Fecha de la orden', value: formatDate(document.date) }, { label: 'Entrega estimada', value: formatDate(document.expectedDelivery) }, { label: 'Forma de pago', value: statusLabel(document.paymentMethod) }, ...chargeMetadata, ...(document.relatedInvoiceNumber ? [{ label: 'Factura relacionada', value: document.relatedInvoiceNumber }] : [])]
     : entity === 'invoices'
-      ? [{ label: 'Fecha de emisión', value: formatDate(document.date) }, { label: 'Fecha de vencimiento', value: formatDate(document.dueDate) }, { label: 'Subtotal neto', value: detailMoney(document.subtotal, document.reportSubtotal) }, { label: 'Impuestos', value: detailMoney(document.taxAmount, document.reportTaxAmount) }, { label: 'Descuento', value: detailMoney(document.discountAmount, document.reportDiscountAmount) }, { label: 'Forma de pago', value: statusLabel(document.paymentMethod) }, { label: 'Pagos registrados', value: formatNumber(document.paymentCount) }, ...(document.relatedOrderNumber ? [{ label: 'Orden relacionada', value: document.relatedOrderNumber }] : [])]
+      ? [{ label: 'Fecha de emisión', value: formatDate(document.date) }, { label: 'Fecha de vencimiento', value: formatDate(document.dueDate) }, { label: 'Subtotal neto', value: detailMoney(document.subtotal, document.reportSubtotal) }, { label: 'Impuestos', value: detailMoney(document.taxAmount, document.reportTaxAmount) }, { label: 'Descuento', value: detailMoney(document.discountAmount, document.reportDiscountAmount) }, ...chargeMetadata, { label: 'Forma de pago', value: statusLabel(document.paymentMethod) }, { label: 'Pagos registrados', value: formatNumber(document.paymentCount) }, ...(document.relatedOrderNumber ? [{ label: 'Orden relacionada', value: document.relatedOrderNumber }] : [])]
       : entity === 'recurring'
         ? [{ label: 'Fecha de inicio', value: formatDate(document.startDate) }, { label: 'Próxima fecha', value: formatDate(document.nextInvoiceDate) }, { label: 'Fecha final', value: formatDate(document.endDate) }, { label: 'Subtotal neto', value: detailMoney(document.subtotal, document.reportSubtotal) }, { label: 'Impuestos', value: detailMoney(document.taxAmount, document.reportTaxAmount) }]
         : entity === 'payments'
@@ -905,7 +916,7 @@ function exportRow(view: ManagerSalesView, row: any, reportCurrency: string) {
   if (view === 'cash') return { Caja: row.registerName, Código: row.registerCode, Apertura: formatDate(row.openedAt, true), Cierre: formatDate(row.closedAt, true), 'Abrió': row.openedByName, 'Cerró': row.closedByName, Facturas: row.invoiceCount, 'Diferencia original': formatMoney(row.differenceNIO, 'NIO', true), Equivalencia: row.reportDifferenceNIO == null ? 'No disponible' : formatMoney(row.reportDifferenceNIO, reportCurrency, true), ...base };
   if (view === 'deliveries') return { Entrega: row.number, Cliente: row.customerName, Facturación: row.billingBranchName, 'Entrega en': row.deliveryBranchName, Factura: row.invoiceNumber, Artículos: row.itemCount, Cobro: statusLabel(row.paymentStatus), 'Monto original': formatMoney(row.total, currency, true), Equivalencia: row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true), ...base };
   if (view === 'pricelists') return row.productName ? { Lista: row.listName, Código: row.listCode, Sucursal: row.branchName, SKU: row.productCode, Producto: row.productName, Variante: row.variantName, 'Precio original': formatMoney(row.price, currency, true), 'Costo referencia': formatMoney(row.costPrice, currency, true), Equivalencia: row.reportPrice == null ? 'No disponible' : formatMoney(row.reportPrice, reportCurrency, true), 'Tasa aplicada': row.reportRateLabel || '—', Estado: statusLabel(row.listActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) } : { Código: row.code, Lista: row.name, Sucursal: row.branchName, Productos: row.itemCount, 'Precios en': row.currencies?.join(' / ') || row.currency, Predeterminada: row.isDefault ? 'Sí' : 'No', Estado: statusLabel(row.isActive ? 'ACTIVE' : 'INACTIVE'), Actualizada: formatDate(row.updatedAt) };
-  return { Número: row.number, Cliente: row.customerName, 'Total original': formatMoney(row.total, currency, true), Equivalencia: row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true), 'Saldo original': row.balance == null ? '—' : formatMoney(row.balance, currency, true), 'Saldo equivalente': row.reportBalance == null ? '—' : formatMoney(row.reportBalance, reportCurrency, true), ...base };
+  return { Número: row.number, Cliente: row.customerName, 'Total original': formatMoney(row.total, currency, true), Equivalencia: row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, reportCurrency, true), 'Cargos adicionales': additionalChargesLabel(row), 'Saldo original': row.balance == null ? '—' : formatMoney(row.balance, currency, true), 'Saldo equivalente': row.reportBalance == null ? '—' : formatMoney(row.reportBalance, reportCurrency, true), ...base };
 }
 
 function Pagination({ page, totalPages, total, pageSize, onPageChange, onPageSizeChange }: { page: number; totalPages: number; total: number; pageSize: number; onPageChange: (page: number) => void; onPageSizeChange: (pageSize: number) => void }) { return <div className="flex flex-wrap items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{formatNumber(total)} registro(s) · Página {page} de {totalPages}</span><div className="flex flex-wrap items-center gap-2"><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-9 rounded-lg border border-border bg-background px-2 text-xs"><option value={25}>25 por página</option><option value={50}>50 por página</option><option value={100}>100 por página</option></select><Button variant="outline" size="icon" className="size-9 rounded-lg" disabled={page <= 1} onClick={() => onPageChange(page - 1)} aria-label="Página anterior"><ChevronLeft className="size-4" /></Button><Button variant="outline" size="icon" className="size-9 rounded-lg" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} aria-label="Página siguiente"><ChevronRight className="size-4" /></Button></div></div>; }

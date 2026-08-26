@@ -4,6 +4,7 @@ import autoTable from 'jspdf-autotable';
 import { getBase64Image } from './reportExportUtils';
 import { getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { formatCurrencyAmount, formatCurrencyDescriptor } from './currency';
+import { normalizeSalesExtraCharges } from './salesCharges';
 
 export interface ManagerQuoteExportRow {
   number?: string | null;
@@ -21,6 +22,11 @@ export interface ManagerQuoteExportRow {
   reportRateSource?: string | null;
   reportRateEffectiveAt?: string | null;
   reportValuationLabel?: string | null;
+  extraCharges?: unknown;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number | null;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number | null;
   status?: string | null;
 }
 
@@ -84,27 +90,35 @@ function reportContext(options: ManagerQuotesExportOptions) {
   return `Moneda de referencia: ${formatCurrencyDescriptor(amountCurrency)} · Valoración: ${valuation}${fallback}`;
 }
 
+function additionalChargesLabel(row: ManagerQuoteExportRow) {
+  const charges = normalizeSalesExtraCharges(row)
+    .filter((charge) => charge.amount > 0)
+    .map((charge, index) => `${charge.description || `Coste extra ${index + 1}`}: ${formatMoney(charge.amount, row.currency, true)}`);
+  if (Number(row.deliveryAmount || 0) > 0) charges.push(`${row.deliveryDescription || 'Delivery'}: ${formatMoney(row.deliveryAmount, row.currency, true)}`);
+  return charges.join(' · ') || '—';
+}
+
 export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptions) {
   const primary = safeHex(options.primaryColor);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'NovaHub';
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet('Cotizaciones', { views: [{ state: 'frozen', ySplit: 4 }] });
-  worksheet.mergeCells('A1:K1');
+  worksheet.mergeCells('A1:L1');
   const title = worksheet.getCell('A1');
   title.value = 'COTIZACIONES MANAGER';
   title.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
   title.alignment = { horizontal: 'center', vertical: 'middle' };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(primary) } };
   worksheet.getRow(1).height = 28;
-  worksheet.mergeCells('A2:K2');
+  worksheet.mergeCells('A2:L2');
   worksheet.getCell('A2').value = `${options.tenantName} · ${filteredContext(options.filterSummary)}`;
   worksheet.getCell('A2').font = { italic: true, color: { argb: 'FF64748B' } };
-  worksheet.mergeCells('A3:K3');
+  worksheet.mergeCells('A3:L3');
   worksheet.getCell('A3').value = `Total de cotizaciones: ${options.metrics?.total || options.rows.length} · Monto total: ${formatMoney(options.metrics?.amount, options.metrics?.amountCurrency, true)} · ${reportContext(options)} · Sucursal con más cotizaciones: ${options.metrics?.topBranchName || 'Sin datos'}`;
   worksheet.getCell('A3').font = { bold: true, color: { argb: hexToArgb(primary) } };
 
-  worksheet.addRow(['Número', 'Sucursal', 'Cliente', 'Fecha de emisión', 'Total original', 'Total funcional', 'Equivalencia', 'Tasa utilizada', 'Fuente / fecha', 'Estado', 'Validez']);
+  worksheet.addRow(['Número', 'Sucursal', 'Cliente', 'Fecha de emisión', 'Total original', 'Cargos adicionales', 'Total funcional', 'Equivalencia', 'Tasa utilizada', 'Fuente / fecha', 'Estado', 'Validez']);
   const header = worksheet.getRow(4);
   header.height = 22;
   header.eachCell((cell) => {
@@ -121,6 +135,7 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
       row.customerName || 'Cliente ocasional',
       formatDate(row.date),
       formatMoney(row.total, row.currency, true),
+      additionalChargesLabel(row),
       row.baseTotal == null ? '—' : formatMoney(row.baseTotal, row.baseCurrency, true),
       row.reportTotal == null ? 'No disponible' : formatMoney(row.reportTotal, row.reportCurrency, true),
       rateContext(row),
@@ -139,9 +154,9 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
   });
 
   worksheet.columns = [
-    { width: 18 }, { width: 24 }, { width: 30 }, { width: 18 }, { width: 20 }, { width: 20 }, { width: 21 }, { width: 24 }, { width: 28 }, { width: 16 }, { width: 16 },
+    { width: 18 }, { width: 24 }, { width: 30 }, { width: 18 }, { width: 20 }, { width: 38 }, { width: 20 }, { width: 21 }, { width: 24 }, { width: 28 }, { width: 16 }, { width: 16 },
   ];
-  worksheet.autoFilter = { from: 'A4', to: 'K4' };
+  worksheet.autoFilter = { from: 'A4', to: 'L4' };
   const buffer = await workbook.xlsx.writeBuffer();
   downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `cotizaciones-manager-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
@@ -187,16 +202,16 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
   currentY += 7;
 
   autoTable(doc, {
-    head: [['Número', 'Sucursal', 'Cliente', 'Fecha emisión', 'Total original', 'Equivalencia', 'Tasa utilizada', 'Estado', 'Validez']],
-    body: options.rows.map((row) => [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), `${formatMoney(row.total, row.currency, true)}\n${formatCurrencyDescriptor(row.currency)}`, row.reportTotal == null ? 'No disponible' : `${formatMoney(row.reportTotal, row.reportCurrency, true)}\n${formatCurrencyDescriptor(row.reportCurrency)}`, rateContext(row), statusLabel(row.status), formatDate(row.expiryDate)]),
+    head: [['Número', 'Sucursal', 'Cliente', 'Fecha emisión', 'Total original', 'Cargos adicionales', 'Equivalencia', 'Tasa utilizada', 'Estado', 'Validez']],
+    body: options.rows.map((row) => [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), `${formatMoney(row.total, row.currency, true)}\n${formatCurrencyDescriptor(row.currency)}`, additionalChargesLabel(row), row.reportTotal == null ? 'No disponible' : `${formatMoney(row.reportTotal, row.reportCurrency, true)}\n${formatCurrencyDescriptor(row.reportCurrency)}`, rateContext(row), statusLabel(row.status), formatDate(row.expiryDate)]),
     startY: currentY,
     margin: { left: margin, right: margin, bottom: 16 },
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak' },
     headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { halign: 'right', fontStyle: 'bold' }, 7: { halign: 'center' } },
+    columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { halign: 'left' }, 6: { halign: 'right', fontStyle: 'bold' }, 8: { halign: 'center' } },
     didParseCell: (hook) => {
-      if (hook.section === 'body' && hook.column.index === 5) hook.cell.styles.textColor = primary;
+      if (hook.section === 'body' && hook.column.index === 6) hook.cell.styles.textColor = primary;
     },
   });
 
