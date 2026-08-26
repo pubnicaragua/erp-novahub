@@ -534,6 +534,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       APPROVED: 'APROBADO',
       CANCELLED: 'CANCELADO',
       REOPENED: 'REABIERTO',
+      ADJUSTMENT_PENDING: 'AJUSTE PENDIENTE',
       COMPLETED: 'ABIERTO',
     };
     return labels[s] || s;
@@ -549,6 +550,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
       CANCELLED: 'bg-red-100 text-red-700 border-red-200',
       REOPENED: 'bg-purple-100 text-purple-700 border-purple-200',
+      ADJUSTMENT_PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
       COMPLETED: 'bg-gray-100 text-gray-700 border-gray-200',
     };
     return classes[s] || 'bg-gray-100 text-gray-700 border-gray-200';
@@ -853,7 +855,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                 },
                 items: {
                   title: '3. Carga los productos',
-                  description: 'Primero elige una bodega. Después busca un producto o usa Categorías y Existencia para encontrarlo. Pulsa Agregar filtrados para agregar lo que ves, o Agregar todos para agregar toda la lista.',
+                  description: 'Primero elige una bodega. Puedes agregar un producto por producto pulsando el botón Agregar producto, o buscar varios con Categorías y Existencia. Pulsa Agregar filtrados para agregar lo que ves, o Agregar todos para agregar toda la lista.',
                   tip: 'Cuando los productos estén abajo, escribe cuánto contaste de cada uno en Cantidad contada. El sistema comparará ese número con el que tenía guardado.',
                 },
                 actions: {
@@ -983,9 +985,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                       </div>
                     </div>
 
-                    <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_10rem_10rem_auto]">
                       <div className="min-w-0 space-y-1">
-                        <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Search className="size-3" /> Buscar producto</Label>
+                        <Label className="flex h-4 items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><Search className="size-3" /> Buscar producto</Label>
                         <Input
                           value={inventoryProductSearch}
                           onChange={(event) => setInventoryProductSearch(event.target.value)}
@@ -995,7 +997,10 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         />
                       </div>
                       <div className="min-w-0 space-y-1">
-                        <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Categorías <span className="font-medium normal-case tracking-normal">(puedes elegir varias)</span></Label>
+                        <Label className="flex h-4 min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                          <span className="shrink-0">Categorías</span>
+                          <span className="truncate text-[8px] font-medium normal-case tracking-normal">(puedes elegir varias)</span>
+                        </Label>
                         <MultiSelectFilter
                           options={productCategoryOptions.map((category) => ({ value: category.id, label: category.name }))}
                           selected={bulkCategoryIds}
@@ -1007,9 +1012,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
                         />
                       </div>
                       <div className="min-w-0 space-y-1">
-                        <Label className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><SlidersHorizontal className="size-3" /> Existencia</Label>
+                        <Label className="flex h-4 items-center gap-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground"><SlidersHorizontal className="size-3" /> Existencia</Label>
                         <Select value={inventoryStockFilter} onValueChange={(value: 'all' | 'available' | 'out') => setInventoryStockFilter(value)} disabled={!form.warehouseId}>
-                          <SelectTrigger className="h-8 min-w-0 rounded-md bg-background/80 text-[10px]"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="!h-8 min-w-0 rounded-md bg-background/80 text-[10px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all" className="text-[10px]">Con y sin existencia</SelectItem>
                             <SelectItem value="available" className="text-[10px]">Con existencia</SelectItem>

@@ -211,9 +211,14 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
     staleTime: 30_000,
   });
   const warehouseCatalogQuery = useQuery({
-    queryKey: ['purchases', 'warehouses-catalog', tenantKey],
-    queryFn: ({ signal }) => inventoryService.getWarehouses(signal),
-    enabled: canReadInventory && ['solicitudes', 'recepciones'].includes(activeSection),
+    queryKey: ['purchases', 'warehouses-catalog', tenantKey, selectedBranchId],
+    queryFn: ({ signal }) => inventoryService.getWarehouseCatalog({
+      branchId: selectedBranchId || user?.tenantId || undefined,
+      scopeType: 'BRANCH',
+      page: 1,
+      pageSize: 200,
+    }, signal),
+    enabled: canReadInventory && ['solicitudes', 'ordenes', 'recepciones'].includes(activeSection),
     staleTime: 30_000,
   });
   const productCatalogQuery = useQuery({
@@ -484,8 +489,8 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
                     {section.id === 'proveedores'  && <ProveedoresView    {...commonProps} data={filteredData.proveedores} pagination={pagination.proveedores} onSearchChange={(value) => updateSearch('proveedores', value)} />}
                     {section.id === 'gastos'        && <GastosView         {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'gastos' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} expenseCategoryCatalog={expenseCategoryCatalog} data={filteredData.gastos} pagination={pagination.gastos} onSearchChange={(value) => updateSearch('gastos', value)} onDateChange={updateExpenseDate} />}
                     {section.id === 'gastos-rec'    && <GastosRecurrentesView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.gastosRec} pagination={pagination.gastosRec} onSearchChange={(value) => updateSearch('gastos-rec', value)} />}
-                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
-                       {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
+                     {section.id === 'ordenes'       && <OrdenesCompraView  {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'ordenes' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} warehouseCatalog={warehouseCatalog} selectedBranchId={selectedBranchId} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.ordenes} initialStatus={ordersPrefilter} onApprovedToReceipt={handleApprovedOrderReceipt} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes', value)} onStatusChange={(value) => updateStatus('ordenes', value)} />}
+                       {section.id === 'recepciones'   && <RecepcionesCompraView {...commonProps} purchaseAlert={purchaseAlert || undefined} targetId={targetRecord?.section === 'recepciones' ? targetRecord.id : null} onClearTargetId={() => setTargetRecord(null)} supplierCatalog={supplierCatalog} accountCatalog={chartAccountCatalog} warehouseCatalog={warehouseCatalog.filter((warehouse: any) => warehouse?.clientTenantId === selectedBranchId)} orderCatalog={orderCatalog} productCatalog={productCatalog} productCategories={productCategories} data={filteredData.recepciones} pagination={pagination.recepciones} onSearchChange={(value) => updateSearch('recepciones', value)} />}
                    {section.id === 'facturas-rec'  && <FacturasProveedorRecView {...commonProps} supplierCatalog={supplierCatalog} data={filteredData.facturasRec} pagination={pagination.facturasRec} onSearchChange={(value) => updateSearch('facturas-rec', value)} />}
                    {section.id === 'pagos'         && (
                     <PagosRealizadosView

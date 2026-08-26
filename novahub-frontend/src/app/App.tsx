@@ -68,7 +68,6 @@ const ActividadesPage = lazyWithChunkRecovery(() => import('./components/Activid
 const TicketsPage = lazyWithChunkRecovery(() => import('./components/TicketsPage').then(m => ({ default: m.TicketsPage })), 'tickets');
 const DocumentosPage = lazyWithChunkRecovery(() => import('./components/DocumentosPage').then(m => ({ default: m.DocumentosPage })), 'documentos');
 const NotificacionesPage = lazyWithChunkRecovery(() => import('./components/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })), 'notificaciones');
-const TransferenciasPage = lazyWithChunkRecovery(() => import('./components/TransferenciasPage').then(m => ({ default: m.TransferenciasPage })), 'transferencias');
 const ReportesPage = lazyWithChunkRecovery(() => import('./components/ReportesPage').then(m => ({ default: m.ReportesPage })), 'reportes');
 const ConfiguracionPage = lazyWithChunkRecovery(() => import('./components/ConfiguracionPage').then(m => ({ default: m.ConfiguracionPage })), 'configuracion');
 const SuscripcionesPage = lazyWithChunkRecovery(() => import('./components/SuscripcionesPage').then(m => ({ default: m.SuscripcionesPage })), 'suscripciones');
@@ -297,7 +296,7 @@ function DashboardLayout() {
       case 'tickets': return <TicketsPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'documentos': return <DocumentosPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'notificaciones': return <NotificacionesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'transferencias': return <TransferenciasPage />;
+      case 'transferencias': return <InventarioPage activeSubModule="transferencias" isSidebarCollapsed={isCollapsed} />;
       case 'reportes': return <ReportesPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'configuracion': return <ModuleErrorBoundary moduleName="Configuración"><ConfiguracionPage initialTab={activeSubModule || 'branding'} /></ModuleErrorBoundary>;
       case 'suscripciones': return user?.isPlatformAdmin ? <EnterpriseGroupsAdminView /> : <SuscripcionesPage />;
