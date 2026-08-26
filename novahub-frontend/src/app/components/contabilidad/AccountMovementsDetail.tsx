@@ -68,6 +68,19 @@ const formatDate = (value?: string) => {
   return new Date(value).toLocaleDateString('es-NI');
 };
 
+const normalizeTransferDescription = (description: unknown, referenceType?: string | null) => {
+  const value = String(description || 'Sin descripción');
+  if (String(referenceType || '').toUpperCase() !== 'TRANSFER') return value;
+  // Compatibilidad con asientos históricos que guardaron el UUID de la
+  // variante/producto en lugar de su nombre. El backend intenta resolverlo;
+  // este último filtro evita que el UUID llegue a la pantalla si el asiento
+  // antiguo todavía no ha sido sincronizado.
+  return value.replace(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+    'Producto',
+  );
+};
+
 export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFrom, dateTo }: AccountMovementsDetailProps) {
   const query = useAccountingQuery<MovementRow[]>(
     ['account-movements-detail', accountId, dateFrom, dateTo],
@@ -76,7 +89,7 @@ export function AccountMovementsDetail({ accountId, codigo, cuenta, tipo, dateFr
       return accountingList(raw).map((row: any) => ({
         id: String(row.id || `${row.date}-${row.reference}-${row.description}`),
         date: row.date,
-        description: row.description || 'Sin descripción',
+        description: normalizeTransferDescription(row.description, row.referenceType),
         reference: row.reference || '—',
         journalNumber: row.journalNumber || null,
         referenceType: row.referenceType || null,
