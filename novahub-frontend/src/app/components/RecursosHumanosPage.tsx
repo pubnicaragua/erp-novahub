@@ -55,6 +55,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     'empleados': 'empleados',
     'departamentos': 'departamentos',
     'nominas': 'nominas',
+    'comisiones': 'comisiones',
     'config-nomina': 'config-nomina',
     'asistencia': 'asistencia',
     'ausencias': 'ausencias',
@@ -125,6 +126,13 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             hrService.getEmployees(page, signal),
           ]);
           return { payrolls, employees };
+        }
+        case 'comisiones': {
+          const [employees, departments] = await Promise.all([
+            hrService.getEmployees(page, signal),
+            hrService.getDepartments(signal),
+          ]);
+          return { employees, departments };
         }
         case 'asistencia': {
           const [attendance, employees] = await Promise.all([
@@ -253,7 +261,8 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
             // La suscripción al módulo padre (HR) habilita todas sus vistas,
             // incluso con submódulos granulares contratados.
             const hasFallback = user?.enabledModules?.includes('HR');
-            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(tab.module, 'view');
+            const permissionModule = tab.id === 'comisiones' ? 'HR' : tab.module;
+            const hasAccess = (!user?.enabledModules || hasRequired || hasFallback) && canPerform(permissionModule, 'view');
             if (!hasAccess) return null;
             return (
               <TabsTrigger 

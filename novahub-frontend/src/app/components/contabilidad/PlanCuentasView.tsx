@@ -72,6 +72,21 @@ interface AccountTransaction {
   };
 }
 
+function readableTransactionDescription(transaction: AccountTransaction): string {
+  const description = String(transaction.description || 'Sin descripción');
+  const isTransfer = Boolean(transaction.transferDetails)
+    || /^Transferencia de inventario\b/i.test(description);
+  if (!isTransfer) return description;
+  // Compatibilidad con movimientos históricos que conservaron el UUID de la
+  // variante/producto. El backend devuelve el nombre cuando puede resolverlo;
+  // este filtro evita que el identificador técnico aparezca en el Plan de
+  // Cuentas mientras se reparan esos registros.
+  return description.replace(
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+    'Producto',
+  );
+}
+
 const ACCOUNT_COLUMN_DEFS = [
   { key: 'code', label: 'Código', width: 'minmax(48px,.7fr)' },
   { key: 'name', label: 'Nombre', width: 'minmax(90px,1.45fr)' },
@@ -1016,6 +1031,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                         {accountTransactions.map((transaction) => {
                           const debit = Number(transaction.debit ?? 0);
                           const credit = Number(transaction.credit ?? 0);
+                          const readableDescription = readableTransactionDescription(transaction);
                           return (
                             <div
                               key={transaction.id}
@@ -1035,7 +1051,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                                 {debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
                               </div>
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold" title={transaction.description || 'Sin descripción'}>{transaction.description || 'Sin descripción'}</p>
+                                <p className="truncate text-xs font-semibold" title={readableDescription}>{readableDescription}</p>
                                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
                                   {new Date(transaction.date).toLocaleDateString('es-NI')} · {transaction.reference || 'Sin referencia'}
                                 </p>
@@ -1096,13 +1112,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
             const credit = Number(selectedTransaction.credit ?? 0);
             const movement = debit - credit;
             const transferDetails = selectedTransaction.transferDetails;
+            const readableDescription = readableTransactionDescription(selectedTransaction);
 
             return (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Movimiento seleccionado</p>
-                  <p className="mt-2 break-words text-base font-black text-foreground">{selectedTransaction.description || 'Sin descripción'}</p>
-                  <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">ID: {selectedTransaction.id}</p>
+                  <p className="mt-2 break-words text-base font-black text-foreground">{readableDescription}</p>
                 </div>
 
                 <div className="grid min-w-0 gap-4 sm:grid-cols-2">

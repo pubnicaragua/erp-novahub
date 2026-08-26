@@ -380,6 +380,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
   const [irTaxId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
+  const skipInitialProductSearchRef = useRef(false);
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -845,8 +846,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
+    skipInitialProductSearchRef.current = true;
     try {
-      const cashRegisters = await cajaService.getRegisters();
+      const [cashRegisters, registeredCustomers] = await Promise.all([
+        cajaService.getRegisters(),
+        cajaService.getCustomers(),
+      ]);
       const branchRegisters = cashRegisters;
       setRegisters(branchRegisters);
 
@@ -871,10 +876,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
       const initialWarehouseId = branchRegisters.find(r => r.id === initialRegisterId)?.resolvedWarehouseId || undefined;
 
-      const [availableProducts, registeredCustomers] = await Promise.all([
-        cajaService.getProducts(undefined, initialWarehouseId),
-        cajaService.getCustomers(),
-      ]);
+      const availableProducts = await cajaService.getProducts(undefined, initialWarehouseId);
       setProducts(availableProducts);
       setCustomers(registeredCustomers);
     } catch (error: unknown) {
@@ -959,21 +961,31 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   // Búsqueda dinámica en el backend
   useEffect(() => {
+    if (!selectedRegisterId) return;
+    if (!productSearch.trim() && skipInitialProductSearchRef.current) {
+      skipInitialProductSearchRef.current = false;
+      return;
+    }
+
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
         const selectedRegister = registers.find(r => r.id === selectedRegisterId);
         const warehouseId = selectedRegister?.resolvedWarehouseId || undefined;
-        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined, warehouseId);
-        setProducts(availableProducts);
+        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined, warehouseId, controller.signal);
+        if (!controller.signal.aborted) setProducts(availableProducts);
       } catch (error) {
-        console.error('Error fetching products:', error);
+        if (!controller.signal.aborted) console.error('Error fetching products:', error);
       } finally {
-        setIsSearching(false);
+        if (!controller.signal.aborted) setIsSearching(false);
       }
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [productSearch, selectedRegisterId, registers]);
 
   const filteredProducts = useMemo(

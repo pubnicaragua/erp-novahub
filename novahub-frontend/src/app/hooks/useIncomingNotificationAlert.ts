@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNotifications } from './useNotifications';
 import { playNotificationSound } from '../utils/notificationSound';
+import { toast } from 'sonner';
 
 /**
  * Detecta notificaciones entrantes nuevas (polling cada 30s) y:
@@ -27,8 +28,12 @@ export function useIncomingNotificationAlert() {
     if (fresh.length === 0) return;
     fresh.forEach(n => seenIds.current!.add(n.id));
 
-    const newest = fresh[fresh.length - 1];
+    const newest = [...fresh].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] || fresh[0];
     playNotificationSound();
+    toast.info(newest.title || 'Nueva notificación', {
+      description: newest.message || 'Tienes una novedad pendiente de revisar.',
+      duration: 6000,
+    });
 
     if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {

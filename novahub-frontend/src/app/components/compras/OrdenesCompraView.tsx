@@ -14,7 +14,7 @@ import { purchaseOrdersService, purchaseRequestsService } from '../../services/c
 import { inventoryService } from '../../services/inventario.service';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
-import type { PurchaseOrder, Supplier } from '../../types';
+import type { PurchaseOrder, Supplier, Warehouse } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -49,6 +49,8 @@ interface Props {
   loading: boolean;
   onRefresh: () => void;
   supplierCatalog?: Supplier[];
+  warehouseCatalog?: Warehouse[];
+  selectedBranchId?: string;
   productCatalog?: any[];
   productCategories?: any[];
   isSidebarCollapsed?: boolean;
@@ -465,7 +467,7 @@ const getProductListFromResponse = (response: any): any[] => (
 
 const normalizeProductCode = (product: any) => String(product?.code || product?.sku || '').trim().toLowerCase();
 
-export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
+export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -1291,6 +1293,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     if ((localDoc.items || []).some((it: any) => !String(it.category || '').trim())) {
       return toast.error('Cada producto debe tener una categoría. Selecciónala o créala antes de guardar.');
     }
+    const requiresWarehouse = String(localDoc.purchaseType || 'INVENTORY').toUpperCase() === 'INVENTORY'
+      || (localDoc.items || []).some((it: any) => it.stockApplies === true);
+    if (requiresWarehouse && !String(localDoc.warehouseId || '').trim()) {
+      return toast.error('Selecciona una bodega destino de la sucursal activa.');
+    }
 
     const normalizedItems = (localDoc.items || []).map((it: any) => {
       const quantity = Math.max(0, Math.trunc(Number(it.quantity || 0)));
@@ -1722,6 +1729,23 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
                     placeholder="Seleccionar Proveedor"
                   />
+                </div>
+                <div>
+                  <p className="text-[10px] text-foreground mb-1">Bodega destino *</p>
+                  <Combobox
+                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                    options={warehouseCatalog
+                      .filter((warehouse: any) => warehouse?.isActive !== false && (!selectedBranchId || warehouse.clientTenantId === selectedBranchId))
+                      .map((warehouse: any) => ({
+                        label: warehouse.name,
+                        value: warehouse.id,
+                        description: warehouse.location || 'Bodega operativa',
+                      }))}
+                    value={localDoc.warehouseId || ''}
+                    onChange={(value) => setLocalDoc({ ...localDoc, warehouseId: value })}
+                    placeholder="Seleccionar bodega destino"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">Solo bodegas activas de la sucursal seleccionada.</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-foreground mb-1">Fecha Emisión</p>

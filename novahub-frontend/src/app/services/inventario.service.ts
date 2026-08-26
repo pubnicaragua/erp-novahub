@@ -27,6 +27,7 @@ export const inventoryService = {
 
   // ==================== WAREHOUSES ====================
   getWarehouses: (signal?: AbortSignal) => api.get<Warehouse[]>('/inventory/warehouses', { signal }),
+  getWarehouseCatalog: (filters?: ApiFilters & { branchId?: string; scopeType?: string }, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/warehouses/catalog', { params: filters as any, signal }),
   getWarehouse: (id: string) => api.get<Warehouse>(`/inventory/warehouses/${id}`),
   createWarehouse: (data: Partial<Warehouse>) => api.post<Warehouse>('/inventory/warehouses', data),
   updateWarehouse: (id: string, data: Partial<Warehouse>) => api.patch<Warehouse>(`/inventory/warehouses/${id}`, data),
@@ -34,8 +35,8 @@ export const inventoryService = {
   autoCreateAccountingLink: (id: string) => api.post<Warehouse>(`/inventory/warehouses/${id}/accounting-link/auto-create`, {}),
 
   // ==================== STOCK LEVELS ====================
-  getAllStock: () => api.get<any[]>('/inventory/stock'),
-  getStockByWarehouse: (warehouseId: string) => api.get<any>(`/inventory/stock/${warehouseId}`),
+  getAllStock: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/stock', { params: filters as any, signal }),
+  getStockByWarehouse: (warehouseId: string, filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>(`/inventory/stock/${warehouseId}`, { params: filters as any, signal }),
   updateStockLevel: (data: { productId: string; warehouseId: string; variantId: string; quantity: number; minStock?: number; maxStock?: number }) => 
     api.post<any>('/inventory/stock/update', data),
 
@@ -58,6 +59,7 @@ export const inventoryService = {
 
   // ==================== TRANSFERS ====================
   getTransfers: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any>>('/inventory/transfers', { params: filters as any, signal }),
+  getTransferLocations: (signal?: AbortSignal) => api.get<any[]>('/inventory/transfers/locations', { signal }),
   getTransferAccountingPreflight: (
     fromId: string,
     toId: string,

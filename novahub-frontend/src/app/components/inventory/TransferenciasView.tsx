@@ -110,7 +110,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
     let cancelled = false;
     const loadTransferLocations = async () => {
       try {
-        const response: any = await api.get('/inventory/transfers/locations');
+        const response: any = await inventoryService.getTransferLocations();
         if (!cancelled) setTransferBranchWarehouses(Array.isArray(response) ? response : []);
       } catch {
         if (!cancelled) setTransferBranchWarehouses([]);
@@ -157,11 +157,13 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
 
   const transferLocations = useMemo<TransferLocation[]>(() => {
     const branchLocations: TransferLocation[] = [];
+    const backendCorporateLocations: TransferLocation[] = [];
     const seen = new Set<string>();
     for (const location of transferBranchWarehouses) {
       if (!location?.id || seen.has(location.id)) continue;
       seen.add(location.id);
-      branchLocations.push(location);
+      if (location.kind === 'ALMACEN_CORPORATIVO') backendCorporateLocations.push(location);
+      else branchLocations.push(location);
     }
     for (const branch of branches) {
       const branchWarehouses = Array.isArray(branch?.warehouses)
@@ -186,7 +188,7 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
       seen.add(warehouse.id);
       branchLocations.push({ id: warehouse.id, name: warehouse.name, kind: 'BODEGA', branchId: selectedBranchId, branchName: 'Sucursal actual', clientTenantId: warehouse.clientTenantId || selectedBranchId });
     }
-    const corporateLocations = corporateWarehouses
+    const corporateLocations = [...backendCorporateLocations, ...corporateWarehouses
       .filter((warehouse) => warehouse?.id && warehouse.isActive !== false)
       .map((warehouse) => ({
         id: warehouse.id,
@@ -194,8 +196,9 @@ export function TransferenciasView({ transfers, warehouses, products, series = [
         kind: 'ALMACEN_CORPORATIVO' as const,
         businessUnitId: warehouse.businessUnitId || null,
         clientTenantId: null,
-      }));
-    return [...branchLocations, ...corporateLocations];
+      }))];
+    const allLocations = [...branchLocations, ...corporateLocations];
+    return allLocations.filter((location, index) => allLocations.findIndex((candidate) => candidate.id === location.id) === index);
   }, [branches, warehouses, transferBranchWarehouses, corporateWarehouses, selectedBranchId]);
 
   const locationById = useMemo(() => new Map(transferLocations.map((location) => [location.id, location])), [transferLocations]);

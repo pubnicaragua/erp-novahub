@@ -2018,10 +2018,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             if (skippedCount > 0) {
               toast.info(`${skippedCount} factura${skippedCount === 1 ? '' : 's'} pagada${skippedCount === 1 ? '' : 's'} o parcial${skippedCount === 1 ? '' : 'es'} se omitió${skippedCount === 1 ? '' : 'eron'}`);
             }
-            const bulkCancelToastId = toast.loading(`Anulando ${rowsToCancel.length} factura${rowsToCancel.length === 1 ? '' : 's'}...`);
+            const bulkCancelToastId = toast.loading(`Enviando ${rowsToCancel.length} solicitud${rowsToCancel.length === 1 ? '' : 'es'} a Contabilidad...`);
             try {
-              await Promise.all(rowsToCancel.map((invoice) => invoicesService.cancel(invoice.id, 'Anulación masiva')));
-              toast.success(`${rowsToCancel.length} factura${rowsToCancel.length === 1 ? '' : 's'} anulada${rowsToCancel.length === 1 ? '' : 's'}`, { id: bulkCancelToastId });
+              await Promise.all(rowsToCancel.map((invoice) => invoicesService.requestCancellation(invoice.id, 'Solicitud de anulación masiva')));
+              toast.success(`${rowsToCancel.length} solicitud${rowsToCancel.length === 1 ? '' : 'es'} enviada${rowsToCancel.length === 1 ? '' : 's'} a Contabilidad`, { id: bulkCancelToastId });
               onRefresh();
             } catch (e: any) {
               toast.error(e?.response?.data?.message || e?.message || 'No se pudieron anular las facturas', { id: bulkCancelToastId });
@@ -2054,7 +2054,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                 </Button>
               )}
               {canPerform('SALES_INVOICES', 'delete') && isInvoiceCancellableFromList(row) && (
-                <Button type="button" title="Anular factura" aria-label={`Anular factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
+                <Button type="button" title="Solicitar anulación a Contabilidad" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
                   <Ban className="size-4" />
                 </Button>
               )}
@@ -2084,24 +2084,24 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       <ConfirmDialog
         open={pendingCancelId !== null}
         onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title={"¿Cancelar factura?"}
-        description="La factura quedará cancelada y no afectará reportes financieros. Esta acción no se puede deshacer."
-        confirmLabel="Cancelar factura"
+        title={"¿Solicitar anulación?"}
+        description="La factura no se anulará ahora. Se enviará una solicitud a Contabilidad para revisión y aprobación."
+        confirmLabel="Enviar solicitud"
         variant="destructive"
         loading={cancelLoading}
         disabled={!cancelReason.trim()}
         onConfirm={async () => {
           if (!pendingCancelId || !cancelReason.trim()) return;
-          const cancelToastId = toast.loading('Anulando factura...');
+          const cancelToastId = toast.loading('Enviando solicitud a Contabilidad...');
           try {
             setCancelLoading(true);
-            await invoicesService.cancel(pendingCancelId, cancelReason.trim());
-            toast.success('Factura anulada', { id: cancelToastId });
+            await invoicesService.requestCancellation(pendingCancelId, cancelReason.trim());
+            toast.success('Solicitud enviada a Contabilidad', { id: cancelToastId });
             setEditingId(null);
             setIsCreating(false);
             onRefresh();
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'Error al anular factura', { id: cancelToastId });
+            toast.error(error?.response?.data?.message || error?.message || 'No se pudo enviar la solicitud de anulación', { id: cancelToastId });
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);

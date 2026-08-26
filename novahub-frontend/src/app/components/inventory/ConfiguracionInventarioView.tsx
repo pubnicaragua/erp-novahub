@@ -821,6 +821,13 @@ export function ConfiguracionInventarioView(_props: ConfiguracionInventarioViewP
                             )
                           })}
                         </div>
+                      ) : branchForWarehouse(wh) ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary"
+                        >
+                          {branchForWarehouse(wh).name}
+                        </Badge>
                       ) : (
                         <span className="text-xs text-muted-foreground">Sin sucursal</span>
                       )}

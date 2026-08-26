@@ -15,6 +15,7 @@ export const REFERENCE_TYPE_LABELS: Record<string, string> = {
   FINANCIAL_INCOME: 'Ingreso financiero',
   FINANCIAL_EXPENSE: 'Gasto financiero',
   INVENTORY_ADJUSTMENT: 'Ajuste de inventario',
+  TRANSFER: 'Transferencia de inventario',
   CASH_REGISTER_SESSION: 'Cierre de caja',
   CASH_REGISTER_DEPOSIT: 'Depósito a banco',
   RECONCILIATION: 'Conciliación bancaria',

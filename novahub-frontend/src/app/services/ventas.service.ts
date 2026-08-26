@@ -59,7 +59,15 @@ export const invoicesService = {
     api.post<any>(`/sales/invoices/${id}/send-to-cash`, data || {}),
   checkNumber: (number: string, excludeId?: string) =>
     api.get<{ exists: boolean; record?: Pick<Invoice, 'id' | 'number' | 'status'> }>(`/sales/invoices/check-number/${encodeURIComponent(number)}`, excludeId ? ({ excludeId } as any) : undefined),
-  cancel: (id: string, reason?: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
+  requestCancellation: (invoiceId: string, reason: string, idempotencyKey?: string) =>
+    api.idempotentPost<{ request: { id: string; status: string }; invoice: Invoice; created: boolean; message: string }>('/sales/invoices/cancellation-requests', { invoiceId, reason }, idempotencyKey),
+  /** Compatibilidad temporal: el endpoint ya no anula; crea una solicitud. */
+  cancel: (id: string, reason?: string, idempotencyKey?: string) =>
+    api.idempotentPost<{ request: { id: string; status: string }; invoice: Invoice; created: boolean; message: string }>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
+  getCancellationRequests: (status = 'PENDING', signal?: AbortSignal) =>
+    api.get<any[]>('/sales/invoices/cancellation-requests', { params: { status }, signal }),
+  reviewCancellationRequest: (requestId: string, decision: 'APPROVE' | 'REJECT', reason?: string, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/sales/invoices/cancellation-requests/${requestId}/review`, { decision, reason }, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/invoices/${id}`),
 };
 

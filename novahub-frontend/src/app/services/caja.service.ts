@@ -83,6 +83,36 @@ export interface HistoricalCashReport {
   };
 }
 
+export interface HistoricalCashSessionDetail {
+  session: any;
+  cash: {
+    initial: { NIO: number; USD: number };
+    expected: { NIO: number; USD: number };
+    counted: { NIO: number; USD: number };
+    difference: { NIO: number; USD: number };
+    deposit: { NIO: number; USD: number };
+    keepInCash: { NIO: number; USD: number };
+  };
+  invoices: {
+    count: number;
+    statuses: Record<string, number>;
+    totals: Record<string, { NIO: number; USD: number }>;
+    rows: any[];
+  };
+  payments: {
+    summary: Record<string, { count: number; amountNIO: number; amountUSD: number }>;
+    rows: any[];
+    checks: any[];
+    transfers: any[];
+  };
+  returns: { count: number; totals: { NIO: number; USD: number }; rows: any[] };
+  creditNotes: { count: number; totals: { NIO: number; USD: number }; rows: any[] };
+  movements: any[];
+  denominations: { opening: any[]; closing: any[] };
+  availability: Record<string, boolean>;
+  unavailable: Array<{ label: string; value: string }>;
+}
+
 export interface CashRegisterCount {
   id?: string;
   attempt: number;
@@ -508,11 +538,11 @@ export const cajaService = {
   updateDeficitCharge: (id: string, dto: { status?: 'PENDING' | 'COLLECTED' | 'WRITTEN_OFF'; responsibleUserId?: string | null; notes?: string }) =>
     api.patch<any>(`/caja/deficit-charges/${id}`, dto),
 
-  getProducts: async (search?: string, warehouseId?: string) => {
+  getProducts: async (search?: string, warehouseId?: string, signal?: AbortSignal) => {
     const params: any = {};
     if (search) params.search = search;
     if (warehouseId) params.warehouseId = warehouseId;
-    const products = await api.get<PosProduct[]>('/caja/products', { params: Object.keys(params).length > 0 ? params : undefined });
+    const products = await api.get<PosProduct[]>('/caja/products', { params: Object.keys(params).length > 0 ? params : undefined, signal });
     return resolveStorageReferences(products);
   },
 
@@ -637,6 +667,11 @@ export const cajaService = {
   } = {}, signal?: AbortSignal): Promise<HistoricalCashReport> => {
     const res = await api.get<any>('/caja/reports/historical', { params: filters, signal });
     return (res?.data !== undefined ? res.data : res) as HistoricalCashReport;
+  },
+
+  getHistoricalCashSessionDetail: async (sessionId: string, signal?: AbortSignal): Promise<HistoricalCashSessionDetail> => {
+    const res = await api.get<any>(`/caja/reports/historical/${sessionId}`, { signal });
+    return (res?.data !== undefined ? res.data : res) as HistoricalCashSessionDetail;
   },
 
   countSession: async (id: string, dto: any) => {

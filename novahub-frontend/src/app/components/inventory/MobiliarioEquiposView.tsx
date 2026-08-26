@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -160,7 +160,7 @@ const SHEET_ALIASES: Record<string, string> = {
 
 function parseSheetRows(sheet: any[][]): Record<string, any>[] {
   if (!sheet || sheet.length < 2) return [];
-  const headers = sheet[0].map((h, i) => {
+  const headers = sheet[0].map((h) => {
     const key = String(h ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
     return SHEET_ALIASES[key] || key;
   });
@@ -285,6 +285,13 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   const displayTotal = cutoffDate ? assets.length : meta.total;
   const displayTotalPages = cutoffDate ? Math.max(1, Math.ceil(assets.length / pageSize)) : meta.totalPages;
+  const hasActiveFilters = Boolean(
+    search.trim()
+    || categoryFilter !== 'all'
+    || statusFilter !== 'all'
+    || (!externalBranchId && branchFilter !== 'all')
+    || monthCutoff,
+  );
 
   const cutoffSummary = useMemo(() => {
     if (!cutoffDate) return null;
@@ -321,6 +328,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   // Respaldo
   const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const set = (field: keyof FormState, value: string) => setForm(prev => ({ ...prev, [field]: value }));
 
   useEffect(() => {
     if (!formOpen || form.currency !== 'NIO' || form.exchangeRate) return;
@@ -330,8 +338,6 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     }).catch(() => { /* tasa manual si no se puede obtener */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formOpen, form.currency]);
-
-  const set = (field: keyof FormState, value: string) => setForm(prev => ({ ...prev, [field]: value }));
 
   const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setFormOpen(true); };
   const openEdit = (asset: AssetRow) => {
@@ -367,9 +373,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
         exchangeRate: form.exchangeRate ? Number(form.exchangeRate) : null,
         status: form.status, observations: form.observations.trim() || null,
       };
-      let saved;
-      if (editing) saved = await mobiliarioService.updateAsset(editing.id, payload);
-      else saved = await mobiliarioService.createAsset(payload);
+      if (editing) await mobiliarioService.updateAsset(editing.id, payload);
+      else await mobiliarioService.createAsset(payload);
       toast.success(editing ? 'Activo actualizado' : 'Activo registrado');
       setFormOpen(false);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
@@ -446,7 +451,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       setImportFileName(file.name);
       setImportResult(null);
       setImportOpen(true);
-    } catch (e: any) {
+    } catch {
       toast.error('No se pudo leer el archivo Excel');
     }
   };
@@ -481,6 +486,14 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   const branchNameOf = (id?: string | null) => branches.find(b => b.id === id)?.name || '—';
   const userNameOf = (id?: string | null) => users.find(u => u.id === id)?.name || '—';
   const currencySymbol = (c: string) => c === 'NIO' ? 'C$' : '$';
+  const clearFilters = () => {
+    setSearch('');
+    setCategoryFilter('all');
+    setStatusFilter('all');
+    if (!externalBranchId) setBranchFilter('all');
+    setMonthCutoff('');
+    setPage(1);
+  };
 
   const renderCostCell = (asset: AssetRow) => {
     const original = `${currencySymbol(asset.currency || 'USD')} ${fmtCost(asset.cost)}`;
@@ -500,55 +513,27 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center gap-4 p-5 bg-muted/30 rounded-2xl border border-border/50 shadow-sm" data-tour="mobiliario-list-title">
-        <div className="flex items-center gap-2 text-xs font-black text-muted-foreground uppercase tracking-[0.2em] bg-background/50 px-3 py-1.5 rounded-lg border border-border/30 shrink-0">
-          <Building2 className="size-3.5" /> Activos de la empresa
-        </div>
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-4" data-tour="mobiliario-list-data">
-          <div className="relative min-w-0 sm:col-span-2 lg:flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar por nombre, código, serie, marca..." className="h-9 pl-9" />
+      <div className="flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between" data-tour="mobiliario-list-title">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <Building2 className="size-5 text-primary" />
           </div>
-          <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
-            <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Categoría" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las categorías</SelectItem>
-              {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-            <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Estado" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
-              {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {!externalBranchId && (
-            <Select value={branchFilter} onValueChange={(v) => { setBranchFilter(v); setPage(1); }}>
-              <SelectTrigger className="h-9 min-w-[150px]"><SelectValue placeholder="Sucursal" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las sucursales</SelectItem>
-                {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          <Select value={monthCutoff || '__none'} onValueChange={(v) => { setMonthCutoff(v === '__none' ? '' : v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Corte por mes" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none">Sin corte (actual)</SelectItem>
-              {monthOptions.map((mo) => <SelectItem key={mo.value} value={mo.value}>{mo.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div className="min-w-0">
+            <h2 className="text-sm font-black uppercase tracking-widest">Mobiliario y Equipos</h2>
+            <p className="mt-1 max-w-3xl text-[10px] leading-relaxed text-muted-foreground">
+              Controla los bienes de la empresa, su ubicación, responsable, respaldo y estado operativo.
+            </p>
+          </div>
         </div>
-        <div className="erp-list-toolbar lg:ml-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-border/20 flex items-center gap-2" data-tour="mobiliario-list-actions">
+        <div className="erp-list-toolbar flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-tour="mobiliario-list-actions">
           <InventoryViewTutorial label="Cómo gestionar mobiliario" targetPrefix="mobiliario-list" copy={{ data: { description: 'Busca y filtra los activos por nombre, código, categoría, estado o sucursal.' }, actions: { description: 'Registra, importa, descarga la plantilla o actualiza los activos existentes.' } }} />
-          <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-9">
+          <Button variant="outline" size="sm" onClick={() => listQuery.refetch()} disabled={loading} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <RefreshCw className={cn("size-4", loading && "animate-spin")} /> Actualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-9 gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
           </Button>
-          <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-9 gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Upload className="size-4" /> Importar Excel
           </Button>
           <input
@@ -562,21 +547,89 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               e.target.value = '';
             }}
           />
-          <Button size="sm" onClick={openCreate} className="h-10 gap-1.5 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+          <Button size="sm" data-toolbar-role="primary" onClick={openCreate} className="h-10 w-full gap-2 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 sm:w-auto">
             <Plus className="size-4" /> Nuevo activo
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg font-bold flex items-center gap-2">
-            <Building2 className="size-5 text-primary" /> Mobiliario y Equipos
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Bienes propiedad de la empresa que no son mercancías para la venta. El costo puede registrarse en Córdobas o Dólares (con tasa de cambio) y puedes adjuntar la factura de compra como respaldo. La contabilización (costo, depreciación) la maneja Contabilidad → Activos Fijos.
-          </p>
-        </CardHeader>
+      <div className="erp-composite-toolbar flex min-w-0 flex-col gap-3 rounded-2xl border border-border/50 bg-card p-3 shadow-sm sm:p-4" data-tour="mobiliario-list-filters">
+        <div className="order-1 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+              <Search className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-foreground">Filtrar activos</p>
+              <p className="truncate text-[10px] text-muted-foreground">Busca y combina los filtros para encontrar un bien rápidamente.</p>
+            </div>
+          </div>
+          <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{displayTotal} activo{displayTotal === 1 ? '' : 's'}</p>
+        </div>
+
+        <div className="erp-toolbar-filter-group grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(260px,1.55fr)_repeat(4,minmax(140px,1fr))]" data-toolbar-role="filters" data-tour="mobiliario-list-data">
+          <div className="min-w-0 space-y-1.5 sm:col-span-2 xl:col-span-1">
+            <label htmlFor="mobiliario-search" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Buscar</label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/50" />
+              <Input id="mobiliario-search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Nombre, código, serie o marca" className="h-10 w-full rounded-xl border-border/50 bg-background/50 pl-9 text-xs" />
+            </div>
+          </div>
+
+          <div className="min-w-0 space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Categoría</span>
+            <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
+              <SelectTrigger aria-label="Filtrar por categoría" className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-xs"><SelectValue placeholder="Categoría" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="min-w-0 space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</span>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger aria-label="Filtrar por estado" className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-xs"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!externalBranchId && (
+            <div className="min-w-0 space-y-1.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sucursal</span>
+              <Select value={branchFilter} onValueChange={(v) => { setBranchFilter(v); setPage(1); }}>
+                <SelectTrigger aria-label="Filtrar por sucursal" className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-xs"><SelectValue placeholder="Sucursal" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las sucursales</SelectItem>
+                  {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="min-w-0 space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Corte temporal</span>
+            <Select value={monthCutoff || '__none'} onValueChange={(v) => { setMonthCutoff(v === '__none' ? '' : v); setPage(1); }}>
+              <SelectTrigger aria-label="Filtrar por corte mensual" className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-xs"><SelectValue placeholder="Corte por mes" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Sin corte (actual)</SelectItem>
+                {monthOptions.map((mo) => <SelectItem key={mo.value} value={mo.value}>{mo.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="order-3 flex flex-col gap-2 border-t border-border/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[10px] text-muted-foreground">Los resultados se actualizan al cambiar la búsqueda o cualquier filtro.</p>
+          {hasActiveFilters && <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="h-8 w-fit gap-1.5 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground"><X className="size-3.5" /> Limpiar filtros</Button>}
+        </div>
+      </div>
+
+      <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-4">
           {cutoffDate && (
             <div className="mb-4 flex flex-wrap items-center gap-2">

@@ -608,7 +608,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         const missingWarehouseItems = getItemsMissingWarehouse(currentReceipt?.items || [], true);
         if (missingWarehouseItems.length > 0) {
           const labels = getWarehouseWarningLabels(currentReceipt?.items || []);
-          toast.error(`Selecciona un almacén para cada producto recibido: ${labels.join(', ')}`);
+          toast.error(`Selecciona una bodega para cada producto recibido: ${labels.join(', ')}`);
           return;
         }
       }
@@ -705,7 +705,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       const missingWarehouseItems = getItemsMissingWarehouse(itemsToSave, true);
       if (missingWarehouseItems.length > 0) {
         const labels = getWarehouseWarningLabels(itemsToSave);
-        return toast.error(`Selecciona un almacén para cada producto recibido: ${labels.join(', ')}`);
+        return toast.error(`Selecciona una bodega para cada producto recibido: ${labels.join(', ')}`);
       }
     }
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepción de compra...' : 'Guardando recepción de compra...');
@@ -977,7 +977,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           withholdingRate: (it as any).withholdingRate || 0,
                           accountId: (it as any).accountId || '',
                           costCenterId: (it as any).costCenterId || null,
-                          warehouseId: warehouses.find((w) => (w as any)?.isMain)?.id || '',
+                          // La recepción hereda la bodega destino de la orden.
+                          // Si la orden histórica no la tiene, la selección debe
+                          // quedar vacía para forzar una elección válida.
+                          warehouseId: (ord as any)?.warehouseId || '',
                         })) || [];
                         const autoStatus = calcStatus(newItems);
                         setLocalDoc({
@@ -1067,9 +1070,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                   <AlertTriangle className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 dark:text-rose-400">Almacén obligatorio por producto</p>
-                  <p className="mt-1 text-xs font-semibold text-foreground">Selecciona un almacén para cada producto antes de registrar cantidades recibidas.</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">El sistema necesita saber en qué almacén ingresará la existencia y actualizará el costo promedio.</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 dark:text-rose-400">Bodega obligatoria por producto</p>
+                  <p className="mt-1 text-xs font-semibold text-foreground">Selecciona una bodega para cada producto antes de registrar cantidades recibidas.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">El sistema necesita saber en qué bodega ingresará la existencia y actualizará el costo promedio.</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {itemsMissingWarehouse.map((item: any, index: number) => <Badge key={`${item.id || index}-warehouse-warning`} variant="outline" className="border-rose-500/30 bg-background/70 text-[9px] font-bold text-rose-600 dark:text-rose-400">{item.description || item.name || item.code || `Producto ${index + 1}`}</Badge>)}
                   </div>
@@ -1233,7 +1236,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                     </div>
                     <div className="col-span-2">
                       <div className="mb-1 flex items-center gap-2">
-                        <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>Almacén *</p>
+                        <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>Bodega destino *</p>
                         {missingWarehouse && <span className="rounded-full bg-rose-700 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Requerido</span>}
                       </div>
                       <Combobox
@@ -1248,7 +1251,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         value={item.warehouseId || ''}
                         onChange={(val) => handleItemChange(idx, 'warehouseId', val)}
                         className={missingWarehouse ? 'border-2 border-rose-500 bg-rose-500/5 text-rose-700 shadow-sm dark:text-rose-300' : ''}
-                        placeholder="Seleccionar almacén"
+                        placeholder="Seleccionar bodega destino"
                       />
                     </div>
                   </div>

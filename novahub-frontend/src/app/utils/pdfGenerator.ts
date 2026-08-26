@@ -2193,3 +2193,190 @@ export const generateHistoricalCashReportPDF = async ({
   doc.text(`Generado por ${tenantName || 'NovaHub'} - Reporte histórico de Caja`, 14, doc.internal.pageSize.height - 10);
   doc.save(`Reporte_Historico_Caja_${new Date().getTime()}.pdf`);
 };
+
+/**
+ * Cierre gerencial en formato 16:9. Se genera en varias páginas con la misma
+ * proporción para conservar legibilidad cuando la sesión tenga muchos datos.
+ * Las secciones sin datos se muestran como No aplica, nunca como información
+ * inventada.
+ */
+export const generateCashClosureReportPDF = async ({
+  detail,
+  tenantName,
+}: {
+  detail: any;
+  tenantName: string;
+}) => {
+  const settings = await getPdfDesignSettings('ventas.cash-historical-report');
+  const width = 338.666;
+  const height = 190.5;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [width, height] });
+  const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
+  const dark: PdfRgb = [15, 55, 48];
+  const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
+  const line: PdfRgb = [218, 231, 225];
+  const pale: PdfRgb = [241, 249, 245];
+  const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const date = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('es-NI') : 'No aplica';
+  const time = (value: unknown) => value ? new Date(String(value)).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' }) : 'No aplica';
+  const label = (value: unknown) => String(value || 'No aplica').replace(/_/g, ' ');
+  const session = detail.session || {};
+  const cash = detail.cash || {};
+  const invoices = detail.invoices || { rows: [], totals: {}, statuses: {}, count: 0 };
+  const payments = detail.payments || { rows: [], summary: {}, checks: [], transfers: [] };
+  const statusLabel = (value: unknown) => ({ PAID: 'Pagada', PENDING: 'Pendiente', PARTIAL: 'Parcial', CANCELLED: 'Anulada', OVERDUE: 'Vencida' } as Record<string, string>)[String(value || '').toUpperCase()] || label(value);
+
+  const drawChrome = (title: string, subtitle: string) => {
+    doc.setFillColor(...dark);
+    doc.rect(0, 0, width, 24, 'F');
+    doc.setFillColor(...primary);
+    doc.rect(0, 0, 7, 24, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(title, 15, 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(subtitle, 15, 18);
+    doc.setTextColor(...text);
+    doc.setDrawColor(...line);
+    doc.setLineWidth(0.25);
+    doc.line(14, height - 12, width - 14, height - 12);
+    doc.setFontSize(7);
+    doc.setTextColor(112, 132, 125);
+    doc.text(`${tenantName || 'NovaHub'} - Cierre gerencial de Caja`, 14, height - 6);
+    doc.text(`Página ${doc.getNumberOfPages()}`, width - 14, height - 6, { align: 'right' });
+  };
+  const sectionTitle = (value: string, x: number, y: number) => {
+    doc.setTextColor(...primary);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(value.toUpperCase(), x, y);
+    doc.setDrawColor(...primary);
+    doc.setLineWidth(0.8);
+    doc.line(x, y + 2, x + 20, y + 2);
+    doc.setTextColor(...text);
+  };
+  const tableStyles = { textColor: text, fontSize: 7, cellPadding: 2, lineColor: line, lineWidth: 0.2, overflow: 'linebreak' as const };
+  const headStyles = { fillColor: primary, textColor: 255, fontSize: 7, fontStyle: 'bold' as const, cellPadding: 2 };
+  const currencyRows = (value: any, title: string) => [
+    [title, money(value?.NIO, 'NIO'), money(value?.USD, 'USD')],
+  ];
+
+  drawChrome('CIERRE GERENCIAL DE CAJA', `${session.branch?.name || 'Sin sucursal'} · ${session.register?.code || 'Sin caja'} · Sesión ${label(session.status)} · ${date(session.openedAt)} ${time(session.openedAt)}`);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...text);
+  doc.text(`Cajero: ${session.openedBy?.name || 'No aplica'}    Cierre: ${session.closedBy?.name || 'Pendiente'}    Tipo de cambio: ${money(session.exchangeRateUSD, 'NIO')}/USD`, 15, 32);
+  sectionTitle('Resumen de caja', 15, 43);
+  autoTable(doc, {
+    startY: 48,
+    margin: { left: 15, right: 177 },
+    tableWidth: 146,
+    head: [['Concepto', 'Córdobas', 'Dólares']],
+    body: [
+      ...currencyRows(cash.initial, 'Fondo inicial'),
+      ...currencyRows(cash.expected, 'Esperado'),
+      ...currencyRows(cash.counted, 'Contado'),
+      ...currencyRows(cash.difference, 'Diferencia'),
+      ...currencyRows(cash.deposit, 'Depósito'),
+      ...currencyRows(cash.keepInCash, 'Fondo fijo retenido'),
+    ],
+    theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
+  });
+
+  sectionTitle('Facturación y pagos', 174, 43);
+  autoTable(doc, {
+    startY: 48,
+    margin: { left: 174, right: 15 },
+    tableWidth: 149,
+    head: [['Indicador', 'Valor']],
+    body: [
+      ['Facturas / ventas', String(invoices.count || 0)],
+      ['Subtotal', `${money(invoices.totals?.subtotal?.NIO)} / ${money(invoices.totals?.subtotal?.USD, 'USD')}`],
+      ['Descuentos', `${money(invoices.totals?.discountAmount?.NIO)} / ${money(invoices.totals?.discountAmount?.USD, 'USD')}`],
+      ['Impuestos', `${money(invoices.totals?.taxAmount?.NIO)} / ${money(invoices.totals?.taxAmount?.USD, 'USD')}`],
+      ['Total facturado', `${money(invoices.totals?.total?.NIO)} / ${money(invoices.totals?.total?.USD, 'USD')}`],
+      ['Notas de crédito', `${detail.creditNotes?.count || 0} · ${money(detail.creditNotes?.totals?.NIO)} / ${money(detail.creditNotes?.totals?.USD, 'USD')}`],
+      ['Devoluciones', `${detail.returns?.count || 0} · ${money(detail.returns?.totals?.NIO)} / ${money(detail.returns?.totals?.USD, 'USD')}`],
+    ],
+    theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
+  });
+
+  doc.addPage([width, height], 'landscape');
+  drawChrome('DETALLE TRANSACCIONAL', `${session.register?.name || 'Caja'} · Facturas, estados, pagos y trazabilidad`);
+  sectionTitle('Facturas de la sesión', 15, 34);
+  const invoiceRows = (invoices.rows || []).map((invoice: any) => [
+    invoice.number,
+    date(invoice.date),
+    String(invoice.customer || 'Cliente general').slice(0, 28),
+    statusLabel(invoice.status),
+    label(invoice.currency),
+    money(invoice.total, invoice.currency),
+  ]);
+  autoTable(doc, {
+    startY: 39,
+    margin: { left: 15, right: 15 },
+    head: [['Factura', 'Fecha', 'Cliente', 'Estado', 'Moneda', 'Total']],
+    body: invoiceRows.length ? invoiceRows : [['No aplica', 'No aplica', 'No hay facturas asociadas', 'No aplica', 'No aplica', 'C$ 0.00']],
+    theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
+    columnStyles: { 2: { cellWidth: 92 }, 5: { halign: 'right' } },
+  });
+
+  const paymentStart = Math.min(Number((doc as any).lastAutoTable?.finalY || 88) + 8, 145);
+  sectionTitle('Pagos registrados', 15, paymentStart);
+  const paymentRows = (payments.rows || []).map((payment: any) => [
+    payment.number || 'No aplica', date(payment.date), label(payment.method), payment.customer || 'Cliente general', payment.document || 'No aplica', money(payment.amount, payment.currency), payment.reference || 'No aplica',
+  ]);
+  autoTable(doc, {
+    startY: paymentStart + 5,
+    margin: { left: 15, right: 15 },
+    head: [['Recibo', 'Fecha', 'Método', 'Cliente', 'Documento', 'Monto', 'Referencia']],
+    body: paymentRows.length ? paymentRows : [['No aplica', 'No aplica', 'No aplica', 'Sin pagos', 'No aplica', 'C$ 0.00', 'No aplica']],
+    theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
+  });
+
+  doc.addPage([width, height], 'landscape');
+  drawChrome('ARQUEO Y MOVIMIENTOS', `${session.register?.name || 'Caja'} · Denominaciones, entradas, salidas y conceptos no registrados`);
+  sectionTitle('Denominaciones de apertura', 15, 34);
+  const denominationRows = (items: any[]) => items.map((item) => [label(item.currency), money(item.value, item.currency), String(item.quantity || 0), money(item.subtotal, item.currency)]);
+  autoTable(doc, {
+    startY: 39,
+    margin: { left: 15, right: 177 },
+    tableWidth: 146,
+    head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
+    body: denominationRows(detail.denominations?.opening || []).length ? denominationRows(detail.denominations?.opening || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
+    theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
+  });
+  sectionTitle('Denominaciones de cierre', 174, 34);
+  autoTable(doc, {
+    startY: 39,
+    margin: { left: 174, right: 15 },
+    tableWidth: 149,
+    head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
+    body: denominationRows(detail.denominations?.closing || []).length ? denominationRows(detail.denominations?.closing || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
+    theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
+  });
+  const movementStart = Math.max(Number((doc as any).lastAutoTable?.finalY || 70), 70) + 8;
+  sectionTitle('Entradas y salidas', 15, movementStart);
+  const movementRows = (detail.movements || []).map((item: any) => [label(item.type), date(item.createdAt), String(item.description || 'Sin descripción').slice(0, 45), label(item.paymentMethod), money(item.amountNIO), money(item.amountUSD, 'USD')]);
+  autoTable(doc, {
+    startY: movementStart + 5,
+    margin: { left: 15, right: 177 },
+    tableWidth: 146,
+    head: [['Tipo', 'Fecha', 'Descripción', 'Método', 'C$', 'USD']],
+    body: movementRows.length ? movementRows : [['No aplica', 'No aplica', 'No hay movimientos manuales', 'No aplica', 'C$ 0.00', '$ 0.00']],
+    theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
+  });
+  sectionTitle('Conceptos no registrados en la sesión', 174, movementStart);
+  autoTable(doc, {
+    startY: movementStart + 5,
+    margin: { left: 174, right: 15 },
+    tableWidth: 149,
+    head: [['Concepto', 'Resultado']],
+    body: (detail.unavailable || []).map((item: any) => [item.label, item.value]),
+    theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
+  });
+
+  doc.save(`Cierre_Gerencial_Caja_${session.register?.code || 'caja'}_${new Date().getTime()}.pdf`);
+};

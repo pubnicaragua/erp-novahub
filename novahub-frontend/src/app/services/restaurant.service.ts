@@ -75,6 +75,33 @@ export const restaurantService = {
   getMenu: (signal?: AbortSignal) => api.get<RestaurantMenuCategory[]>('/restaurant/menu', { signal }),
   createCategory: (body: { name: string; description?: string }) =>
     api.post<RestaurantMenuCategory>('/restaurant/menu/categories', body),
+  createMenuItem: (body: {
+    categoryId: string;
+    productId?: string | null;
+    name: string;
+    description?: string | null;
+    price: number;
+    currency?: string;
+    taxRate?: number;
+    prepStation?: string;
+    imageUrl?: string | null;
+    accountingKey?: string;
+    options?: unknown;
+    sortOrder?: number;
+    isFeatured?: boolean;
+  }) => api.post<RestaurantMenuItem>('/restaurant/menu/items', body),
+  updateMenuItem: (id: string, body: Partial<{
+    name: string;
+    description: string | null;
+    imageUrl: string | null;
+    price: number;
+    taxRate: number;
+    productId: string | null;
+    accountingKey: string;
+    prepStation: string;
+    isAvailable: boolean;
+    isFeatured: boolean;
+  }>) => api.patch<RestaurantMenuItem>(`/restaurant/menu/items/${id}`, body),
   listOrders: (branchId?: string, signal?: AbortSignal) =>
     api.get<RestaurantOrder[]>('/restaurant/orders', { params: { branchId }, signal }),
   createOrder: (body: { tableId: string; items: Array<{ menuItemId: string; quantity: number; notes?: string }>; notes?: string }) =>

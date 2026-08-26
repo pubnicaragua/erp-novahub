@@ -4,8 +4,9 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { useState } from 'react';
 
 type InventoryFormStep = 'title' | 'data' | 'items' | 'summary' | 'actions';
+type InventoryTutorialCopy = { title: string; description: string; placement: GuidedTourStep['placement']; tip?: string };
 
-const DEFAULT_COPY: Record<InventoryFormStep, { title: string; description: string; placement: GuidedTourStep['placement'] }> = {
+const DEFAULT_COPY: Record<InventoryFormStep, InventoryTutorialCopy> = {
   title: { title: 'Acción de inventario', description: 'Sigue este flujo para completar la operación de inventario.', placement: 'bottom' },
   data: { title: 'Datos principales', description: 'Completa la información requerida y revisa que los valores correspondan al movimiento.', placement: 'bottom' },
   items: { title: 'Detalle de productos', description: 'Agrega o revisa los productos, cantidades, ubicaciones y demás datos del detalle.', placement: 'top' },
@@ -26,7 +27,7 @@ export function InventoryViewTutorial({
   context?: 'form';
   targetPrefix?: string;
   stepKeys?: InventoryFormStep[];
-  copy?: Partial<Record<InventoryFormStep, Partial<typeof DEFAULT_COPY[InventoryFormStep]>>>;
+  copy?: Partial<Record<InventoryFormStep, Partial<InventoryTutorialCopy>>>;
   className?: string;
   compact?: boolean;
 }) {
@@ -38,6 +39,7 @@ export function InventoryViewTutorial({
       target: `[data-tour="${targetPrefix}-${key}"]`,
       title: override.title || base.title,
       description: override.description || base.description,
+      tip: override.tip || base.tip,
       placement: override.placement || base.placement,
     };
   });

@@ -26,7 +26,7 @@ type BusinessUnitOption = { id: string; name: string; isActive?: boolean };
 const viewLabels: Record<ManagerInventoryView, string> = {
   overview: 'Resumen de inventario', branchInventory: 'Inventario de mi sucursal', corporateInventory: 'Inventario de almacén corporativo', products: 'Productos', services: 'Servicios', warehouses: 'Bodegas', corporateWarehouses: 'Almacenes', transfers: 'Transferencias', adjustments: 'Ajustes', audits: 'Auditorías', losses: 'Pérdidas', movements: 'Movimientos', assets: 'Mobiliario y equipos',
 };
-const statusLabels: Record<string, string> = { PENDING: 'Pendiente', IN_TRANSIT: 'En tránsito', COMPLETED: 'Completada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada', OPEN: 'Abierta', IN_PROGRESS: 'En progreso', CLOSED: 'Cerrada', REOPENED: 'Reabierta', DISPOSED: 'Dada de baja', DAMAGED: 'Dañada' };
+const statusLabels: Record<string, string> = { PENDING: 'Pendiente', IN_TRANSIT: 'En tránsito', COMPLETED: 'Completada', APPROVED: 'Aprobada', CANCELLED: 'Cancelada', OPEN: 'Abierta', IN_PROGRESS: 'En progreso', CLOSED: 'Cerrada', REOPENED: 'Reabierta', ADJUSTMENT_PENDING: 'Ajuste pendiente', DISPOSED: 'Dada de baja', DAMAGED: 'Dañada' };
 const movementTypeLabels: Record<string, string> = { IN: 'Entrada', OUT: 'Salida', TRANSFER_IN: 'Transferencia de entrada', TRANSFER_OUT: 'Transferencia de salida', ADJUSTMENT: 'Ajuste' };
 const formatStatus = (value: unknown) => statusLabels[String(value || '').toUpperCase()] || String(value || '—');
 const formatMovementType = (value: unknown) => movementTypeLabels[String(value || '').toUpperCase()] || String(value || '—');
