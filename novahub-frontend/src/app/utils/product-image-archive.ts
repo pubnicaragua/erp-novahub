@@ -44,15 +44,26 @@ export const extractProductImageArchive = async (
     const files = Object.values(zip.files).filter((entry) => !entry.dir && PRODUCT_IMAGE_EXTENSIONS.test(entry.name));
     let completed = 0;
     onProgress?.(0, files.length);
-    for (const entry of files) {
-      const sku = productImageSkuFromPath(entry.name);
-      if (sku) {
-        const blob = await entry.async('blob');
-        entries.set(sku, productImageFileFromBytes(entry.name, blob));
+    // JSZip descomprime de forma asíncrona. Procesar varias entradas en
+    // paralelo reduce mucho el tiempo de espera del archivo de imágenes sin
+    // montar todas las imágenes a la vez ni bloquear la interfaz con un loop
+    // secuencial de cientos de archivos.
+    const concurrency = Math.min(6, Math.max(1, files.length));
+    let nextIndex = 0;
+    await Promise.all(Array.from({ length: concurrency }, async () => {
+      while (true) {
+        const index = nextIndex++;
+        const entry = files[index];
+        if (!entry) return;
+        const sku = productImageSkuFromPath(entry.name);
+        if (sku) {
+          const blob = await entry.async('blob');
+          entries.set(sku, productImageFileFromBytes(entry.name, blob));
+        }
+        completed += 1;
+        onProgress?.(completed, files.length);
       }
-      completed += 1;
-      onProgress?.(completed, files.length);
-    }
+    }));
     return entries;
   }
 

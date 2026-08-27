@@ -29,6 +29,7 @@ import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } 
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
@@ -750,19 +751,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     toast.success('Plantilla de órdenes descargada');
   }, [products, taxOptions]);
 
-  const handlePurchaseImportFile = useCallback((file: File) => {
+  const handlePurchaseImportFile = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
     }
     setImportProcessing(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      window.setTimeout(async () => {
-        try {
-          const workbook = XLSX.read(new Uint8Array(event.target?.result as ArrayBuffer), { type: 'array' });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    setPreviewLoading(true);
+    setPreviewProgress(3);
+    try {
+          const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+            setPreviewProgress(Math.min(84, Math.max(3, progress)));
+          });
+          setPreviewProgress(88);
           if (raw.length < 2) throw new Error('El archivo está vacío o no tiene datos');
           const headers = raw[0].map(normalizeImportHeader);
           const fieldAliases: Record<string, string[]> = {
@@ -806,24 +807,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
               currentStock: undefined,
           } as PurchaseImportRow));
           if (!parsed.length) throw new Error('No se encontraron filas con datos');
+          setPreviewProgress(90);
           const importCatalog = await resolveImportProducts(parsed);
+          setPreviewProgress(96);
           setImportData(validateImportRows(parsed, importCatalog));
           setImportDataCurrency(importCurrency);
           setImportFileName(file.name);
           setImportProgress(0);
+          setPreviewProgress(100);
           toast.success(`${parsed.length} artículo(s) encontrados`);
-        } catch (error: any) {
-          toast.error(error?.message || 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.');
-        } finally {
-          setImportProcessing(false);
-        }
-      }, 50);
-    };
-    reader.onerror = () => {
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.');
+    } finally {
       setImportProcessing(false);
-      toast.error('No se pudo leer el archivo seleccionado');
-    };
-    reader.readAsArrayBuffer(file);
+      setPreviewLoading(false);
+      setPreviewProgress(0);
+    }
   }, [importCurrency, resolveImportProducts, validateImportRows]);
 
   const handleOpenPurchaseImportPreview = useCallback(() => {
@@ -838,22 +837,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       }))));
       setImportDataCurrency(orderCurrency);
     }
-    setPreviewLoading(true);
-    setPreviewProgress(20);
     setImportModalOpen(false);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      window.setTimeout(() => {
-        setPreviewProgress(100);
-        window.setTimeout(() => {
-          setImportPreviewOpen(true);
-          window.requestAnimationFrame(() => {
-            setPreviewLoading(false);
-            setPreviewProgress(0);
-          });
-        }, 120);
-      }, 120);
-    }, 40);
+    setImportPreviewOpen(true);
   }, [displayCurrency, globalRate, importData.length, importDataCurrency, importProcessing, importing, localDoc?.currency, previewLoading, validateImportRows]);
 
   const handlePurchaseImportRowUpdate = (index: number, field: keyof PurchaseImportRow, value: any) => {

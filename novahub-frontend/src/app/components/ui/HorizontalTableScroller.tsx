@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
 import { cn } from './utils';
@@ -8,22 +8,31 @@ interface HorizontalTableScrollerProps {
   label?: string;
   className?: string;
   tableClassName?: string;
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  scrollBehavior?: ScrollBehavior;
 }
 
 /** Scroll container shared by import previews and other wide tables. */
-export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName }: HorizontalTableScrollerProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+export function HorizontalTableScroller({ children, label = 'Desplazamiento horizontal', className, tableClassName, scrollRef: externalScrollRef, scrollBehavior = 'smooth' }: HorizontalTableScrollerProps) {
+  const internalScrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = externalScrollRef || internalScrollRef;
   const pointerInside = useRef(false);
+  const scrollStateFrameRef = useRef<number | null>(null);
   const [scrollState, setScrollState] = useState({ left: false, right: false });
 
   const updateScrollState = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) return;
-    setScrollState({
-      left: element.scrollLeft > 4,
-      right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
+    if (scrollStateFrameRef.current !== null) return;
+    scrollStateFrameRef.current = window.requestAnimationFrame(() => {
+      scrollStateFrameRef.current = null;
+      const element = scrollRef.current;
+      if (!element) return;
+      const nextState = {
+        left: element.scrollLeft > 4,
+        right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
+      };
+      setScrollState((current) => current.left === nextState.left && current.right === nextState.right ? current : nextState);
     });
-  }, []);
+  }, [scrollRef]);
 
   const scrollByColumn = useCallback((direction: 'left' | 'right') => {
     const element = scrollRef.current;
@@ -32,8 +41,8 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
     // cuando la siguiente columna es muy estrecha. La barra inferior sigue
     // permitiendo llegar a cualquier columna con precisión.
     const amount = Math.max(240, Math.floor(element.clientWidth * 0.78));
-    element.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' });
-  }, []);
+    element.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: scrollBehavior });
+  }, [scrollBehavior, scrollRef]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -47,8 +56,12 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
       element.removeEventListener('scroll', updateScrollState);
       observer.disconnect();
       window.removeEventListener('resize', updateScrollState);
+      if (scrollStateFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollStateFrameRef.current);
+        scrollStateFrameRef.current = null;
+      }
     };
-  }, [updateScrollState]);
+  }, [scrollRef, updateScrollState]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -63,7 +76,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [scrollByColumn]);
+  }, [scrollRef, scrollByColumn]);
 
   const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;

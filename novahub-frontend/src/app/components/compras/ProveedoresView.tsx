@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Truck, Plus, Search, Eye, History, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -28,6 +28,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { PrintButton } from '../ui/PrintButton';
 import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
 import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -76,11 +77,16 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<SupplierImportResult | null>(null);
+  const importValidationTimerRef = useRef<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [draft, setDraft] = useState(emptyDraft());
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => () => {
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+  }, []);
 
   const filtered = data.filter(s => {
     const isActive = s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE';
@@ -126,15 +132,14 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const downloadTemplate = () => {
-    const headers = ['Código', 'Nombre', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Estado'];
-    const example = ['PRV-000001', 'Proveedor Ejemplo', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', 'ACTIVO'];
+    const headers = ['Nombre', 'RUC / identificación', 'Persona de contacto', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'País', 'Condiciones de pago', 'Estado'];
+    const example = ['Proveedor Ejemplo', 'J0310000000000', 'María López', 'proveedor@correo.com', '8888-1111', 'Managua', 'Managua', 'Nicaragua', 'Contado', 'ACTIVO'];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA DE LLENADO · IMPORTACIÓN DE PROVEEDORES'],
       ['Puedes repetir la importación. El código se genera automáticamente y conserva el consecutivo por sucursal.'],
       ['Campo', 'Regla'],
-      ['Código', 'Se genera automáticamente como PRV-000001, PRV-000002, etc. Si el archivo trae un código, se ignora.'],
       ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
       ['RUC / identificación', 'Opcional. No se puede repetir dentro de la empresa.'],
       ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
@@ -152,12 +157,14 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const readImportFile = async (file: File) => {
+    setPreviewLoading(true);
+    setPreviewProgress(3);
     try {
       if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-      const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'proveedores') || workbook.SheetNames[0];
-      const rawSheet = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      const { rows: rawSheet } = await parseSpreadsheetInWorker(file, 'proveedores', false, (progress) => {
+        setPreviewProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setPreviewProgress(88);
       const raw = rawSheet[0]?.length === 1 && String(rawSheet[0][0] || '').toLowerCase().startsWith('sep=') ? rawSheet.slice(1) : rawSheet;
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
       const headers = (raw[0] || []).map(normalizeHeader);
@@ -182,59 +189,54 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         row.status = status.includes('inactiv') ? 'INACTIVE' : 'ACTIVE';
         return row;
       });
+      setPreviewProgress(94);
       setImportFile(file);
       setImportRows(validateImportRows(parsed));
+      setPreviewProgress(100);
       setImportResult(null);
       toast.success(`${parsed.length} proveedores listos para previsualizar`);
     } catch (error: any) {
       setImportFile(null);
       setImportRows([]);
       toast.error(error?.message || 'No se pudo leer el archivo');
+    } finally {
+      setPreviewLoading(false);
+      setPreviewProgress(0);
     }
   };
 
   const handleOpenImportPreview = () => {
     if (!importFile || !importRows.length || previewLoading) return;
-    setPreviewLoading(true);
-    setPreviewProgress(20);
     setImportOpen(false);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      window.setTimeout(() => {
-        setPreviewProgress(100);
-        window.setTimeout(() => {
-          setImportPreviewOpen(true);
-          setPreviewLoading(false);
-          setPreviewProgress(0);
-        }, 120);
-      }, 120);
-    }, 40);
+    setImportPreviewOpen(true);
   };
 
   const updateImportRow = (index: number, field: keyof SupplierImportRow, value: string) => {
-    setImportRows((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row)));
+    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+    importValidationTimerRef.current = window.setTimeout(() => {
+      setImportRows((current) => validateImportRows(current));
+      importValidationTimerRef.current = null;
+    }, 260);
   };
 
   const executeImport = async () => {
     const validRows = importRows.filter((row) => !row.error);
     if (!validRows.length) return;
     setImporting(true);
-    setImportProgress(8);
+    setImportProgress(10);
     setImportResult(null);
-    let timer: ReturnType<typeof setInterval> | null = null;
     try {
-      timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
       const result = await suppliersService.importMassive({
         rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({ ...row, code: row.code || undefined, ruc: row.taxId || undefined })),
       });
-      if (timer) clearInterval(timer);
-      setImportProgress(100);
+      setImportProgress(90);
       setImportResult(result);
-      onRefresh();
+      void onRefresh();
+      setImportProgress(100);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar proveedores');
     } finally {
-      if (timer) clearInterval(timer);
       setImporting(false);
       setImportProgress(0);
     }

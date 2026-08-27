@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -77,6 +78,8 @@ export function ActivosFijosImportTab() {
   const [validating, setValidating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [operationProgress, setOperationProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
   const [result, setResult] = useState<any>(null);
 
   const fmt = (value: number) => formatConvertedAmount(value, baseCurrency);
@@ -109,11 +112,13 @@ export function ActivosFijosImportTab() {
       toast.error('El archivo debe ser Excel (.xlsx o .xls)');
       return;
     }
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '', raw: false });
+      const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(90);
       const nonEmpty = raw.filter((row: any) => Array.isArray(row) && row.some((cell: any) => String(cell ?? '').trim().length > 0));
       if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return; }
       const headerRow = (nonEmpty[0] as any[]).map((h) => String(h ?? '').trim());
@@ -130,8 +135,12 @@ export function ActivosFijosImportTab() {
       setRows(mapped);
       setResult(null);
       toast.success(`${mapped.length} filas leídas del archivo`);
+      setReadingProgress(100);
     } catch (err) {
       toast.error('Error al leer el archivo Excel');
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   }
 
@@ -158,19 +167,17 @@ export function ActivosFijosImportTab() {
     if (rows.length === 0) { toast.error('Primero carga un archivo'); return; }
     setValidating(true);
     setOperationProgress(12);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      progressTimer = setInterval(() => setOperationProgress((current) => Math.min(90, current + 4)), 180);
+      setOperationProgress(35);
       const res = await contabilidadService.validateFixedAssetImport(effectiveRows());
-      if (progressTimer) clearInterval(progressTimer);
-      setOperationProgress(100);
+      setOperationProgress(90);
       setResult(res);
+      setOperationProgress(100);
     } catch (err: any) {
       toast.error(err.message || 'Error al validar');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setValidating(false);
-      window.setTimeout(() => setOperationProgress(0), 180);
+      setOperationProgress(0);
     }
   }
 
@@ -178,24 +185,22 @@ export function ActivosFijosImportTab() {
     if (!result || result.valid === 0) { toast.error('Valida primero y asegúrate de que haya filas válidas'); return; }
     setImporting(true);
     setOperationProgress(12);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      progressTimer = setInterval(() => setOperationProgress((current) => Math.min(90, current + 3)), 180);
+      setOperationProgress(35);
       const res = await contabilidadService.importFixedAssets(effectiveRows());
-      if (progressTimer) clearInterval(progressTimer);
-      setOperationProgress(100);
+      setOperationProgress(90);
       toast.success(`Importación completada: ${res?.imported ?? 0} activos`);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       queryClient.invalidateQueries({ queryKey: ['fixed-assets'] });
       setResult(null);
       setRows([]);
       setFileName('');
+      setOperationProgress(100);
     } catch (err: any) {
       toast.error(err.message || 'Error al importar');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
-      window.setTimeout(() => setOperationProgress(0), 180);
+      setOperationProgress(0);
     }
   }
 
@@ -317,10 +322,10 @@ export function ActivosFijosImportTab() {
         </Card>
       )}
       <ImportProgressOverlay
-        open={validating || importing}
-        progress={operationProgress}
-        title={validating ? 'Validando activos fijos' : 'Importando activos fijos'}
-        description={validating ? 'Comprobando categorías, fechas, valores y referencias antes de importar.' : 'Guardando los activos válidos y actualizando la información contable.'}
+        open={readingFile || validating || importing}
+        progress={readingFile ? readingProgress : operationProgress}
+        title={readingFile ? 'Preparando activos fijos' : validating ? 'Validando activos fijos' : 'Importando activos fijos'}
+        description={readingFile ? 'Leyendo el archivo y preparando todas las filas para su revisión.' : validating ? 'Comprobando categorías, fechas, valores y referencias antes de importar.' : 'Guardando los activos válidos y actualizando la información contable.'}
       />
     </div>
   );

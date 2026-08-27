@@ -18,7 +18,7 @@ interface TeamAccessPanelProps {
   tenantId: string;
   tenantName: string;
   users: any[];
-  onRolesChange?: () => void;
+  onRolesChange?: () => Promise<unknown> | void;
   canViewRoles?: boolean;
   canCreateRoles?: boolean;
   canEditRoles?: boolean;
@@ -228,7 +228,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
       setRoleDialogOpen(false);
       setEditingRole(null);
       await load();
-      onRolesChange?.();
+      await onRolesChange?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al guardar el rol');
     } finally {
@@ -243,7 +243,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
       await rolesService.delete(role.id);
       toast.success('Rol eliminado');
       await load();
-      onRolesChange?.();
+      await onRolesChange?.();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar rol');
     }

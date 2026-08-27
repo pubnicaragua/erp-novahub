@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth, type Module } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { ImpersonationProvider, useImpersonation } from './contexts/ImpersonationContext';
 import { LoginPage } from './components/LoginPage';
@@ -439,6 +439,7 @@ function DashboardLayout() {
 
 function AppContent() {
   const { isAuthenticated, login, logout, user, sessionStartVersion } = useAuth();
+  const { isBrandingReady } = useTheme();
   const { isImpersonating, branch } = useImpersonation();
   const location = useLocation();
   const [trialExpired, setTrialExpired] = useState(false);
@@ -554,7 +555,7 @@ function AppContent() {
     );
   }
 
-  if (showingSessionBranding) {
+  if (showingSessionBranding || !isBrandingReady) {
     const isBranchManagerBranding = Boolean(isImpersonating && branch);
     const isPlatformBranding = Boolean(user?.isPlatformAdmin) && !isBranchManagerBranding;
     return (

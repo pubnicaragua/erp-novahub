@@ -35,6 +35,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface AccountNode {
   id: string;
@@ -515,15 +516,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
       const fileName = importFile.name.toLowerCase();
 
       if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) { toast.error('El archivo debe ser Excel (.xlsx o .xls)'); return null; }
-      const buffer = await importFile.arrayBuffer();
-      setPreviewProgress(24);
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      setPreviewProgress(48);
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      const sheetCandidates = workbook.SheetNames.map((sheetName) => {
-        const sheet = workbook.Sheets[sheetName];
-        const jsonRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '' });
+      const parsedFile = await parseSpreadsheetInWorker(importFile, undefined, true, (progress) => {
+        setPreviewProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setPreviewProgress(88);
+      const availableSheets = parsedFile.sheets || { [parsedFile.sheetName || 'Hoja 1']: parsedFile.rows };
+      const sheetCandidates = Object.entries(availableSheets).map(([sheetName, jsonRows]) => {
         const rows = jsonRows.map((row: any) => (Array.isArray(row) ? row : [String(row)]).map(String));
         const nonEmpty = rows.filter(row => row.some(cell => String(cell ?? '').trim().length > 0));
         const headers = (nonEmpty[0] ?? []).map(header => String(header).trim().toLowerCase().replace(/^\uFEFF/, ''));
@@ -569,15 +567,15 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
         });
       }
 
-      setPreviewProgress(90);
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      setPreviewProgress(96);
       setPreviewProgress(100);
       return { valid, errors, fileName: `${importFile.name} · Hoja: ${selectedSheet.sheetName}` };
     } catch (e: any) {
       toast.error(e?.message || 'Error al leer el archivo');
       return null;
     } finally {
-      window.setTimeout(() => { setPreviewLoading(false); setPreviewProgress(0); }, 180);
+      setPreviewLoading(false);
+      setPreviewProgress(0);
     }
   };
 
@@ -594,19 +592,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     if (importPreviewRows.length === 0) { toast.error('No hay cuentas válidas para importar'); return; }
     setImporting(true);
     setImportProgress(5);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      // La petición de importación es atómica en el backend; avanzamos de
-      // forma continua mientras termina, igual que la importación masiva de
-      // productos, sin afirmar que ya terminó antes de recibir la respuesta.
-      let progress = 5;
-      progressTimer = setInterval(() => {
-        progress = Math.min(progress + 3, 92);
-        setImportProgress(progress);
-      }, 120);
+      setImportProgress(25);
       const res: any = await contabilidadService.importAccounts(importPreviewRows, replaceAccounts);
-      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
-      setImportProgress(94);
+      setImportProgress(90);
       await fetchAccounts(true);
       setImportProgress(100);
       
@@ -623,7 +612,6 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
     } catch (e: any) {
       toast.error(e?.message || 'Error al importar');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
       setImportProgress(0);
     }

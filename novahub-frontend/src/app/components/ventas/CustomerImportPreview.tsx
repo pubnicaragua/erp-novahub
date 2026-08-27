@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Upload } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -10,6 +10,7 @@ import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
+import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 
 export type CustomerImportRow = {
   name: string;
@@ -152,6 +153,10 @@ export function CustomerImportPreview({
   useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const gridTemplate = '80px 288px 160px 192px 224px 192px 176px 256px 176px 288px 160px 192px 160px 176px 144px 288px';
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58);
   const validRows = rows.filter((row) => !row.error).length;
   const errorRows = rows.filter((row) => row.error).length;
   const warningRows = rows.filter((row) => !row.error && row.warning).length;
@@ -181,10 +186,10 @@ export function CustomerImportPreview({
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
 
         <div className="hidden min-h-0 flex-1 sm:flex">
-          <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="w-[3100px] min-w-[3100px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-              <TableRow>
+          <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="block w-[3100px] min-w-[3100px]">
+            <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
+              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Nombre *</TableHead>
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo *</TableHead>
@@ -203,9 +208,12 @@ export function CustomerImportPreview({
                 <TableHead className="w-72 min-w-72 whitespace-nowrap">Validación</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {rows.map((row, index) => (
-                <TableRow key={index} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
+            <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
+              {tableVirtualizer.getVirtualItems().map((virtualRow) => {
+                const index = virtualRow.index;
+                const row = rows[index];
+                return (
+                <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : row.warning ? 'bg-amber-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row.warning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className={fieldClass} value={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell><Select value={row.type} onValueChange={(value) => onRowUpdate(index, 'type', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INDIVIDUAL">Particular</SelectItem><SelectItem value="COMPANY">Empresa</SelectItem></SelectContent></Select></TableCell>
@@ -223,7 +231,8 @@ export function CustomerImportPreview({
                   <TableCell><Select value={row.status} onValueChange={(value) => onRowUpdate(index, 'status', value)} disabled={importing}><SelectTrigger size="sm" className={fieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></TableCell>
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : row.warning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row.error || row.warning || 'Correcto'}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
@@ -235,8 +244,8 @@ export function CustomerImportPreview({
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un cliente por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <CustomerImportMobileCard key={index} row={row} index={index} priceLists={priceLists} importing={importing} onRowUpdate={onRowUpdate} />)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          <div className="min-h-0 flex-1">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={390} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3"><CustomerImportMobileCard row={rows[index]} index={index} priceLists={priceLists} importing={importing} onRowUpdate={onRowUpdate} /></div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 

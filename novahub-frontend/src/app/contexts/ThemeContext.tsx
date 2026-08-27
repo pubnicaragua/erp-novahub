@@ -24,6 +24,8 @@ export interface ThemeConfig {
 
 interface ThemeContextType {
   themeConfig: ThemeConfig;
+  /** El panel no debe montarse antes de resolver el branding del tenant activo. */
+  isBrandingReady: boolean;
   updateTheme: (colors: Partial<BrandColors>) => void;
   updateConfig: (config: Partial<Omit<ThemeConfig, 'colors'>>) => void;
   resetTheme: () => void;
@@ -132,7 +134,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // clientTenantId is the canonical active tenant after a group/branch
   // context switch. Using tenantId alone can read/write the wrong theme key.
   const activeTenantId = user?.clientTenantId || user?.tenantId || 'default';
+  const brandingSessionKey = user ? `${user.id}:${activeTenantId}` : 'anonymous';
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(activeTenantId));
+  const [readyBrandingSessionKey, setReadyBrandingSessionKey] = useState<string | null>(
+    () => user && activeTenantId !== 'default' ? null : 'anonymous',
+  );
+  const isBrandingReady = !user || activeTenantId === 'default' || readyBrandingSessionKey === brandingSessionKey;
 
   const updateTheme = useCallback((colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({
@@ -256,10 +263,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user || activeTenantId === 'default') return;
-    let cancelled = false;
+    if (!user || activeTenantId === 'default') {
+      setReadyBrandingSessionKey('anonymous');
+      return;
+    }
 
-    brandingService.getCurrent()
+    let cancelled = false;
+    const controller = new AbortController();
+    const sessionKey = brandingSessionKey;
+
+    // Invalidate the previous session immediately. AppContent uses this flag
+    // to keep the workspace behind the loader until the server branding has
+    // been applied to the active tenant.
+    setReadyBrandingSessionKey(null);
+
+    brandingService.getCurrent(controller.signal)
       .then(branding => {
         // Never replace a valid persisted theme with a default palette just
         // because the endpoint returned a partial/empty branding object.
@@ -267,11 +285,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         applyServerBranding(branding, activeTenantId);
       })
       .catch(err => {
-        if (!cancelled) console.error('Failed to fetch branding:', err);
+        if (!cancelled && err?.name !== 'AbortError') {
+          console.error('Failed to fetch branding:', err);
+        }
+      })
+      .finally(() => {
+        // A failed branding request must not leave the application blocked
+        // forever: the persisted tenant theme remains the safe fallback.
+        if (!cancelled) setReadyBrandingSessionKey(sessionKey);
       });
 
-    return () => { cancelled = true; };
-  }, [user, activeTenantId, applyServerBranding]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [user?.id, user?.userType, activeTenantId, brandingSessionKey, applyServerBranding]);
 
   const resetTheme = () => {
     setThemeConfig(createDefaultTheme(activeTenantId));
@@ -279,7 +307,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ themeConfig, updateTheme, updateConfig, resetTheme }}>
+    <ThemeContext.Provider value={{ themeConfig, isBrandingReady, updateTheme, updateConfig, resetTheme }}>
       {children}
     </ThemeContext.Provider>
   );

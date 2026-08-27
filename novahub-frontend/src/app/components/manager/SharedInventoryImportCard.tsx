@@ -7,6 +7,9 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 export type SharedInventoryImportRow = {
   code: string;
@@ -83,6 +86,13 @@ function parseRows(rawRows: Array<Record<string, unknown>>) {
   return { parsed, errors };
 }
 
+function matrixToObjects(raw: any[][]): Record<string, unknown>[] {
+  const nonEmpty = raw.filter((row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim() !== ''));
+  if (nonEmpty.length < 2) return [];
+  const headers = nonEmpty[0].map((header) => String(header ?? '').trim());
+  return nonEmpty.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
+}
+
 export function SharedInventoryImportCard({
   branches,
   sourceBranchId,
@@ -101,6 +111,8 @@ export function SharedInventoryImportCard({
   importing,
 }: SharedInventoryImportCardProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
   const source = branches.find((branch) => branch.id === sourceBranchId);
   const targetBranches = useMemo(
     () => branches.filter((branch) => Boolean(source?.businessUnitId) && branch.businessUnitId === source?.businessUnitId),
@@ -129,14 +141,19 @@ export function SharedInventoryImportCard({
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawRows = sheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }) : [];
+      const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(88);
+      const rawRows = matrixToObjects(raw);
       const result = parseRows(rawRows);
       setRows(result.parsed);
       setFileName(file.name);
       setValidationErrors(result.errors);
+      setReadingProgress(100);
       if (!result.parsed.length) toast.error('La plantilla no contiene filas para importar');
       else if (result.errors.length) toast.error(`Revisa ${result.errors.length} observación(es) antes de importar`);
       else toast.success(`${result.parsed.length} producto(s) listos para importar`);
@@ -145,6 +162,9 @@ export function SharedInventoryImportCard({
       setFileName('');
       setValidationErrors([]);
       toast.error(error instanceof Error ? error.message : 'No se pudo leer la plantilla');
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   };
 
@@ -214,12 +234,13 @@ export function SharedInventoryImportCard({
 
         {validationErrors.length > 0 && <div className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-3 text-xs text-amber-700 dark:text-amber-300"><p className="flex items-center gap-2 font-black uppercase tracking-widest"><AlertTriangle className="size-4" /> Corrige la plantilla antes de importar</p><ul className="mt-2 grid gap-1 sm:grid-cols-2">{validationErrors.slice(0, 8).map((error) => <li key={error}>• {error}</li>)}</ul>{validationErrors.length > 8 && <p className="mt-1">Y {validationErrors.length - 8} observación(es) más.</p>}</div>}
 
-        {priceMode === 'BY_BRANCH' && rows.length > 0 && selectedBranches.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60 p-4"><div className="flex items-center gap-2"><Boxes className="size-4 text-primary" /><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precios por sucursal</p></div><div className="mt-3 min-w-[620px] space-y-2">{rows.slice(0, 50).map((row) => <div key={row.code} className="grid grid-cols-[minmax(150px,1fr)_repeat(auto-fit,minmax(150px,1fr))] items-center gap-2 text-xs"><span className="truncate font-mono">{row.code}</span>{selectedBranches.map((branch) => <Input key={branch.id} type="number" min="0" step="0.01" value={pricesByBranch[branch.id]?.[row.code] || ''} onChange={(event) => updateBranchPrice(branch.id, row.code, event.target.value)} placeholder={branch.name} className="h-9 min-w-0" />)}</div>)}</div>{rows.length > 50 && <p className="mt-2 text-[11px] text-muted-foreground">La plantilla contiene {rows.length} filas; aquí se muestran las primeras 50 para definir precios particulares.</p>}</div>}
+        {priceMode === 'BY_BRANCH' && rows.length > 0 && selectedBranches.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60 p-4"><div className="flex items-center gap-2"><Boxes className="size-4 text-primary" /><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Precios por sucursal · {rows.length} filas</p></div><VirtualizedImportList count={rows.length} estimateSize={46} className="mt-3 h-64 min-w-[620px]" renderItem={(index) => { const row = rows[index]; return <div className="grid grid-cols-[minmax(150px,1fr)_repeat(auto-fit,minmax(150px,1fr))] items-center gap-2 border-b border-border/30 py-1 text-xs"><span className="truncate font-mono">{row.code}</span>{selectedBranches.map((branch) => <Input key={branch.id} type="number" min="0" step="0.01" value={pricesByBranch[branch.id]?.[row.code] || ''} onChange={(event) => updateBranchPrice(branch.id, row.code, event.target.value)} placeholder={branch.name} className="h-9 min-w-0" />)}</div>; }} /></div>}
 
-        {rows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Stock final</TableHead><TableHead>Precio venta</TableHead><TableHead>Costo</TableHead></TableRow></TableHeader><TableBody>{rows.slice(0, 8).map((row) => <TableRow key={row.code}><TableCell className="font-mono font-semibold">{row.code || '—'}</TableCell><TableCell>{String(row.stock || 0)}</TableCell><TableCell>{row.salePrice === '' ? 'Catálogo' : String(row.salePrice)}</TableCell><TableCell>{row.costPrice === '' ? 'Conservar' : String(row.costPrice)}</TableCell></TableRow>)}</TableBody></Table><div className="flex items-center gap-2 border-t border-border/50 px-3 py-2 text-xs text-muted-foreground"><CheckCircle2 className="size-3.5 text-emerald-600" /> Vista previa de {rows.length} fila(s). La operación se ejecuta de forma atómica.</div></div>}
+        {rows.length > 0 && <div className="overflow-x-auto rounded-2xl border border-border/60"><div className="grid min-w-[620px] grid-cols-[minmax(180px,1fr)_repeat(3,minmax(120px,1fr))] gap-3 border-b border-border/50 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground"><span>Código</span><span>Stock final</span><span>Precio venta</span><span>Costo</span></div><VirtualizedImportList count={rows.length} estimateSize={38} className="h-64 min-w-[620px]" renderItem={(index) => { const row = rows[index]; return <div className="grid grid-cols-[minmax(180px,1fr)_repeat(3,minmax(120px,1fr))] gap-3 border-b border-border/30 px-3 py-2 text-xs"><span className="truncate font-mono font-semibold">{row.code || '—'}</span><span>{String(row.stock || 0)}</span><span>{row.salePrice === '' ? 'Catálogo' : String(row.salePrice)}</span><span>{row.costPrice === '' ? 'Conservar' : String(row.costPrice)}</span></div>; }} /><div className="flex items-center gap-2 border-t border-border/50 px-3 py-2 text-xs text-muted-foreground"><CheckCircle2 className="size-3.5 text-emerald-600" /> Vista previa completa de {rows.length} fila(s). La operación se ejecuta de forma atómica.</div></div>}
 
-        <Button type="button" className="w-full rounded-xl font-black" disabled={!sourceBranchId || !branchIds.length || !rows.length || validationErrors.length > 0 || importing} onClick={onImport}><UploadCloud className="mr-2 size-4" />{importing ? 'Aplicando inventario…' : 'Aplicar a sucursales seleccionadas'}</Button>
+      <Button type="button" className="w-full rounded-xl font-black" disabled={!sourceBranchId || !branchIds.length || !rows.length || validationErrors.length > 0 || importing || readingFile} onClick={onImport}><UploadCloud className="mr-2 size-4" />{importing ? 'Aplicando inventario…' : 'Aplicar a sucursales seleccionadas'}</Button>
       </CardContent>
+      <ImportProgressOverlay open={readingFile} progress={readingProgress} title="Preparando inventario compartido" description="Leyendo la plantilla y preparando todas las filas para revisión." />
     </Card>
   );
 }

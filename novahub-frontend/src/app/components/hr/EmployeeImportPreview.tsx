@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Briefcase, Building2, CheckCircle2, Download, Plus, Upload } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -11,6 +11,8 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { HRViewTutorial } from './HRViewTutorial';
+import { employeeContractTypeOptions, employeePayFrequencyOptions, employeeStatusOptions } from './employeeImportValues';
+import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 
 export type EmployeeImportRow = {
   sourceRow: number;
@@ -74,14 +76,6 @@ type EmployeeImportPreviewProps = {
   onDone: () => void;
 };
 
-const contractOptions = [
-  ['FULL_TIME', 'Tiempo completo'],
-  ['PART_TIME', 'Medio tiempo'],
-  ['CONTRACTOR', 'Contratista'],
-  ['INTERN', 'Pasante'],
-  ['TEMPORARY', 'Temporal'],
-];
-
 const fieldClass = importPreviewFieldClass;
 
 export function EmployeeImportPreview({
@@ -111,6 +105,10 @@ export function EmployeeImportPreview({
   const [positionTitle, setPositionTitle] = useState('');
   const [positionDepartmentId, setPositionDepartmentId] = useState('');
   const [savingCatalog, setSavingCatalog] = useState(false);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const gridTemplate = '80px 144px 176px 176px 256px 192px 176px 144px 256px 256px 160px 144px 112px 176px 144px 420px';
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 66);
   const validRows = rows.filter((row) => !row._hasError).length;
   const errorRows = rows.filter((row) => row._hasError).length;
   const warningRows = rows.filter((row) => !row._hasError && row._hasWarning).length;
@@ -153,10 +151,11 @@ export function EmployeeImportPreview({
               {canCreateCatalogs && !row.positionId && row.position && row.departmentId && <Button type="button" size="icon" variant="outline" className="size-9 shrink-0 rounded-lg" title="Crear puesto" aria-label="Crear puesto" onClick={() => { setPositionRowIndex(index); setPositionTitle(row.position); setPositionDepartmentId(row.departmentId || ''); }} disabled={importing}><Plus className="size-3.5" /></Button>}
             </div>
           </ImportPreviewField>
-          <ImportPreviewField label="Tipo de contrato"><select className={importPreviewFieldClass} value={row.contractType} onChange={(event) => onRowUpdate(index, 'contractType', event.target.value)} disabled={importing}>{contractOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label="Tipo de contrato"><select className={importPreviewFieldClass} value={row.contractType} onChange={(event) => onRowUpdate(index, 'contractType', event.target.value)} disabled={importing}>{employeeContractTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></ImportPreviewField>
           <ImportPreviewField label="Salario *"><Input className={`${importPreviewFieldClass} text-right`} type="number" min="0" value={row.salary} onChange={(event) => onRowUpdate(index, 'salary', event.target.value === '' ? '' : Number(event.target.value))} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Moneda"><select className={importPreviewFieldClass} value={row.currency} onChange={(event) => onRowUpdate(index, 'currency', event.target.value)} disabled={importing}><option value="NIO">NIO</option><option value="USD">USD</option></select></ImportPreviewField>
-          <ImportPreviewField label="Estado"><select className={importPreviewFieldClass} value={row.employmentStatus} onChange={(event) => onRowUpdate(index, 'employmentStatus', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option><option value="ON_LEAVE">En ausencia</option><option value="TERMINATED">Terminado</option></select></ImportPreviewField>
+          <ImportPreviewField label="Frecuencia de pago"><select className={importPreviewFieldClass} value={row.payFrequency} onChange={(event) => onRowUpdate(index, 'payFrequency', event.target.value)} disabled={importing}>{employeePayFrequencyOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></ImportPreviewField>
+          <ImportPreviewField label="Estado laboral"><select className={importPreviewFieldClass} value={row.employmentStatus} onChange={(event) => onRowUpdate(index, 'employmentStatus', event.target.value)} disabled={importing}>{employeeStatusOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></ImportPreviewField>
         </div>
         {row._hasError && (!row.departmentId || !row.positionId) && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-muted-foreground">Corrige el catálogo o usa + para crearlo.</p>}
       </ImportPreviewMobileCard>
@@ -188,15 +187,15 @@ export function EmployeeImportPreview({
 
         <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
           <Building2 className="mt-0.5 size-4 shrink-0 text-primary" />
-          <p><span className="font-bold text-foreground">Catálogos relacionados:</span> si un departamento o puesto no existe, puedes crearlo desde la columna de validación. El puesto se creará obligatoriamente dentro del departamento seleccionado.</p>
+          <p><span className="font-bold text-foreground">Catálogos y valores:</span> si un departamento o puesto no existe, puedes crearlo desde la columna de validación. El puesto se creará obligatoriamente dentro del departamento seleccionado. Tipo de contrato, frecuencia de pago y estado laboral se muestran y se reciben en español.</p>
         </div>
 
         <div className="hidden min-h-0 flex-1 sm:flex" data-tour="hr-employee-import-preview-items">
-        <HorizontalTableScroller className="min-h-0 flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '4050px', minWidth: '4050px', maxWidth: 'none' }} className="w-[4050px] min-w-[4050px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-              <TableRow>
-                <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
+        <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="overflow-visible" containerStyle={{ width: '4230px', minWidth: '4230px', maxWidth: 'none' }} className="block w-[4230px] min-w-[4230px]">
+            <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
+              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
+                <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Resultado</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">N.º empleado *</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Nombres *</TableHead>
                 <TableHead className="w-44 min-w-44 whitespace-nowrap">Apellidos *</TableHead>
@@ -209,15 +208,18 @@ export function EmployeeImportPreview({
                 <TableHead className="w-40 min-w-40 whitespace-nowrap">Contrato *</TableHead>
                 <TableHead className="w-36 min-w-36 whitespace-nowrap">Salario *</TableHead>
                 <TableHead className="w-28 min-w-28 whitespace-nowrap">Moneda</TableHead>
-                <TableHead className="w-36 min-w-36 whitespace-nowrap">Estado</TableHead>
+                <TableHead className="w-44 min-w-44 whitespace-nowrap">Frecuencia de pago</TableHead>
+                <TableHead className="w-36 min-w-36 whitespace-nowrap">Estado laboral</TableHead>
                 <TableHead className="w-[420px] min-w-[420px] whitespace-nowrap">Validación / acciones</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {rows.map((row, index) => {
+            <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
+              {tableVirtualizer.getVirtualItems().map((virtualRow) => {
+                const index = virtualRow.index;
+                const row = rows[index];
                 const rowPositions = positions.filter((position: any) => !row.departmentId || position.departmentId === row.departmentId);
                 return (
-                  <TableRow key={index} className={row._hasError ? 'bg-rose-500/5' : row._hasWarning ? 'bg-amber-500/5' : ''}>
+                  <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={virtualRow.index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row._hasError ? 'bg-rose-500/5' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                     <TableCell className="text-center">{row._hasError ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : row._hasWarning ? <AlertTriangle className="mx-auto size-4 text-amber-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                     <TableCell><Input className={fieldClass} value={row.employeeNumber} onChange={(event) => onRowUpdate(index, 'employeeNumber', event.target.value)} disabled={importing} /></TableCell>
                     <TableCell><Input className={fieldClass} value={row.firstName} onChange={(event) => onRowUpdate(index, 'firstName', event.target.value)} disabled={importing} /></TableCell>
@@ -246,10 +248,11 @@ export function EmployeeImportPreview({
                         {canCreateCatalogs && !row.positionId && row.position && row.departmentId && <Button type="button" size="icon" variant="outline" className="size-9 shrink-0" title="Crear puesto" onClick={() => { setPositionRowIndex(index); setPositionTitle(row.position); setPositionDepartmentId(row.departmentId || ''); }} disabled={importing}><Plus className="size-3.5" /></Button>}
                       </div>
                     </TableCell>
-                    <TableCell><select className={fieldClass} value={row.contractType} onChange={(event) => onRowUpdate(index, 'contractType', event.target.value)} disabled={importing}>{contractOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></TableCell>
+                    <TableCell><select className={fieldClass} value={row.contractType} onChange={(event) => onRowUpdate(index, 'contractType', event.target.value)} disabled={importing}>{employeeContractTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></TableCell>
                     <TableCell><Input className={`${fieldClass} text-right`} type="number" min="0" value={row.salary} onChange={(event) => onRowUpdate(index, 'salary', event.target.value === '' ? '' : Number(event.target.value))} disabled={importing} /></TableCell>
                     <TableCell><select className={fieldClass} value={row.currency} onChange={(event) => onRowUpdate(index, 'currency', event.target.value)} disabled={importing}><option value="NIO">NIO</option><option value="USD">USD</option></select></TableCell>
-                    <TableCell><select className={fieldClass} value={row.employmentStatus} onChange={(event) => onRowUpdate(index, 'employmentStatus', event.target.value)} disabled={importing}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option><option value="ON_LEAVE">En ausencia</option><option value="TERMINATED">Terminado</option></select></TableCell>
+                    <TableCell><select className={fieldClass} value={row.payFrequency} onChange={(event) => onRowUpdate(index, 'payFrequency', event.target.value)} disabled={importing}>{employeePayFrequencyOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></TableCell>
+                    <TableCell><select className={fieldClass} value={row.employmentStatus} onChange={(event) => onRowUpdate(index, 'employmentStatus', event.target.value)} disabled={importing}>{employeeStatusOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></TableCell>
                     <TableCell className="whitespace-normal">
                       <div className="space-y-2">
                         <p className={row._hasError ? 'text-xs font-medium text-rose-600' : row._hasWarning ? 'text-xs font-medium text-amber-600' : 'text-xs text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</p>
@@ -270,8 +273,8 @@ export function EmployeeImportPreview({
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un empleado por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          <div className="min-h-0 flex-1">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={570} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 

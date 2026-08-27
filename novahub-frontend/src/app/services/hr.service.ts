@@ -54,6 +54,7 @@ export const hrService = {
   clockIn: (data: any) => api.post('/hr/attendance/clock-in', data),
   clockOut: (data: any) => api.post('/hr/attendance/clock-out', data),
   createAttendance: (data: any) => api.post('/hr/attendance', data),
+  bulkCreateAttendance: (data: any[]) => api.post('/hr/attendance/bulk-import', data),
   getAttendanceRecords: (filters?: any, signal?: AbortSignal) => api.get('/hr/attendance/records', withSignal(filters, signal)),
   getAttendanceReports: (month?: string, signal?: AbortSignal) => api.get('/hr/attendance/reports', withSignal({ month }, signal)),
 

@@ -8,6 +8,7 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import type { ChartAccountCsvRow } from '../../types/accounting';
 import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 
 interface AccountImportPreviewProps {
   rows: ChartAccountCsvRow[];
@@ -100,6 +101,45 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
     ...errors,
     ...Array.from(rowValidationErrors.entries()).map(([index, message]) => `Fila ${index + 2}: ${message}`),
   ];
+  const renderDesktopRow = (index: number) => {
+    const row = rows[index];
+    const rowError = rowValidationErrors.get(index);
+    return <div className={`grid min-w-[2200px] grid-cols-[5rem_10rem_18rem_10rem_12rem_13rem_8rem_10rem_8rem_8rem_18rem] items-center border-t border-border/30 text-xs ${rowError ? 'bg-rose-500/5' : ''}`}>
+      <div className="px-3 py-2 text-center" title={rowError || 'Fila válida'}>{rowError ? <AlertTriangle className="mx-auto size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" aria-label="Fila válida" />}</div>
+      <div className="p-1"><Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.tipo_cuenta} onChange={(event) => onRowUpdate(index, 'tipo_cuenta', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.subtipo} onChange={(event) => onRowUpdate(index, 'subtipo', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.tipo_detalle} onChange={(event) => onRowUpdate(index, 'tipo_detalle', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.moneda} onChange={(event) => onRowUpdate(index, 'moneda', event.target.value.toUpperCase())} disabled={importing} /></div>
+      <div className="p-1"><Input className={`${fieldClass} font-mono`} value={row.codigo_padre} onChange={(event) => onRowUpdate(index, 'codigo_padre', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={`${fieldClass} text-center`} value={row.permite_manual} onChange={(event) => onRowUpdate(index, 'permite_manual', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={`${fieldClass} text-center`} value={row.activa} onChange={(event) => onRowUpdate(index, 'activa', event.target.value)} disabled={importing} /></div>
+      <div className="p-1"><Input className={fieldClass} value={row.notas} onChange={(event) => onRowUpdate(index, 'notas', event.target.value)} disabled={importing} /></div>
+    </div>;
+  };
+  const renderMobileRow = (index: number) => {
+    const row = rows[index];
+    const rowError = rowValidationErrors.get(index);
+    return <div className={`rounded-2xl border border-border/70 bg-card p-3 shadow-sm ${rowError ? 'border-rose-500/50 bg-rose-500/5' : ''}`}>
+      <div className="flex items-start gap-2">
+        <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${rowError ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`} title={rowError || 'Fila válida'}>{rowError ? <AlertTriangle className="size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="size-4 text-emerald-500" aria-label="Fila válida" />}</div>
+        <div className="min-w-0 flex-1 space-y-1"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código</p><Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} /></div>
+        <div className="min-w-0 flex-[1.6] space-y-1"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p><Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} /></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</span><Input className={fieldClass} value={row.tipo_cuenta} onChange={(event) => onRowUpdate(index, 'tipo_cuenta', event.target.value)} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Moneda</span><Input className={fieldClass} value={row.moneda} onChange={(event) => onRowUpdate(index, 'moneda', event.target.value.toUpperCase())} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Subtipo</span><Input className={fieldClass} value={row.subtipo} onChange={(event) => onRowUpdate(index, 'subtipo', event.target.value)} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo detalle</span><Input className={fieldClass} value={row.tipo_detalle} onChange={(event) => onRowUpdate(index, 'tipo_detalle', event.target.value)} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código padre</span><Input className={`${fieldClass} font-mono`} value={row.codigo_padre} onChange={(event) => onRowUpdate(index, 'codigo_padre', event.target.value)} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Permite manual</span><Input className={`${fieldClass} text-center`} value={row.permite_manual} onChange={(event) => onRowUpdate(index, 'permite_manual', event.target.value)} disabled={importing} /></label>
+        <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Activa</span><Input className={`${fieldClass} text-center`} value={row.activa} onChange={(event) => onRowUpdate(index, 'activa', event.target.value)} disabled={importing} /></label>
+      </div>
+      <label className="mt-2 block space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Notas</span><Input className={fieldClass} value={row.notas} onChange={(event) => onRowUpdate(index, 'notas', event.target.value)} disabled={importing} /></label>
+      {rowError && <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2 text-xs font-medium text-rose-600">{rowError}</p>}
+    </div>;
+  };
   return (
     <div className={`accounting-module fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background p-3 sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}`}>
       <div className="mx-auto flex min-h-0 w-full max-w-[1900px] flex-1 flex-col gap-4">
@@ -118,80 +158,16 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
 
         <ImportReviewSummary total={totalRowCount} valid={validRowCount} skipped={skippedRowCount} entityLabel="cuentas" />
 
-        <HorizontalTableScroller className="hidden min-h-0 flex-1 sm:flex" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="overflow-visible" containerStyle={{ width: '2200px', minWidth: '2200px', maxWidth: 'none' }} className="w-[2200px] min-w-[2200px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-              <TableRow>
-                <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
-                <TableHead className="w-40 min-w-40 whitespace-nowrap">Código *</TableHead>
-                <TableHead className="w-72 min-w-72 whitespace-nowrap">Nombre *</TableHead>
-                <TableHead className="w-40 min-w-40 whitespace-nowrap">Tipo</TableHead>
-                <TableHead className="w-48 min-w-48 whitespace-nowrap">Subtipo</TableHead>
-                <TableHead className="w-52 min-w-52 whitespace-nowrap">Tipo de detalle</TableHead>
-                <TableHead className="w-32 min-w-32 whitespace-nowrap">Moneda</TableHead>
-                <TableHead className="w-40 min-w-40 whitespace-nowrap">Código padre</TableHead>
-                <TableHead className="w-32 min-w-32 whitespace-nowrap text-center">Manual</TableHead>
-                <TableHead className="w-32 min-w-32 whitespace-nowrap text-center">Activa</TableHead>
-                <TableHead className="w-72 min-w-72 whitespace-nowrap">Notas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row, index) => {
-                const rowError = rowValidationErrors.get(index);
-                return (
-                <TableRow key={index} className={rowError ? 'bg-rose-500/5' : undefined}>
-                  <TableCell className="text-center" title={rowError || 'Fila válida'}>{rowError ? <AlertTriangle className="mx-auto size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" aria-label="Fila válida" />}</TableCell>
-                  <TableCell><Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.tipo_cuenta} onChange={(event) => onRowUpdate(index, 'tipo_cuenta', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.subtipo} onChange={(event) => onRowUpdate(index, 'subtipo', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.tipo_detalle} onChange={(event) => onRowUpdate(index, 'tipo_detalle', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.moneda} onChange={(event) => onRowUpdate(index, 'moneda', event.target.value.toUpperCase())} disabled={importing} /></TableCell>
-                  <TableCell><Input className={`${fieldClass} font-mono`} value={row.codigo_padre} onChange={(event) => onRowUpdate(index, 'codigo_padre', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={`${fieldClass} text-center`} value={row.permite_manual} onChange={(event) => onRowUpdate(index, 'permite_manual', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={`${fieldClass} text-center`} value={row.activa} onChange={(event) => onRowUpdate(index, 'activa', event.target.value)} disabled={importing} /></TableCell>
-                  <TableCell><Input className={fieldClass} value={row.notas} onChange={(event) => onRowUpdate(index, 'notas', event.target.value)} disabled={importing} /></TableCell>
-                </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>}
-        </HorizontalTableScroller>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto sm:hidden">
-          {rows.length === 0 ? (
-            <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>
-          ) : rows.map((row, index) => {
-            const rowError = rowValidationErrors.get(index);
-            return (
-            <div key={index} className={`rounded-2xl border border-border/70 bg-card p-3 shadow-sm ${rowError ? 'border-rose-500/50 bg-rose-500/5' : ''}`}>
-              <div className="flex items-start gap-2">
-                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${rowError ? 'bg-rose-500/10' : 'bg-emerald-500/10'}`} title={rowError || 'Fila válida'}>
-                  {rowError ? <AlertTriangle className="size-4 text-rose-500" aria-label="Fila con errores" /> : <CheckCircle2 className="size-4 text-emerald-500" aria-label="Fila válida" />}
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código</p>
-                  <Input className={`${fieldClass} font-mono`} value={row.codigo} onChange={(event) => onRowUpdate(index, 'codigo', event.target.value)} disabled={importing} />
-                </div>
-                <div className="min-w-0 flex-[1.6] space-y-1">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Nombre</p>
-                  <Input className={fieldClass} value={row.nombre} onChange={(event) => onRowUpdate(index, 'nombre', event.target.value)} disabled={importing} />
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo</span><Input className={fieldClass} value={row.tipo_cuenta} onChange={(event) => onRowUpdate(index, 'tipo_cuenta', event.target.value)} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Moneda</span><Input className={fieldClass} value={row.moneda} onChange={(event) => onRowUpdate(index, 'moneda', event.target.value.toUpperCase())} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Subtipo</span><Input className={fieldClass} value={row.subtipo} onChange={(event) => onRowUpdate(index, 'subtipo', event.target.value)} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Tipo detalle</span><Input className={fieldClass} value={row.tipo_detalle} onChange={(event) => onRowUpdate(index, 'tipo_detalle', event.target.value)} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Código padre</span><Input className={`${fieldClass} font-mono`} value={row.codigo_padre} onChange={(event) => onRowUpdate(index, 'codigo_padre', event.target.value)} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Permite manual</span><Input className={`${fieldClass} text-center`} value={row.permite_manual} onChange={(event) => onRowUpdate(index, 'permite_manual', event.target.value)} disabled={importing} /></label>
-                <label className="space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Activa</span><Input className={`${fieldClass} text-center`} value={row.activa} onChange={(event) => onRowUpdate(index, 'activa', event.target.value)} disabled={importing} /></label>
-              </div>
-              <label className="mt-2 block space-y-1"><span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Notas</span><Input className={fieldClass} value={row.notas} onChange={(event) => onRowUpdate(index, 'notas', event.target.value)} disabled={importing} /></label>
-              {rowError && <p className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2 text-xs font-medium text-rose-600">{rowError}</p>}
+        <HorizontalTableScroller className="hidden min-h-0 flex-1 sm:flex" tableClassName="overflow-hidden scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+          <div className="flex min-h-0 min-w-[2200px] flex-1 flex-col">
+            <div className="grid min-w-[2200px] grid-cols-[5rem_10rem_18rem_10rem_12rem_13rem_8rem_10rem_8rem_8rem_18rem] bg-muted/95 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {['Estado', 'Código *', 'Nombre *', 'Tipo', 'Subtipo', 'Tipo de detalle', 'Moneda', 'Código padre', 'Manual', 'Activa', 'Notas'].map((label) => <div key={label} className="px-3 py-2">{label}</div>)}
             </div>
-            );
-          })}
+            {rows.length ? <VirtualizedImportList count={rows.length} estimateSize={58} className="h-[min(62vh,46rem)] flex-none min-w-[2200px]" renderItem={renderDesktopRow} /> : <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>}
+          </div>
+        </HorizontalTableScroller>
+        <div className="min-h-0 flex-1 sm:hidden">
+          {rows.length === 0 ? <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div> : <VirtualizedImportList count={rows.length} estimateSize={260} className="h-[min(62vh,46rem)] space-y-3" renderItem={renderMobileRow} />}
         </div>
 
         {validationMessages.length > 0 && (

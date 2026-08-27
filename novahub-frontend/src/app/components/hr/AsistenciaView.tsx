@@ -14,6 +14,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { cn } from '../ui/utils';
 import { HRViewTutorial } from './HRViewTutorial';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 const TEMPLATE_COLUMNS = [
   { key: 'codigo_empleado', label: 'CÓDIGO EMPLEADO', example: 'EMP-001', rule: 'Obligatorio. Código o nombre completo del empleado tal como aparece en el módulo Empleados.' },
@@ -42,6 +43,13 @@ const pickRowValue = (row: any, ...keys: string[]): string => {
   return '';
 };
 
+function matrixToObjects(raw: any[][]): Record<string, unknown>[] {
+  const nonEmpty = raw.filter((row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim() !== ''));
+  if (nonEmpty.length < 2) return [];
+  const headers = nonEmpty[0].map((header) => String(header ?? '').trim());
+  return nonEmpty.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
+}
+
 const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   PRESENTE: 'PRESENT', PRESENT: 'PRESENT',
   AUSENTE: 'ABSENT', ABSENT: 'ABSENT',
@@ -57,6 +65,9 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [parsedImportRows, setParsedImportRows] = useState<Record<string, any>[]>([]);
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   const [quickFilter, setQuickFilter] = useState<{ status?: string; today?: boolean } | null>(null);
@@ -64,22 +75,35 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
   const handleAttendanceFileChange = async (file: File | undefined) => {
     setImportFile(file || null);
     setImportFileStats(null);
+    setParsedImportRows([]);
     if (!file) return;
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const parsed = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(88);
+      const rows = matrixToObjects(parsed.rows);
+      const employeeReferences = new Set<string>();
+      employees.forEach((employee: any) => {
+        if (employee.employeeNumber) employeeReferences.add(String(employee.employeeNumber).trim().toLowerCase());
+        employeeReferences.add(`${employee.firstName} ${employee.lastName}`.trim().toLowerCase());
+      });
       const valid = rows.filter((row: any) => {
-        const employeeNumber = String(row.employeeNumber || row.employeenumber || row.codigo || '').trim().toLowerCase();
-        return employees.some((employee: any) =>
-          (employee.employeeNumber && String(employee.employeeNumber).toLowerCase() === employeeNumber) ||
-          `${employee.firstName} ${employee.lastName}`.toLowerCase() === employeeNumber
-        );
+        const employeeNumber = pickRowValue(row, 'codigo_empleado', 'employeeNumber', 'empleado', 'codigo').toLowerCase();
+        return employeeReferences.has(employeeNumber);
       }).length;
+      setParsedImportRows(rows);
       setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
+      setReadingProgress(100);
     } catch {
+      setImportFile(null);
       setImportFileStats(null);
+      setParsedImportRows([]);
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   };
 
@@ -145,26 +169,26 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
     setImportProgress(8);
     setImportResult(null);
     try {
-      const buffer = await importFile.arrayBuffer();
+      const rows = parsedImportRows.length > 0
+        ? parsedImportRows
+        : matrixToObjects((await parseSpreadsheetInWorker(importFile, undefined, false, (progress) => {
+          setImportProgress(Math.min(22, Math.max(8, Math.round(progress * 0.23))));
+        })).rows);
       setImportProgress(22);
-      const wb = XLSX.read(buffer, { type: 'array' });
       setImportProgress(36);
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
       if (rows.length === 0) { toast.error('El archivo no contiene filas'); return; }
-      setImportProgress(40);
-      let created = 0, skipped = 0;
       const errors: string[] = [];
-      const updateRowProgress = (index: number) => setImportProgress(40 + Math.round(((index + 1) / rows.length) * 55));
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
+      const employeeByReference = new Map<string, any>();
+      employees.forEach((employee: any) => {
+        if (employee.employeeNumber) employeeByReference.set(String(employee.employeeNumber).trim().toLowerCase(), employee);
+        employeeByReference.set(`${employee.firstName} ${employee.lastName}`.trim().toLowerCase(), employee);
+      });
+      const payload: any[] = [];
+      rows.forEach((row, idx) => {
         const rowNum = idx + 2;
         const empNum = pickRowValue(row, 'codigo_empleado', 'employeeNumber', 'empleado', 'codigo');
-        const employee = employees.find((e: any) =>
-          (e.employeeNumber && (e.employeeNumber + '').toLowerCase() === empNum.toLowerCase()) ||
-          ((e.firstName + ' ' + e.lastName).toLowerCase() === empNum.toLowerCase())
-        );
-        if (!employee) { skipped++; errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); updateRowProgress(idx); continue; }
+        const employee = employeeByReference.get(empNum.toLowerCase());
+        if (!employee) { errors.push(`Fila ${rowNum}: empleado "${empNum}" no encontrado`); return; }
         const dateRaw = pickRowValue(row, 'fecha', 'date');
         const dateParsed = dateRaw ? new Date(dateRaw) : new Date();
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
@@ -177,26 +201,25 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
         const hoursWorked = Number(pickRowValue(row, 'horas_trabajadas', 'horas', 'hoursWorked').replace(',', '.') || '0');
         const overtimeHours = Number(pickRowValue(row, 'horas_extra', 'overtimeHours', 'extra').replace(',', '.') || '0');
         const location = pickRowValue(row, 'ubicacion', 'location');
-        try {
-          await hrService.createAttendance({
-            employeeId: employee.id, date, checkIn, checkOut, status, hoursWorked, overtimeHours: overtimeHours || 0, location: location || undefined,
-          });
-          created++;
-        } catch (e: any) {
-          skipped++;
-          errors.push(`Fila ${rowNum}: ${e?.response?.data?.message || e?.message || 'error al crear'}`);
-        }
-        updateRowProgress(idx);
-      }
+        payload.push({ sourceRow: rowNum, employeeId: employee.id, date, checkIn, checkOut, status, hoursWorked, overtimeHours: overtimeHours || 0, location: location || undefined });
+      });
+      setImportProgress(55);
+      const response: any = await hrService.bulkCreateAttendance(payload);
+      const serverResult = response?.data || response;
+      const serverErrors = Array.isArray(serverResult?.errors) ? serverResult.errors : [];
+      const created = Number(serverResult?.created ?? payload.length - serverErrors.length);
+      const skipped = Number(serverResult?.skipped ?? errors.length + serverErrors.length);
+      setImportProgress(90);
+      const allErrors = [...errors, ...serverErrors];
       setImportProgress(100);
-      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
+      setImportResult({ total: rows.length, created, skipped, errors: allErrors.slice(0, 12) });
       if (created > 0) onRefresh();
       toast.success(`Importación finalizada: ${created} registros, ${skipped} omitidos`);
     } catch (error: any) {
       toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
     } finally {
       setImporting(false);
-      window.setTimeout(() => setImportProgress(0), 180);
+      setImportProgress(0);
     }
   };
 
@@ -595,6 +618,12 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
         progress={importProgress}
         title="Importando asistencia"
         description="Procesando cada fila, validando el empleado y registrando la asistencia en la base de datos."
+      />
+      <ImportProgressOverlay
+        open={readingFile}
+        progress={readingProgress}
+        title="Preparando asistencia"
+        description="Leyendo el archivo y validando las referencias de empleados para la previsualización."
       />
     </div>
   );

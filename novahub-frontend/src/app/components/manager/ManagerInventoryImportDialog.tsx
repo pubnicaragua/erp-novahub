@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import type { Worksheet } from 'exceljs';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, ImageIcon, Info, Loader2, PackagePlus, Plus, RefreshCw, Upload, Warehouse } from 'lucide-react';
@@ -18,6 +17,9 @@ import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 
 type Currency = 'NIO' | 'USD';
 type StockMode = 'SET' | 'ADD';
@@ -73,8 +75,7 @@ const parseImportNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const findHeaderRow = (sheet: XLSX.WorkSheet) => {
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+const findHeaderRow = (matrix: unknown[][]) => {
   const headerIndex = matrix.findIndex((row) => {
     const keys = row.map(normalizeImportKey);
     return keys.some((key) => key === 'codigosku' || key === 'sku' || key === 'codigo')
@@ -83,20 +84,24 @@ const findHeaderRow = (sheet: XLSX.WorkSheet) => {
   return headerIndex >= 0 ? headerIndex : 0;
 };
 
-function readSpreadsheetRows(file: File) {
-  return file.arrayBuffer().then((buffer) => {
-    const workbook = XLSX.read(buffer, { type: 'array' });
+async function readSpreadsheetRows(file: File, onProgress?: (progress: number) => void) {
+    const parsed = await parseSpreadsheetInWorker(file, undefined, true, onProgress);
+    const sheets = parsed.sheets || { [parsed.sheetName || 'Hoja 1']: parsed.rows };
     const normalizeSheetName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     const sheetHeaderRows = new Map<string, number>();
     const readSheet = (name?: string) => {
       if (!name) return [];
-      const sheet = workbook.Sheets[name];
-      const headerRow = findHeaderRow(sheet);
+      const matrix = sheets[name] || [];
+      const headerRow = findHeaderRow(matrix);
       sheetHeaderRows.set(name, headerRow);
-      return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { range: headerRow, defval: '' });
+      const headers = (matrix[headerRow] || []).map((header) => String(header ?? '').trim());
+      return matrix.slice(headerRow + 1)
+        .filter((row) => row.some((cell) => String(cell ?? '').trim().length > 0))
+        .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])) as Record<string, unknown>);
     };
-    const productSheetName = workbook.SheetNames.find((name) => normalizeSheetName(name) === 'productos');
-    const distributionSheetName = workbook.SheetNames.find((name) => ['distribucion', 'asignaciones', 'ubicaciones'].includes(normalizeSheetName(name)));
+    const sheetNames = Object.keys(sheets);
+    const productSheetName = sheetNames.find((name) => normalizeSheetName(name) === 'productos');
+    const distributionSheetName = sheetNames.find((name) => ['distribucion', 'asignaciones', 'ubicaciones'].includes(normalizeSheetName(name)));
     const products = readSheet(productSheetName);
     const distributions = readSheet(distributionSheetName);
     const productByCode = new Map<string, Record<string, unknown>>();
@@ -125,7 +130,7 @@ function readSpreadsheetRows(file: File) {
       });
       return { rows, productRows: products.length, distributionRows: distributions.length, format: 'two-sheet' as const };
     }
-    const firstSheet = workbook.SheetNames[0];
+    const firstSheet = sheetNames[0];
     const legacyRows = readSheet(firstSheet).map((row, index) => ({
       __importRowNumber: (sheetHeaderRows.get(firstSheet) || 0) + index + 2,
       code: String(readImportValue(row, ['Código / SKU', 'Código', 'Codigo', 'SKU', 'code']) ?? '').trim(),
@@ -139,7 +144,6 @@ function readSpreadsheetRows(file: File) {
       registerCatalog: String(readImportValue(row, ['Registrar catálogo', 'Registrar catalogo', 'registerCatalog']) ?? 'SI').trim() || 'SI',
     }));
     return { rows: legacyRows, productRows: 0, distributionRows: 0, format: 'legacy' as const };
-  });
 }
 
 export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, businessUnits, onImported }: Props) {
@@ -156,6 +160,9 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
   const [imageArchiveFileName, setImageArchiveFileName] = useState('');
   const [imageArchiveEntries, setImageArchiveEntries] = useState<Map<string, File>>(new Map());
   const [imageArchiveProcessing, setImageArchiveProcessing] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
 
   const optionsQuery = useTenantQuery(
     ['manager-inventory-import-options', groupId, importBusinessUnitId || ''],
@@ -228,8 +235,10 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
 
   const importMutation = useMutation({
     mutationFn: async () => {
+      setImportProgress(8);
       if (!imageArchiveEntries.size) {
         const result = await enterpriseGroupsService.importSharedInventory(groupId, requestBody);
+        setImportProgress(100);
         return { result, imageUpload: null };
       }
       const imageUrlByCode = new Map<string, string>();
@@ -239,23 +248,34 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         throw new Error('Ninguna imagen del archivo coincide con el SKU de la hoja Productos. Revisa los nombres del ZIP/RAR antes de confirmar.');
       }
       const uploadFailures: Array<{ code: string; message: string }> = [];
-      for (const [code, imageFile] of matchedEntries) {
-        try {
-          const uploaded = await storageService.uploadFile('product-image', imageFile, {
-            // Una sola imagen por SKU dentro del grupo; los espejos de las
-            // sucursales reciben la misma URL pública de Supabase.
-            folder: 'products',
-            scopeId: groupId,
-            dedupeKey: code,
-          });
-          imageUrlByCode.set(code, uploaded.url);
-        } catch (error) {
-          uploadFailures.push({
-            code,
-            message: error instanceof Error ? error.message : 'Error desconocido del almacenamiento',
-          });
+      let completedUploads = 0;
+      let nextEntry = 0;
+      const uploadNext = async () => {
+        while (nextEntry < matchedEntries.length) {
+          const entryIndex = nextEntry;
+          nextEntry += 1;
+          const [code, imageFile] = matchedEntries[entryIndex];
+          try {
+            const uploaded = await storageService.uploadFile('product-image', imageFile, {
+              // Una sola imagen por SKU dentro del grupo; los espejos de las
+              // sucursales reciben la misma URL pública de Supabase.
+              folder: 'products',
+              scopeId: groupId,
+              dedupeKey: code,
+            });
+            imageUrlByCode.set(code, uploaded.url);
+          } catch (error) {
+            uploadFailures.push({
+              code,
+              message: error instanceof Error ? error.message : 'Error desconocido del almacenamiento',
+            });
+          } finally {
+            completedUploads += 1;
+            setImportProgress(8 + Math.round((completedUploads / matchedEntries.length) * 70));
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, matchedEntries.length) }, () => uploadNext()));
       if (uploadFailures.length) {
         const detail = uploadFailures.slice(0, 2).map(({ code, message }) => `${code}: ${message}`).join(' · ');
         throw new Error(`${uploadFailures.length} imagen(es) no pudieron cargarse. No se aplicó la importación para evitar productos sin imagen. ${detail}`);
@@ -264,7 +284,9 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
         const imageUrl = imageUrlByCode.get(productImageKey(rowCode(row)));
         return imageUrl ? { ...row, imageUrl } : row;
       });
+      setImportProgress(90);
       const result = await enterpriseGroupsService.importSharedInventory(groupId, { ...requestBody, rows: rowsWithImages });
+      setImportProgress(100);
       return { result, imageUpload: { attempted: matchedEntries.length, uploaded: imageUrlByCode.size } };
     },
     onSuccess: ({ result, imageUpload }) => {
@@ -273,14 +295,19 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       onBack();
       onImported();
     },
-    onError: (error: Error) => toast.error(`Importación detenida; no se aplicaron cambios. ${error.message}`),
+    onError: (error: Error) => { setImportProgress(0); toast.error(`Importación detenida; no se aplicaron cambios. ${error.message}`); },
   });
 
   const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const parsed = await readSpreadsheetRows(file);
+      const parsed = await readSpreadsheetRows(file, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(90);
       if (!parsed.rows.length) {
         toast.error(parsed.format === 'two-sheet' ? 'La hoja Distribución no contiene filas para importar' : 'El archivo no contiene filas para importar');
         return;
@@ -291,9 +318,12 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       setPreview(null);
       setPreviewDirty(false);
       setPreparedCategoryNames([]);
+      setReadingProgress(100);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo leer la plantilla');
     } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
       event.target.value = '';
     }
   };
@@ -568,6 +598,7 @@ export function ManagerInventoryImportView({ onBack, groupId, businessUnitId, bu
       </div>
       <div className="flex flex-col gap-3 border-t border-border/60 bg-muted/10 px-4 py-5 sm:px-8"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-left text-xs leading-5 text-muted-foreground sm:max-w-xl">Se conserva el precio al costo del archivo, convertido a la moneda base de cada sucursal cuando corresponda. La operación confirmada es atómica.</p><div className="flex w-full gap-2 sm:w-auto"><Button type="button" variant="outline" className="flex-1 rounded-xl sm:flex-none" onClick={onBack}>Volver</Button><Button type="button" className="flex-1 rounded-xl sm:flex-none" disabled={!validForImport || !hasValidExchangeRate || importMutation.isPending} title={!validForImport ? importBlockReason : undefined} onClick={() => importMutation.mutate()}>{importMutation.isPending ? <><Loader2 className="mr-2 size-4 animate-spin" />Aplicando…</> : <><CheckCircle2 className="mr-2 size-4" />Confirmar importación</>}</Button></div></div>{importBlockReason && <p role="status" className={`text-xs ${preview?.summary.errorRows ? 'text-destructive' : 'text-muted-foreground'}`}>{importBlockReason}</p>}</div>
     </div>
+      <ImportProgressOverlay open={readingFile || importMutation.isPending} progress={readingFile ? readingProgress : importProgress} title={readingFile ? 'Preparando inventario compartido' : 'Aplicando importación de inventario'} description={readingFile ? 'Leyendo las hojas y preparando todas las filas para revisión.' : 'Cargando imágenes y registrando los productos en las ubicaciones seleccionadas.'} />
   </section>;
 }
 
@@ -690,6 +721,46 @@ function PreviewPanel({
       {row.issues.length ? 'Error' : statusLabels[row.status] || row.status}
     </Badge>
   );
+  const renderDesktopRow = (index: number) => {
+    const row = preview.rows[index];
+    const category = String(valueFor(row, 'category', '') || '');
+    return <div className="grid min-w-[2240px] grid-cols-[3.5rem_8rem_14rem_11rem_7rem_8rem_14rem_7rem_7rem_8rem_7rem_7rem_15rem_20rem] items-start border-t border-border/50 align-top text-xs">
+      <div className="px-2 py-2 text-muted-foreground">{row.rowNumber}</div>
+      <div className="p-1"><Input value={String(valueFor(row, 'code', row.code) || '')} onChange={(event) => onRowUpdate(row, 'code', event.target.value)} className={`${inputClass} font-mono`} /></div>
+      <div className="p-1"><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></div>
+      <div className="p-1"><div className="flex min-w-0 items-center gap-1"><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={`${inputClass} ${categoryIsNew(row) ? 'border-amber-500/60' : ''}`} />{categoryIsNew(row) && <Button type="button" variant="ghost" size="icon" className={`size-8 shrink-0 rounded-lg ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}</Button>}</div></div>
+      <div className="p-1"><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></div>
+      <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></div>
+      <div className="p-1"><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="max-w-56 px-1 pt-1 text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</div>
+      <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></div>
+      <div className="p-1"><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></div>
+      <div className="p-1"><select value={String(valueFor(row, 'registerCatalog', 'SI') || 'SI').toUpperCase()} onChange={(event) => onRowUpdate(row, 'registerCatalog', event.target.value)} className={inputClass}><option value="SI">SI</option><option value="NO">NO</option></select></div>
+      <div className="px-2 py-2 font-bold">{formatNumber(row.currentQty)}</div>
+      <div className="px-2 py-2 font-black text-primary">{formatNumber(row.resultingQty)}</div>
+      <div className="px-2 py-2">{renderImageStatus(row)}</div>
+      <div className="w-80 px-2 py-2"><div className="min-w-0">{renderStatus(row)}</div><p className={`mt-1 break-words whitespace-normal ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p></div>
+    </div>;
+  };
+  const renderMobileRow = (index: number) => {
+    const row = preview.rows[index];
+    const category = String(valueFor(row, 'category', '') || '');
+    return <div className={`rounded-2xl border bg-card p-3 shadow-sm ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin SKU')}</p><p className="text-xs text-muted-foreground">Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
+      <div className="mt-2">{renderImageStatus(row)}</div>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Nombre</span><Input value={String(valueFor(row, 'name', row.name) || '')} onChange={(event) => onRowUpdate(row, 'name', event.target.value)} className={inputClass} /></label>
+        <label className="space-y-1 sm:col-span-2"><span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Categoría {categoryIsNew(row) && <>{categoryIsPrepared(row) ? <span className="font-normal text-emerald-600">· preparada</span> : <span className="font-normal text-amber-600">· pulsa + para agregar</span>}<Button type="button" variant="ghost" size="icon" className={`size-6 rounded-md ${categoryIsPrepared(row) ? 'text-emerald-600' : 'text-amber-600'}`} onClick={() => onPrepareCategory(category)} aria-label={categoryIsPrepared(row) ? `Categoría ${category} preparada` : `Agregar categoría ${category}`} title={categoryIsPrepared(row) ? 'Categoría preparada para crear al confirmar' : 'Agregar categoría al importador'}>{categoryIsPrepared(row) ? <CheckCircle2 className="size-3.5" /> : <Plus className="size-3.5" />}</Button></>}</span><Input list="manager-import-categories" value={category} onChange={(event) => onRowUpdate(row, 'category', event.target.value)} className={inputClass} /></label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Unidad</span><Input value={String(valueFor(row, 'unit', 'unidad') || '')} onChange={(event) => onRowUpdate(row, 'unit', event.target.value)} className={inputClass} /></label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Costo</span><Input type="number" min={0} value={String(valueFor(row, 'costPrice', row.costPrice ?? '') ?? '')} onChange={(event) => onRowUpdate(row, 'costPrice', parseImportNumber(event.target.value))} className={`${inputClass} text-right`} /></label>
+        <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Ubicación destino</span><select value={selectedLocationValue(row)} onChange={(event) => onRowUpdate(row, 'warehouseSelection', event.target.value)} className={`${inputClass} ${locationIssue(row) ? 'border-destructive/60 text-destructive' : ''}`}><option value="">Seleccionar ubicación activa</option>{currentLocationOptions(row).map((option) => <option key={`${option.value}-${option.type}`} value={option.value}>{option.value}{option.type === 'INVALID' ? ' · no disponible' : ''}</option>)}</select>{locationContext(row) && <p className="text-[10px] leading-4 text-muted-foreground">{locationContext(row)}</p>}{locationIssue(row) && <p className="text-[10px] leading-4 text-destructive">{locationIssue(row)}</p>}</label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock inicial</span><Input type="number" min={0} value={String(valueFor(row, 'stock', row.stock) ?? 0)} onChange={(event) => onRowUpdate(row, 'stock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Stock mínimo</span><Input type="number" min={0} value={String(valueFor(row, 'minStock', 0) ?? 0)} onChange={(event) => onRowUpdate(row, 'minStock', parseImportNumber(event.target.value) ?? 0)} className={`${inputClass} text-right`} /></label>
+        <label className="space-y-1"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Registrar catálogo</span><select value={String(valueFor(row, 'registerCatalog', 'SI') || 'SI').toUpperCase()} onChange={(event) => onRowUpdate(row, 'registerCatalog', event.target.value)} className={inputClass}><option value="SI">SI</option><option value="NO">NO</option></select></label>
+        <div className="rounded-lg bg-muted/30 p-2 text-xs"><span className="text-muted-foreground">Actual / resultado</span><p className="mt-1 font-black">{formatNumber(row.currentQty)} / <span className="text-primary">{formatNumber(row.resultingQty)}</span></p></div>
+      </div>
+      <p className={`mt-3 text-xs ${row.issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>{row.issues.join(' · ') || 'Sin observaciones'}</p>
+    </div>;
+  };
 
   return <div className="space-y-4 rounded-2xl border border-border/60 p-3 sm:p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -749,7 +820,7 @@ function PreviewPanel({
           <tr><th className="w-14 px-2 py-2">Fila</th><th className="w-32 px-2 py-2">SKU</th><th className="w-56 px-2 py-2">Nombre</th><th className="w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="w-60 px-2 py-2">Imagen por SKU</th><th className="w-80 px-2 py-2">Estado / observación</th></tr>
         </thead>
         <tbody>
-          {preview.rows.slice(0, 100).map((row) => {
+          {preview.rows.slice(0, 0).map((row) => {
             const category = String(valueFor(row, 'category', '') || '');
             return <tr key={`${row.rowNumber}-${row.code}-${row.warehouseId}`} className="border-t border-border/50 align-top">
               <td className="px-2 py-2 text-muted-foreground">{row.rowNumber}</td>
@@ -770,11 +841,12 @@ function PreviewPanel({
           })}
         </tbody>
       </table>
-      {preview.rows.length > 100 && <p className="px-3 py-2 text-xs text-muted-foreground">Mostrando 100 de {preview.rows.length} filas.</p>}
+      <VirtualizedImportList count={preview.rows.length} estimateSize={86} className="h-[min(60vh,42rem)] min-w-[2240px]" renderItem={renderDesktopRow} />
+      <p className="px-3 py-2 text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
     </div>
 
     <div className="space-y-3 lg:hidden">
-      {preview.rows.slice(0, 100).map((row) => {
+      {preview.rows.slice(0, 0).map((row) => {
         const category = String(valueFor(row, 'category', '') || '');
         return <div key={`${row.rowNumber}-${row.code}-${row.warehouseId}`} className={`rounded-2xl border bg-card p-3 shadow-sm ${row.issues.length ? 'border-destructive/40 bg-destructive/[0.03]' : 'border-border/60'}`}>
           <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-sm font-black">{String(valueFor(row, 'code', row.code) || 'Sin SKU')}</p><p className="text-xs text-muted-foreground">Fila {row.rowNumber} · {row.locationLabel || 'Destino por resolver'}</p></div>{renderStatus(row)}</div>
@@ -795,7 +867,8 @@ function PreviewPanel({
       })}
     </div>
     <datalist id="manager-import-categories">{categoryOptions.map((category) => <option key={category.id} value={category.name} />)}</datalist>
-    {preview.rows.length > 100 && <p className="text-xs text-muted-foreground">Mostrando 100 de {preview.rows.length} filas.</p>}
+    <VirtualizedImportList count={preview.rows.length} estimateSize={430} className="h-[min(70vh,48rem)] space-y-3" renderItem={renderMobileRow} />
+    <p className="text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
   </div>;
 }
 

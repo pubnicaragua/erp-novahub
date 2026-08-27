@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { extractProductImageArchive, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
+import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -36,6 +36,8 @@ import type { SalesPaginationControls } from '../../types';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -63,9 +65,9 @@ const TAX_OPTIONS = [
 ];
 
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
-  { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por almacén. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por bodega. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Productos muestra el total, disponibles, stock bajo y sin stock. Servicios muestra categorías, promedio semanal y precio promedio. Las tarjetas de existencias filtran la lista; los valores de referencia solo informan.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, almacén o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, bodega o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes cargar imágenes masivamente en cualquier momento, iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o Bodegas cuando corresponda.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'El botón para importar productos permanece disponible en esta vista. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
@@ -180,7 +182,103 @@ interface ImportPreviewPageProps {
   canCreateWarehouse: boolean;
   onConfirm: () => void;
   onBack: () => void;
+  onReady?: () => void;
 }
+
+interface ProductImportPreviewRowProps {
+  row: any;
+  index: number;
+  start: number;
+  gridTemplate: string;
+  categoryNames: Set<string>;
+  warehouseNames: Set<string>;
+  categoryOptions: any[];
+  warehouseOptions: any[];
+  importing: boolean;
+  canViewInventoryCost: boolean;
+  canCreateCategory: boolean;
+  canCreateWarehouse: boolean;
+  onRowUpdate: (index: number, field: string, value: any) => void;
+  onCreateCategory: (index: number, value: string) => void;
+  onCreateWarehouse: (index: number, value: string) => void;
+}
+
+const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
+  row,
+  index,
+  start,
+  gridTemplate,
+  categoryNames,
+  warehouseNames,
+  categoryOptions,
+  warehouseOptions,
+  importing,
+  canViewInventoryCost,
+  canCreateCategory,
+  canCreateWarehouse,
+  onRowUpdate,
+  onCreateCategory,
+  onCreateWarehouse,
+}: ProductImportPreviewRowProps) {
+  const categoryExists = categoryNames.has(String(row.category || '').trim().toLowerCase());
+  const warehouseExists = !row.warehouse || warehouseNames.has(String(row.warehouse || '').trim().toLowerCase());
+
+  return (
+    <TableRow
+      data-index={index}
+      style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', height: '58px', transform: `translateY(${start}px)` }}
+      className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}
+    >
+      <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
+      <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
+      <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
+      <TableCell className="p-1 text-center">
+        {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
+      </TableCell>
+      <TableCell className="p-1">
+        {categoryExists ? (
+          <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className="h-8 text-xs" />
+        ) : (
+          <div className="flex items-center gap-1">
+            <Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }}>
+              <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>
+                {categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}
+                {categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {canCreateCategory && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')}><Plus className="size-3.5" /></Button>}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+      <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+      {canViewInventoryCost && <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>}
+      <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
+      <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
+      <TableCell className="p-1">
+        {warehouseExists ? (
+          <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+            <SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+          </Select>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
+              <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
+            </Select>
+            {canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')}><Plus className="size-3.5" /></Button>}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
+    </TableRow>
+  );
+});
 
 function ImportPreviewPage({
   importData,
@@ -198,28 +296,52 @@ function ImportPreviewPage({
   canCreateWarehouse,
   onConfirm,
   onBack,
+  onReady,
 }: ImportPreviewPageProps) {
   useImportPreviewLayout();
   const { canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
-  const previewPageSize = 50;
-  const [previewPage, setPreviewPage] = useState(1);
-  const validRows = importData.filter((row) => !row._hasError).length;
-  const errorRows = importData.filter((row) => row._hasError).length;
-  const warningRows = importData.filter((row) => !row._hasError && row._hasWarning).length;
-  const issueRows = importData.filter((row) => row._hasError || row._hasWarning).length;
-  const previewPageCount = Math.max(1, Math.ceil(importData.length / previewPageSize));
-  const safePreviewPage = Math.min(previewPage, previewPageCount);
-  const previewStart = (safePreviewPage - 1) * previewPageSize;
-  const previewRows = useMemo(() => importData.slice(previewStart, previewStart + previewPageSize), [importData, previewStart]);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const [rowsReady, setRowsReady] = useState(false);
+  const gridTemplate = canViewInventoryCost
+    ? '32px 128px minmax(220px, 1fr) 80px 128px 112px 112px 112px 112px 112px 96px 96px 160px 160px'
+    : '32px 128px minmax(220px, 1fr) 80px 128px 112px 112px 112px 96px 96px 160px 160px';
+  const tableVirtualizer = useVirtualizedImportRows(rowsReady ? importData.length : 0, tableScrollRef, 58, { overscan: 2 });
+  const categoryNames = useMemo(() => new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()).filter(Boolean)), [categoryOptions]);
+  const warehouseNames = useMemo(() => new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()).filter(Boolean)), [warehouseOptions]);
+  const { validRows, errorRows, warningRows, issueRows } = useMemo(() => {
+    let valid = 0;
+    let errors = 0;
+    let warnings = 0;
+    let issues = 0;
+    for (const row of importData) {
+      if (row._hasError) {
+        errors += 1;
+        issues += 1;
+      } else {
+        valid += 1;
+        if (row._hasWarning) {
+          warnings += 1;
+          issues += 1;
+        }
+      }
+    }
+    return { validRows: valid, errorRows: errors, warningRows: warnings, issueRows: issues };
+  }, [importData]);
 
   useEffect(() => {
-    if (previewPage > previewPageCount) setPreviewPage(previewPageCount);
-  }, [previewPage, previewPageCount]);
+    const frame = window.requestAnimationFrame(() => setRowsReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (rowsReady) onReady?.();
+  }, [onReady, rowsReady]);
 
   const renderMobileCard = (row: any, index: number) => {
-    const categoryExists = categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase());
-    const warehouseExists = !row.warehouse || warehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase());
+    const categoryExists = categoryNames.has(String(row.category || '').trim().toLowerCase());
+    const warehouseExists = !row.warehouse || warehouseNames.has(String(row.warehouse || '').trim().toLowerCase());
     return (
       <ImportPreviewMobileCard index={index} title={row.name || row.code} error={row._hasError ? row._errorMessage || 'Fila con errores' : undefined} warning={row._hasWarning ? row._warningMessage || 'Revisar fila' : undefined}>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -269,11 +391,20 @@ function ImportPreviewPage({
 
       <ImportReviewSummary total={importData.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
+      {!rowsReady ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border bg-card p-8 text-center">
+          <div className="space-y-3">
+            <Loader2 className="mx-auto size-8 animate-spin text-primary" />
+            <p className="text-sm font-semibold">Preparando filas para revisión…</p>
+            <p className="text-xs text-muted-foreground">La tabla se montará de forma virtualizada para no bloquear la página.</p>
+          </div>
+        </div>
+      ) : <>
       <div className="hidden min-h-0 flex-1 sm:flex">
-      <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1320px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
-              <TableRow>
+      <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block min-w-[1320px]">
+            <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
+              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">Nombre</TableHead>
@@ -290,64 +421,27 @@ function ImportPreviewPage({
                 <TableHead className="w-40 text-[10px] uppercase">Validación</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {previewRows.map((row, localIndex) => {
-                const index = previewStart + localIndex;
-                return (
-                <TableRow key={index} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
-                  <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
-                  <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
-                  <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
-                  <TableCell className="p-1 text-center">
-                    {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
-                  </TableCell>
-                  <TableCell className="p-1">
-                    {categoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
-                      <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className="h-8 text-xs" />
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Select value="__none__" onValueChange={(value) => {
-                          const category = categoryOptions.find((item: any) => item.id === value);
-                          if (category) onRowUpdate(index, 'category', category.name);
-                        }}>
-                          <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>
-                            {categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}
-                            {categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {canCreateCategory && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')}><Plus className="size-3.5" /></Button>}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(event) => onRowUpdate(index, 'price.RETAIL', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(event) => onRowUpdate(index, 'price.WHOLESALE', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(event) => onRowUpdate(index, 'price.DISTRIBUTOR', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
-                  {canViewInventoryCost && <TableCell className="p-1"><Input type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className="h-8 text-right text-xs" /></TableCell>}
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.initialStock ?? ''} onChange={(event) => onRowUpdate(index, 'initialStock', Number(event.target.value) || 0)} aria-label="Stock inicial" title="Edita el stock inicial antes de confirmar la importación" className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1"><Input type="number" min={0} value={row.minStock} onChange={(event) => onRowUpdate(index, 'minStock', Number(event.target.value) || 0)} className="h-8 text-right text-xs" /></TableCell>
-                  <TableCell className="p-1">
-                    {!row.warehouse || warehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === String(row.warehouse || '').trim().toLowerCase()) ? (
-                      <Select value={row.warehouse || '__none__'} onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
-                        <SelectContent><SelectItem value="__none__">Sin bodega</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Select value="__none__" onValueChange={(value) => onRowUpdate(index, 'warehouse', value === '__none__' ? '' : value)}>
-                          <SelectTrigger className="h-8 min-w-0 flex-1 border-amber-500/60 text-xs text-amber-600"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="__none__">{`No existe: ${row.warehouse}`}</SelectItem>{warehouseOptions.length === 0 && <SelectItem value="__no_warehouses__" disabled>No hay bodegas</SelectItem>}{warehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.name}>{warehouse.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                        {canCreateWarehouse && <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta bodega" aria-label="Crear esta bodega" onClick={() => onCreateWarehouse(index, row.warehouse || '')}><Plus className="size-3.5" /></Button>}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="p-1 text-xs"><span className={row._hasError ? 'text-red-600' : row._hasWarning ? 'text-amber-600' : 'text-emerald-600'}>{row._errorMessage || row._warningMessage || 'Correcto'}</span></TableCell>
-                </TableRow>
-                );
-              })}
+            <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
+              {tableVirtualizer.getVirtualItems().map((virtualRow) => (
+                <ProductImportPreviewRow
+                  key={virtualRow.key}
+                  row={importData[virtualRow.index]}
+                  index={virtualRow.index}
+                  start={virtualRow.start}
+                  gridTemplate={gridTemplate}
+                  categoryNames={categoryNames}
+                  warehouseNames={warehouseNames}
+                  categoryOptions={categoryOptions}
+                  warehouseOptions={warehouseOptions}
+                  importing={importing}
+                  canViewInventoryCost={canViewInventoryCost}
+                  canCreateCategory={canCreateCategory}
+                  canCreateWarehouse={canCreateWarehouse}
+                  onRowUpdate={onRowUpdate}
+                  onCreateCategory={onCreateCategory}
+                  onCreateWarehouse={onCreateWarehouse}
+                />
+              ))}
             </TableBody>
           </Table>
       </HorizontalTableScroller>
@@ -358,21 +452,11 @@ function ImportPreviewPage({
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
           <Badge variant="secondary" className="shrink-0 text-[10px]">{importData.length} registros</Badge>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-          {importData.length ? <div className="space-y-3">{previewRows.map((row, localIndex) => { const index = previewStart + localIndex; return <div key={index}>{renderMobileCard(row, index)}</div>; })}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+        <div className="min-h-0 flex-1">
+          {importData.length ? <VirtualizedImportList count={importData.length} scrollRef={mobileScrollRef} estimateSize={360} overscan={2} className="pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(importData[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
         </div>
       </section>
-
-      {importData.length > previewPageSize && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs">
-          <span className="text-muted-foreground">Mostrando {previewStart + 1}–{Math.min(previewStart + previewPageSize, importData.length)} de {importData.length} registros</span>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setPreviewPage((current) => Math.max(1, current - 1))} disabled={safePreviewPage === 1}>Anterior</Button>
-            <span className="min-w-20 text-center font-semibold">Página {safePreviewPage} / {previewPageCount}</span>
-            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setPreviewPage((current) => Math.min(previewPageCount, current + 1))} disabled={safePreviewPage === previewPageCount}>Siguiente</Button>
-          </div>
-        </div>
-      )}
+      </>}
 
       {importing && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all duration-300" style={{ width: `${importProgress}%` }} /></div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
@@ -481,7 +565,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [importProcessing, setImportProcessing] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewMounting, setPreviewMounting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const importValidationTimerRef = useRef<number | null>(null);
+  const previewMountTimerRef = useRef<number | null>(null);
+  const previewFinishTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageArchiveInputRef = useRef<HTMLInputElement>(null);
   const [bulkImageModalOpen, setBulkImageModalOpen] = useState(false);
@@ -528,6 +616,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [variantManagerProduct, setVariantManagerProduct] = useState<any | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
+
+  useEffect(() => () => {
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+    if (previewMountTimerRef.current !== null) window.clearTimeout(previewMountTimerRef.current);
+    if (previewFinishTimerRef.current !== null) window.clearTimeout(previewFinishTimerRef.current);
+  }, []);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1047,7 +1141,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [branches, stockByProduct]);
 
   const warehouseTypeLabel = (type: string) =>
-    WAREHOUSE_TYPES.find((t) => t.value === type)?.label || type || 'Almacén';
+    WAREHOUSE_TYPES.find((t) => t.value === type)?.label || type || 'Bodega';
 
   const branchesForWarehouse = (warehouseId: string) =>
     (branches || []).filter((branch: any) =>
@@ -1273,7 +1367,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       : [];
     const serviceWarehouseId = product.initialAllocations?.find((item) => item.warehouseId)?.warehouseId || product.warehouseId;
     if (product.itemType === 'SERVICE' && !serviceWarehouseId) {
-      toast.error('Selecciona el almacén vinculado al servicio');
+      toast.error('Selecciona la bodega vinculada al servicio');
       return;
     }
     const uniqueWarehouses = new Set(validAllocations.map((item) => item.warehouseId));
@@ -1524,7 +1618,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   const handleCreateWarehouse = async () => {
-    if (!newWarehouseName.trim()) return toast.error('El nombre del almacén es requerido');
+    if (!newWarehouseName.trim()) return toast.error('El nombre de la bodega es requerido');
     setCreatingWarehouse(true);
     try {
       const response = await inventoryService.createWarehouse({
@@ -1552,7 +1646,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           return validateImportRows(next, imageArchiveEntries, imageArchiveFileName, importCategoryOptions, [...importWarehouseOptions, createdWarehouse]);
         });
       }
-      toast.success('Almacén creado');
+      toast.success('Bodega creada');
       setWarehouseModalOpen(false);
       setNewWarehouseName('');
       setNewWarehouseLocation('');
@@ -1561,7 +1655,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setNewWarehouseInventoryAccountId('none');
       setPendingWarehouseRowIndex(null);
       onRefresh();
-    } catch (error: any) { toast.error(error?.message || 'Error al crear almacén'); }
+    } catch (error: any) { toast.error(error?.message || 'Error al crear bodega'); }
     finally { setCreatingWarehouse(false); }
   };
 
@@ -1736,7 +1830,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             }}
             disabled={isSaving}
           >
-            <SelectTrigger className="h-8 w-full text-xs"><SelectValue placeholder="Almacén..." /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full text-xs"><SelectValue placeholder="Bodega..." /></SelectTrigger>
             <SelectContent>
               {warehouses.map((w: any) => (
                 <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
@@ -1960,13 +2054,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const validateImportRows = useCallback((rows: any[], entries = imageArchiveEntries, archiveName = imageArchiveFileName, categoryOptions = importCategoryOptions, warehouseOptions = importWarehouseOptions) => {
     const codeCounts = new Map<string, number>();
+    const categoryNames = new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()));
+    const warehouseNames = new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()));
     rows.forEach((row) => {
       const code = String(row.code || '').trim().toLowerCase();
       if (code) codeCounts.set(code, (codeCounts.get(code) || 0) + 1);
     });
     return rows.map((row) => {
       const code = String(row.code || '').trim();
-      const categoryOk = categoryOptions.some((c: any) => c.name?.toLowerCase() === String(row.category || '').trim().toLowerCase());
+      const categoryOk = categoryNames.has(String(row.category || '').trim().toLowerCase());
       const cost = row.costPrice === '' || row.costPrice === undefined || row.costPrice === null ? undefined : Number(row.costPrice);
       const prices = row.prices || {};
       const priceEntries = [
@@ -1980,7 +2076,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const missingPrices = priceEntries.filter(([, value]) => value === undefined || value === '' || value === null).map(([label]) => label);
       const stock = Number(row.initialStock || 0);
       const warehouseName = String(row.warehouse || '').trim();
-      const warehouseExists = !warehouseName || warehouseOptions.some((warehouse: any) => warehouse.name?.toLowerCase() === warehouseName.toLowerCase());
+      const warehouseExists = !warehouseName || warehouseNames.has(warehouseName.toLowerCase());
       const warehouseOk = warehouseExists && (stock <= 0 || Boolean(row.warehouseId || warehouseName));
       const errors = [
         !code ? 'SKU requerido' : codeCounts.get(code.toLowerCase())! > 1 ? 'SKU duplicado en la plantilla' : '',
@@ -1990,7 +2086,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
         !Number.isFinite(stock) || stock < 0 ? 'Stock inicial inválido' : !warehouseExists ? 'Bodega no encontrada' : !warehouseOk ? 'Selecciona una bodega para el stock inicial' : '',
       ].filter(Boolean);
-       const imageStatus = archiveName ? (code && entries.has(code.toLowerCase()) ? 'matched' : 'missing') : 'none';
+       const imageStatus = archiveName ? (code && entries.has(productImageKey(code)) ? 'matched' : 'missing') : 'none';
       const warningParts = missingPrices.length > 0 ? [`Sin precio: ${missingPrices.join(', ')}`] : [];
       return {
         ...row,
@@ -2007,20 +2103,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     });
   }, [importCategoryOptions, importWarehouseOptions, imageArchiveEntries, imageArchiveFileName, canViewInventoryCost]);
 
-  const handleFileSelected = useCallback((file: File) => {
+  const handleFileSelected = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
       toast.error('Selecciona un archivo Excel o CSV válido');
       return;
     }
     setImportProcessing(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      window.setTimeout(() => {
-        try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const raw: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    setPreviewLoading(true);
+    setPreviewProgress(3);
+    try {
+        const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+          setPreviewProgress(Math.min(84, Math.max(3, progress)));
+        });
+        setPreviewProgress(88);
         if (raw.length < 2) {
           toast.error('El archivo está vacío o no tiene datos');
           return;
@@ -2055,23 +2150,20 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             warehouse: String(get('warehouse') || '').trim(), prices,
           };
         });
+        setPreviewProgress(94);
         setImportData(validateImportRows(parsed));
         setImportFileName(file.name);
         setImportProgress(0);
+        setPreviewProgress(100);
         toast.success(`${parsed.length} registros encontrados`);
-        } catch (err) {
+    } catch (err) {
           console.error('Parse error', err);
           toast.error('No se pudo leer el archivo. Asegúrate de que sea un .xlsx o .csv válido.');
-        } finally {
-          setImportProcessing(false);
-        }
-      }, 50);
-    };
-    reader.onerror = () => {
+    } finally {
       setImportProcessing(false);
-      toast.error('No se pudo leer el archivo seleccionado');
-    };
-    reader.readAsArrayBuffer(file);
+      setPreviewLoading(false);
+      setPreviewProgress(0);
+    }
   }, [validateImportRows]);
 
   const handleImageArchiveSelected = useCallback(async (file: File) => {
@@ -2095,22 +2187,26 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   }, [validateImportRows]);
 
   const handleOpenImportPreview = useCallback(() => {
-    if (previewLoading || importProcessing || importing || importData.length === 0) return;
-    setPreviewLoading(true);
-    setPreviewProgress(20);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      setImportModalOpen(false);
-      setImportPreviewOpen(true);
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          setPreviewProgress(100);
-          setPreviewLoading(false);
-          setPreviewProgress(0);
-        });
-      });
-    }, 40);
-  }, [importData.length, importProcessing, importing, previewLoading]);
+    if (previewLoading || previewMounting || importProcessing || importing || importData.length === 0) return;
+    setPreviewMounting(true);
+    setPreviewProgress(8);
+    setImportModalOpen(false);
+    previewMountTimerRef.current = window.setTimeout(() => {
+      previewMountTimerRef.current = null;
+      setPreviewProgress(45);
+      startTransition(() => setImportPreviewOpen(true));
+    }, 80);
+  }, [importData.length, importProcessing, importing, previewLoading, previewMounting]);
+
+  const handleImportPreviewReady = useCallback(() => {
+    setPreviewProgress(100);
+    if (previewFinishTimerRef.current !== null) window.clearTimeout(previewFinishTimerRef.current);
+    previewFinishTimerRef.current = window.setTimeout(() => {
+      previewFinishTimerRef.current = null;
+      setPreviewMounting(false);
+      setPreviewProgress(0);
+    }, 180);
+  }, []);
 
   const handleImportRowUpdate = (index: number, field: string, value: any) => {
     setImportData((prev) => {
@@ -2132,8 +2228,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         row.warehouseId = warehouse?.id;
       }
       next[index] = row;
-      return validateImportRows(next);
+      return next;
     });
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+    importValidationTimerRef.current = window.setTimeout(() => {
+      setImportData((current) => validateImportRows(current));
+      importValidationTimerRef.current = null;
+    }, 260);
   };
 
   const handleImportConfirm = useCallback(() => {
@@ -2148,56 +2249,73 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setInitialImportConfirmOpen(true);
   }, [importData]);
 
+  const uploadInitialImportImages = useCallback(async (rows: any[]) => {
+    const imageRows = rows.filter((row) => imageArchiveEntries.has(productImageKey(row.code)));
+    if (imageRows.length === 0) return;
+    const updates: Array<{ code: string; imageUrl: string }> = [];
+    const failed: string[] = [];
+    let cursor = 0;
+    const uploadWorker = async () => {
+      while (cursor < imageRows.length) {
+        const row = imageRows[cursor++];
+        const imageFile = imageArchiveEntries.get(productImageKey(row.code));
+        if (!imageFile) continue;
+        try {
+          const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: 'catalogo-inicial' });
+          updates.push({ code: row.code, imageUrl: uploaded.uri });
+        } catch {
+          failed.push(String(row.code || row.name || 'Producto'));
+        }
+      }
+    };
+    toast.info(`Los productos ya fueron creados. Vinculando ${imageRows.length} imagen(es) en segundo plano...`);
+    try {
+      // Cuatro tareas mantienen buen rendimiento en equipos modestos: la
+      // compresión usa canvas y más concurrencia puede competir con el hilo
+      // de renderizado sin acelerar proporcionalmente la red.
+      await Promise.all(Array.from({ length: Math.min(4, imageRows.length) }, () => uploadWorker()));
+      if (updates.length > 0) {
+        await inventoryService.updateProductImages(updates);
+        onRefresh();
+      }
+      if (failed.length > 0) toast.warning(`${failed.length} imagen(es) no pudieron vincularse; los productos permanecen creados.`);
+      else toast.success(`${updates.length} imagen(es) vinculada(s) correctamente.`);
+    } catch (error) {
+      console.error('No se pudieron vincular las imágenes de la importación inicial', error);
+      toast.warning('Los productos fueron creados, pero no se pudieron vincular todas las imágenes. Puedes reintentarlo desde carga masiva de imágenes.');
+    }
+  }, [imageArchiveEntries, onRefresh]);
+
   const handleFinalInitialImport = useCallback(async () => {
     const valid = importData.filter((row) => !row._hasError);
     if (initialImportConfirmText !== 'IMPORTAR' || valid.length === 0) return;
     setImporting(true);
-    setImportProgress(0);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    setImportProgress(10);
     try {
-      const items: any[] = [];
-      const imageWarnings: string[] = [];
-      const chunkSize = 8;
-      for (let start = 0; start < valid.length; start += chunkSize) {
-        const chunk = valid.slice(start, start + chunkSize);
-        const chunkItems = await Promise.all(chunk.map(async (row) => {
-          const cat = importCategoryOptions.find((c: any) => c.name?.toLowerCase() === row.category?.toLowerCase());
-          const warehouse = importWarehouseOptions.find((w: any) => w.name?.toLowerCase() === row.warehouse?.toLowerCase());
-          let imageUrl = row.imageUrl;
-          const imageFile = imageArchiveEntries.get(String(row.code || '').trim().toLowerCase());
-          if (imageFile) {
-            try {
-              const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: 'catalogo-inicial' });
-              imageUrl = uploaded.uri;
-            } catch {
-              imageWarnings.push(String(row.code || row.name || 'Producto'));
-            }
-          }
-          return {
-            code: row.code,
-            name: row.name,
-            categoryId: cat?.id,
-             description: row.description, taxRate: row.taxRate, imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
-            unit: String(row.unit ?? '').trim(),
-             ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
-             ...(canViewInventoryCost ? { lastPurchasePrice: row.lastPurchasePrice } : {}),
-            initialStock: row.initialStock,
-            minStock: row.minStock || 0,
-            warehouseId: warehouse?.id,
-            prices: row.prices,
-            price: row.salePrice,
-            trackSeries: Boolean(row.trackSeries),
-          };
-        }));
-        items.push(...chunkItems);
-        setImportProgress(Math.round((Math.min(start + chunk.length, valid.length) / valid.length) * 55));
-      }
-      if (imageWarnings.length > 0) toast.warning(`${imageWarnings.length} imagen(es) no pudieron cargarse; esos productos se importarán sin imagen.`);
-      setImportProgress(65);
-      progressTimer = setInterval(() => setImportProgress((current) => Math.min(current + 1, 92)), 250);
+      const categoryByName = new Map(importCategoryOptions.map((category: any) => [String(category.name || '').trim().toLowerCase(), category]));
+      const warehouseByName = new Map(importWarehouseOptions.map((warehouse: any) => [String(warehouse.name || '').trim().toLowerCase(), warehouse]));
+      const items = valid.map((row) => {
+        const cat = categoryByName.get(String(row.category || '').trim().toLowerCase());
+        const warehouse = warehouseByName.get(String(row.warehouse || '').trim().toLowerCase());
+        return {
+          code: row.code,
+          name: row.name,
+          categoryId: cat?.id,
+          description: row.description, taxRate: row.taxRate, imageUrl: row.imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
+          unit: String(row.unit ?? '').trim(),
+          ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
+          ...(canViewInventoryCost ? { lastPurchasePrice: row.lastPurchasePrice } : {}),
+          initialStock: row.initialStock,
+          minStock: row.minStock || 0,
+          warehouseId: warehouse?.id,
+          prices: row.prices,
+          price: row.salePrice,
+          trackSeries: Boolean(row.trackSeries),
+        };
+      });
+      setImportProgress(25);
       const results = await inventoryService.importInitialCatalog({ items, currency: importCurrency, exchangeRate: importExchangeRate, priceListCode: 'RETAIL', confirmText: 'IMPORTAR' });
-      if (progressTimer) clearInterval(progressTimer);
-      setImportProgress(100);
+      setImportProgress(90);
       setImportResults({ success: results.success || 0, skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [] });
       setImportModalOpen(false);
       setInitialImportConfirmOpen(false);
@@ -2207,15 +2325,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       setImportFileName('');
       setInitialImportCompleted(true);
       onRefresh();
+      void uploadInitialImportImages(valid);
+      setImportProgress(100);
       window.setTimeout(() => setImportResults(null), 2600);
     } catch (e: any) {
       toast.error('Error durante la importación: ' + (e.message || 'Error'));
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
       setImportProgress(0);
     }
-  }, [importData, importCategoryOptions, importWarehouseOptions, imageArchiveEntries, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh, canViewInventoryCost]);
+  }, [importData, importCategoryOptions, importWarehouseOptions, importCurrency, importExchangeRate, initialImportConfirmText, onRefresh, canViewInventoryCost, uploadInitialImportImages]);
 
   const handleBulkImageArchiveSelected = useCallback(async (file: File) => {
     if (!PRODUCT_IMAGE_ARCHIVE_EXTENSIONS.test(file.name)) {
@@ -2232,7 +2351,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         type: 'PRODUCT',
         includeInactive: true,
         report: true,
-        pageSize: Math.min(5000, Math.max(1, entries.size)),
+        pageSize: Math.max(1, entries.size),
       } as any);
       const payload: any = response;
       const productsFromResponse = Array.isArray(payload)
@@ -2267,27 +2386,37 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setBulkImageUploading(true);
     setBulkImageProgress(0);
     const failed: string[] = [];
-    let updated = 0;
-    try {
-      for (let index = 0; index < bulkImageProducts.length; index += 1) {
-        const product = bulkImageProducts[index];
+    const updates: Array<{ code: string; imageUrl: string }> = [];
+    let cursor = 0;
+    let completed = 0;
+    const uploadWorker = async () => {
+      while (cursor < bulkImageProducts.length) {
+        const product = bulkImageProducts[cursor++];
         const sku = String(product.code || '').trim().toLowerCase();
         const imageFile = bulkImageEntries.get(sku);
         try {
           if (!imageFile) throw new Error('Imagen no encontrada');
           const uploaded = await storageService.uploadFile('product-image', imageFile, { folder: product.id });
-          await inventoryService.updateProduct(product.id, { imageUrl: uploaded.uri });
-          updated += 1;
+          updates.push({ code: product.code, imageUrl: uploaded.uri });
         } catch (error) {
           console.error(`No se pudo actualizar la imagen del producto ${product.code}`, error);
           failed.push(String(product.code || product.name || 'Producto'));
+        } finally {
+          completed += 1;
+          setBulkImageProgress(Math.round((completed / bulkImageProducts.length) * 90));
         }
-        setBulkImageProgress(Math.round(((index + 1) / bulkImageProducts.length) * 100));
       }
-      setBulkImageResults({ updated, failed });
-      if (updated > 0) onRefresh();
-      if (failed.length === 0) toast.success(`${updated} imagen(es) actualizada(s) correctamente`);
-      else toast.warning(`${updated} imagen(es) actualizada(s) y ${failed.length} con incidencia`);
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(4, bulkImageProducts.length) }, () => uploadWorker()));
+      if (updates.length > 0) {
+        await inventoryService.updateProductImages(updates);
+        setBulkImageProgress(100);
+        onRefresh();
+      }
+      setBulkImageResults({ updated: updates.length, failed });
+      if (failed.length === 0) toast.success(`${updates.length} imagen(es) actualizada(s) correctamente`);
+      else toast.warning(`${updates.length} imagen(es) actualizada(s) y ${failed.length} con incidencia`);
     } finally {
       setBulkImageUploading(false);
     }
@@ -2295,7 +2424,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   return (
     <>
-      <Card className={importPreviewOpen ? `fixed left-1/2 top-1/2 z-40 flex h-[min(88vh,calc(100dvh-3rem))] w-[calc(100vw-2rem)] max-w-[1200px] min-h-0 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-border/80 bg-background p-4 shadow-2xl sm:p-6 ${isSidebarCollapsed ? 'lg:left-[calc(50%+36px)]' : 'lg:left-[calc(50%+135px)]'}` : 'rounded-xl border bg-card p-4'}>
+      <Card className={importPreviewOpen ? `fixed inset-y-0 right-0 left-0 z-40 flex h-dvh min-h-0 w-auto max-w-none flex-col overflow-hidden rounded-none border-0 bg-background p-3 shadow-none sm:p-6 ${isSidebarCollapsed ? 'lg:left-[72px]' : 'lg:left-[270px]'}` : 'rounded-xl border bg-card p-4'}>
       {importPreviewOpen ? (
         <ImportPreviewPage
           importData={importData}
@@ -2325,7 +2454,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           canCreateCategory={canPerform('INVENTORY', 'edit')}
           canCreateWarehouse={canPerform('INVENTORY', 'edit')}
           onConfirm={handleImportConfirm}
-          onBack={() => { setImportPreviewOpen(false); setImportModalOpen(true); }}
+          onBack={() => {
+            if (previewMountTimerRef.current !== null) window.clearTimeout(previewMountTimerRef.current);
+            if (previewFinishTimerRef.current !== null) window.clearTimeout(previewFinishTimerRef.current);
+            setPreviewMounting(false);
+            setPreviewProgress(0);
+            setImportPreviewOpen(false);
+            setImportModalOpen(true);
+          }}
+          onReady={handleImportPreviewReady}
         />
       ) : (
         <>
@@ -2335,7 +2472,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <div>
             <h2 className="text-xl font-black tracking-tight">{isServiceView ? 'Servicios' : 'Productos y existencias'}</h2>
           </div>
-          <p className="text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} almacenes visibles</p>
+          <p className="text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} bodegas visibles</p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
           {[
@@ -2383,13 +2520,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               )}
               {linkedWarehouses.length > 0 && (
                 <>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Almacenes vinculados</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodegas vinculadas</span>
                   {linkedWarehouses.map((warehouse: any) => (
                     <button
                       key={warehouse.id}
                       type="button"
                       onClick={() => setWarehouseDetail(warehouse)}
-                      title="Ver detalle del almacén"
+                      title="Ver detalle de la bodega"
                       className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
                     >
                       <WarehouseIcon className="size-3 shrink-0 text-sky-600" />
@@ -2477,9 +2614,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           )}
 
           {!selectedBranchId && !isServiceView && (
-            <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3" title="Mostrar todos los productos incluyendo los de almacenes sin sucursal">
+                    <label className="flex h-10 shrink-0 cursor-pointer select-none items-center gap-2 rounded-xl border border-border/50 bg-background/50 px-3" title="Mostrar todos los productos incluyendo los de bodegas sin sucursal">
               <Checkbox checked={showAllWarehouseProducts} onCheckedChange={(checked) => setShowAllWarehouseProducts(checked !== false)} className="size-4" />
-              <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground">Todos los almacenes</span>
+              <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-muted-foreground">Todas las bodegas</span>
             </label>
           )}
 
@@ -2585,7 +2722,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                   </div>}
                   <div className="mt-3 flex min-w-0 items-center gap-2">
                     <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      {isServiceView ? 'Estado' : 'Almacenes'}
+                      {isServiceView ? 'Estado' : 'Bodegas'}
                     </span>
                     <div className="flex min-w-0 flex-wrap gap-1">
                       {isServiceView ? (
@@ -2952,9 +3089,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       <Dialog open={warehouseModalOpen} onOpenChange={(open) => { setWarehouseModalOpen(open); if (!open) setPendingWarehouseRowIndex(null); }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader data-tour="inventory-warehouse-title">
-            <DialogTitle>Nuevo almacén</DialogTitle>
-            <DialogDescription>Completa los mismos datos disponibles en la vista de Almacenes y Sucursales.</DialogDescription>
-            <InventoryViewTutorial label="Cómo crear almacén" targetPrefix="inventory-warehouse" copy={{ data: { description: 'Completa nombre, ubicación, tipo, almacén matriz y cuenta contable de inventario.' }, actions: { description: 'Guarda el almacén para usarlo en productos, transferencias y ajustes.' } }} />
+            <DialogTitle>Nueva bodega</DialogTitle>
+            <DialogDescription>Completa los mismos datos disponibles en la vista de Bodegas y Sucursales.</DialogDescription>
+            <InventoryViewTutorial label="Cómo crear bodega" targetPrefix="inventory-warehouse" copy={{ data: { description: 'Completa nombre, ubicación, tipo, bodega matriz y cuenta contable de inventario.' }, actions: { description: 'Guarda la bodega para usarla en productos, transferencias y ajustes.' } }} />
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2" data-tour="inventory-warehouse-data">
             <div className="space-y-1 sm:col-span-2">
@@ -2974,11 +3111,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </Select>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold">Almacén matriz</p>
+              <p className="text-xs font-semibold">Bodega matriz</p>
               <Select value={newWarehouseParentId} onValueChange={setNewWarehouseParentId} disabled={creatingWarehouse}>
-                <SelectTrigger><SelectValue placeholder="Sin almacén matriz" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Sin bodega matriz" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Sin almacén matriz</SelectItem>
+                  <SelectItem value="none">Sin bodega matriz</SelectItem>
                   {importWarehouseOptions.length === 0 && <SelectItem value="__no_parent_warehouses__" disabled>No hay registros</SelectItem>}
                   {importWarehouseOptions.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
                 </SelectContent>
@@ -2998,15 +3135,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           </div>
           <DialogFooter data-tour="inventory-warehouse-actions">
             <Button variant="outline" onClick={() => setWarehouseModalOpen(false)} disabled={creatingWarehouse}>Cancelar</Button>
-            <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar almacén'}</Button>
+            <Button onClick={handleCreateWarehouse} disabled={creatingWarehouse || !newWarehouseName.trim()}>{creatingWarehouse ? 'Guardando…' : 'Guardar bodega'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(warehouseDetail)} onOpenChange={(open) => !open && setWarehouseDetail(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-sky-600" /> {warehouseDetail?.name || 'Almacén'}</DialogTitle>
-            <DialogDescription>Detalle del almacén con su stock real y productos asignados.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><WarehouseIcon className="size-5 text-sky-600" /> {warehouseDetail?.name || 'Bodega'}</DialogTitle>
+            <DialogDescription>Detalle de la bodega con su stock real y productos asignados.</DialogDescription>
           </DialogHeader>
           {warehouseDetail && (() => {
             const stats = warehouseStockStats.get(warehouseDetail.id) || { products: 0, units: 0 };
@@ -3050,7 +3187,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Store className="size-5 text-violet-600" /> {branchDetail?.name || 'Sucursal'}</DialogTitle>
-            <DialogDescription>Detalle de la sucursal con sus almacenes vinculados y stock agregado.</DialogDescription>
+            <DialogDescription>Detalle de la sucursal con sus bodegas vinculadas y stock agregado.</DialogDescription>
           </DialogHeader>
           {branchDetail && (() => {
             const stats = branchStockStats.get(branchDetail.id) || { warehouses: 0, products: 0, units: 0 };
@@ -3059,12 +3196,12 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Almacenes</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Bodegas</p>
                     <p className="mt-1 text-sm font-black">{stats.warehouses}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Vinculados</p>
-                    <p className="mt-1 truncate text-sm font-black">{warehouseNames.length > 0 ? warehouseNames.join(', ') : 'Sin almacenes'}</p>
+                    <p className="mt-1 truncate text-sm font-black">{warehouseNames.length > 0 ? warehouseNames.join(', ') : 'Sin bodegas'}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -3183,7 +3320,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         allowTargetInteraction
       />}
       <Dialog open={importModalOpen} onOpenChange={(open) => {
-        if (!importing && !previewLoading) {
+        if (!importing && !previewLoading && !previewMounting) {
           setImportModalOpen(open);
           if (!open) { setImportPreviewOpen(false); setImportData([]); setImportFileName(''); setImageArchiveFileName(''); setImageArchiveEntries(new Map()); setImportProgress(0); }
         }
@@ -3279,7 +3416,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {importData.slice(0, 100).map((row, i) => (
+                        {importData.map((row, i) => (
                           <TableRow key={i} className={row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : ''}>
                             <TableCell>
                               {row._hasError ? (
@@ -3402,11 +3539,6 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                       </TableBody>
                     </Table>
                   </div>
-                  {importData.length > 100 && (
-                    <p className="text-xs text-center p-2 text-muted-foreground border-t bg-muted/20">
-                      Mostrando 100 de {importData.length} filas
-                    </p>
-                  )}
                 </div>
                 {importing && (
                   <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
@@ -3436,16 +3568,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </div>
           </div>
           <DialogFooter className="mt-2 pt-2 border-t" data-tour="inventory-import-actions">
-            <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing || previewLoading}>
+            <Button variant="outline" onClick={() => setImportModalOpen(false)} disabled={importing || previewLoading || previewMounting}>
               Cerrar
             </Button>
             {importFileName && (
               <Button 
                 onClick={handleOpenImportPreview}
-                disabled={importing || importProcessing || previewLoading || importData.length === 0}
+                disabled={importing || importProcessing || previewLoading || previewMounting || importData.length === 0}
                 className="bg-primary text-primary-foreground font-bold"
               >
-                {previewLoading ? <><Loader2 className="mr-2 size-3.5 animate-spin" />Cargando previsualización...</> : importProcessing ? 'Procesando archivos...' : 'Previsualizar importación'}
+                {previewLoading || previewMounting ? <><Loader2 className="mr-2 size-3.5 animate-spin" />Preparando previsualización...</> : importProcessing ? 'Procesando archivos...' : 'Previsualizar importación'}
               </Button>
             )}
           </DialogFooter>
@@ -3491,10 +3623,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       </Dialog>
 
       <ImportProgressOverlay
-        open={previewLoading}
+        open={previewLoading || previewMounting}
         progress={previewProgress}
-        title="Preparando previsualización"
-        description="Leyendo el archivo, validando columnas y preparando los registros para edición."
+        title={previewLoading ? 'Preparando previsualización' : 'Montando la previsualización'}
+        description={previewLoading ? 'Leyendo el archivo, validando columnas y preparando los registros para edición.' : 'Preparando las filas visibles de forma virtualizada para que la página siga respondiendo.'}
       />
 
       <Dialog open={expandedProductImage !== null} onOpenChange={(open) => { if (!open) setExpandedProductImage(null); }}>

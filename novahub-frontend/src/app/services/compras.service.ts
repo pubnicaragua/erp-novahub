@@ -102,6 +102,7 @@ export const supplierCreditsService = {
 export const expensesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Expense>>('/purchases/expenses', { params: filters as any, signal }),
   create: (data: Partial<Expense>) => api.post<Expense>('/purchases/expenses', data),
+  bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };

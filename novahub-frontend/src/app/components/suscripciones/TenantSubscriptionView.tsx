@@ -62,7 +62,7 @@ const linkedEmployeePuesto = (user: any, employees: any[]) => {
 
 export function TenantSubscriptionView({ tenant, availableModules, requests, customRoles = [], onRequestModule, onRefresh }: TenantSubscriptionViewProps) {
   const { updateConfig } = useTheme();
-  const { user: currentUser, canPerform } = useAuth();
+  const { user: currentUser, canPerform, refreshProfile } = useAuth();
   const canViewCompany = canPerform('CONFIG_COMPANY', 'view');
   const canEditCompany = canPerform('CONFIG_COMPANY', 'edit');
   const canCreateCompany = canPerform('CONFIG_COMPANY', 'create');
@@ -260,8 +260,9 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
   const fetchUsers = async () => {
     try {
       setLoadingUsers(true);
-      const res = await tenantsService.getUsers(tenant.id);
-      setUsers(Array.isArray(res) ? res : (res as any)?.data || []);
+      const refreshed = await refetchTenantData();
+      const nextUsers = (refreshed.data as any)?.users;
+      if (Array.isArray(nextUsers)) setUsers(nextUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -274,7 +275,8 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
     try {
       await tenantsService.updateUser(tenant.id, userId, { customRoleId: customRoleId === 'none' ? null : customRoleId } as any);
       toast.success('Rol personalizado actualizado');
-      fetchUsers();
+      await fetchUsers();
+      if (currentUser?.id === userId) await refreshProfile();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al asignar rol');
     }
@@ -789,7 +791,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               </CardContent>
             </Card>}
 
-            {canViewRoles && <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={onRefresh} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} />}
+            {canViewRoles && <TeamAccessPanel tenantId={tenant.id} tenantName={tenant.name} users={users} onRolesChange={async () => { await refetchTenantData(); await onRefresh(); }} canViewRoles={canViewRoles} canCreateRoles={canPerform('CONFIG_ROLES', 'create')} canEditRoles={canPerform('CONFIG_ROLES', 'edit')} canDeleteRoles={canPerform('CONFIG_ROLES', 'delete')} />}
           </div>
           </>}
          </TabsContent>
@@ -809,7 +811,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
               Permisos de {selectedUser?.name}
             </DialogTitle>
             <DialogDescription>
-              Accesos efectivos por el rol directo del usuario. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
+              Accesos efectivos del usuario, incluyendo su rol directo y roles heredados de departamentos activos. {selectedUser?.employee ? `Empleado vinculado: ${selectedUser.employee.firstName} ${selectedUser.employee.lastName}.` : 'No hay empleado vinculado.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -828,7 +830,7 @@ export function TenantSubscriptionView({ tenant, availableModules, requests, cus
                 <tbody className="divide-y divide-border">
                   {(() => {
                     const directRole = selectedUser?.customRole || customRoles.find(r => r.id === selectedUser?.customRoleId);
-                    const roleSources = [directRole].filter(Boolean);
+                    const roleSources = [directRole, ...(selectedUser?.inheritedRoles || [])].filter(Boolean);
                     const permissionMap = new Map<string, any>();
                     roleSources.flatMap((role: any) => normalizePermissions(role.permissions)).forEach((permission: any) => {
                       const current = permissionMap.get(permission.module) || { module: permission.module };

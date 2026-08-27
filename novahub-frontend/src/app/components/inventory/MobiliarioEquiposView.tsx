@@ -20,6 +20,9 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -323,6 +326,9 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   const [importRowsData, setImportRowsData] = useState<Record<string, any>[]>([]);
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
   const [importResult, setImportResult] = useState<any>(null);
   const [importMonth, setImportMonth] = useState(currentMonthYM());
 
@@ -438,10 +444,13 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const handleImportFile = async (file: File) => {
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf);
-      const sheet = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      const { rows: sheet } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(90);
       const rows = parseSheetRows(sheet);
       if (rows.length === 0) {
         toast.error('El archivo no contiene filas de datos');
@@ -451,13 +460,18 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       setImportFileName(file.name);
       setImportResult(null);
       setImportOpen(true);
+      setReadingProgress(100);
     } catch {
       toast.error('No se pudo leer el archivo Excel');
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   };
 
   const confirmImport = async () => {
     setImporting(true);
+    setImportProgress(10);
     try {
       const cutoff = lastDayOfMonth(importMonth);
       const y = cutoff.getFullYear();
@@ -468,15 +482,19 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
         const item = row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate };
         return canViewInventoryCost ? item : { ...item, cost: 0, currency: 'USD', exchangeRate: null };
       });
+      setImportProgress(35);
       const res = await mobiliarioService.importAssets(items);
+      setImportProgress(90);
       setImportResult(res);
       toast.success(`Importación completada: ${res?.createdCount ?? 0} creados, ${res?.skippedCount ?? 0} omitidos`);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
+      setImportProgress(100);
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo importar');
     } finally {
       setImporting(false);
+      setImportProgress(0);
     }
   };
 
@@ -949,17 +967,17 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               )}
             </div>
           ) : (
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-border/50" data-tour="mobiliario-import-data">
+            <div className="rounded-xl border border-border/50" data-tour="mobiliario-import-data">
               <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                <FileSpreadsheet className="size-3.5" /> Vista previa (primeras filas)
+                <FileSpreadsheet className="size-3.5" /> Vista previa completa · {importRowsData.length} filas
               </div>
-              {importRowsData.slice(0, 8).map((row, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 border-b border-border/30 px-3 py-1.5 text-[11px] last:border-0">
+              <VirtualizedImportList count={importRowsData.length} estimateSize={34} className="h-64" renderItem={(i) => {
+                const row = importRowsData[i];
+                return <div className="flex items-center justify-between gap-2 border-b border-border/30 px-3 py-1.5 text-[11px] last:border-0">
                   <span className="min-w-0 truncate font-medium">{row.name || '—'}</span>
                   <span className="shrink-0 text-muted-foreground">{row.category}{canViewInventoryCost ? ` · ${row.currency || 'USD'} · ${row.cost || '0'}` : ''}</span>
-                </div>
-              ))}
-              {importRowsData.length > 8 && <p className="px-3 py-1.5 text-[10px] text-muted-foreground">...y {importRowsData.length - 8} filas más</p>}
+                </div>;
+              }} />
             </div>
           )}
           <DialogFooter className="gap-2 sm:gap-0" data-tour="mobiliario-import-actions">
@@ -976,6 +994,8 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportProgressOverlay open={readingFile || importing} progress={readingFile ? readingProgress : importProgress} title={readingFile ? 'Preparando mobiliario y equipos' : 'Importando mobiliario y equipos'} description={readingFile ? 'Leyendo el archivo y preparando todas las filas para revisión.' : 'Validando y registrando los activos en una operación masiva.'} />
 
       <ConfirmDialog
         open={deleteTarget !== null}

@@ -23,10 +23,12 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import * as XLSX from 'xlsx';
 import { PrintButton } from '../ui/PrintButton';
 import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
 import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -73,6 +75,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [itemTypeFilter, setItemTypeFilter] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [importErrors, setImportErrors] = useState<string[]>([]);
 
   useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
@@ -140,6 +143,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
   const importCreditItems = async (file: File) => {
     setImporting(true);
+    setImportProgress(5);
     setImportErrors([]);
     try {
       const isPdf = /\.pdf$/i.test(file.name);
@@ -152,14 +156,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       let raw: any[][] = [];
       if (isPdf) {
         const buffer = await file.arrayBuffer();
+        setImportProgress(18);
         const text = new TextDecoder('latin1').decode(buffer);
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         raw = lines.map(line => line.split(/[\t;|]+/).map(c => c.trim()));
       } else {
-        const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+        const parsed = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+          setImportProgress(Math.min(70, Math.max(5, Math.round(progress * 0.72))));
+        });
+        raw = parsed.rows;
       }
+      setImportProgress(74);
 
       const normalizeHeader = (h: any) => String(h || '').trim().toLowerCase().replace(/[\s_\-]+/g, '');
       const header = raw[0]?.map(normalizeHeader) || [];
@@ -227,6 +234,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           _lineDiscount: descLine || undefined,
         });
       });
+      setImportProgress(92);
 
       if (errors.length > 0) {
         setImportErrors(errors.slice(0, 10));
@@ -238,12 +246,14 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
       }
       const existing = localDoc?.items || [];
       setLocalDoc({ ...(localDoc as any), items: [...existing, ...items] });
+      setImportProgress(100);
       toast.success(`${items.length} línea(s) importada(s)` + (errors.length ? `, ${errors.length} con error` : ''));
       setImportOpen(false);
     } catch (e: any) {
       setImportErrors([e?.message || 'No se pudo leer el archivo. Verifique que sea un Excel o PDF válido.']);
     } finally {
       setImporting(false);
+      setImportProgress(0);
     }
   };
 
@@ -966,6 +976,12 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <ImportProgressOverlay
+          open={importing}
+          progress={importProgress}
+          title="Preparando líneas del crédito"
+          description="Leyendo el archivo y agregando las líneas válidas al crédito actual."
+        />
 
       </div>
     );

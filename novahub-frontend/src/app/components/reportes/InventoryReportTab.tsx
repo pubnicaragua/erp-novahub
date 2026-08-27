@@ -25,6 +25,8 @@ import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86_400_000;
@@ -354,16 +356,19 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const importPreview = useMemo(() => {
     return importRows.map((r) => {
-      const product = r.productId ? products.find((p) => p.id === r.productId) : null;
+      const product = r.productId ? productsById.get(r.productId) : null;
       const currentStock = product ? stockOfProduct(product, importWarehouse) : 0;
       const difference = r.error ? 0 : r.qty - currentStock;
       return { ...r, currentStock, difference };
     });
-  }, [importRows, importWarehouse, products]);
+  }, [importRows, importWarehouse, productsById]);
   const importValidCount = importPreview.filter((r) => !r.error).length;
 
   function downloadImportTemplate() {
@@ -391,11 +396,14 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       toast.error('El archivo debe ser Excel (.xlsx o .xls)');
       return;
     }
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer);
-      const sheet = workbook.Sheets['Inventario'] || workbook.Sheets[workbook.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, raw: false, defval: '' });
+      const parsed = await parseSpreadsheetInWorker(file, 'Inventario', false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(88);
+      const raw = parsed.rows;
       const nonEmpty = raw.filter((row: any[]) => Array.isArray(row) && row.some((cell: any) => String(cell ?? '').trim() !== ''));
       if (nonEmpty.length < 2) {
         toast.error('El archivo no contiene filas de datos');
@@ -409,19 +417,20 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         toast.error('La plantilla debe contener las columnas "Código de producto" y "Cantidad"');
         return;
       }
+      const productByImportCode = new Map<string, any>();
+      products.forEach((product) => {
+        [product.code, product.sku].forEach((value) => {
+          const normalized = String(value || '').toUpperCase().replace(/\s+/g, '');
+          if (normalized) productByImportCode.set(normalized, product);
+        });
+      });
       const rows = nonEmpty.slice(1).map((cols: any[], i) => {
         const rowNum = i + 2;
         const rawCode = String(cols[codeIdx] ?? '').trim();
         const qtyText = String(cols[qtyIdx] ?? '').trim();
         if (!rawCode && !qtyText) return null;
         const code = rawCode.toUpperCase().replace(/\s+/g, '');
-        const product = code
-          ? products.find((p) => {
-            const pc = String(p.code || '').toUpperCase().replace(/\s+/g, '');
-            const ps = String(p.sku || '').toUpperCase().replace(/\s+/g, '');
-            return pc === code || (ps && ps === code);
-          })
-          : null;
+        const product = code ? productByImportCode.get(code) : null;
         let error = '';
         if (!rawCode) error = 'Código vacío';
         else if (!product) error = 'Código no encontrado en el catálogo';
@@ -436,9 +445,13 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       }
       setImportRows(rows);
       setImportFileName(file.name);
+      setReadingProgress(100);
       toast.success(`${rows.length} filas leídas`);
     } catch (e: any) {
       toast.error('No se pudo leer el archivo Excel');
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   }
 
@@ -455,27 +468,17 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const changes = valid.filter((r) => Math.abs(r.difference) > 0.0001);
     setImporting(true);
     setImportProgress(5);
-    let done = 0;
-    let failed = 0;
     try {
-      for (let i = 0; i < changes.length; i += 1) {
-        const r = changes[i];
-        try {
-          await inventoryService.createAdjustment({
-            warehouseId: importWarehouse,
-            reason: `Importación mensual ${importMonth}`,
-            notes: 'Carga masiva desde plantilla',
-            items: [{ productId: r.productId, quantity: r.difference }],
-          });
-          done += 1;
-        } catch {
-          failed += 1;
-        }
-        setImportProgress(5 + Math.round(((i + 1) / Math.max(1, changes.length)) * 90));
-      }
+      setImportProgress(25);
+      await inventoryService.createAdjustment({
+        warehouseId: importWarehouse,
+        reason: `Importación mensual ${importMonth}`,
+        notes: 'Carga masiva desde plantilla',
+        items: changes.map((row) => ({ productId: row.productId, actualStock: row.qty })),
+      });
+      setImportProgress(90);
       setImportProgress(100);
-      if (done > 0) toast.success(`Ajuste creado: ${done} productos`);
-      if (failed > 0) toast.error(`${failed} productos no se pudieron ajustar`);
+      toast.success(`Ajuste creado: ${changes.length} productos`);
       if (changes.length === 0) toast.info('Las cantidades coinciden con el stock actual: no se requieren ajustes');
       queryClient.invalidateQueries({ predicate: (q) => q.queryKey.includes('reports') && q.queryKey.includes('inventory') });
       setImportOpen(false);
@@ -1866,7 +1869,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
-                    {importPreview.map((r) => (
+                    {importPreview.slice(0, 0).map((r) => (
                       <tr key={r.row} className={r.error ? 'bg-rose-500/5' : 'hover:bg-muted/30'}>
                         <td className={`${TD} font-mono text-[10px]`}>{r.rawCode || '—'}</td>
                         <td className={`${TD} font-bold max-w-[200px]`}>
@@ -1888,13 +1891,24 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     ))}
                   </tbody>
                 </table>
+                <VirtualizedImportList count={importPreview.length} estimateSize={38} className="h-60 min-w-[640px]" renderItem={(index) => {
+                  const r = importPreview[index];
+                  return <div className={`grid min-w-[640px] grid-cols-[1.1fr_2fr_0.8fr_1fr_1fr_1.4fr] items-center border-t border-border/40 text-xs ${r.error ? 'bg-rose-500/5' : 'hover:bg-muted/30'}`}>
+                    <div className={`${TD} font-mono text-[10px]`}>{r.rawCode || '—'}</div>
+                    <div className={`${TD} truncate font-bold`} title={r.productName}>{r.productName || '—'}</div>
+                    <div className={`${TD} font-bold`}>{fmtQty(r.qty)}</div>
+                    <div className={TD}>{r.error ? '—' : fmtQty(r.currentStock)}</div>
+                    <div className={`${TD} font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</div>
+                    <div className={TD}>{r.error ? <Badge variant="destructive" className="text-[9px]">{r.error}</Badge> : <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[9px] text-emerald-600">Válida</Badge>}</div>
+                  </div>;
+                }} />
               </div>
               <section className="space-y-3 sm:hidden" aria-label="Ajustes de inventario para revisar">
                 <div className="flex items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
                   <Badge variant="secondary" className="text-[10px]">{importPreview.length} filas</Badge>
                 </div>
-                {importPreview.map((r) => (
+                {importPreview.slice(0, 0).map((r) => (
                   <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{r.rawCode || '—'}</p></ImportPreviewField>
@@ -1906,6 +1920,19 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
                     </div>
                   </ImportPreviewMobileCard>
                 ))}
+                <VirtualizedImportList count={importPreview.length} estimateSize={220} className="h-[min(62vh,40rem)] space-y-3" renderItem={(index) => {
+                  const r = importPreview[index];
+                  return <ImportPreviewMobileCard key={r.row} index={r.row} title={r.productName || r.rawCode} error={r.error}>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{r.rawCode || '—'}</p></ImportPreviewField>
+                      <ImportPreviewField label="Fila"><p className="font-mono text-xs">{r.row + 2}</p></ImportPreviewField>
+                      <ImportPreviewField label="Producto" className="col-span-2"><p className="break-words text-xs font-bold">{r.productName || '—'}</p></ImportPreviewField>
+                      <ImportPreviewField label="Cantidad"><p className="text-right text-xs font-bold">{fmtQty(r.qty)}</p></ImportPreviewField>
+                      <ImportPreviewField label="Stock actual"><p className="text-right text-xs">{r.error ? '—' : fmtQty(r.currentStock)}</p></ImportPreviewField>
+                      <ImportPreviewField label="Diferencia" className="col-span-2"><p className={`text-right text-xs font-black ${r.error ? 'text-muted-foreground' : r.difference > 0 ? 'text-emerald-500' : r.difference < 0 ? 'text-rose-500' : 'text-muted-foreground'}`}>{r.error ? '—' : fmtQty(r.difference)}</p></ImportPreviewField>
+                    </div>
+                  </ImportPreviewMobileCard>;
+                }} />
               </section>
             </div>
           )}
@@ -1921,10 +1948,10 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
       </Dialog>
 
       <ImportProgressOverlay
-        open={importing}
-        progress={importProgress}
-        title="Importando inventario"
-        description={`Creando ajustes del mes ${monthLabelOf(importMonth)} en el almacén seleccionado...`}
+        open={readingFile || importing}
+        progress={readingFile ? readingProgress : importProgress}
+        title={readingFile ? 'Preparando inventario' : 'Importando inventario'}
+        description={readingFile ? 'Leyendo el archivo y preparando todas las filas para revisión.' : `Creando ajustes del mes ${monthLabelOf(importMonth)} en el almacén seleccionado...`}
       />
     </div>
   );

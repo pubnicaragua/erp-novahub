@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Search, Filter, Edit2, Save, X, Building2, Briefcase, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Send, CheckCircle2, XCircle, History, Ban, Download, Upload, Settings2, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '../ui/button';
@@ -16,10 +16,20 @@ import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 import { Textarea } from '../ui/textarea';
 import { EmployeeImportPreview, type EmployeeImportResult, type EmployeeImportRow } from './EmployeeImportPreview';
+import {
+  employeeContractTypeImportValues,
+  employeeContractTypeValues,
+  employeePayFrequencyImportValues,
+  employeePayFrequencyValues,
+  employeeStatusImportValues,
+  employeeStatusValues,
+  normalizeEmployeeImportValue,
+} from './employeeImportValues';
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { HRViewTutorial } from './HRViewTutorial';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform } = useAuth();
@@ -61,8 +71,13 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<EmployeeImportResult | null>(null);
+  const importValidationTimerRef = useRef<number | null>(null);
   const [pendingImportDepartmentRow, setPendingImportDepartmentRow] = useState<number | null>(null);
   const [pendingImportPositionRow, setPendingImportPositionRow] = useState<number | null>(null);
+
+  React.useEffect(() => () => {
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+  }, []);
 
   const filteredEmployees = employees.filter((emp: any) => {
     const term = searchTerm.toLowerCase();
@@ -427,26 +442,6 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     return text;
   };
 
-  const normalizeContractType = (value: unknown) => {
-    const normalized = normalizeImportText(value);
-    if (!normalized) return 'FULL_TIME';
-    if (normalized.includes('medio') || normalized.includes('part')) return 'PART_TIME';
-    if (normalized.includes('contrat') || normalized.includes('contract')) return 'CONTRACTOR';
-    if (normalized.includes('pas') || normalized.includes('intern')) return 'INTERN';
-    if (normalized.includes('temp')) return 'TEMPORARY';
-    if (normalized.includes('completo') || normalized.includes('full')) return 'FULL_TIME';
-    return String(value).trim().toUpperCase();
-  };
-
-  const normalizeImportStatus = (value: unknown) => {
-    const normalized = normalizeImportText(value);
-    if (normalized.includes('inactiv')) return 'INACTIVE';
-    if (!normalized || normalized.includes('activ')) return 'ACTIVE';
-    if (normalized.includes('ausenc') || normalized.includes('leave')) return 'ON_LEAVE';
-    if (normalized.includes('termin')) return 'TERMINATED';
-    return String(value).trim().toUpperCase();
-  };
-
   const validateEmployeeImportRows = (rows: EmployeeImportRow[]) => {
     const existingNumbers = new Set(employees.map((employee: any) => String(employee.employeeNumber || '').trim().toLowerCase()).filter(Boolean));
     const existingEmails = new Set(employees.map((employee: any) => String(employee.email || '').trim().toLowerCase()).filter(Boolean));
@@ -454,8 +449,9 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     const seenNumbers = new Set<string>();
     const seenEmails = new Set<string>();
     const seenNationalIds = new Set<string>();
-    const contractValues = ['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN', 'TEMPORARY'];
-    const statusValues = ['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'TERMINATED'];
+    const contractValues: readonly string[] = employeeContractTypeValues;
+    const payFrequencyValues: readonly string[] = employeePayFrequencyValues;
+    const statusValues: readonly string[] = employeeStatusValues;
 
     return rows.map((row) => {
       const next: EmployeeImportRow = { ...row, _hasError: false, _errorMessage: undefined, _hasWarning: false, _warningMessage: undefined };
@@ -475,6 +471,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       const email = String(row.email || '').trim().toLowerCase();
       const nationalId = normalizeImportNationalId(row.nationalId);
       const salary = row.salary === '' || row.salary === null || row.salary === undefined ? NaN : Number(row.salary);
+      const contractType = normalizeEmployeeImportValue('contractType', row.contractType) || 'FULL_TIME';
+      const payFrequency = normalizeEmployeeImportValue('payFrequency', row.payFrequency) || 'MONTHLY';
+      const employmentStatus = normalizeEmployeeImportValue('employmentStatus', row.employmentStatus) || 'ACTIVE';
+      next.contractType = contractType;
+      next.payFrequency = payFrequency;
+      next.employmentStatus = employmentStatus;
       const errors = [
         !number ? 'Número de empleado obligatorio' : existingNumbers.has(number.toLowerCase()) || seenNumbers.has(number.toLowerCase()) ? 'Número de empleado duplicado' : '',
         !String(row.firstName || '').trim() ? 'Nombres obligatorios' : '',
@@ -485,10 +487,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         !departmentExists ? 'Departamento no encontrado' : '',
         !positionExists ? 'Puesto no encontrado' : '',
         positionMatch && departmentId && String(positionMatch.departmentId) !== String(departmentId) ? 'El puesto no pertenece al departamento' : '',
-        !contractValues.includes(String(row.contractType || '').toUpperCase()) ? 'Tipo de contrato inválido' : '',
+        !contractValues.includes(contractType) ? 'Tipo de contrato inválido: usa Tiempo completo, Medio tiempo, Contratista, Pasante o Temporal' : '',
         !Number.isFinite(salary) || salary < 0 ? 'Salario inválido' : '',
         !['NIO', 'USD'].includes(String(row.currency || '').toUpperCase()) ? 'Moneda inválida' : '',
-        !statusValues.includes(String(row.employmentStatus || '').toUpperCase()) ? 'Estado inválido' : '',
+        !payFrequencyValues.includes(payFrequency) ? 'Frecuencia de pago inválida: usa Semanal, Quincenal, Mensual o Por hora' : '',
+        !statusValues.includes(employmentStatus) ? 'Estado laboral inválido: usa Activo, Inactivo, En ausencia o Terminado' : '',
       ].filter(Boolean);
       next.departmentId = departmentId;
       next.positionId = positionId;
@@ -507,10 +510,10 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const downloadEmployeeTemplate = () => {
-    const headers = ['Número de empleado', 'Nombres', 'Apellidos', 'Correo', 'Teléfono', 'Fecha de nacimiento', 'Fecha de contratación', 'Departamento', 'Puesto', 'Tipo de contrato', 'Salario', 'Moneda', 'Dirección', 'Ciudad', 'Estado/Provincia', 'País', 'Código postal', 'Contacto de emergencia', 'Teléfono de emergencia', 'Cédula', 'Número de seguro social', 'Fin de prueba', 'Frecuencia de pago', 'Estado', 'Notas'];
+    const headers = ['Número de empleado', 'Nombres', 'Apellidos', 'Correo', 'Teléfono', 'Fecha de nacimiento', 'Fecha de contratación', 'Departamento', 'Puesto', 'Tipo de contrato', 'Salario', 'Moneda', 'Dirección', 'Ciudad', 'Estado/Provincia', 'País', 'Código postal', 'Contacto de emergencia', 'Teléfono de emergencia', 'Cédula', 'Número de seguro social', 'Fin de prueba', 'Frecuencia de pago', 'Estado laboral', 'Notas'];
     const sampleDepartment = departments[0]?.name || 'Ventas';
     const samplePosition = positions.find((position: any) => position.departmentId === departments[0]?.id)?.title || 'Ejecutivo de ventas';
-    const example = ['EMP0001', 'Ana', 'Gómez', 'ana.gomez@empresa.com', '8888-8888', '1990-05-12', new Date().toISOString().slice(0, 10), sampleDepartment, samplePosition, 'FULL_TIME', 15000, 'NIO', 'Dirección del empleado', 'Managua', 'Managua', 'Nicaragua', '', 'Persona de contacto', '8888-0000', '', '', '', 'MONTHLY', 'ACTIVE', ''];
+    const example = ['EMP0001', 'Ana', 'Gómez', 'ana.gomez@empresa.com', '8888-8888', '1990-05-12', new Date().toISOString().slice(0, 10), sampleDepartment, samplePosition, employeeContractTypeImportValues[0], 15000, 'NIO', 'Dirección del empleado', 'Managua', 'Managua', 'Nicaragua', '', 'Persona de contacto', '8888-0000', '', '', '', employeePayFrequencyImportValues[2], employeeStatusImportValues[0], ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -522,10 +525,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       ['Fecha de contratación', 'Obligatoria. Usa AAAA-MM-DD o una fecha reconocible por Excel.'],
       ['Departamento', 'Debe coincidir por nombre o código con un departamento existente. Si no existe, puedes crearlo desde la previsualización.'],
       ['Puesto', 'Debe coincidir por título o código y pertenecer al departamento de la misma fila. También puedes crearlo desde la previsualización.'],
-      ['Tipo de contrato', 'Usa FULL_TIME, PART_TIME, CONTRACTOR, INTERN o TEMPORARY.'],
+      ['Tipo de contrato', 'Ingresa el valor en español: Tiempo completo, Medio tiempo, Contratista, Pasante o Temporal.'],
       ['Salario y moneda', 'El salario debe ser numérico y mayor o igual a cero. Monedas soportadas en esta vista: NIO y USD.'],
       ['Cédula', 'Es opcional, pero si se informa no puede repetirse en otro empleado de la misma empresa. La comparación ignora mayúsculas, espacios y guiones.'],
-      ['Estado', 'Usa ACTIVE, INACTIVE, ON_LEAVE o TERMINATED.'],
+      ['Frecuencia de pago', 'Ingresa el valor en español: Semanal, Quincenal, Mensual o Por hora.'],
+      ['Estado laboral', 'Ingresa el valor en español: Activo, Inactivo, En ausencia o Terminado.'],
       ['Vendedores', 'No se importa un vendedor por empleado. La elegibilidad para comisiones la determina el departamento marcado como vendedor.'],
     ]);
     guide['!cols'] = [{ wch: 32 }, { wch: 115 }];
@@ -537,12 +541,14 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   };
 
   const readEmployeeImportFile = async (file: File) => {
+    setPreviewLoading(true);
+    setPreviewProgress(3);
     try {
       if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Selecciona un archivo Excel o CSV válido');
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-      const sheetName = workbook.SheetNames.find((name) => normalizeImportHeader(name) === 'empleados') || workbook.SheetNames[0];
-      const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      const { rows: raw } = await parseSpreadsheetInWorker(file, 'empleados', false, (progress) => {
+        setPreviewProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setPreviewProgress(88);
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
       const headers = (raw[0] || []).map(normalizeImportHeader);
       const aliases: Record<string, string[]> = {
@@ -558,38 +564,31 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
       const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[], index) => {
         const row = emptyEmployeeImportRow(index + 2);
         row.employeeNumber = String(getValue(values, 'employeeNumber')).trim(); row.firstName = String(getValue(values, 'firstName')).trim(); row.lastName = String(getValue(values, 'lastName')).trim(); row.email = String(getValue(values, 'email')).trim(); row.phone = String(getValue(values, 'phone')).trim();
-        row.dateOfBirth = normalizeImportDate(getValue(values, 'dateOfBirth')); row.hireDate = normalizeImportDate(getValue(values, 'hireDate')); row.department = String(getValue(values, 'department')).trim(); row.position = String(getValue(values, 'position')).trim(); row.contractType = normalizeContractType(getValue(values, 'contractType')); row.salary = getValue(values, 'salary') === '' ? '' : Number(getValue(values, 'salary')); row.currency = String(getValue(values, 'currency') || 'NIO').trim().toUpperCase(); row.address = String(getValue(values, 'address')).trim(); row.city = String(getValue(values, 'city')).trim(); row.state = String(getValue(values, 'state')).trim(); row.country = String(getValue(values, 'country') || 'Nicaragua').trim(); row.postalCode = String(getValue(values, 'postalCode')).trim(); row.emergencyContact = String(getValue(values, 'emergencyContact')).trim(); row.emergencyPhone = String(getValue(values, 'emergencyPhone')).trim(); row.nationalId = String(getValue(values, 'nationalId')).trim(); row.socialSecurityNumber = String(getValue(values, 'socialSecurityNumber')).trim(); row.probationEndDate = normalizeImportDate(getValue(values, 'probationEndDate')); row.payFrequency = String(getValue(values, 'payFrequency') || 'MONTHLY').trim().toUpperCase(); row.employmentStatus = normalizeImportStatus(getValue(values, 'employmentStatus')); row.notes = String(getValue(values, 'notes')).trim();
+        row.dateOfBirth = normalizeImportDate(getValue(values, 'dateOfBirth')); row.hireDate = normalizeImportDate(getValue(values, 'hireDate')); row.department = String(getValue(values, 'department')).trim(); row.position = String(getValue(values, 'position')).trim(); row.contractType = normalizeEmployeeImportValue('contractType', getValue(values, 'contractType')) || 'FULL_TIME'; row.salary = getValue(values, 'salary') === '' ? '' : Number(getValue(values, 'salary')); row.currency = String(getValue(values, 'currency') || 'NIO').trim().toUpperCase(); row.address = String(getValue(values, 'address')).trim(); row.city = String(getValue(values, 'city')).trim(); row.state = String(getValue(values, 'state')).trim(); row.country = String(getValue(values, 'country') || 'Nicaragua').trim(); row.postalCode = String(getValue(values, 'postalCode')).trim(); row.emergencyContact = String(getValue(values, 'emergencyContact')).trim(); row.emergencyPhone = String(getValue(values, 'emergencyPhone')).trim(); row.nationalId = String(getValue(values, 'nationalId')).trim(); row.socialSecurityNumber = String(getValue(values, 'socialSecurityNumber')).trim(); row.probationEndDate = normalizeImportDate(getValue(values, 'probationEndDate')); row.payFrequency = normalizeEmployeeImportValue('payFrequency', getValue(values, 'payFrequency')) || 'MONTHLY'; row.employmentStatus = normalizeEmployeeImportValue('employmentStatus', getValue(values, 'employmentStatus')) || 'ACTIVE'; row.notes = String(getValue(values, 'notes')).trim();
         return row;
       });
+      setPreviewProgress(94);
       setImportFileName(file.name);
       setImportRows(validateEmployeeImportRows(parsed));
+      setPreviewProgress(100);
       setImportResult(null);
       toast.success(`${parsed.length} empleados listos para previsualizar`);
     } catch (error: any) {
       setImportFileName(''); setImportRows([]); toast.error(error?.message || 'No se pudo leer el archivo');
+    } finally {
+      setPreviewLoading(false);
+      setPreviewProgress(0);
     }
   };
 
   const handleOpenImportPreview = () => {
     if (!importRows.length || previewLoading) return;
-    setPreviewLoading(true);
-    setPreviewProgress(20);
     setImportOpen(false);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      window.setTimeout(() => {
-        setPreviewProgress(100);
-        window.setTimeout(() => {
-          setImportPreviewOpen(true);
-          setPreviewLoading(false);
-          setPreviewProgress(0);
-        }, 120);
-      }, 120);
-    }, 40);
+    setImportPreviewOpen(true);
   };
 
   const updateEmployeeImportRow = (index: number, field: string, value: string | number) => {
-    setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => {
+    setImportRows((current) => current.map((row, rowIndex) => {
       if (rowIndex !== index) return row;
       const next = { ...row, [field]: value } as EmployeeImportRow;
       if (field === 'departmentId') {
@@ -602,7 +601,12 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         next.position = position?.title || next.position;
       }
       return next;
-    })));
+    }));
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+    importValidationTimerRef.current = window.setTimeout(() => {
+      setImportRows((current) => validateEmployeeImportRows(current));
+      importValidationTimerRef.current = null;
+    }, 260);
   };
 
   const downloadEmployeeImportErrors = () => {
@@ -628,20 +632,22 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
   const executeEmployeeImport = async () => {
     const validRows = importRows.filter((row) => !row._hasError);
     if (!validRows.length) return;
-    setImporting(true); setImportProgress(8); setImportResult(null);
-    const timer = window.setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
+    setImporting(true); setImportProgress(10); setImportResult(null);
     try {
       const response: any = await hrService.bulkImportEmployees(validRows.map((row) => ({
-        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(), phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, positionId: row.positionId, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
+        sourceRow: row.sourceRow, employeeNumber: row.employeeNumber.trim(), firstName: row.firstName.trim(), lastName: row.lastName.trim(), email: row.email.trim(), phone: row.phone.trim() || undefined, dateOfBirth: row.dateOfBirth || undefined, hireDate: row.hireDate, departmentId: row.departmentId, department: row.department, positionId: row.positionId, position: row.position, contractType: row.contractType, salary: Number(row.salary), currency: row.currency, address: row.address || undefined, city: row.city || undefined, state: row.state || undefined, country: row.country || undefined, postalCode: row.postalCode || undefined, emergencyContact: row.emergencyContact || undefined, emergencyPhone: row.emergencyPhone || undefined, nationalId: row.nationalId || undefined, socialSecurityNumber: row.socialSecurityNumber || undefined, probationEndDate: row.probationEndDate || undefined, payFrequency: row.payFrequency || 'MONTHLY', employmentStatus: row.employmentStatus || 'ACTIVE', notes: row.notes || undefined,
       })));
       const result = response?.data || response;
-      setImportProgress(100);
+      setImportProgress(90);
       setImportResult({ total: result?.total ?? validRows.length, created: result?.created ?? result?.success ?? 0, skipped: (importRows.length - validRows.length) + (result?.skipped ?? result?.failed ?? 0), errors: result?.errors || [], warnings: result?.warnings || [] });
-      await onRefresh();
+      // El resultado de la carga debe quedar disponible sin esperar a que se
+      // repinten todas las vistas de RR. HH. La actualización continúa aparte.
+      void onRefresh();
+      setImportProgress(100);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar empleados');
     } finally {
-      window.clearInterval(timer); setImporting(false); setImportProgress(0);
+      setImporting(false); setImportProgress(0);
     }
   };
 
@@ -660,6 +666,24 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
 
   const createPositionFromImport = async (index: number, title: string, departmentId: string) => {
     try {
+      const normalizedTitle = normalizeImportText(title);
+      const existingPosition = positions.find((position: any) =>
+        String(position.departmentId) === String(departmentId)
+        && normalizeImportText(position.title) === normalizedTitle,
+      );
+      const pendingPosition = importRows.find((row, rowIndex) =>
+        rowIndex !== index
+        && String(row.departmentId) === String(departmentId)
+        && row.positionId
+        && normalizeImportText(row.position) === normalizedTitle,
+      );
+      const matchedPosition = existingPosition || (pendingPosition ? { id: pendingPosition.positionId, title: pendingPosition.position } : null);
+      if (matchedPosition?.id) {
+        setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, position: matchedPosition.title || title.trim(), positionId: matchedPosition.id } : row)));
+        toast.info('El puesto ya existía y fue asignado a la fila');
+        return;
+      }
+
       const code = title.trim().replace(/\s+/g, '').substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 10000);
       const createdPosition: any = await hrService.createPosition({ title: title.trim(), departmentId, code });
       setImportRows((current) => validateEmployeeImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, position: createdPosition.title, positionId: createdPosition.id } : row)));
@@ -1279,7 +1303,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
           <DialogHeader data-tour="hr-employee-import-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar empleados</DialogTitle><DialogDescription>Carga una plantilla Excel, revisa la previsualización y confirma solo las filas válidas. Este proceso puede repetirse cuantas veces sea necesario.</DialogDescription><HRViewTutorial label="Cómo importar empleados" targetPrefix="hr-employee-import" stepKeys={['title', 'data', 'actions']} copy={{ data: { description: 'Descarga la plantilla, carga el archivo y revisa las filas detectadas.' }, actions: { description: 'Abre la previsualización para corregir incidencias y confirmar las filas válidas.' } }} /></DialogHeader>
           <div className="space-y-4" data-tour="hr-employee-import-data">
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">Usa nombres o códigos existentes para departamentos y puestos. Si falta alguno, podrás crearlo desde la previsualización. No se importa un vendedor individual: la condición de vendedor proviene del departamento.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadEmployeeTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">Usa nombres o códigos existentes para departamentos y puestos. Los campos Tipo de contrato, Frecuencia de pago y Estado laboral deben escribirse en español como se indica en la guía. Si falta algún catálogo, podrás crearlo desde la previsualización. No se importa un vendedor individual: la condición de vendedor proviene del departamento.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadEmployeeTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de empleados</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readEmployeeImportFile(file); }} />{importFileName && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFileName}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos laborales.</li><li>Carga el archivo y abre la previsualización.</li><li>Corrige los errores; crea departamentos o puestos faltantes desde la misma fila.</li><li>Confirma escribiendo IMPORTAR. Las filas válidas se guardan aunque otras tengan incidencias.</li></ol></div>
           </div>

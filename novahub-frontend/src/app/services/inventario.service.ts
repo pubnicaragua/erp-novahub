@@ -105,15 +105,7 @@ export const inventoryService = {
   bulkCreateProducts: async (items: Array<Partial<Product> & { initialStock?: number }>, onProgress?: (done: number, total: number) => void) => {
     const results: { success: number; skipped: number; failed: number; errors: string[] } = { success: 0, skipped: 0, failed: 0, errors: [] };
     const total = items.length;
-    let progressTick: ReturnType<typeof setInterval> | null = null;
-    if (onProgress) {
-      let pct = 5;
-      progressTick = setInterval(() => {
-        pct = Math.min(pct + 3, 92);
-        onProgress?.(Math.round(pct * total / 100), total);
-        if (pct >= 92) clearInterval(progressTick!);
-      }, 80);
-    }
+    onProgress?.(0, total);
     try {
       const data = await api.post<{ success: number; skipped: number; errors: string[] }>('/inventory/products/batch', { items });
       results.success += data.success || 0;
@@ -122,7 +114,6 @@ export const inventoryService = {
     } catch (e: any) {
       results.errors.push(`Error: ${e?.message || 'Error de red'}`);
     } finally {
-      if (progressTick) clearInterval(progressTick);
       results.failed = results.errors.length;
       onProgress?.(total, total);
     }
@@ -130,6 +121,7 @@ export const inventoryService = {
   },
   getInitialImportStatus: (signal?: AbortSignal) => api.get<{ completed: boolean; importedAt?: string | null; productCount?: number; priceListCode?: string | null; currency?: string | null; exchangeRate?: number | null; blockedByExistingProducts?: boolean }>('/inventory/initial-import/status', { signal }),
   importInitialCatalog: (data: { items: any[]; currency: string; exchangeRate?: number; priceListCode?: string; confirmText: string }) => api.post<any>('/inventory/initial-import', data),
+  updateProductImages: (items: Array<{ code: string; imageUrl: string }>) => api.patch<{ updated: number }>('/inventory/products/images/batch', { items }),
   deactivateProducts: (ids: string[]) => api.post<{ deleted: number }>('/inventory/products/batch-delete', { ids }),
 
   // ==================== AUDITORÍAS (INVENTARIO SELECTIVO) ====================

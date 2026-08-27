@@ -37,6 +37,7 @@ import { requiresPaymentReference } from '../../utils/paymentMethods';
 import { PrintButton } from '../ui/PrintButton';
 import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
 import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -103,6 +104,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [parsedImportRows, setParsedImportRows] = useState<Record<string, string>[]>([]);
   const [importFileStats, setImportFileStats] = useState<{ total: number; valid: number; skipped: number } | null>(null);
   const [importResult, setImportResult] = useState<{ total: number; created: number; skipped: number; errors: string[] } | null>(null);
   
@@ -260,71 +264,15 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     return match ? row[match] : '';
   };
 
-  const splitCsvLine = (line: string, delimiter: string) => {
-    const values: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const next = line[i + 1];
-      if (char === '"') {
-        if (inQuotes && next === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
-      }
-      if (char === delimiter && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-    values.push(current.trim());
-    return values.map((v) => v.replace(/^"(.*)"$/, '$1').trim());
-  };
-
-  const parseExpensesFile = async (file: File) => {
+  const parseExpensesFile = async (file: File, onProgress?: (progress: number) => void) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV');
-
-    if (/\.(xlsx|xls)$/i.test(file.name)) {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-      const sheetName = workbook.SheetNames.find((name) => normalizeImportHeader(name) === 'gastos') || workbook.SheetNames[0];
-      const rawSheet = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
-      const raw = rawSheet.filter((row) => row.some((cell) => String(cell ?? '').trim()));
-      if (raw.length < 2) return [];
-      const headers = (raw[0] || []).map(normalizeImportHeader);
-      return raw.slice(1).map((values: any[]) => {
-        const row: Record<string, string> = {};
-        headers.forEach((header: string, index: number) => { if (header) row[header] = String(values[index] ?? '').trim(); });
-        return row;
-      });
-    }
-
-    const text = await file.text();
-    const rawLines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const lines = rawLines[0]?.toLowerCase().startsWith('sep=') ? rawLines.slice(1) : rawLines;
-    if (lines.length < 2) return [];
-    const headerLine = lines[0];
-    const delimiter = (
-      (headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/;/g)?.length || 0)
-        ? ((headerLine.match(/,/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ',' : '\t')
-        : ((headerLine.match(/;/g)?.length || 0) >= (headerLine.match(/\t/g)?.length || 0) ? ';' : '\t')
-    );
-    const headers = splitCsvLine(headerLine, delimiter).map(normalizeImportHeader);
-    return lines.slice(1).map((line) => {
-      const cols = splitCsvLine(line, delimiter);
+    const { rows: rawSheet } = await parseSpreadsheetInWorker(file, 'gastos', false, onProgress);
+    const raw = rawSheet.filter((row) => row.some((cell) => String(cell ?? '').trim()));
+    if (raw.length < 2) return [];
+    const headers = (raw[0] || []).map(normalizeImportHeader);
+    return raw.slice(1).map((values: any[]) => {
       const row: Record<string, string> = {};
-      headers.forEach((h, idx) => {
-        row[h] = cols[idx] ?? '';
-      });
+      headers.forEach((header: string, index: number) => { if (header) row[header] = String(values[index] ?? '').trim(); });
       return row;
     });
   };
@@ -354,13 +302,26 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const handleExpenseFileChange = async (file: File | undefined) => {
     setImportFile(file || null);
     setImportFileStats(null);
+    setParsedImportRows([]);
     if (!file) return;
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const rows = await parseExpensesFile(file);
+      const rows = await parseExpensesFile(file, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(90);
       const valid = rows.filter(isValidExpenseImportRow).length;
+      setParsedImportRows(rows);
       setImportFileStats({ total: rows.length, valid, skipped: rows.length - valid });
+      setReadingProgress(100);
     } catch {
+      setImportFile(null);
       setImportFileStats(null);
+      setParsedImportRows([]);
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   };
 
@@ -373,21 +334,20 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     setImportProgress(8);
     setImportResult(null);
     try {
-      const rows = await parseExpensesFile(importFile);
+      const rows = parsedImportRows.length > 0
+        ? parsedImportRows
+        : await parseExpensesFile(importFile, (progress) => {
+          setImportProgress(Math.min(28, Math.max(8, Math.round(progress * 0.29))));
+        });
       setImportProgress(28);
       if (rows.length === 0) {
         toast.error('El archivo no contiene filas para importar');
         return;
       }
       setImportProgress(35);
-
-      let created = 0;
-      let skipped = 0;
       const errors: string[] = [];
-      const updateRowProgress = (index: number) => setImportProgress(35 + Math.round(((index + 1) / rows.length) * 60));
-
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
+      const payload: any[] = [];
+      rows.forEach((row, idx) => {
         const rowNumber = idx + 2;
         const description = String(getImportCell(row, ['descripcion', 'description', 'concepto'])).trim();
         const amount = Number(String(getImportCell(row, ['monto', 'amount', 'importe', 'valor'])).replace(',', '.'));
@@ -405,55 +365,36 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         const date = Number.isNaN(dateParsed.getTime()) ? new Date().toISOString() : dateParsed.toISOString();
 
         if (!description) {
-          skipped++;
           errors.push(`Fila ${rowNumber}: descripción es obligatoria`);
-          updateRowProgress(idx);
-          continue;
+          return;
         }
         if (!Number.isFinite(amount) || amount <= 0) {
-          skipped++;
           errors.push(`Fila ${rowNumber}: monto inválido`);
-          updateRowProgress(idx);
-          continue;
+          return;
         }
         if (category === 'OTRO' && !categoryCustom) {
-          skipped++;
           errors.push(`Fila ${rowNumber}: categoría OTRO requiere categoryCustom`);
-          updateRowProgress(idx);
-          continue;
+          return;
         }
-
-        try {
-          await expensesService.create({
-            date,
-            amount,
-            currency: currency as any,
-            exchangeRate: globalRate,
-            category,
-            categoryCustom: categoryCustom || undefined,
-            description,
-            paidTo: paidTo || undefined,
-            paymentSource: paymentSource as any,
-            reference: reference || undefined,
-            status: status as any,
-          } as any);
-          created++;
-        } catch (e: any) {
-          skipped++;
-          errors.push(`Fila ${rowNumber}: ${e?.response?.data?.message || e?.message || 'no se pudo crear'}`);
-        }
-        updateRowProgress(idx);
-      }
-
+        payload.push({ sourceRow: rowNumber, date, amount, currency, exchangeRate: globalRate, category, categoryCustom: categoryCustom || undefined, description, paidTo: paidTo || undefined, paymentSource, reference: reference || undefined, status });
+      });
+      setImportProgress(55);
+      const response: any = payload.length ? await expensesService.bulkImport(payload) : { total: rows.length, created: 0, skipped: 0, errors: [] };
+      const serverResult = response?.data || response;
+      const created = Number(serverResult?.created ?? serverResult?.success ?? serverResult?.count ?? 0);
+      const serverErrors = Array.isArray(serverResult?.errors) ? serverResult.errors : [];
+      const skipped = Number(serverResult?.skipped ?? (rows.length - created));
+      setImportProgress(90);
+      const allErrors = [...errors, ...serverErrors];
       setImportProgress(100);
-      setImportResult({ total: rows.length, created, skipped, errors: errors.slice(0, 12) });
+      setImportResult({ total: rows.length, created, skipped, errors: allErrors.slice(0, 12) });
       if (created > 0) onRefresh();
       toast.success(`Importación finalizada: ${created} creados, ${skipped} omitidos`);
     } catch (error: any) {
       toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
     } finally {
       setImporting(false);
-      window.setTimeout(() => setImportProgress(0), 180);
+      setImportProgress(0);
     }
   };
 
@@ -1180,6 +1121,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           progress={importProgress}
           title="Importando gastos"
           description="Leyendo el archivo, validando cada fila y registrando los gastos en la base de datos."
+        />
+        <ImportProgressOverlay
+          open={readingFile}
+          progress={readingProgress}
+          title="Preparando gastos"
+          description="Leyendo el archivo y calculando la prevalidación antes de registrarlo."
         />
       </div>
     </div>

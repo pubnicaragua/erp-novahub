@@ -183,6 +183,8 @@ export interface User {
     name?: string;
     logo?: string | null;
   };
+  /** Roles heredados desde los departamentos activos del usuario/empleado. */
+  inheritedRoles?: Array<{ id: string; name: string; description?: string | null }>;
 }
 
 /**
@@ -266,6 +268,8 @@ interface AuthContextType {
   logout: () => void;
   switchIdentity: (userId: string) => Promise<void>;
   refreshEnabledModules: () => Promise<void>;
+  /** Recarga permisos efectivos desde el backend sin reutilizar el perfil anterior. */
+  refreshProfile: () => Promise<void>;
   /** Incrementa cada vez que una sesión autenticada debe iniciar navegación limpia. */
   sessionStartVersion: number;
   isLoading: boolean;
@@ -558,6 +562,7 @@ const createUserObject = (apiPayload: any): User => {
           logo: apiUser.clientTenant.logo,
         }
       : null,
+    inheritedRoles: Array.isArray(apiUser.inheritedRoles) ? apiUser.inheritedRoles : [],
   };
 };
 
@@ -567,6 +572,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userBranches, setUserBranches] = useState<BranchInfo[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const profileRefreshAtRef = React.useRef(0);
 
   React.useEffect(() => {
     const remembered = isLoading ? getRememberedSessionBranding() : {};
@@ -610,6 +616,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isAuthenticated = user !== null;
+
+  const refreshProfile = useCallback(async () => {
+    if (!user || !localStorage.getItem('nh-auth-token')) return;
+    const now = Date.now();
+    // A role/department change should be visible quickly without turning every
+    // focus event into a burst of profile requests.
+    if (now - profileRefreshAtRef.current < 15_000) return;
+    profileRefreshAtRef.current = now;
+    try {
+      const response = await api.get<any>('/auth/profile');
+      rememberSessionBranding(response);
+      setUser(createUserObject(response));
+    } catch (error) {
+      profileRefreshAtRef.current = 0;
+      throw error;
+    }
+  }, [user]);
+
+  React.useEffect(() => {
+    const refreshOnResume = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshProfile().catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', refreshOnResume);
+    window.addEventListener('focus', refreshOnResume);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshOnResume);
+      window.removeEventListener('focus', refreshOnResume);
+    };
+  }, [refreshProfile]);
 
   // Restore session from localStorage on mount
   React.useEffect(() => {
@@ -1006,7 +1042,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.tenantId]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, hasAccess, canPerform, login, setSession, logout, switchIdentity, refreshEnabledModules, refreshProfile, sessionStartVersion, isLoading, userBranches, selectedBranchId, setSelectedBranchId }}>
       {isLoading ? (
         <BrandLogoLoader
           logo={getRememberedSessionBranding().logo}

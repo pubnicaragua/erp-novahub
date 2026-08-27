@@ -31,6 +31,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -142,6 +144,8 @@ export function DiarioView() {
   const [rawImportRows, setRawImportRows] = useState<Record<string, string>[]>([]);
   const [importing, setImporting] = useState(false);
   const [operationProgress, setOperationProgress] = useState(0);
+  const [readingFile, setReadingFile] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(filterSearch.trim()), 250);
@@ -300,11 +304,13 @@ export function DiarioView() {
       toast.error('El archivo debe ser Excel (.xlsx o .xls)');
       return;
     }
+    setReadingFile(true);
+    setReadingProgress(3);
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: '', raw: false });
+      const { rows: raw } = await parseSpreadsheetInWorker(file, undefined, false, (progress) => {
+        setReadingProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setReadingProgress(88);
       const nonEmpty = raw.filter((row: any) => Array.isArray(row) && row.some((cell: any) => String(cell ?? '').trim().length > 0));
       if (nonEmpty.length < 2) { toast.error('El archivo no contiene datos'); return; }
       const headerRow = (nonEmpty[0] as any[]).map((h) => String(h ?? '').trim());
@@ -319,9 +325,13 @@ export function DiarioView() {
       });
       setImportFileName(file.name);
       setRawImportRows(mapped);
+      setReadingProgress(100);
       toast.success(`${mapped.length} filas leídas del archivo`);
     } catch (err) {
       toast.error('Error al leer el archivo Excel');
+    } finally {
+      setReadingFile(false);
+      setReadingProgress(0);
     }
   }
 
@@ -329,9 +339,7 @@ export function DiarioView() {
     if (validImportCount === 0) { toast.error('No hay filas válidas para importar'); return; }
     setImporting(true);
     setOperationProgress(10);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
-      progressTimer = setInterval(() => setOperationProgress((p) => Math.min(90, p + 3)), 180);
       const rows = importRows.filter((r) => r.valid).map((r) => [
         r.codigo,
         r.cutoffISO,
@@ -340,20 +348,20 @@ export function DiarioView() {
         r.credito ?? 0,
         r.referencia || 'IMPORT-XLSX',
       ]);
+      setOperationProgress(35);
       const res = await contabilidadService.importCsv({ type: 'transactions', rows });
-      if (progressTimer) clearInterval(progressTimer);
-      setOperationProgress(100);
+      setOperationProgress(90);
       toast.success(`Importación completada: ${res?.imported ?? validImportCount} asientos`);
       loadJournals();
       setImportOpen(false);
       setRawImportRows([]);
       setImportFileName('');
+      setOperationProgress(100);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Error al importar asientos');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
-      window.setTimeout(() => setOperationProgress(0), 200);
+      setOperationProgress(0);
     }
   }
 
@@ -1023,54 +1031,25 @@ export function DiarioView() {
                 <>
                   <ImportReviewSummary total={importRows.length} valid={validImportCount} skipped={invalidImportCount} entityLabel="asientos" />
 
-                  <div className="hidden overflow-x-auto rounded-xl border border-border/60 sm:block">
-                    <table className="w-full min-w-[820px] text-xs">
-                      <thead className="bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2">Fila</th>
-                          <th className="px-3 py-2">Código</th>
-                          <th className="px-3 py-2">Descripción</th>
-                          <th className="px-3 py-2 text-right">Débito</th>
-                          <th className="px-3 py-2 text-right">Crédito</th>
-                          <th className="px-3 py-2">Fecha de corte</th>
-                          <th className="px-3 py-2">Referencia</th>
-                          <th className="px-3 py-2 text-center">Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importRows.map((row) => (
-                          <tr key={row.rowIndex} className="border-t border-border/30">
-                            <td className="px-3 py-1.5 font-mono">{row.rowIndex + 2}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.codigo || '—'}</td>
-                            <td className="max-w-[240px] truncate px-3 py-1.5" title={row.descripcion}>{row.descripcion || '—'}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{row.debito !== null && row.debito > 0 ? formatCurrency(row.debito) : '—'}</td>
-                            <td className="px-3 py-1.5 text-right tabular-nums text-rose-500">{row.credito !== null && row.credito > 0 ? formatCurrency(row.credito) : '—'}</td>
-                            <td className="px-3 py-1.5 font-mono">{row.cutoffLabel || '—'}</td>
-                            <td className="max-w-[140px] truncate px-3 py-1.5 font-mono" title={row.referencia}>{row.referencia || '—'}</td>
-                            <td className="px-3 py-1.5 text-center">
-                              {row.valid ? (
-                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                                  <CheckCircle2 className="size-3" /> Válida
-                                </span>
-                              ) : (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-flex cursor-help items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600">
-                                      <AlertTriangle className="size-3" /> Error
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs">
-                                    <div className="space-y-1">
-                                      {row.errors.map((error) => <p key={error}>{error}</p>)}
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="hidden overflow-hidden rounded-xl border border-border/60 sm:block">
+                    <div className="min-w-[820px]">
+                      <div className="grid grid-cols-[4rem_7rem_minmax(14rem,1fr)_7rem_7rem_8rem_8rem_7rem] bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {['Fila', 'Código', 'Descripción', 'Débito', 'Crédito', 'Fecha de corte', 'Referencia', 'Estado'].map((label) => <div key={label} className="px-3 py-2">{label}</div>)}
+                      </div>
+                      <VirtualizedImportList count={importRows.length} estimateSize={38} className="h-[min(48vh,28rem)] min-w-[820px]" renderItem={(index) => {
+                        const row = importRows[index];
+                        return <div className="grid min-w-[820px] grid-cols-[4rem_7rem_minmax(14rem,1fr)_7rem_7rem_8rem_8rem_7rem] items-center border-t border-border/30 text-xs">
+                          <div className="px-3 py-1.5 font-mono">{row.rowIndex + 2}</div>
+                          <div className="px-3 py-1.5 font-mono">{row.codigo || '—'}</div>
+                          <div className="truncate px-3 py-1.5" title={row.descripcion}>{row.descripcion || '—'}</div>
+                          <div className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{row.debito !== null && row.debito > 0 ? formatCurrency(row.debito) : '—'}</div>
+                          <div className="px-3 py-1.5 text-right tabular-nums text-rose-500">{row.credito !== null && row.credito > 0 ? formatCurrency(row.credito) : '—'}</div>
+                          <div className="px-3 py-1.5 font-mono">{row.cutoffLabel || '—'}</div>
+                          <div className="truncate px-3 py-1.5 font-mono" title={row.referencia}>{row.referencia || '—'}</div>
+                          <div className="px-3 py-1.5 text-center">{row.valid ? <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600"><CheckCircle2 className="size-3" /> Válida</span> : <Tooltip><TooltipTrigger asChild><span className="inline-flex cursor-help items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600"><AlertTriangle className="size-3" /> Error</span></TooltipTrigger><TooltipContent className="max-w-xs"><div className="space-y-1">{row.errors.map((error) => <p key={error}>{error}</p>)}</div></TooltipContent></Tooltip>}</div>
+                        </div>;
+                      }} />
+                    </div>
                   </div>
 
                   <section className="space-y-3 sm:hidden" aria-label="Asientos importados para revisar">
@@ -1078,8 +1057,9 @@ export function DiarioView() {
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revisión móvil</p>
                       <Badge variant="secondary" className="text-[10px]">{importRows.length} filas</Badge>
                     </div>
-                    {importRows.map((row) => (
-                      <ImportPreviewMobileCard key={row.rowIndex} index={row.rowIndex} title={row.descripcion || row.codigo} error={row.valid ? undefined : row.errors.join(' · ')}>
+                    <VirtualizedImportList count={importRows.length} estimateSize={210} className="h-[min(58vh,38rem)] space-y-3" renderItem={(index) => {
+                      const row = importRows[index];
+                      return <ImportPreviewMobileCard key={row.rowIndex} index={row.rowIndex} title={row.descripcion || row.codigo} error={row.valid ? undefined : row.errors.join(' · ')}>
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <ImportPreviewField label="Código"><p className="break-words font-mono text-xs">{row.codigo || '—'}</p></ImportPreviewField>
                           <ImportPreviewField label="Fila"><p className="font-mono text-xs">{row.rowIndex + 2}</p></ImportPreviewField>
@@ -1089,8 +1069,8 @@ export function DiarioView() {
                           <ImportPreviewField label="Fecha de corte"><p className="break-words font-mono text-xs">{row.cutoffLabel || '—'}</p></ImportPreviewField>
                           <ImportPreviewField label="Referencia"><p className="break-words font-mono text-xs">{row.referencia || '—'}</p></ImportPreviewField>
                         </div>
-                      </ImportPreviewMobileCard>
-                    ))}
+                      </ImportPreviewMobileCard>;
+                    }} />
                   </section>
 
                   <div className="flex justify-end">
@@ -1106,10 +1086,10 @@ export function DiarioView() {
         </DialogContent>
       </Dialog>
       <ImportProgressOverlay
-        open={importing}
-        progress={operationProgress}
-        title="Importando asientos contables"
-        description="Creando las transacciones del libro diario desde las filas válidas..."
+        open={readingFile || importing}
+        progress={readingFile ? readingProgress : operationProgress}
+        title={readingFile ? 'Preparando asientos contables' : 'Importando asientos contables'}
+        description={readingFile ? 'Leyendo el archivo y preparando todas las filas para su revisión.' : 'Creando las transacciones del libro diario desde las filas válidas...'}
       />
       </div>
     </div>

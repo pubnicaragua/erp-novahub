@@ -24,6 +24,7 @@ import { useImportPreviewLayout } from '../../hooks/useImportPreviewLayout';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesViewTutorial } from './SalesViewTutorial';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -601,13 +602,15 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     return undefined;
   };
 
-  const readFile = (file: File) => {
+  const readFile = async (file: File) => {
     if (!canImportPriceLists) return;
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const workbook = XLSX.read(new Uint8Array(event.target?.result as ArrayBuffer), { type: 'array' });
-        const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[workbook.SheetNames.find((name) => normalize(name) === 'precios') || workbook.SheetNames[0]], { header: 1 });
+    setPreviewLoading(true);
+    setPreviewProgress(3);
+    try {
+        const { rows: raw } = await parseSpreadsheetInWorker(file, 'precios', false, (progress) => {
+          setPreviewProgress(Math.min(84, Math.max(3, progress)));
+        });
+        setPreviewProgress(88);
         const headers = (raw[0] || []).map((header: any) => normalize(header));
         const skuIndex = headers.findIndex((header: string) => ['sku', 'codigo', 'codigo / sku', 'code'].includes(header));
         if (skuIndex < 0) throw new Error('La plantilla necesita la columna Código');
@@ -627,31 +630,16 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
           next.error = validateImportRow(next);
           return next;
         });
-        setImportRows(rows); setImportFile(file.name); toast.success(`${rows.length} filas encontradas`);
-      } catch (error: any) { toast.error(error.message || 'No se pudo leer el archivo'); }
-    };
-    reader.onerror = () => {
-      toast.error('No se pudo leer el archivo seleccionado');
-    };
-    reader.readAsArrayBuffer(file);
+        setPreviewProgress(96);
+        setImportRows(rows); setImportFile(file.name); setPreviewProgress(100); toast.success(`${rows.length} filas encontradas`);
+    } catch (error: any) { toast.error(error.message || 'No se pudo leer el archivo'); }
+    finally { setPreviewLoading(false); setPreviewProgress(0); }
   };
 
   const handleOpenImportPreview = () => {
     if (!importFile || !importRows.length || previewLoading) return;
-    setPreviewLoading(true);
-    setPreviewProgress(20);
     setImportOpen(false);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      window.setTimeout(() => {
-        setPreviewProgress(100);
-        window.setTimeout(() => {
-          setImportPreviewOpen(true);
-          setPreviewLoading(false);
-          setPreviewProgress(0);
-        }, 120);
-      }, 120);
-    }, 40);
+    setImportPreviewOpen(true);
   };
 
   const updateImportRow = (index: number, field: string, value: string) => {
@@ -670,10 +658,8 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     if (!canImportPriceLists) return;
     if (importRows.some((row) => row.error) || !importRows.length) return;
     setImporting(true);
-    setImportProgress(8);
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    setImportProgress(10);
     try {
-      progressTimer = setInterval(() => setImportProgress((current) => Math.min(current + 2, 92)), 180);
       const result = await priceListsService.importMatrix({
         currency: importCurrency,
         exchangeRate: importCurrency === baseCurrency ? 1 : importRate,
@@ -695,14 +681,13 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         }),
         confirmText: 'ACTUALIZAR',
       });
-      if (progressTimer) clearInterval(progressTimer);
-      setImportProgress(100);
+      setImportProgress(90);
       setImportResult({ updated: result.updated || 0, unchanged: result.unchanged || 0, errors: result.errors || [] });
       await refreshMatrix();
+      setImportProgress(100);
     } catch (error: any) {
       toast.error(error.message || 'No se pudieron actualizar los precios');
     } finally {
-      if (progressTimer) clearInterval(progressTimer);
       setImporting(false);
       setImportProgress(0);
     }

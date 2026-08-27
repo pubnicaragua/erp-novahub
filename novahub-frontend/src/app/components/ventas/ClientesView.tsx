@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import * as XLSX from 'xlsx';
 import { 
@@ -28,6 +28,7 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { formatCustomerBalance, getCustomerBalancePresentation } from '../../utils/customerBalance';
+import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -127,6 +128,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
+  const importValidationTimerRef = useRef<number | null>(null);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -140,6 +142,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const [newCustomer, setNewCustomer] = useState<CustomerDraft>(emptyCustomerDraft);
   const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
   const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => () => {
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+  }, []);
 
   useEffect(() => {
     priceListsService.getAll().then((response: any) => setPriceLists(Array.isArray(response) ? response : (response?.data || []))).catch(() => setPriceLists([]));
@@ -204,14 +210,16 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   };
 
   const readImportFile = async (file: File) => {
+    setPreviewLoading(true);
+    setPreviewProgress(3);
     try {
       if (!/\.(xlsx|xls)$/i.test(file.name)) {
         throw new Error('Solo se permiten archivos Excel (.xlsx o .xls)');
       }
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-      const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
-      const raw = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      const { rows: raw } = await parseSpreadsheetInWorker(file, 'clientes', false, (progress) => {
+        setPreviewProgress(Math.min(84, Math.max(3, progress)));
+      });
+      setPreviewProgress(88);
       if (raw.length < 2) throw new Error('El archivo no contiene filas para importar');
       const headers = (raw[0] || []).map(normalizeHeader);
       const parsed = raw.slice(1).filter((row: any[]) => row.some((cell) => String(cell ?? '').trim())).map((values: any[]) => {
@@ -239,48 +247,44 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         row.notes = String(getCell(source, ['notas', 'notes', 'observaciones']) || '').trim();
         return row;
       });
+      setPreviewProgress(94);
       setImportFile(file);
       setImportRows(validateImportRows(parsed));
+      setPreviewProgress(100);
       setImportResult(null);
       toast.success(`${parsed.length} clientes listos para previsualizar`);
     } catch (error: any) {
       setImportFile(null);
       setImportRows([]);
       toast.error(error?.message || 'No se pudo leer el archivo');
+    } finally {
+      setPreviewLoading(false);
+      setPreviewProgress(0);
     }
   };
 
   const handleOpenImportPreview = () => {
     if (!importFile || !importRows.length || previewLoading) return;
-    setPreviewLoading(true);
-    setPreviewProgress(20);
     setImportOpen(false);
-    window.setTimeout(() => {
-      setPreviewProgress(65);
-      window.setTimeout(() => {
-        setPreviewProgress(100);
-        window.setTimeout(() => {
-          setImportPreviewOpen(true);
-          setPreviewLoading(false);
-          setPreviewProgress(0);
-        }, 120);
-      }, 120);
-    }, 40);
+    setImportPreviewOpen(true);
   };
 
   const updateImportRow = (index: number, field: keyof CustomerImportRow, value: string) => {
-    setImportRows((current) => validateImportRows(current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value } : row)));
+    setImportRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: field === 'creditLimit' ? (value === '' ? '' : Number(value)) : value } : row));
+    if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
+    importValidationTimerRef.current = window.setTimeout(() => {
+      setImportRows((current) => validateImportRows(current));
+      importValidationTimerRef.current = null;
+    }, 260);
   };
 
   const executeImport = async () => {
     const validRows = importRows.filter((row) => !row.error);
     if (!validRows.length) return;
     setImporting(true);
-    setImportProgress(8);
+    setImportProgress(10);
     setImportResult(null);
-    let timer: ReturnType<typeof setInterval> | null = null;
     try {
-      timer = setInterval(() => setImportProgress((current) => Math.min(92, current + 3)), 180);
       const result = await customersService.importMassive({
         rows: validRows.map(({ error: _error, warning: _warning, ...row }) => ({
           ...row,
@@ -288,14 +292,15 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
           creditLimit: row.creditLimit === '' ? undefined : row.creditLimit,
         })),
       });
-      if (timer) clearInterval(timer);
-      setImportProgress(100);
+      setImportProgress(90);
       setImportResult(result);
-      await onRefresh();
+      // No mantengas bloqueada la previsualización esperando el refresco de
+      // todo el módulo; la consulta puede terminar en segundo plano.
+      void onRefresh();
+      setImportProgress(100);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo importar clientes');
     } finally {
-      if (timer) clearInterval(timer);
       setImporting(false);
       setImportProgress(0);
     }
