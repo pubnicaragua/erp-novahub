@@ -47,6 +47,15 @@ const emptyDraft = () => ({
 
 const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
 
+const compareSupplierNames = (left: Supplier, right: Supplier) =>
+  String(left.name || '').trim().localeCompare(String(right.name || '').trim(), 'es', { sensitivity: 'base' }) ||
+  String(left.id).localeCompare(String(right.id));
+
+const supplierCodeNumber = (supplier: Supplier) => {
+  const match = String(supplier.code || '').match(/(\d+)(?!.*\d)/);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+};
+
 export function ProveedoresView({ data, loading, onRefresh, pagination, onSearchChange, isSidebarCollapsed = true }: ProveedoresViewProps) {
   const { canPerform, user } = useAuth();
   const { baseCurrency, valuationModeSuffix, formatConvertedAmount } = useCurrency();
@@ -97,24 +106,19 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   });
 
   const validateImportRows = (rows: SupplierImportRow[]) => {
-    const existingCodes = new Set(data.map((supplier) => String(supplier.code || '').trim().toLowerCase()).filter(Boolean));
     const existingEmails = new Set(data.map((supplier) => String(supplier.email || '').trim().toLowerCase()).filter(Boolean));
     const existingTaxIds = new Set(data.map((supplier) => String(supplier.taxId || '').trim().toLowerCase()).filter(Boolean));
-    const seenCodes = new Set<string>();
     const seenEmails = new Set<string>();
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: SupplierImportRow = { ...row, error: undefined, warning: undefined };
-      const code = row.code.trim().toLowerCase();
       const email = row.email.trim().toLowerCase();
       const taxId = row.taxId.trim().toLowerCase();
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
-      else if (code && (existingCodes.has(code) || seenCodes.has(code))) next.error = 'Código duplicado';
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
-      if (!next.error && !code) next.warning = 'Se generará el código automáticamente';
-      if (code) { existingCodes.add(code); seenCodes.add(code); }
+      if (!next.error) next.warning = 'Se generará un código consecutivo automáticamente';
       if (email) { existingEmails.add(email); seenEmails.add(email); }
       if (taxId) { existingTaxIds.add(taxId); seenTaxIds.add(taxId); }
       return next;
@@ -128,9 +132,9 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ['GUÍA DE LLENADO · IMPORTACIÓN DE PROVEEDORES'],
-      ['Puedes repetir la importación. El código es opcional; si lo omites, el sistema lo genera automáticamente.'],
+      ['Puedes repetir la importación. El código se genera automáticamente y conserva el consecutivo por sucursal.'],
       ['Campo', 'Regla'],
-      ['Código', 'Opcional. No se puede repetir dentro de la empresa.'],
+      ['Código', 'Se genera automáticamente como PRV-000001, PRV-000002, etc. Si el archivo trae un código, se ignora.'],
       ['Nombre', 'Obligatorio. Es el nombre comercial o razón social del proveedor.'],
       ['RUC / identificación', 'Opcional. No se puede repetir dentro de la empresa.'],
       ['Correo', 'Opcional, pero debe tener formato válido y no estar registrado.'],
@@ -247,19 +251,14 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const filteredAndSorted = [...filtered].sort((a, b) => {
     if (balanceOrder === 'highest') return Number(b.balance || 0) - Number(a.balance || 0);
     if (balanceOrder === 'lowest') return Number(a.balance || 0) - Number(b.balance || 0);
-    const aCode = String(a.code || '').trim();
-    const bCode = String(b.code || '').trim();
-    if (!aCode && !bCode) return 0;
-    if (!aCode) return 1;
-    if (!bCode) return -1;
-    return aCode.localeCompare(bCode, 'es', { numeric: true, sensitivity: 'base' });
+    return compareSupplierNames(a, b);
   });
 
   const colFilters = useColumnFilters();
   const filterGetters = {
+    code: (row: Supplier) => supplierCodeNumber(row),
     name: (row: Supplier) => {
-      const sort = colFilters.state.name?.sort;
-      return sort === 'desc' ? (row.createdAt ? new Date(row.createdAt).getTime() : 0) : row.name || '';
+      return row.name || '';
     },
     type: (row: Supplier) => String(row.type || 'COMPANY').toUpperCase(),
     balance: (row: Supplier) => Number(row.balance || 0),
@@ -310,9 +309,10 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   ];
 
   const columns: ColumnDef<Supplier>[] = [
-    { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+      headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" /> },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
-      headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /> },
+      headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} /> },
     { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select',
       headerExtra: <ColumnFilterMenu label="Tipo" options={typeOptions} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />,
       options: [
@@ -400,7 +400,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       country: draft.country || undefined,
       status: draft.status,
     };
-    if (!editingSupplier) payload.code = draft.code || undefined;
     return payload;
   };
 
@@ -554,7 +553,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-3xl overflow-y-auto">
           <DialogHeader data-tour="supplier-import-modal-title"><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar proveedores</DialogTitle><DialogDescription>Carga una plantilla Excel o CSV. Luego abre la previsualización completa para corregir los datos antes de crear los proveedores.</DialogDescription><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import-modal" /></DialogHeader>
           <div className="space-y-4" data-tour="supplier-import-modal-data">
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código es opcional y se genera automáticamente si lo dejas vacío. Los códigos, correos e identificaciones repetidas se marcarán como errores. Podrás editar cada fila antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El código se genera automáticamente con el consecutivo de la sucursal. Si el archivo trae un código, se ignorará; los correos e identificaciones repetidas se marcarán como errores. Podrás editar los demás datos antes de confirmar.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel o CSV de proveedores</label><Input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del proveedor.</li><li>Carga el archivo; el sistema lo valida sin guardar todavía.</li><li>Presiona “Previsualizar proveedores” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; solo se guardarán las filas válidas.</li></ol></div>
           </div>
@@ -566,15 +565,15 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !saving) setCreateOpen(false); }}>
         <DialogContent className="!flex !max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(94vw,720px)] !flex-col overflow-hidden rounded-3xl p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-5 sm:px-7" data-tour="purchases-form-title">
-            <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
-            <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto. El código es opcional.</DialogDescription>
+          <DialogTitle className="text-xl font-black uppercase tracking-tight">Nuevo proveedor</DialogTitle>
+            <DialogDescription>Completa los datos del proveedor y sus condiciones de contacto. El código se asigna automáticamente.</DialogDescription>
             <PurchaseViewTutorial view="suppliers" context="form" />
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-5 sm:p-7" data-tour="purchases-form-data">
             <section className="space-y-3">
-              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">Si no ingresas un código, el sistema lo asignará automáticamente.</p></div>
+              <div><h3 className="text-sm font-black uppercase tracking-widest">Identificación</h3><p className="text-xs text-muted-foreground">El sistema asignará un código consecutivo por sucursal al guardar.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="PRV-000001" className="h-11 rounded-xl" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</label><Input value={draft.code} placeholder={editingSupplier ? undefined : 'Se asigna al guardar'} className="h-11 rounded-xl bg-muted/30" readOnly disabled /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>

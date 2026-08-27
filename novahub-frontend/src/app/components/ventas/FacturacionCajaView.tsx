@@ -49,7 +49,7 @@ import { createIdempotencyKey } from '../../services/api';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
@@ -58,6 +58,7 @@ import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -1237,6 +1238,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId);
     const requestedQty = (existing?.quantity || 0) + 1;
 
+    if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId)) {
+      toast.error('Este producto ya está agregado con la misma lista de precios.');
+      return;
+    }
+
     if (product.trackInventory && !warehouseId) {
       toast.error('Selecciona una bodega de salida antes de agregar el producto.');
       return;
@@ -1290,6 +1296,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const existing = cart.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
     const globalQty = getGlobalCartQuantity(product.id);
     const requestedQty = (existing?.quantity || 0) + 1;
+
+    if (!isService && hasSalesProductPriceListConflict(cart, product.id, selectedPriceListId, existing ? cart.indexOf(existing) : -1, selectedPriceListId)) {
+      toast.error('Este producto ya está agregado con la misma lista de precios.');
+      return;
+    }
 
     if (product.trackInventory && product.currentStock !== null && product.currentStock !== undefined && requestedQty + globalQty > product.currentStock) {
       toast.error(stockBlockedMessage(product, globalQty), {
@@ -1581,13 +1592,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.error('Selecciona una bodega de salida para este producto.');
       return;
     }
-    setCart((current) => current.map((line) => (
+    const nextCart = cart.map((line) => (
       line.productId === item.productId
         && line.variantId === item.variantId
         && line.warehouseId === item.warehouseId
         ? { ...line, warehouseId: nextWarehouseId }
         : line
-    )));
+    ));
+    if (hasSalesProductPriceListConflicts(nextCart, selectedPriceListId)) {
+      toast.error('No se puede cambiar la bodega: el producto ya usa esa lista de precios en otra línea.');
+      return;
+    }
+    setCart(nextCart);
   };
 
   const handleCustomerChange = (value: string) => {
@@ -1597,21 +1613,30 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const nextListId = customer
       ? customer.priceListId || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || ''
       : retailList?.id || priceLists.find((list) => list.isDefault)?.id || priceLists[0]?.id || '';
-    setSelectedCustomerId(customerId);
-    setSelectedPriceListId(nextListId);
-    setCart((current) => current.map((item) => {
+    const nextCart = cart.map((item) => {
       const isService = productsById.get(item.productId)?.itemType === 'SERVICE';
       const price = isService ? Number(productsById.get(item.productId)?.salePrice || item.unitPrice || 0) : getConfiguredPrice(nextListId, item.productId);
       return price === undefined
         ? { ...item, priceListId: nextListId, unitPrice: 0, lineTotal: 0, priceMissing: true }
         : { ...item, priceListId: isService ? undefined : nextListId, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
-    }));
+    });
+    if (hasSalesProductPriceListConflicts(nextCart, nextListId)) {
+      toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
+      return;
+    }
+    setSelectedCustomerId(customerId);
+    setSelectedPriceListId(nextListId);
+    setCart(nextCart);
   };
 
   const handlePay = () => {
     if (!canPayPos) return;
     if (cart.length === 0) {
       toast.error('Agregá al menos un producto');
+      return;
+    }
+    if (hasSalesProductPriceListConflicts(cart, selectedPriceListId)) {
+      toast.error('No se puede emitir: hay productos repetidos con la misma lista de precios.');
       return;
     }
 
@@ -2175,6 +2200,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                     )
                                   )}
                                 </div>
+                                {prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <SalesWarehouseStockHint
+                                    product={prod}
+                                    warehouses={directWarehouseOptions}
+                                    warehouseId={selectedWarehouseId}
+                                    className="mt-1 px-0"
+                                  />
+                                )}
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
                               </td>
                               <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
@@ -2255,6 +2288,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                 <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">
                                   {prod.description || (prod.itemType === 'SERVICE' ? 'Servicio disponible para facturación inmediata.' : 'Producto disponible para facturación inmediata.')}
                                 </p>
+                                {prod.itemType !== 'SERVICE' && prod.trackInventory && (
+                                  <SalesWarehouseStockHint
+                                    product={prod}
+                                    warehouses={directWarehouseOptions}
+                                    warehouseId={selectedWarehouseId}
+                                    className="mt-1 px-0"
+                                  />
+                                )}
                               </div>
                               <Button
                                 onClick={() => handleAddOrCheck(prod)}
@@ -2343,7 +2384,22 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
                           <tr key={`${item.productId}-${item.variantId || 'base'}-${item.warehouseId || 'service'}`} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-3 py-2 font-bold"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{item.description}</span><SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />{item.priceMissing && <PriceMissingBadge className="basis-full" />}</div></td>
+                            <td className="px-3 py-2 font-bold">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <span className="min-w-0 flex-1">{item.description}</span>
+                                <SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
+                                {item.priceMissing && <PriceMissingBadge className="basis-full" />}
+                              </div>
+                              {productsById.get(item.productId)?.itemType !== 'SERVICE' && (
+                                <SalesWarehouseStockHint
+                                  product={productsById.get(item.productId)}
+                                  warehouses={directWarehouseOptions}
+                                  warehouseId={item.warehouseId}
+                                  variantId={item.variantId}
+                                  className="mt-1 px-0"
+                                />
+                              )}
+                            </td>
                             <td className="px-3 py-2 align-top">
                               {productsById.get(item.productId)?.itemType === 'SERVICE' ? (
                                 <span className="text-[10px] text-muted-foreground">No aplica</span>

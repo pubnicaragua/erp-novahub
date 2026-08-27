@@ -24,7 +24,7 @@ import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdf
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -38,6 +38,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface EstimacionesViewProps {
@@ -64,9 +65,6 @@ const statusOptions = [
 ];
 type EstimateWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
 const normalizeEstimateStatus = (status: unknown) => String(status || '').toUpperCase() === 'SENT' ? 'IN_PROCESS' : String(status || '').toUpperCase();
-const hasEstimateContent = (estimate: Estimate | null | undefined) => Boolean(
-  estimate?.customerId || (estimate?.items || []).some((item: any) => item?.productId || String(item?.description || '').trim()),
-);
 const getEstimateWorkflowIssues = (estimate: Estimate | null | undefined): string[] => {
   if (!estimate) return ['Información general'];
   const issues: string[] = [];
@@ -105,7 +103,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const localDraftRef = useRef<Estimate | null>(null);
-  const creatingEstimateRef = useRef<Promise<Estimate> | null>(null);
   const savingEstimateRef = useRef(false);
   const localDocRef = useRef<Estimate | null>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
@@ -228,56 +225,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         const nextDoc = { ...baseDoc, ...updates, items: updates.items ?? baseDoc.items } as Estimate;
         localDraftRef.current = nextDoc;
         commitLocalDoc(nextDoc);
-        if (!hasEstimateContent(nextDoc)) return;
-
-        if (creatingEstimateRef.current) {
-          await creatingEstimateRef.current;
-          const createdDoc = localDraftRef.current;
-          if (!createdDoc || isLocalEstimate(createdDoc.id)) return;
-          await estimatesService.update(createdDoc.id, updates);
-          localDraftRef.current = { ...createdDoc, ...updates, items: updates.items ?? createdDoc.items } as Estimate;
-          commitLocalDoc(localDraftRef.current);
-          await onRefresh();
-          return;
-        }
-
-        const createStatus = normalizeEstimateStatus(updates.status || 'DRAFT');
-        const createRequest = estimatesService.create({
-          customerId: nextDoc.customerId || undefined,
-          date: nextDoc.date || new Date().toISOString(),
-          expiryDate: nextDoc.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString(),
-          items: nextDoc.items || [],
-          subtotal: nextDoc.subtotal || 0,
-          taxAmount: nextDoc.taxAmount || 0,
-          discountAmount: nextDoc.discountAmount || 0,
-          irRate: 0,
-          irTaxId: null,
-          irAmount: 0,
-          priceListId: nextDoc.priceListId || null,
-          total: nextDoc.total || 0,
-          extraCostDescription: nextDoc.extraCostDescription || null,
-          extraCostAmount: nextDoc.extraCostAmount || 0,
-          extraCharges: getSalesExtraChargesPayload(nextDoc),
-          deliveryDescription: nextDoc.deliveryDescription || null,
-          deliveryAmount: nextDoc.deliveryAmount || 0,
-          currency: nextDoc.currency || displayCurrency,
-          exchangeRate: nextDoc.exchangeRate || globalRate,
-          baseTotal: (nextDoc as any).baseTotal || 0,
-          notes: nextDoc.notes,
-           status: createStatus === 'IN_PROCESS' ? 'IN_PROCESS' : 'DRAFT',
-           warehouseId: nextDoc.warehouseId || null,
-         } as Partial<Estimate>);
-        creatingEstimateRef.current = createRequest;
-        try {
-          const created = await createRequest;
-          localDraftRef.current = created;
-          commitLocalDoc(created);
-          setEditingId(created.id);
-          await onRefresh();
-          return;
-        } finally {
-          if (creatingEstimateRef.current === createRequest) creatingEstimateRef.current = null;
-        }
+        return;
       }
       await estimatesService.update(id.toString(), updates);
       await onRefresh();
@@ -384,14 +332,17 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
         return;
       }
     }
-    if (isLocalEstimate(localDoc.id) && !hasEstimateContent(localDoc)) {
-      toast.info('Selecciona un cliente o agrega un producto o servicio antes de guardar');
-      return;
-    }
     const saveToastId = toast.loading(status === 'IN_PROCESS' ? 'Marcando cotización en proceso...' : 'Guardando cotización...');
     savingEstimateRef.current = true;
     try {
-      await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
+      if (isLocalEstimate(localDoc.id)) {
+        const created = await estimatesService.create({ ...buildEstimateStatusPayload(status), number: undefined } as any);
+        localDraftRef.current = created;
+        commitLocalDoc(created);
+        await onRefresh();
+      } else {
+        await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
+      }
       clearSalesEditorDraft(salesDraftStorageKey);
       localDraftRef.current = null;
       localDocRef.current = null;
@@ -527,7 +478,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const now = new Date().toISOString();
     const draft = {
       id: `local-${Date.now()}`,
-      number: 'Sin guardar',
+      number: '',
       customerId: '',
       date: now,
       expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
@@ -742,7 +693,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Cotización {localDoc?.number}</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">{isLocalEstimate(localDoc?.id) ? 'Nueva Cotización' : `Cotización ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la cotización comercial</p>
             </div>
           </div>
@@ -779,10 +730,6 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                  <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox 
                     options={(customers || [])
@@ -795,6 +742,10 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       const items = (localDoc?.items || []).map((item: any) => item.productId
                         ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
                         : { ...item, priceListId });
+                      if (hasSalesProductPriceListConflicts(items, priceListId)) {
+                        toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
+                        return;
+                      }
                       setLocalDoc({ ...localDoc, customerId: val, priceListId, items } as any);
                       void handleUpdate(localDoc!.id, { customerId: val, priceListId, items } as any);
                     }}
@@ -966,6 +917,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])] as any[];
                         const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                        const effectivePriceListId = (item as any).priceListId || (localDoc as any).priceListId || null;
+                        if (val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, (localDoc as any).priceListId || null)) {
+                          toast.error('Este producto ya está agregado con la misma lista de precios.');
+                          return;
+                        }
                         newItems[idx].productId = val;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
@@ -1002,6 +958,8 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       itemType={item.itemType}
                       value={item.priceListId}
                       defaultPriceListId={localDoc?.priceListId}
+                      lineItems={localDoc?.items || []}
+                      lineIndex={idx}
                       currency={localDoc?.currency}
                       exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
                       onChange={(priceListId, result, source) => {
@@ -1014,6 +972,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                       if (source !== 'initial') void handleUpdate(localDoc!.id, { ...calculated, priceListId, items: calculated.items } as any);
                       }}
                     /></div>
+                    {item.productId && resolveItemType(item) !== 'SERVICE' && (
+                      <SalesWarehouseStockHint
+                        product={products.find((product) => product.id === item.productId)}
+                        warehouses={warehouses}
+                        warehouseId={localDoc?.warehouseId}
+                        variantId={item.variantId}
+                        className="basis-full"
+                      />
+                    )}
                     {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   </div>
                   {pricingMode === 'individual' && (

@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, FileCog, Link2, Loader2, RotateCcw, Unlink2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Input } from '../../ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Switch } from '../../ui/switch';
 import { getApiErrorMessage } from '../../../services/api';
 import { invoicesService, type InvoiceSeriesConfiguration } from '../../../services/ventas.service';
@@ -17,7 +16,6 @@ const typeLabel: Record<string, string> = {
 
 export function InvoiceSeriesSettings() {
   const [configuration, setConfiguration] = useState<InvoiceSeriesConfiguration | null>(null);
-  const [selectedScope, setSelectedScope] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sharePrefix, setSharePrefix] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -30,7 +28,6 @@ export function InvoiceSeriesSettings() {
     try {
       const data = await invoicesService.getSeriesConfiguration();
       setConfiguration(data);
-      setSelectedScope((current) => current || data.items[0]?.scopeKey || '');
       setDrafts(Object.fromEntries(data.items.map((item) => [item.scopeKey + ':' + item.documentType, item.prefix])));
     } catch (err) {
       setError(getApiErrorMessage(err, 'No se pudo cargar la configuración de prefijos.'));
@@ -41,17 +38,7 @@ export function InvoiceSeriesSettings() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const scopes = useMemo(() => {
-    if (!configuration) return [];
-    const seen = new Set<string>();
-    return configuration.items.filter((item) => {
-      if (seen.has(item.scopeKey)) return false;
-      seen.add(item.scopeKey);
-      return true;
-    });
-  }, [configuration]);
-
-  const visibleItems = configuration?.items.filter((item) => item.scopeKey === selectedScope) || [];
+  const visibleItems = configuration?.items || [];
   const normalItem = visibleItems.find((item) => item.documentType === 'SALES_INVOICE');
   const posItem = visibleItems.find((item) => item.documentType === 'POS_INVOICE');
   const normalKey = normalItem ? normalItem.scopeKey + ':' + normalItem.documentType : '';
@@ -78,7 +65,6 @@ export function InvoiceSeriesSettings() {
     setError('');
     try {
       await invoicesService.saveSeriesConfiguration({
-        branchId: item.branchId,
         documentType: useSharedSeries ? 'SALES_INVOICE' : item.documentType,
         prefix,
         shareWithOtherType: useSharedSeries,
@@ -117,7 +103,7 @@ export function InvoiceSeriesSettings() {
           {loading ? <div className="flex items-center justify-center py-12 text-sm text-muted-foreground"><Loader2 className="mr-2 size-5 animate-spin" /> Cargando series…</div> : error && !configuration ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</div> : (
             <>
               {error && <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-              <div className="max-w-xl space-y-1.5"><label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursal / alcance a configurar</label><Select value={selectedScope} onValueChange={setSelectedScope}><SelectTrigger><SelectValue placeholder="Selecciona una sucursal" /></SelectTrigger><SelectContent>{scopes.map((scope) => <SelectItem key={scope.scopeKey} value={scope.scopeKey}>{scope.branchName} · {scope.branchCode}</SelectItem>)}</SelectContent></Select></div>
+              {configuration && <div className="flex min-w-0 flex-col gap-2 rounded-2xl border border-sky-500/20 bg-sky-500/[0.06] p-4 text-sm sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Sucursal facturante</p><p className="mt-1 truncate font-black">{configuration.currentTenant.name} · {configuration.currentTenant.slug}</p></div><Badge variant="outline" className="w-fit shrink-0">Bodegas y cajas comparten esta serie</Badge></div>}
 
               {normalItem && posItem && <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">

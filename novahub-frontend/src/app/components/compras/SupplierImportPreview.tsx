@@ -103,7 +103,7 @@ export function SupplierImportPreview({
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación masiva</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">Previsualizar proveedores</h1>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores. Si dejas el código vacío, el sistema lo generará automáticamente.</p>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Edita los datos antes de crear proveedores. El sistema asignará un código consecutivo por sucursal e ignorará cualquier código incluido en el archivo.</p>
             <div className="mt-3"><PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo importar proveedores" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-import" /></div>
           </div>
         </div>

@@ -631,7 +631,7 @@ export const enterpriseGroupsService = {
     ),
   saveManagerInvoiceSeriesConfiguration: (
     groupId: string,
-    body: { clientTenantId: string; businessUnitId?: string; scopeBranchId?: string | null; documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean },
+    body: { clientTenantId: string; businessUnitId?: string; documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean },
   ) =>
     api.put<{ clientTenantId: string; scopeBranchId: string | null; configuration: unknown }>(
       `/enterprise-groups/manager/${groupId}/sales/invoice-series`,

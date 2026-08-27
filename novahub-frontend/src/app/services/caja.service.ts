@@ -159,6 +159,7 @@ export interface PosProduct {
   isActive?: boolean;
   costPrice?: number;
   currentStock?: number | null;
+  warehouseStock?: Array<{ warehouseId: string; warehouseName: string; currentStock: number; variantId?: string | null }>;
   isVariable?: boolean;
   variants?: PosProductVariant[];
 }

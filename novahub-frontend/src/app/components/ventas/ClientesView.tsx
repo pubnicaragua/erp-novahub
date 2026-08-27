@@ -65,6 +65,15 @@ const emptyCustomerDraft = (): CustomerDraft => ({
 
 const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'status'];
 
+const compareCustomerNames = (left: Customer, right: Customer) =>
+  String(left.name || '').trim().localeCompare(String(right.name || '').trim(), 'es', { sensitivity: 'base' }) ||
+  String(left.id).localeCompare(String(right.id));
+
+const customerCodeNumber = (customer: Customer) => {
+  const match = String(customer.code || '').match(/(\d+)(?!.*\d)/);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+};
+
 const customerToDraft = (customer: Customer): CustomerDraft => ({
   name: customer.name || '',
   type: String(customer.type || '').toUpperCase() === 'COMPANY' ? 'company' : 'individual',
@@ -313,14 +322,15 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   });
 
   const colFilters = useColumnFilters();
+  const filteredAndSorted = [...filtered].sort(compareCustomerNames);
   const filterGetters = {
+    code: (row: Customer) => customerCodeNumber(row),
     name: (row: Customer) => {
-      const sort = colFilters.state.name?.sort;
-      return sort === 'desc' ? (row.createdAt ? new Date(row.createdAt).getTime() : 0) : row.name || '';
+      return row.name || '';
     },
     type: (row: Customer) => String(row.type || '').toUpperCase(),
   };
-  const filteredData = colFilters.applyTo(filtered, filterGetters);
+  const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
   const typeOptions = [
     { value: 'INDIVIDUAL', label: 'Particular', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'INDIVIDUAL').length },
     { value: 'COMPANY', label: 'Empresa', count: filtered.filter((c) => String(c.type || '').toUpperCase() === 'COMPANY').length },
@@ -497,8 +507,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const columns: ColumnDef<Customer>[] = [
     { 
       key: 'code', 
-      header: 'ID / Código', 
+      header: 'ID / Código',
       width: '110px',
+      headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
       render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span>
     },
     { 
@@ -506,7 +517,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       header: 'Nombre del Cliente', 
       width: '220px',
       editable: canPerform('SALES_CLIENTS', 'edit'),
-      headerExtra: <ColumnFilterMenu label="Nombre" options={[{ value: '__empty__', label: 'Sin nombre' }]} selected={colFilters.state.name?.values || []} onSelect={(values) => colFilters.setValues('name', values)} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} />,
+      headerExtra: <ColumnFilterMenu label="Nombre" options={[{ value: '__empty__', label: 'Sin nombre' }]} selected={colFilters.state.name?.values || []} onSelect={(values) => colFilters.setValues('name', values)} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} />,
       render: (val) => <span className="text-[13px] font-bold text-foreground">{val || 'Sin nombre'}</span>
     },
     { 

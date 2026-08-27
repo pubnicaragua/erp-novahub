@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { priceListsService } from '../../services/price-lists.service';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import { getSalesUnitPrice, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
+import { getSalesLinePriceListId, getSalesUnitPrice, hasSalesProductPriceListConflict, resolveVariantPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
 
 
 interface SalesLinePriceListSelectProps {
@@ -21,11 +21,14 @@ interface SalesLinePriceListSelectProps {
   currency?: string;
   exchangeRate?: number;
   disabled?: boolean;
+  /** Líneas del documento para impedir repetir producto+lista desde cualquier orden de selección. */
+  lineItems?: Array<{ productId?: string | null; priceListId?: string | null }>;
+  lineIndex?: number;
   onChange: (priceListId: string, result: { unitPrice?: number; priceMissing: boolean }, source?: 'initial' | 'user') => void;
 }
 
 /** Selector compacto para elegir la tarifa comercial de una línea y devolver su precio bloqueado. */
-export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, onChange }: SalesLinePriceListSelectProps) {
+export function SalesLinePriceListSelect({ productId, variantId, productCode, productName, itemType, value, defaultPriceListId, fallbackPrice, currency = 'NIO', exchangeRate = 1, disabled, lineItems = [], lineIndex = -1, onChange }: SalesLinePriceListSelectProps) {
   const { user, canPerform } = useAuth();
   const query = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', user?.tenantId || 'anonymous'],
@@ -47,11 +50,34 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
   );
   const isService = String(matrixProduct?.itemType || matrixProduct?.type || itemType || '').toUpperCase() === 'SERVICE';
 
-  // Lista resuelta: la asignada al item, la de la orden, la default o la primera
-  const requestedListId = value || defaultPriceListId || '';
-  const resolvedListId = lists.some((list: any) => sameSalesId(list.id, requestedListId))
-    ? requestedListId
+  const inheritedPriceListId = lists.some((list: any) => sameSalesId(list.id, defaultPriceListId))
+    ? defaultPriceListId
     : lists.find((list: any) => list.isDefault)?.id || lists[0]?.id || '';
+  const blockedPriceListIds = useMemo(() => new Set(
+    lineItems
+      .filter((line, index) => index !== lineIndex && sameSalesId(line?.productId, productId))
+      .map((line) => getSalesLinePriceListId(line, inheritedPriceListId))
+      .filter(Boolean)
+      .map((id) => String(id)),
+  ), [lineItems, lineIndex, productId, inheritedPriceListId]);
+
+  // Lista resuelta: la asignada al item, la de la orden, la default o la primera.
+  // Si la lista heredada ya está ocupada por el mismo producto, se elige una
+  // alternativa libre; nunca se aplica silenciosamente el par duplicado.
+  const requestedListId = value || defaultPriceListId || '';
+  const preferredListId = lists.some((list: any) => sameSalesId(list.id, requestedListId))
+    ? requestedListId
+    : inheritedPriceListId;
+  const keepsExistingValue = Boolean(
+    value
+    && lists.some((list: any) => sameSalesId(list.id, value))
+    && !blockedPriceListIds.has(String(value)),
+  );
+  const resolvedListId = keepsExistingValue
+    ? String(value)
+    : !blockedPriceListIds.has(String(preferredListId))
+      ? preferredListId
+      : lists.find((list: any) => !blockedPriceListIds.has(String(list.id)))?.id || '';
 
   /** Calcula el precio para un producto/variant+lista dados */
   const calcPrice = (priceListId: string, pid: string | null | undefined): { unitPrice?: number; priceMissing: boolean } => {
@@ -115,6 +141,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
 
   /** Cuando el usuario elige explícitamente un tipo de precio */
   const handleUserSelect = (priceListId: string) => {
+    if (hasSalesProductPriceListConflict(lineItems, productId, priceListId, lineIndex, inheritedPriceListId)) return;
     const result = calcPrice(priceListId, productId);
     latestOnChange.current(priceListId, result, 'user');
   };
@@ -126,7 +153,12 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
           <SelectValue placeholder="Tipo de precio" />
         </SelectTrigger>
         <SelectContent>
-          {lists.map((list) => <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>)}
+          {lists.map((list) => {
+            const blocked = blockedPriceListIds.has(String(list.id)) && !sameSalesId(list.id, resolvedListId);
+            return <SelectItem key={list.id} value={list.id} disabled={blocked}>
+              {list.name}{blocked ? ' · Ya utilizada para este producto' : ''}
+            </SelectItem>;
+          })}
         </SelectContent>
       </Select>
     </div>

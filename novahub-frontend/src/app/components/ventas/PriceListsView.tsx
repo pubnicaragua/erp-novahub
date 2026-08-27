@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Layers, Pencil, Plus, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, FileSpreadsheet, Layers, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -36,8 +36,9 @@ const PRICE_LISTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="price-lists-title"]', title: 'Vista de Listas de precios', description: 'Aquí administras las tarifas de venta por producto. El costo permanece en Inventario; esta vista concentra los precios que utilizará Ventas.', tip: 'Minorista, Mayorista y Distribuidor vienen como listas predeterminadas. Las demás listas se agregan después.', placement: 'bottom' },
   { target: '[data-tour="price-lists-new"]', title: 'Crear una nueva lista', description: 'Usa Nueva lista para agregar una tarifa adicional, por ejemplo Promocional o Institucional. El sistema genera automáticamente su código.', placement: 'bottom' },
   { target: '[data-tour="price-lists-columns"]', title: 'Configurar columnas', description: 'Elige qué listas se ven en la tabla. La misma selección define las columnas que aparecerán al descargar o importar una plantilla.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-search"]', title: 'Buscar productos', description: 'Filtra la matriz por código, SKU, nombre, categoría o SKU de variante. La paginación se reinicia al cambiar la búsqueda.', placement: 'bottom' },
   { target: '[data-tour="price-lists-currency"]', title: 'Moneda de visualización', description: 'Cambia entre córdobas y dólares para consultar o editar precios. El cálculo utiliza la tasa global configurada y conserva el valor base.', placement: 'bottom' },
-  { target: '[data-tour="price-lists-pagination"]', title: 'Paginación', description: 'Actívala cuando tengas muchos productos para cargar solo una cantidad de filas por página y mantener la vista ágil.', placement: 'bottom' },
+  { target: '[data-tour="price-lists-pagination"]', title: 'Paginación', description: 'La matriz inicia con 50 productos por página para mantener la vista ágil. Puedes desactivarla o cambiar el tamaño cuando lo necesites.', placement: 'bottom' },
   { target: '[data-tour="price-lists-template"]', title: 'Descargar plantilla', description: 'Selecciona productos en la tabla y descarga una plantilla con el costo de referencia, precios existentes y las listas visibles. Incluye una guía de llenado.', placement: 'bottom' },
   { target: '[data-tour="price-lists-import"]', title: 'Importar precios', description: 'La importación no depende de seleccionar filas: carga un archivo y el sistema identifica los productos por SKU. Primero se abre el modal de carga; después, al presionar Previsualizar actualización, se muestra la tabla completa para editar.', tip: 'Las celdas vacías no cambian precios existentes. Las incidencias se corrigen antes de confirmar y el proceso muestra porcentaje y resultado final.', placement: 'bottom' },
   { target: '[data-tour="price-lists-matrix"]', title: 'Matriz y edición', description: 'Cada fila representa un producto y cada columna una lista. Haz clic en el lápiz para editar todos los precios visibles de esa fila y guarda una sola vez.', placement: 'top' },
@@ -217,9 +218,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const matrixProducts = useMemo(() => matrixQuery.data?.products || [], [matrixQuery.data]);
   const [visibleListIds, setVisibleListIds] = useLocalStorageState<string[] | null>(`sales-price-lists-columns-${tenantKey}`, null, 24 * 365);
   const [displayCurrency, setDisplayCurrency] = useState<'NIO' | 'USD'>(baseCurrency === 'USD' ? 'USD' : 'NIO');
-  const [paginationEnabled, setPaginationEnabled] = useState(false);
+  const [paginationEnabled, setPaginationEnabled] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [productSearch, setProductSearch] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [missingSelectedIds, setMissingSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
@@ -258,6 +260,19 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     () => (matrixProducts.length ? matrixProducts : products).filter((product) => String(product.itemType || product.type || 'PRODUCT').toUpperCase() !== 'SERVICE'),
     [matrixProducts, products],
   );
+  const filteredCatalogProducts = useMemo(() => {
+    const query = normalize(productSearch);
+    if (!query) return catalogProducts;
+    return catalogProducts.filter((product) => {
+      const searchableValues = [
+        product.code,
+        product.name,
+        product.category?.name,
+        ...(product.variants || []).map((variant) => variant.sku),
+      ];
+      return searchableValues.some((value) => normalize(value).includes(query));
+    });
+  }, [catalogProducts, productSearch]);
   const visibleLists = useMemo(() => lists.filter((list) => visibleListIds?.includes(list.id)), [lists, visibleListIds]);
   const itemsByProduct = useMemo(() => {
     const result = new Map<string, Map<string, PriceListItem>>();
@@ -271,16 +286,16 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const productByCode = useMemo(() => new Map(catalogProducts.map((product) => [normalize(product.code), product])), [catalogProducts]);
   const missingProducts = useMemo(() => catalogProducts.filter((product) => {
     const byList = itemsByProduct.get(product.id);
-    return lists.some((list) => !byList?.has(list.id));
-  }), [catalogProducts, itemsByProduct, lists]);
+    return visibleLists.some((list) => !byList?.has(list.id));
+  }), [catalogProducts, itemsByProduct, visibleLists]);
   const missingPriceCount = useMemo(() => missingProducts.reduce((total, product) => {
     const byList = itemsByProduct.get(product.id);
-    return total + lists.filter((list) => !byList?.has(list.id)).length;
-  }, 0), [missingProducts, itemsByProduct, lists]);
+    return total + visibleLists.filter((list) => !byList?.has(list.id)).length;
+  }, 0), [missingProducts, itemsByProduct, visibleLists]);
   const selectedCount = selectedProductIds.size;
   const importLists = visibleLists;
-  const totalPages = Math.max(1, Math.ceil(catalogProducts.length / pageSize));
-  const displayedProducts = useMemo(() => paginationEnabled ? catalogProducts.slice((page - 1) * pageSize, page * pageSize) : catalogProducts, [catalogProducts, page, pageSize, paginationEnabled]);
+  const totalPages = Math.max(1, Math.ceil(filteredCatalogProducts.length / pageSize));
+  const displayedProducts = useMemo(() => paginationEnabled ? filteredCatalogProducts.slice((page - 1) * pageSize, page * pageSize) : filteredCatalogProducts, [filteredCatalogProducts, page, pageSize, paginationEnabled]);
   const displayedProductIds = useMemo(() => displayedProducts.map((product) => product.id), [displayedProducts]);
   const allDisplayedSelected = displayedProductIds.length > 0 && displayedProductIds.every((id) => selectedProductIds.has(id));
 
@@ -310,6 +325,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [productSearch]);
 
   useEffect(() => {
     if (missingOpen) setMissingSelectedIds(new Set(missingProducts.map((product) => product.id)));
@@ -759,6 +778,68 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     }
   };
 
+  const priceMatrix = (
+    <Card className="rounded-2xl" data-tour="price-lists-matrix">
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <div>
+          <CardTitle>Matriz de precios</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p>
+        </div>
+        <Badge variant="outline">{selectedCount} seleccionados</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-xl border">
+          <Table className="min-w-[980px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60" aria-label="Seleccionar productos visibles">
+                    {allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}
+                  </button>
+                </TableHead>
+                <TableHead>Código</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead>Categoría</TableHead>
+                {visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}
+                <TableHead className="w-24 text-right">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? <TableRow><TableCell colSpan={5 + visibleLists.length} className="py-10 text-center text-muted-foreground">Cargando matriz…</TableCell></TableRow> : displayedProducts.map((product) => {
+                const byList = itemsByProduct.get(product.id);
+                const isEditing = editingProductIds.has(product.id);
+                return (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <button type="button" onClick={() => toggleProduct(product.id)} aria-label={`Seleccionar ${product.name}`}>
+                        {selectedProductIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{product.code}</TableCell>
+                    <TableCell className="font-medium">{product.name}{product.variants && product.variants.length > 1 && <Badge variant="outline" className="ml-2 border-primary/40 text-primary text-[9px]"><Tag className="mr-0.5 size-2.5" />{product.variants.length}v</Badge>}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>
+                    {visibleLists.map((list) => {
+                      const item = byList?.get(list.id);
+                      return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={editingPrices[product.id]?.[list.id] ?? ''} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>;
+                    })}
+                    <TableCell className="text-right">
+                      {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
+                      {product.variants && product.variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-primary" title="Ver variantes" aria-label={`Ver variantes de ${product.name}`} onClick={() => openVariantDetail(product)}><Layers className="size-4" /></Button>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+        {paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {filteredCatalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /><span className="sr-only">Página anterior</span></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /><span className="sr-only">Página siguiente</span></Button></div></div>}
+        {!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}
+        {catalogProducts.length > 0 && !filteredCatalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos que coincidan con la búsqueda.</p>}
+        {!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}
+      </CardContent>
+    </Card>
+  );
+
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h2 className="text-2xl font-black tracking-tight" data-tour="price-lists-title">Listas de Precios</h2></div>
@@ -768,16 +849,17 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Card className="rounded-2xl"><CardContent className="p-4"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Productos</p><p className="mt-2 text-3xl font-black">{catalogProducts.length}</p><p className="text-xs text-muted-foreground">en el catálogo de venta</p></CardContent></Card>
       <Card className="rounded-2xl"><CardContent className="p-4"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Listas visibles</p><p className="mt-2 text-3xl font-black">{visibleLists.length}</p><p className="text-xs text-muted-foreground">de {lists.length} configuradas</p></CardContent></Card>
-      <Card className="rounded-2xl"><CardContent className="p-4"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Precios cargados</p><p className="mt-2 text-3xl font-black">{Math.max(0, catalogProducts.length * lists.length - missingPriceCount)}</p><p className="text-xs text-muted-foreground">en todas las listas activas</p></CardContent></Card>
+      <Card className="rounded-2xl"><CardContent className="p-4"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Precios cargados</p><p className="mt-2 text-3xl font-black">{Math.max(0, catalogProducts.length * visibleLists.length - missingPriceCount)}</p><p className="text-xs text-muted-foreground">en las listas visibles</p></CardContent></Card>
       <button type="button" onClick={() => setMissingOpen(true)} className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-left transition hover:bg-amber-500/10"><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Productos con precios faltantes</p><p className="mt-2 text-3xl font-black text-amber-700">{missingProducts.length}</p><p className="text-xs text-muted-foreground">{missingPriceCount} celdas pendientes · Ver y actualizar</p></button>
     </div>
 
-    <div className="flex flex-wrap justify-end gap-2"><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-currency"><span className="text-xs font-bold text-muted-foreground">Moneda</span><Select value={displayCurrency} onValueChange={(value: 'NIO' | 'USD') => setDisplayCurrency(value)}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-[10px] text-muted-foreground">Tasa {Number(exchangeRate || 1).toFixed(4)}</span></div><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-pagination"><span className="text-xs font-bold text-muted-foreground">Paginación</span><Select value={paginationEnabled ? 'on' : 'off'} onValueChange={(value) => { setPaginationEnabled(value === 'on'); setPage(1); }}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="off">Desactivada</SelectItem><SelectItem value="on">Activada</SelectItem></SelectContent></Select>{paginationEnabled && <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger className="h-8 w-20 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent></Select>}</div><Button variant="outline" className="rounded-xl" onClick={() => setColumnConfigOpen(true)} data-tour="price-lists-columns"><Settings2 className="mr-2 size-4" /> Configurar columnas <Badge variant="secondary" className="ml-2">{visibleLists.length}</Badge></Button></div>
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"><div className="relative w-full min-w-0 lg:max-w-md" data-tour="price-lists-search"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Buscar producto, código o SKU..." aria-label="Buscar producto, código o SKU" className="h-10 rounded-xl pl-9 pr-9" />{productSearch && <button type="button" onClick={() => setProductSearch('')} className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Limpiar búsqueda"><X className="size-4" /></button>}</div><div className="flex flex-wrap justify-end gap-2"><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-currency"><span className="text-xs font-bold text-muted-foreground">Moneda</span><Select value={displayCurrency} onValueChange={(value: 'NIO' | 'USD') => setDisplayCurrency(value)}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas</SelectItem><SelectItem value="USD">Dólares</SelectItem></SelectContent></Select><span className="text-[10px] text-muted-foreground">Tasa {Number(exchangeRate || 1).toFixed(4)}</span></div><div className="flex items-center gap-2 rounded-xl border px-3 py-1.5" data-tour="price-lists-pagination"><span className="text-xs font-bold text-muted-foreground">Paginación</span><Select value={paginationEnabled ? 'on' : 'off'} onValueChange={(value) => { setPaginationEnabled(value === 'on'); setPage(1); }}><SelectTrigger className="h-8 w-28 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="off">Desactivada</SelectItem><SelectItem value="on">Activada</SelectItem></SelectContent></Select>{paginationEnabled && <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}><SelectTrigger className="h-8 w-20 border-0 px-2 shadow-none"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent></Select>}</div><Button variant="outline" className="rounded-xl" onClick={() => setColumnConfigOpen(true)} data-tour="price-lists-columns"><Settings2 className="mr-2 size-4" /> Configurar columnas <Badge variant="secondary" className="ml-2">{visibleLists.length}</Badge></Button></div></div>
+
+    {priceMatrix}
     <Dialog open={columnConfigOpen} onOpenChange={setColumnConfigOpen}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configurar columnas</DialogTitle><DialogDescription>Elige qué listas se muestran en la tabla y cuáles aparecerán en la plantilla. Los cambios se reflejan inmediatamente.</DialogDescription></DialogHeader><div className="flex flex-col gap-2">{lists.map((list) => { const active = visibleListIds?.includes(list.id) ?? false; return <div key={list.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted/20 opacity-60'}`}><button type="button" onClick={() => setVisibleListIds((current) => active ? (current || []).filter((id) => id !== list.id) : [...(current || []), list.id])} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"><span className={`flex size-5 shrink-0 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'}`}>{active && <CheckCircle2 className="size-3.5" />}</span><span className="min-w-0 truncate"><b>{list.name}</b><span className="ml-2 text-[10px] font-mono text-muted-foreground">{list.code}</span></span></button>{canEditPriceList && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" title={`Editar nombre de ${list.name}`} aria-label={`Editar nombre de ${list.name}`} onClick={() => beginEditListName(list)}><Pencil className="size-4" /></Button>}</div>; })}</div><DialogFooter><Button variant="outline" onClick={() => setVisibleListIds(lists.map((list) => list.id))}>Mostrar todas</Button><Button onClick={() => setVisibleListIds([])}>Ocultar todas</Button></DialogFooter></DialogContent></Dialog>
 
-    <Card className="rounded-2xl" data-tour="price-lists-matrix"><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Matriz de precios</CardTitle><p className="mt-1 text-xs text-muted-foreground">Selecciona productos para descargar una plantilla. Para importar, el sistema identifica los productos por el SKU del archivo. El costo permanece en Inventario.</p></div><Badge variant="outline">{selectedCount} seleccionados</Badge></CardHeader><CardContent><div className="overflow-x-auto rounded-xl border"><Table className="min-w-[980px]"><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(displayedProductIds)} className="flex size-7 items-center justify-center rounded-md hover:bg-muted/60">{allDisplayedSelected ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Categoría</TableHead>{visibleLists.map((list) => <TableHead key={list.id} className="min-w-36 text-right">{list.name}</TableHead>)}<TableHead className="w-24 text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={5 + visibleLists.length} className="py-10 text-center text-muted-foreground">Cargando matriz…</TableCell></TableRow> : displayedProducts.map((product) => { const byList = itemsByProduct.get(product.id); const isEditing = editingProductIds.has(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id)}>{selectedProductIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}{product.variants && product.variants.length > 1 && <Badge variant="outline" className="ml-2 border-primary/40 text-primary text-[9px]"><Tag className="mr-0.5 size-2.5" />{product.variants.length}v</Badge>}</TableCell><TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>{visibleLists.map((list) => { const item = byList?.get(list.id); return <TableCell key={list.id} className="text-right">{isEditing ? <Input className="ml-auto h-8 w-32 text-right" type="number" min="0" value={editingPrices[product.id]?.[list.id] ?? ''} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} /> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'rounded-md bg-amber-500/10 font-medium italic text-amber-700' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice)) : 'Sin precio'}</div>}<span className="mt-1 block text-[10px] text-muted-foreground">{item ? currencyLabel(displayCurrency) : 'Pendiente'}</span></TableCell>; })}<TableCell className="text-right">{isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id}><Check className="size-4" /></Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}{product.variants && product.variants.length > 1 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-primary" title="Ver variantes" onClick={() => openVariantDetail(product)}><Layers className="size-4" /></Button>}</TableCell></TableRow>; })}</TableBody></Table></div>{paginationEnabled && <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>Mostrando {displayedProducts.length} de {catalogProducts.length} productos</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}><ChevronLeft className="size-4" /></Button><span>Página {page} de {totalPages}</span><Button variant="outline" size="sm" className="h-8" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}><ChevronRight className="size-4" /></Button></div></div>}{!catalogProducts.length && <p className="py-8 text-center text-sm text-muted-foreground">No hay productos disponibles.</p>}{!visibleLists.length && <p className="py-8 text-center text-sm text-muted-foreground">Selecciona al menos una lista para mostrar columnas.</p>}</CardContent></Card>
 
-    <Dialog open={missingOpen} onOpenChange={setMissingOpen}><DialogContent className="max-w-5xl max-h-[90vh] flex flex-col"><DialogHeader><DialogTitle>Productos con precios faltantes</DialogTitle><DialogDescription>Selecciona los productos y descarga una plantilla con las listas visibles pendientes. Las celdas vacías no modifican precios existentes.</DialogDescription></DialogHeader><div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline">{missingSelectedIds.size} seleccionados</Badge><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => openDownload([...missingSelectedIds])} disabled={!missingSelectedIds.size}><Download className="mr-2 size-4" /> Descargar plantilla</Button><Button size="sm" onClick={() => { setMissingOpen(false); openImport([...missingSelectedIds]); }} disabled={!missingSelectedIds.size}><Upload className="mr-2 size-4" /> Importar plantilla</Button></div></div><div className="min-h-0 flex-1 overflow-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(missingProducts.map((product) => product.id), 'missing')}>{missingSelectedIds.size === missingProducts.length && missingProducts.length > 0 ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Listas pendientes</TableHead></TableRow></TableHeader><TableBody>{missingProducts.map((product) => { const byList = itemsByProduct.get(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id, 'missing')}>{missingSelectedIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="flex flex-wrap gap-1">{lists.filter((list) => !byList?.has(list.id)).map((list) => <Badge key={list.id} variant="outline" className="text-[10px]">{list.name}</Badge>)}</TableCell></TableRow>; })}</TableBody></Table>{!missingProducts.length && <p className="p-8 text-center text-sm text-muted-foreground">Todos los productos tienen precios en las listas activas.</p>}</div><DialogFooter><Button variant="outline" onClick={() => setMissingOpen(false)}>Cerrar</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={missingOpen} onOpenChange={setMissingOpen}><DialogContent className="max-w-5xl max-h-[90vh] flex flex-col"><DialogHeader><DialogTitle>Productos con precios faltantes</DialogTitle><DialogDescription>Selecciona los productos y descarga una plantilla con las listas visibles pendientes. Las celdas vacías no modifican precios existentes.</DialogDescription></DialogHeader><div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="outline">{missingSelectedIds.size} seleccionados</Badge><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => openDownload([...missingSelectedIds])} disabled={!missingSelectedIds.size}><Download className="mr-2 size-4" /> Descargar plantilla</Button><Button size="sm" onClick={() => { setMissingOpen(false); openImport([...missingSelectedIds]); }} disabled={!missingSelectedIds.size}><Upload className="mr-2 size-4" /> Importar plantilla</Button></div></div><div className="min-h-0 flex-1 overflow-auto rounded-xl border"><Table><TableHeader><TableRow><TableHead className="w-10"><button type="button" onClick={() => toggleAll(missingProducts.map((product) => product.id), 'missing')}>{missingSelectedIds.size === missingProducts.length && missingProducts.length > 0 ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableHead><TableHead>Código</TableHead><TableHead>Producto</TableHead><TableHead>Listas pendientes</TableHead></TableRow></TableHeader><TableBody>{missingProducts.map((product) => { const byList = itemsByProduct.get(product.id); return <TableRow key={product.id}><TableCell><button type="button" onClick={() => toggleProduct(product.id, 'missing')}>{missingSelectedIds.has(product.id) ? <SquareCheckBig className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />}</button></TableCell><TableCell className="font-mono text-xs">{product.code}</TableCell><TableCell className="font-medium">{product.name}</TableCell><TableCell className="flex flex-wrap gap-1">{visibleLists.filter((list) => !byList?.has(list.id)).map((list) => <Badge key={list.id} variant="outline" className="text-[10px]">{list.name}</Badge>)}</TableCell></TableRow>; })}</TableBody></Table>{!missingProducts.length && <p className="p-8 text-center text-sm text-muted-foreground">Todos los productos tienen precios en las listas visibles.</p>}</div><DialogFooter><Button variant="outline" onClick={() => setMissingOpen(false)}>Cerrar</Button></DialogFooter></DialogContent></Dialog>
 
     <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}><DialogContent><DialogHeader><DialogTitle>Preparar plantilla de precios</DialogTitle><DialogDescription>Revisa el contenido antes de descargar el archivo.</DialogDescription></DialogHeader><div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm"><div className="flex justify-between"><span>Productos seleccionados</span><b>{downloadScopeIds.length}</b></div><div className="flex justify-between"><span>Listas incluidas</span><b>{importLists.length}</b></div><div className="flex justify-between"><span>Precios existentes incluidos</span><b>{catalogProducts.filter((product) => downloadScopeIds.includes(product.id)).reduce((total, product) => total + importLists.filter((list) => itemsByProduct.get(product.id)?.has(list.id)).length, 0)}</b></div><div className="flex justify-between"><span>Costo de referencia</span><b>Incluido</b></div></div><div className="space-y-2 text-xs text-muted-foreground"><p>• La plantilla incluirá el código, nombre, costo informativo y una columna por cada lista visible.</p><p>• Los precios existentes se descargarán para usarlos como referencia.</p><p>• El costo no se modifica al importar. Si un precio permanece igual, el sistema no hará ningún cambio.</p></div><DialogFooter><Button variant="outline" onClick={() => setDownloadOpen(false)}>Cancelar</Button><Button onClick={() => downloadTemplate(downloadScopeIds)}><Download className="mr-2 size-4" /> Descargar plantilla</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={importOpen} onOpenChange={(open) => { if (!open && !importing) { setImportRows([]); setImportFile(''); } setImportOpen(open); }}>

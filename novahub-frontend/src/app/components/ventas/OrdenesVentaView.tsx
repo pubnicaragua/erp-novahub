@@ -25,7 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
-import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -37,7 +37,8 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
-import { SalesWarehouseSelect, getDefaultSalesWarehouseId, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
+import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface OrdenesVentaViewProps {
@@ -257,10 +258,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         toast.error('La orden debe estar en proceso o aprobada antes de enviarse a factura', { id: invoiceToastId });
         return;
       }
-      if (currentStatus === 'IN_PROCESS') {
-        await salesOrdersService.update(order.id, { status: 'APPROVED' as any });
-        orderForConversion = { ...orderForConversion, status: 'APPROVED' as any };
-      }
       await onGenerateInvoice({ ...orderForConversion, status: 'APPROVED' as any });
       toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
       await onRefresh();
@@ -421,6 +418,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const handleUpdate = async (id: string | number, updates: Partial<SalesOrder>) => {
     try {
+      if (String(id).startsWith('local-')) {
+        const baseDoc = localDocRef.current?.id === String(id) ? localDocRef.current : localDoc;
+        if (!baseDoc) return;
+        commitLocalDoc({ ...baseDoc, ...updates, items: updates.items ?? baseDoc.items } as SalesOrder);
+        return;
+      }
       await salesOrdersService.update(id.toString(), updates);
       onRefresh();
     } catch (error: any) {
@@ -489,7 +492,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     );
     savingOrderRef.current = true;
     try {
-      await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
+      if (String(localDoc.id).startsWith('local-')) {
+        const created = await salesOrdersService.create({ ...buildOrderStatusPayload(status), number: undefined } as any);
+        commitLocalDoc(created);
+        await onRefresh();
+      } else {
+        await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
+      }
       clearSalesEditorDraft(salesDraftStorageKey);
       localDocRef.current = null;
       setEditingId(null);
@@ -611,33 +620,12 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     return () => clearTimeout(timer);
   }, [draftHydrated, editingId, data]);
 
-  const handleAddOrder = async () => {
-    const createToastId = toast.loading('Creando orden de venta...');
-    try {
-      const newOrd = await salesOrdersService.create({
-        // No customerId — el usuario lo elige en el formulario
-        date: new Date().toISOString(),
-        expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
-        discountAmount: 0,
-        extraCostDescription: null,
-        extraCostAmount: 0,
-        extraCharges: [],
-        deliveryDescription: null,
-        deliveryAmount: 0,
-        total: 0,
-        currency: displayCurrency as any,
-        exchangeRate: globalRate,
-        status: 'DRAFT' as any,
-        items: [],
-        warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
-      });
-      await onRefresh();
-      toast.success('Orden de venta creada como borrador', { id: createToastId });
-      commitLocalDoc(newOrd);
-      setEditingId(newOrd.id);
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || 'No se pudo crear la orden de venta', { id: createToastId });
-    }
+  const handleAddOrder = () => {
+    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: globalRate, status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
+    commitLocalDoc(draft);
+    setLocalRates({ dRate: 0, tRate: 0 });
+    setPricingMode('global');
+    setEditingId(draft.id);
   };
 
   const columns: ColumnDef<SalesOrder>[] = [
@@ -793,7 +781,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Orden {localDoc?.number}</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">{String(localDoc?.id).startsWith('local-') ? 'Nueva Orden' : `Orden ${localDoc?.number}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
             </div>
           </div>
@@ -826,10 +814,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
               <SalesAccountingLegend flow="order" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                  <Input defaultValue={localDoc?.number} onBlur={(e) => handleUpdate(localDoc!.id, { number: e.target.value })} className="h-8 text-xs font-black uppercase" />
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={(customers || [])
@@ -842,6 +826,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                       const items = (localDoc?.items || []).map((item: any) => item.productId
                         ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
                         : { ...item, priceListId });
+                      if (hasSalesProductPriceListConflicts(items, priceListId)) {
+                        toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
+                        return;
+                      }
                       setLocalDoc({ ...localDoc, customerId: val, priceListId, items } as any);
                       void handleUpdate(localDoc!.id, { customerId: val, priceListId, items } as any);
                     }}
@@ -1092,6 +1080,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                           onChange={(val) => {
                             const newItems = [...(localDoc.items || [])] as any[];
                             const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => p.id === val);
+                            const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || null;
+                            if (val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, localDoc.priceListId || null)) {
+                              toast.error('Este producto ya está agregado con la misma lista de precios.');
+                              return;
+                            }
                             newItems[idx].productId = val;
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
@@ -1120,7 +1113,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                         productCode={(productCatalog.find((product) => product.id === item.productId) || productCatalog.find((product) => String(product.name).trim() === String(item.description || '').trim()))?.code || item.code} 
                         itemType={item.itemType}
                         value={item.priceListId} 
-                        defaultPriceListId={localDoc?.priceListId} 
+                         defaultPriceListId={localDoc?.priceListId}
+                         lineItems={localDoc?.items || []}
+                         lineIndex={idx}
                         currency={localDoc?.currency} 
                         exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)} 
                         onChange={(priceListId, result) => { 
@@ -1178,6 +1173,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               )}>
                                 STOCK: {stock}
                               </Badge>
+                              <SalesWarehouseStockHint
+                                product={p}
+                                warehouses={warehouses}
+                                warehouseId={localDoc?.warehouseId}
+                                variantId={item.variantId}
+                                className="basis-full"
+                              />
                               {item.priceMissing && <PriceMissingBadge />}
                             </>
                           );

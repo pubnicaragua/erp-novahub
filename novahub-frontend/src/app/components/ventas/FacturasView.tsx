@@ -31,7 +31,7 @@ import { publicAccessService, publicLinkUrl } from '../../services/public-access
 import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
-import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
@@ -45,6 +45,7 @@ import { getInvoicePaymentPresentation, isBankPaymentMethod, requiresPaymentRefe
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -878,7 +879,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     }
   };
 
-  const startNewInvoice = async () => {
+  const startNewInvoice = () => {
     clearSalesEditorDraft(salesDraftStorageKey);
     localDocRef.current = null;
     setIsCreating(true);
@@ -910,13 +911,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     };
     commitLocalDoc(newInvoiceDraft);
     setLocalRates({ dRate: 0, tRate: 15 });
-
-    try {
-      const nextNumber = await invoicesService.getNextNumber();
-      setLocalDoc((current: any) => current ? { ...current, number: nextNumber } : current);
-    } catch (error) {
-      console.warn('No se pudo consultar la vista previa del número de factura.', error);
-    }
   };
 
   const handleSaveInvoice = async (
@@ -1572,10 +1566,6 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               )}
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Número</p>
-                   <Input value={localDoc?.number || ''} readOnly={isCreating} className="h-8 text-xs font-black uppercase" disabled={isInvoiceLocked} />
-                </div>
-                <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={customers
@@ -1589,6 +1579,10 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           ? { ...item, itemType: 'SERVICE', priceListId: null, priceMissing: false }
                           : { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false }
                         : { ...item, priceListId });
+                      if (hasSalesProductPriceListConflicts(items, priceListId)) {
+                        toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
+                        return;
+                      }
                       setLocalDoc({ ...localDoc, customerId: val, priceListId, items });
                       if (!isCreating) handleUpdate(localDoc!.id, { customerId: val, priceListId, items });
                     }}
@@ -1809,6 +1803,11 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         const newItems = [...(localDoc.items || [])];
                         const selectedProd = (resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).find(p => String(p.id) === String(val));
                         const selectedItemType = selectedProd ? getCatalogItemType(selectedProd) : resolveItemType(item);
+                        const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId);
+                        if (selectedItemType !== 'SERVICE' && val && hasSalesProductPriceListConflict(newItems, val, effectivePriceListId, idx, localDoc.priceListId || getCustomerPriceListId(localDoc.customerId))) {
+                          toast.error('Este producto ya está agregado con la misma lista de precios.');
+                          return;
+                        }
                         newItems[idx] = {
                           ...newItems[idx],
                           productId: val,
@@ -1843,6 +1842,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         itemType={item.itemType}
                         value={item.priceListId}
                         defaultPriceListId={localDoc?.priceListId || getCustomerPriceListId(localDoc?.customerId)}
+                        lineItems={localDoc?.items || []}
+                        lineIndex={idx}
                         fallbackPrice={Number(findProductForItem(item)?.salePrice || 0)}
                         currency={localDoc?.currency}
                         exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
@@ -1893,6 +1894,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                               )}>
                                 STOCK EN BODEGA: {stock}
                               </Badge>
+                              <SalesWarehouseStockHint
+                                product={p}
+                                warehouses={warehouses}
+                                warehouseId={warehouseId}
+                                variantId={item.variantId}
+                                className="basis-full"
+                              />
                               {item.priceMissing && <PriceMissingBadge />}
                             </>
                           );

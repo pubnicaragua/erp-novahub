@@ -21,6 +21,50 @@ export function sameSalesId(left: unknown, right: unknown): boolean {
   return Boolean(left) && Boolean(right) && String(left) === String(right);
 }
 
+/**
+ * Identifica la lista efectiva de una línea. Las líneas que no traen una
+ * lista propia heredan la lista del documento o del cliente.
+ */
+export function getSalesLinePriceListId(item: any, fallbackPriceListId?: string | null): string | null {
+  const value = item?.priceListId || fallbackPriceListId || '';
+  return String(value).trim() || null;
+}
+
+/** No permite repetir producto+lista, excluyendo la línea que se está editando. */
+export function hasSalesProductPriceListConflict(
+  items: any[] = [],
+  productId: unknown,
+  priceListId: unknown,
+  excludeIndex = -1,
+  fallbackPriceListId?: string | null,
+): boolean {
+  if (!productId || !priceListId) return false;
+  return items.some((item, index) =>
+    index !== excludeIndex
+    && String(item?.itemType || '').toUpperCase() !== 'SERVICE'
+    && sameSalesId(item?.productId, productId)
+    && sameSalesId(getSalesLinePriceListId(item, fallbackPriceListId), priceListId),
+  );
+}
+
+/** Detecta conflictos dentro de un documento ya construido, por ejemplo al
+ * cambiar el cliente y aplicar su lista a todas las líneas de productos. */
+export function hasSalesProductPriceListConflicts(
+  items: any[] = [],
+  fallbackPriceListId?: string | null,
+): boolean {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!item?.productId || String(item?.itemType || '').toUpperCase() === 'SERVICE') continue;
+    const priceListId = getSalesLinePriceListId(item, fallbackPriceListId);
+    if (!priceListId) continue;
+    const key = `${String(item.productId)}:${priceListId}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
 /** Formato visual único para importes de Ventas: 44,999.00. */
 export function formatSalesAmount(value: unknown): string {
   const amount = Number(value || 0);

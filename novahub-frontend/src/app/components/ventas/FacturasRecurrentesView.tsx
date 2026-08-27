@@ -22,7 +22,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
 import { recurringExpensesService } from '../../services/finanzas.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
-import { formatSalesAmount, getMissingSalesPriceMessage } from '../../utils/salesPriceList';
+import { formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -33,6 +33,7 @@ import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -149,6 +150,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     const itemType = resolveItemType(newItems[idx]);
     const catalog = itemType === 'SERVICE' ? serviceCatalog : productCatalog;
     const selectedProduct = catalog.find((product) => product.id === value);
+    const effectivePriceListId = newItems[idx].priceListId || localDoc.priceListId || null;
+    if (itemType !== 'SERVICE' && hasSalesProductPriceListConflict(newItems, value, effectivePriceListId, idx, localDoc.priceListId || null)) {
+      toast.error('Este producto ya está agregado con la misma lista de precios.');
+      return;
+    }
     const baseSalePrice = Number(selectedProduct?.salePrice ?? selectedProduct?.price ?? 0);
     const unitPrice = localDoc.currency === 'USD' ? baseSalePrice / Number(localDoc.exchangeRate || globalRate || 1) : baseSalePrice;
     newItems[idx] = {
@@ -535,7 +541,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))} 
                     value={localDoc?.customerId || ''} 
-                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: val, priceListId, items }); }}
+                    onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: val, priceListId, items }); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
                 <SalesWarehouseSelect
@@ -662,12 +668,23 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                         productName={item.description}
                         itemType={item.itemType}
                         value={item.priceListId}
-                        defaultPriceListId={localDoc?.priceListId}
+                         defaultPriceListId={localDoc?.priceListId}
+                         lineItems={localDoc?.items || []}
+                         lineIndex={idx}
                         currency={localDoc?.currency}
                         exchangeRate={Number(localDoc?.exchangeRate || globalRate || 1)}
                         onChange={(priceListId, result) => handlePriceListChange(idx, priceListId, result)}
                       />
                     </div>
+                    {item.productId && product && itemType !== 'SERVICE' && (
+                      <SalesWarehouseStockHint
+                        product={product}
+                        warehouses={warehouses}
+                        warehouseId={localDoc?.warehouseId}
+                        variantId={item.variantId}
+                        className="mt-1 basis-full"
+                      />
+                    )}
                     {item.priceMissing && <PriceMissingBadge className="mt-1" />}
                   </div>
                   {pricingMode === 'individual' && <div className="col-span-2 flex min-w-0 flex-wrap items-start gap-1.5 text-[10px] xl:col-span-2">

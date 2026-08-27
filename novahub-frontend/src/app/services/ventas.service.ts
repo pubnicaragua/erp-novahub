@@ -46,7 +46,7 @@ export const invoicesService = {
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<Invoice>>('/sales/invoices', { params: filters as any, signal }),
   getNextNumber: () => api.get<string>('/sales/invoices/next-number'),
   getSeriesConfiguration: () => api.get<InvoiceSeriesConfiguration>('/sales/invoice-series'),
-  saveSeriesConfiguration: (data: { branchId?: string | null; documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean }) =>
+  saveSeriesConfiguration: (data: { documentType: 'SALES_INVOICE' | 'POS_INVOICE'; prefix?: string | null; shareWithOtherType?: boolean }) =>
     api.put<any>('/sales/invoice-series', data),
   getById: (id: string) => api.get<Invoice>(`/sales/invoices/${id}`),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
