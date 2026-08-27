@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
   Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle,
@@ -36,6 +36,8 @@ import { isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentRefer
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { Switch } from '../ui/switch';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -43,6 +45,7 @@ interface NotasCreditoViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  warehouses?: any[];
   salesAlert?: unknown;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -98,10 +101,11 @@ const toWholeQuantity = (value: string | number) => {
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
 };
 
-export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
+export function NotasCreditoView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('credit-note', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credits-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID'>('ALL');
@@ -116,6 +120,42 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [referenceNow] = useState(() => Date.now());
+  const localDocRef = useRef<any>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: any) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        setIsCreating(Boolean(stored.isCreating));
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey) return;
+    if (!localDoc || (!editingId && !isCreating)) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, { editingId, isCreating, document: localDoc });
+  }, [draftHydrated, editingId, isCreating, localDoc, salesDraftStorageKey]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: CreditPaymentLine['method'], amount = '', currency: 'NIO' | 'USD' = displayCurrency): CreditPaymentLine => ({
@@ -259,23 +299,27 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     .map(([, label]) => ({ value: label, label, count: filtered.filter((credit) => customerName(credit) === label).length }));
 
   const closeEditor = () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
+    localDocRef.current = null;
     setEditingId(null);
     setIsCreating(false);
-    setLocalDoc(null);
+    commitLocalDoc(null);
   };
 
   const startEdit = (id: string) => {
     const record = data.find((credit) => credit.id === id);
     if (!record) return;
+    clearSalesEditorDraft(salesDraftStorageKey);
     setEditingId(id);
     setIsCreating(false);
-    setLocalDoc(JSON.parse(JSON.stringify(record)));
+    commitLocalDoc(JSON.parse(JSON.stringify(record)));
   };
 
   const startNew = () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
     setIsCreating(true);
     setEditingId(null);
-    setLocalDoc({
+    commitLocalDoc({
       customerId: '',
       date: new Date().toISOString().split('T')[0],
       dueDate: addDays(new Date(), 30),
@@ -288,6 +332,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
       priceListId: null,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
     });
   };
 
@@ -323,6 +368,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
         total: Number(localDoc.total || 0),
         currency: localDoc.currency || displayCurrency,
         exchangeRate: Number(localDoc.exchangeRate || globalRate),
+        warehouseId: localDoc.warehouseId || localDoc.invoice?.warehouseId || null,
         status: 'DRAFT',
       };
       if (isCreating) {
@@ -445,6 +491,26 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     }
   };
 
+  const handleSendToCash = async (credit: CreditNote) => {
+    if (!canPerform('SALES_CREDIT_NOTES', 'approve')) return;
+    const status = normalizeStatus(credit.status);
+    const balance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
+    if (!['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) || balance <= 0.01) {
+      toast.error('Solo se puede enviar a caja un crédito aprobado con saldo pendiente.');
+      return;
+    }
+    const queueStatus = normalizeStatus(credit.cashQueue?.status);
+    if (['PENDING', 'CLAIMED'].includes(queueStatus)) return;
+    const sendToastId = toast.loading(`Enviando crédito ${credit.number} a caja...`);
+    try {
+      await creditNotesService.sendToCash(credit.id);
+      toast.success(`Crédito ${credit.number} enviado a Caja`, { id: sendToastId });
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo enviar el crédito a caja', { id: sendToastId });
+    }
+  };
+
   const buildCreditPanel = (row: CreditNote): SalesDocumentPanelData => ({
     id: row.id,
     number: row.number,
@@ -527,7 +593,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
           <div className="flex flex-wrap items-center gap-3">{canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300 font-black uppercase text-[10px] tracking-widest" onClick={async () => { const id = toast.loading('Eliminando crédito...'); try { await creditNotesService.delete(localDoc.id); toast.success('Crédito eliminado', { id }); closeEditor(); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || 'No se pudo eliminar', { id }); } }} disabled={isCreating}><Trash2 className="mr-2 size-3" /> Eliminar</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'approve') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Emitir Crédito</Button>}<Button className="rounded-xl bg-primary font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>{isCreating ? 'Crear Crédito' : 'Guardar'}</Button></>}</div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
-          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => resolveItemType(item) === 'SERVICE' ? { ...item, priceListId: null } : item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
+           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => resolveItemType(item) === 'SERVICE' ? { ...item, priceListId: null } : item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite</p><p className="mt-1 text-lg font-black">{formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), baseCurrency)}</p></div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Saldo del cliente</p><p className="mt-1 text-2xl font-black">{formatConvertedAmount(Number(selectedCustomer?.balance || 0), baseCurrency)}</p><p className="mt-1 text-[10px] text-muted-foreground">Negativo: pendiente por cobrar · Positivo: saldo a favor</p></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. Configúralo en <button type="button" className="font-black underline underline-offset-2" onClick={goToCustomers}>Clientes</button> para continuar.</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
@@ -672,7 +738,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tour="sales-list-kpis"><SalesKpiCard title={`Crédito emitido (${baseCurrency})`} value={formatConvertedAmount(totalIssued, baseCurrency)} icon={BadgeDollarSign} color="text-primary" bg="bg-primary/10" /><SalesKpiCard title={`Saldo abierto (${baseCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-amber-500" bg="bg-amber-500/10" /><SalesKpiCard title="Activos" value={data.filter((credit) => ['ISSUED', 'PARTIAL'].includes(normalizeStatus(credit.status))).length} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-500/10" /><SalesKpiCard title="Por vencer / vencidos" value={overdueCount} icon={Clock} color="text-rose-500" bg="bg-rose-500/10" /></div>
       <div className="flex flex-col gap-4"><div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center"><div><h2 className="text-xl font-black uppercase tracking-tight text-foreground" data-tour="sales-list-title">Créditos</h2><p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">Productos y servicios entregados con límite y fecha de pago.</p></div><div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions"><SalesViewTutorial view="credit-notes" /><ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos" /><SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} /><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar crédito..." className="h-10 w-64 rounded-xl border-border/50 bg-background/50 pl-9 text-xs font-bold tracking-widest" value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); onSearchChange?.(event.target.value); }} /></div><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}><SelectTrigger aria-label="Filtrar créditos por estado" className="h-10 min-w-[8.5rem] rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest"><SelectValue /></SelectTrigger><SelectContent align="end"><SelectItem value="ALL">Todos los estados</SelectItem>{statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>{canPerform('SALES_CREDIT_NOTES', 'create') && <Button onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}</div></div>
-        <EditableDataTable data={filteredData} pagination={pagination} onBulkDelete={async (ids) => { const id = toast.loading(`Eliminando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`); try { for (const recordId of ids) await creditNotesService.delete(recordId as string); toast.success('Créditos eliminados', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudieron eliminar', { id }); } }} columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls layoutMode={layoutMode} actions={(row) => <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(row.status) === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}<Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>{canPerform('SALES_CREDIT_NOTES', 'delete') && <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>}</div>} />
+        <EditableDataTable data={filteredData} pagination={pagination} onBulkDelete={async (ids) => { const id = toast.loading(`Eliminando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`); try { for (const recordId of ids) await creditNotesService.delete(recordId as string); toast.success('Créditos eliminados', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudieron eliminar', { id }); } }} columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} actionsWidth="w-36" fitContent showHorizontalControls layoutMode={layoutMode} actions={(row) => { const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status)); return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{canPerform('SALES_CREDIT_NOTES', 'approve') && normalizeStatus(row.status) === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}{canPerform('SALES_CREDIT_NOTES', 'approve') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(row.status)) && Number(row.balance ?? row.total) > 0.01 && <Button title="Registrar pago" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}<Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>{canPerform('SALES_CREDIT_NOTES', 'delete') && <Button title="Eliminar" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="size-4" /></Button>}</div>; }} />
       </div>
 
       <SalesDocumentDetailSheet

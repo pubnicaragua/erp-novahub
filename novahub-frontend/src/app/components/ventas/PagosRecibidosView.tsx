@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Search, TrendingUp, Clock, CheckCircle2, Wallet, Eye, ChevronLeft, Trash2
 } from 'lucide-react';
@@ -33,6 +33,7 @@ import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -130,6 +131,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('payment', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
@@ -139,6 +141,49 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [detailPayment, setDetailPayment] = useState<PaymentReceived | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const localDocRef = useRef<any>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: any) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        setIsCreating(Boolean(stored.isCreating));
+        const paymentLines = stored.metadata?.paymentLines;
+        if (Array.isArray(paymentLines)) setPaymentLines(paymentLines as ReceivedPaymentLine[]);
+        setMixedPaymentEnabled(Boolean(stored.metadata?.mixedPaymentEnabled));
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey) return;
+    if (!localDoc || !isCreating) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, {
+      editingId: null,
+      isCreating: true,
+      document: localDoc,
+      metadata: { paymentLines, mixedPaymentEnabled },
+    });
+  }, [draftHydrated, isCreating, localDoc, mixedPaymentEnabled, paymentLines, salesDraftStorageKey]);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: ReceivedPaymentLine['method'], amount = 0, currency: 'NIO' | 'USD' = displayCurrency): ReceivedPaymentLine => ({
@@ -205,11 +250,12 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
   };
 
   const startNew = () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
     const initialLine = paymentLine('TRANSFER');
     setIsCreating(true);
     setPaymentLines([initialLine]);
     setMixedPaymentEnabled(false);
-    setLocalDoc({
+    commitLocalDoc({
       customerId: '',
       invoiceId: '',
       creditNoteId: '',
@@ -300,7 +346,9 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         await paymentsService.create(payload as any);
       }
       toast.success('Pago registrado', { id: saveToastId });
-      setIsCreating(false); setLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); onRefresh();
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDocRef.current = null;
+      setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago', { id: saveToastId }); }
   };
 
@@ -451,7 +499,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setIsCreating(false); setLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setIsCreating(false); commitLocalDoc(null); setPaymentLines([]); setMixedPaymentEnabled(false); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">Registrar Pago</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>

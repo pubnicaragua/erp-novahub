@@ -10,8 +10,6 @@ import { Banknote, Plus, Loader2, Edit2, Ban, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cajaService, type CashRegister, type CashClosureMode } from '../../../services/caja.service';
 import { getApiErrorMessage } from '../../../services/api';
-import { inventoryService } from '../../../services/inventario.service';
-import { useAuth } from '../../../contexts/AuthContext';
 import { SalesViewTutorial } from '../SalesViewTutorial';
 
 interface AdministrarCajasModalProps {
@@ -27,19 +25,15 @@ function toCajaPayload(form: Partial<CashRegister>) {
     name: String(form.name || '').trim(),
     code: String(form.code || '').trim(),
     location: String(form.location || '').trim(),
-    warehouseId: form.warehouseId || undefined,
     isActive: form.isActive !== false,
   };
 }
 
 export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, initialMode, onInitialModeHandled }: AdministrarCajasModalProps) {
-  const { canPerform } = useAuth();
-  const canViewInventory = canPerform('INVENTORY', 'view');
   const [cajasList, setCajasList] = useState<CashRegister[]>([]);
   const [cajasLoading, setCajasLoading] = useState(false);
   const [isCajaFormOpen, setIsCajaFormOpen] = useState(false);
   const [cajaForm, setCajaForm] = useState<Partial<CashRegister>>({});
-  const [bodegasList, setBodegasList] = useState<any[]>([]);
 
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [accessCaja, setAccessCaja] = useState<CashRegister | null>(null);
@@ -59,24 +53,9 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
     }
   };
 
-  const fetchBodegas = async () => {
-    if (!canViewInventory) {
-      setBodegasList([]);
-      return;
-    }
-    try {
-      const res: any = await inventoryService.getWarehouses();
-      const list = Array.isArray(res) ? res : (res?.data || []);
-      setBodegasList(list.filter((warehouse: any) => warehouse.scopeType !== 'BUSINESS_UNIT'));
-    } catch (e: any) {
-      console.error(e);
-    }
-  };
-
   useEffect(() => {
     if (open) {
       Promise.resolve().then(fetchCajas);
-      Promise.resolve().then(fetchBodegas);
     }
   }, [open]);
 
@@ -165,20 +144,16 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                       <tr className="border-b border-border bg-muted/20">
                         <th className="px-4 py-3 text-left font-semibold">Código</th>
                         <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                        <th className="px-4 py-3 text-left font-semibold">Bodega</th>
                         <th className="px-4 py-3 text-left font-semibold">Ubicación</th>
                         <th className="px-4 py-3 text-left font-semibold">Estado</th>
                         <th data-actions-column="compact" className="px-4 py-3 text-right font-semibold">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                      {cajasList.map((caja) => {
-                        const bodega = caja.warehouse || bodegasList.find((warehouse: any) => warehouse.id === caja.warehouseId);
-                        return (
+                      {cajasList.map((caja) => (
                         <tr key={caja.id} className="hover:bg-muted/10">
                           <td className="px-4 py-3 font-medium">{caja.code}</td>
                           <td className="px-4 py-3">{caja.name}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{bodega ? bodega.name : 'No asignada'}</td>
                           <td className="px-4 py-3 text-muted-foreground">{caja.location || '-'}</td>
                           <td className="px-4 py-3">
                             <Badge variant={caja.isActive ? 'default' : 'secondary'} className={caja.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
@@ -197,7 +172,6 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                                   name: caja.name,
                                   code: caja.code,
                                   location: caja.location || '',
-                                  warehouseId: caja.warehouseId,
                                   isActive: caja.isActive !== false,
                                 });
                                 setIsCajaFormOpen(true);
@@ -217,10 +191,10 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
                             </div>
                           </td>
                         </tr>
-                      )})}
+                      ))}
                       {cajasList.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                          <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                             No hay cajas creadas. Haz clic en "Nueva Caja" para empezar.
                           </td>
                         </tr>
@@ -245,7 +219,7 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
         <DialogContent>
           <DialogHeader data-tour="sales-form-title">
             <DialogTitle>{cajaForm.id ? 'Editar Caja' : 'Nueva Caja'}</DialogTitle>
-            <DialogDescription>Completa la información de la caja.</DialogDescription>
+            <DialogDescription>Completa la información de la caja. Quedará asociada a la sucursal activa.</DialogDescription>
             <SalesViewTutorial view="cash-registers" context="form" />
           </DialogHeader>
           <div className="space-y-4 py-4" data-tour="sales-form-data">
@@ -257,16 +231,8 @@ export function AdministrarCajasModal({ open, onOpenChange, onRegistersChanged, 
               <Label>Nombre *</Label>
               <Input value={cajaForm.name || ''} onChange={e => setCajaForm({...cajaForm, name: e.target.value})} placeholder="Caja Principal" />
             </div>
-            <div className="space-y-2">
-              <Label>Bodega</Label>
-              <Select value={cajaForm.warehouseId || ''} onValueChange={v => setCajaForm({...cajaForm, warehouseId: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccione una bodega" /></SelectTrigger>
-                <SelectContent>
-                  {bodegasList.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              La caja no se vincula a una bodega. En Facturación por Caja seleccionarás la bodega de salida de cada producto.
             </div>
             <div className="space-y-2">
               <Label>Ubicación</Label>

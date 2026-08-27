@@ -1,5 +1,15 @@
 const CACHE_PREFIX = 'nh-erp-';
-const PROTECTED_KEYS = new Set(['nh-auth-token', 'erp-active-module', 'erp-active-submodule']);
+const PROTECTED_KEYS = new Set([
+  'nh-auth-token',
+  'erp-active-module',
+  'erp-active-submodule',
+  'erp-sidebar-collapsed',
+  'novahub:manager-sidebar-collapsed',
+]);
+
+const PROTECTED_KEY_PREFIXES = [
+  'novahub:sales-draft:',
+];
 
 function isCacheKey(key: string): boolean {
   return key.startsWith(CACHE_PREFIX);
@@ -35,7 +45,7 @@ function evictOldestCaches(keep: string | null): number {
     const entries: { key: string; expiry: number }[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || key === keep || PROTECTED_KEYS.has(key)) continue;
+      if (!key || key === keep || PROTECTED_KEYS.has(key) || PROTECTED_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
       let expiry = 0;
       try {
         const parsed = JSON.parse(localStorage.getItem(key) || 'null');

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
   FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, AlertTriangle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send
@@ -44,6 +44,7 @@ import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/s
 import { getInvoicePaymentPresentation, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -142,6 +143,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('invoice', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState(() => {
     try {
       if (sessionStorage.getItem('global-search-module') !== 'facturas') return '';
@@ -177,6 +179,27 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     const linkedProduct = products.find((product) => product.id === item.productId);
     return [...catalog, linkedProduct || { id: item.productId, code: '', name: item.description || 'Artículo vinculado', itemType: item.itemType || 'PRODUCT' }];
   };
+  const getProductStockForWarehouse = (product: any, warehouseId?: string | null) => {
+    if (!product) return 0;
+    const normalizedWarehouseId = String(warehouseId || '').trim();
+    if (!normalizedWarehouseId) return Number(product.stock || 0);
+    const stockLevels = Array.isArray(product.stockLevels) ? product.stockLevels : [];
+    if (stockLevels.length === 0) return 0;
+    return stockLevels
+      .filter((level: any) => String(level?.warehouseId || '') === normalizedWarehouseId)
+      .reduce((sum: number, level: any) => sum + Number(level?.quantity || 0), 0);
+  };
+  const getDefaultWarehouseId = () => {
+    const activeWarehouses = warehouses.filter((warehouse: any) => warehouse?.isActive !== false);
+    // La API devuelve la bodega más reciente primero. Preferimos una bodega
+    // activa con inventario para que el stock mostrado coincida con la salida.
+    return activeWarehouses.find((warehouse: any) => Number(warehouse?.stockCount || 0) > 0)?.id
+      || activeWarehouses[0]?.id
+      || warehouses[0]?.id
+      || '';
+  };
+  const getItemWarehouseId = (item: any) => item?.warehouseId || localDoc?.warehouseId || getDefaultWarehouseId();
+  const getItemStock = (item: any, product?: any) => getProductStockForWarehouse(product || findProductForItem(item), getItemWarehouseId(item));
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 15 });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [isCreating, setIsCreating] = useState(false);
@@ -199,6 +222,55 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [accountingPreflight, setAccountingPreflight] = useState<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[] } | null>(null);
   const [accountingPreflightLoading, setAccountingPreflightLoading] = useState(false);
+  const localDocRef = useRef<any>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: any) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    if (invoiceDraft) {
+      const timer = window.setTimeout(() => setDraftHydrated(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+    const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        setIsCreating(Boolean(stored.isCreating));
+        const rates = stored.metadata?.localRates;
+        if (rates && typeof rates === 'object') setLocalRates(rates as { dRate: number; tRate: number });
+        const storedPricingMode = stored.metadata?.pricingMode;
+        if (storedPricingMode === 'global' || storedPricingMode === 'individual') setPricingMode(storedPricingMode);
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [invoiceDraft, salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey || invoiceDraft) return;
+    if (!localDoc || (!editingId && !isCreating)) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, {
+      editingId,
+      isCreating,
+      document: localDoc,
+      metadata: { localRates, pricingMode },
+    });
+  }, [draftHydrated, editingId, invoiceDraft, isCreating, localDoc, localRates, pricingMode, salesDraftStorageKey]);
 
   const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
@@ -399,7 +471,18 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     setIsCreating(!isExistingInvoice);
     setEditingId(isExistingInvoice ? draftId! : null);
     const draftSnapshot = JSON.parse(JSON.stringify(invoiceDraft));
-    setLocalDoc({ ...draftSnapshot, extraCharges: normalizeExtraCharges(draftSnapshot) });
+    const draftWarehouseId = String(draftSnapshot.warehouseId || '').trim()
+      || (!isExistingInvoice ? getDefaultWarehouseId() : '');
+    const draftItems = (draftSnapshot.items || []).map((item: any) => ({
+      ...item,
+      warehouseId: item.warehouseId || draftWarehouseId || undefined,
+    }));
+    setLocalDoc({
+      ...draftSnapshot,
+      warehouseId: draftWarehouseId || draftSnapshot.warehouseId || null,
+      items: draftItems,
+      extraCharges: normalizeExtraCharges(draftSnapshot),
+    });
     setPricingMode(inferPricingMode(draftSnapshot));
 
     const sub = Number(invoiceDraft.subtotal || 0);
@@ -420,28 +503,35 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   // El documento abierto es un snapshot local. Las actualizaciones de la
   // lista paginada no deben reemplazarlo con una respuesta parcial sin líneas.
   useEffect(() => {
+    if (!draftHydrated) return;
     if (invoiceDraft) return;
     if (editingId) {
-      const inv = data.find(x => x.id === editingId);
-      if (inv) {
+      const localSnapshot = localDocRef.current?.id === editingId ? localDocRef.current : null;
+      if (localSnapshot) {
         setIsCreating(false);
-        const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
-        setLocalDoc({ ...invoiceSnapshot, extraCharges: normalizeExtraCharges(invoiceSnapshot) });
-        setPricingMode(inferPricingMode(invoiceSnapshot));
-        const sub = Number(inv.subtotal || 0);
-        if (sub > 0) {
-          const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
-          const base = sub - Number(inv.discountAmount || 0);
-          const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
-          setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+      } else {
+        const inv = data.find(x => x.id === editingId);
+        if (inv) {
+          setIsCreating(false);
+          const invoiceSnapshot = JSON.parse(JSON.stringify(inv));
+          commitLocalDoc({ ...invoiceSnapshot, extraCharges: normalizeExtraCharges(invoiceSnapshot) });
+          setPricingMode(inferPricingMode(invoiceSnapshot));
+          const sub = Number(inv.subtotal || 0);
+          if (sub > 0) {
+            const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
+            const base = sub - Number(inv.discountAmount || 0);
+            const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
+            setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+          }
         }
       }
     } else if (!isCreating) {
-      setLocalDoc(null);
+      localDocRef.current = null;
+      commitLocalDoc(null);
     }
     // `data` se usa únicamente para inicializar al cambiar de factura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingId, invoiceDraft, isCreating]);
+  }, [data, draftHydrated, editingId, invoiceDraft, isCreating]);
 
   useEffect(() => {
     if (targetInvoiceId) {
@@ -789,6 +879,8 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   };
 
   const startNewInvoice = async () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
+    localDocRef.current = null;
     setIsCreating(true);
     setEditingId(null);
     const newInvoiceDraft = {
@@ -798,6 +890,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       currency: displayCurrency as any,
       exchangeRate: globalRate,
+      warehouseId: getDefaultWarehouseId(),
       items: [],
       subtotal: 0,
       taxAmount: 0,
@@ -815,7 +908,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       commissionRate: 0,
       commissionAmount: 0,
     };
-    setLocalDoc(newInvoiceDraft);
+    commitLocalDoc(newInvoiceDraft);
     setLocalRates({ dRate: 0, tRate: 15 });
 
     try {
@@ -990,7 +1083,9 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       }
       setIsCreating(false);
       setEditingId(null);
-      setLocalDoc(null);
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDocRef.current = null;
+      commitLocalDoc(null);
       onRefresh();
     } catch (e: any) {
       const msg = e.response?.data?.message;
@@ -1396,7 +1491,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); onClearInvoiceDraft?.(); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -1503,6 +1598,31 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                   <p className="mt-2 text-[10px] font-bold text-muted-foreground">
                     El límite de crédito se valida únicamente al registrar un pago parcial o emitir una venta a crédito.
                   </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-1">Bodega de salida</p>
+                  <Select
+                    value={localDoc?.warehouseId || ''}
+                    onValueChange={(warehouseId) => {
+                      const items = (localDoc.items || []).map((item: any) => ({
+                        ...item,
+                        warehouseId,
+                        serialNumbers: [],
+                      }));
+                      const nextDoc = { ...localDoc, warehouseId, items };
+                      setLocalDoc(nextDoc);
+                      if (!isCreating) void handleUpdate(localDoc!.id, { warehouseId, items } as any);
+                    }}
+                    disabled={isInvoiceLocked || warehouses.length === 0}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar bodega" /></SelectTrigger>
+                    <SelectContent>
+                      {warehouses
+                        .filter((warehouse: any) => warehouse?.isActive !== false || warehouse.id === localDoc?.warehouseId)
+                        .map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[10px] text-muted-foreground/70">El stock y la salida se validan en esta bodega.</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
@@ -1654,7 +1774,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
                <div className="flex flex-wrap gap-2">
                  {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
-                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: '', serialNumbers: [] }];
+                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: localDoc?.warehouseId || getDefaultWarehouseId(), serialNumbers: [] }];
                    setLocalDoc({ ...localDoc, items: newItems });
                  }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                  <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
@@ -1697,7 +1817,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                           priceListId: selectedItemType === 'SERVICE'
                             ? null
                             : (newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId)),
-                          warehouseId: '',
+                          warehouseId: newItems[idx].warehouseId || localDoc?.warehouseId || getDefaultWarehouseId(),
                           serialNumbers: [],
                         };
                         if (selectedProd) {
@@ -1763,14 +1883,15 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                               </>
                             );
                           }
-                          const stock = Number(p.stock || 0);
+                          const warehouseId = getItemWarehouseId(item);
+                          const stock = getProductStockForWarehouse(p, warehouseId);
                           return (
                             <>
                               <Badge variant="outline" className={cn(
                                 "text-[9px] font-black border-none px-1.5 py-0 h-4 bg-muted/20",
                                 stock <= 0 ? "text-rose-500 bg-rose-500/10" : "text-emerald-500 bg-emerald-500/10"
                               )}>
-                                STOCK: {stock}
+                                STOCK EN BODEGA: {stock}
                               </Badge>
                               {item.priceMissing && <PriceMissingBadge />}
                             </>
@@ -1855,13 +1976,14 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </div>
                   )}
                   <div className={cn("min-w-0 xl:col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' ? 1000000 : Number(findProductForItem(item)?.stock || 1000000)} value={Number(item.quantity) || ''} placeholder="0"
+                    <Input type="number" min="0" max={resolveItemType(item) === 'SERVICE' ? 1000000 : Math.max(0, getItemStock(item))} value={Number(item.quantity) || ''} placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = findProductForItem(item);
-                        if (p && resolveItemType(item) !== 'SERVICE' && newQty > Number(p.stock || 0)) {
-                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
-                          newQty = Number(p.stock || 0);
+                        const availableStock = getItemStock(item, p);
+                        if (p && resolveItemType(item) !== 'SERVICE' && newQty > availableStock) {
+                          toast.warning(`Stock insuficiente en la bodega seleccionada. Disponible: ${availableStock}`, { id: `stock-warn-${idx}` });
+                          newQty = availableStock;
                         }
                         const newItems = [...(localDoc.items || [])];
                         newItems[idx] = { ...newItems[idx], quantity: newQty, total: newQty * Number(newItems[idx].unitPrice || 0) };

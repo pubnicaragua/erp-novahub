@@ -134,6 +134,7 @@ export const creditNotesService = {
   create: (data: Partial<CreditNote>, idempotencyKey?: string) => api.idempotentPost<CreditNote>('/sales/credit-notes', data, idempotencyKey),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
   issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),
+  sendToCash: (id: string, data?: { notes?: string }) => api.post<any>(`/sales/credit-notes/${id}/send-to-cash`, data || {}),
   apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };

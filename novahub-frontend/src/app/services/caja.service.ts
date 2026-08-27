@@ -17,7 +17,8 @@ export interface CashRegister {
   code: string;
   location?: string;
   isActive: boolean;
-  warehouseId?: string;
+  /** Legacy only. Caja is associated with the branch, not a warehouse. */
+  warehouseId?: string | null;
   warehouse?: any;
   hasActiveSession?: boolean;
   resolvedWarehouseId?: string | null;
@@ -177,6 +178,7 @@ export interface PosCustomer {
 export interface PosInvoiceItem {
   productId?: string;
   variantId?: string;
+  warehouseId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -236,10 +238,48 @@ export interface PosPaymentLine {
 }
 
 export type InvoiceCashQueueStatus = 'PENDING' | 'CLAIMED' | 'PAID' | 'CANCELLED';
+export interface CashQueueDocument {
+  id: string;
+  number: string;
+  status: string;
+  date?: string;
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  extraCostDescription?: string | null;
+  extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description: string; amount: number }>;
+  deliveryDescription?: string | null;
+  deliveryAmount?: number;
+  irAmount?: number;
+  total: number;
+  amountPaid?: number;
+  balance: number;
+  currency: 'NIO' | 'USD';
+  exchangeRate?: number;
+  customerId?: string | null;
+  customCustomerName?: string | null;
+  customer?: { id: string; name: string; phone?: string | null } | null;
+  items?: Array<{ id: string; description: string; quantity: number; unitPrice: number; total: number }>;
+  invoice?: { id: string; number: string; status: string } | null;
+}
+
+export interface PosWarehouseOption {
+  id: string;
+  name: string;
+  scopeType: 'BRANCH' | 'BUSINESS_UNIT' | string;
+  sourceType: 'BODEGA' | 'ALMACEN_CORPORATIVO' | string;
+  branchId?: string | null;
+  branchName: string;
+  businessUnitId?: string | null;
+  canView: boolean;
+  canOperate: boolean;
+}
 export interface InvoiceCashQueue {
   id: string;
   status: InvoiceCashQueueStatus;
-  invoiceId: string;
+  invoiceId?: string | null;
+  creditNoteId?: string | null;
   registerId?: string | null;
   sessionId?: string | null;
   requestedById?: string | null;
@@ -254,27 +294,8 @@ export interface InvoiceCashQueue {
   releaseReason?: string | null;
   notes?: string | null;
   createdAt: string;
-  invoice: {
-    id: string;
-    number: string;
-    status: string;
-    date?: string;
-    subtotal?: number;
-    taxAmount?: number;
-    discountAmount?: number;
-    extraCostDescription?: string | null;
-    extraCostAmount?: number;
-    deliveryDescription?: string | null;
-    deliveryAmount?: number;
-    irAmount?: number;
-    total: number;
-    balance: number;
-    currency: 'NIO' | 'USD';
-    customerId?: string | null;
-    customCustomerName?: string | null;
-    customer?: { id: string; name: string; phone?: string | null } | null;
-    items?: Array<{ id: string; description: string; quantity: number; unitPrice: number; total: number }>;
-  };
+  invoice?: CashQueueDocument | null;
+  creditNote?: CashQueueDocument | null;
   requestedBy?: { id: string; name: string } | null;
   claimedBy?: { id: string; name: string } | null;
   register?: { id: string; code: string; name: string } | null;
@@ -348,6 +369,7 @@ export interface PosHold {
   discountAmount: number;
   extraCostDescription?: string | null;
   extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description: string; amount: number }>;
   deliveryDescription?: string | null;
   deliveryAmount?: number;
   irAmount: number;
@@ -393,6 +415,7 @@ export interface CreatePosHoldDto {
   discountPercent?: number;
   extraCostDescription?: string | null;
   extraCostAmount?: number;
+  extraCharges?: Array<{ id?: string; description: string; amount: number }>;
   deliveryDescription?: string | null;
   deliveryAmount?: number;
   pricingMode?: 'global' | 'individual';
@@ -499,10 +522,10 @@ export const cajaService = {
   getRegisterAvailability: () =>
     api.get<CashRegisterAvailability>('/caja/registers/status'),
 
-  createRegister: (data: { name: string; code: string; location?: string; warehouseId?: string }) =>
+  createRegister: (data: { name: string; code: string; location?: string }) =>
     api.post<CashRegister>('/caja/registers', data),
 
-  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean; warehouseId?: string }) =>
+  updateRegister: (id: string, data: { name?: string; code?: string; location?: string; isActive?: boolean }) =>
     api.put<CashRegister>(`/caja/registers/${id}`, data),
 
   deleteRegister: (id: string) =>
@@ -546,6 +569,9 @@ export const cajaService = {
     return resolveStorageReferences(products);
   },
 
+  getPosWarehouses: (signal?: AbortSignal) =>
+    api.get<PosWarehouseOption[]>('/caja/warehouses', { signal }),
+
   getCustomers: () =>
     api.get<PosCustomer[]>('/caja/customers'),
 
@@ -558,6 +584,7 @@ export const cajaService = {
     discountPercent?: number;
     extraCostDescription?: string | null;
     extraCostAmount?: number;
+    extraCharges?: Array<{ description: string; amount: number }>;
     deliveryDescription?: string | null;
     deliveryAmount?: number;
     pricingMode?: 'global' | 'individual';
@@ -578,6 +605,7 @@ export const cajaService = {
     discountPercent?: number;
     extraCostDescription?: string | null;
     extraCostAmount?: number;
+    extraCharges?: Array<{ description: string; amount: number }>;
     deliveryDescription?: string | null;
     deliveryAmount?: number;
     pricingMode?: 'global' | 'individual';
@@ -708,7 +736,8 @@ export const cajaService = {
 export interface InvoiceCashQueueEvent {
   tenantId: string;
   queueId: string;
-  invoiceId: string;
+  invoiceId?: string | null;
+  creditNoteId?: string | null;
   status: InvoiceCashQueueStatus;
   reason: string;
   occurredAt: string;

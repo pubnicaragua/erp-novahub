@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft
 } from 'lucide-react';
@@ -31,6 +31,8 @@ import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/Purch
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -38,6 +40,7 @@ interface FacturasRecurrentesViewProps {
   onRefresh: () => void;
   customers?: Customer[];
   products?: Product[];
+  warehouses?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
@@ -92,10 +95,11 @@ const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
   return next.toISOString();
 };
 
-export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
+export function FacturasRecurrentesView({ data, loading, onRefresh, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: FacturasRecurrentesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('recurring-invoice', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
@@ -114,6 +118,18 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const [isCreating, setIsCreating] = useState(false);
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
+  const localDocRef = useRef<any>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: any) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
   const resolveItemType = (item: any) => String(item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT')).toUpperCase();
@@ -172,22 +188,6 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     };
   };
 
-  const [prevEditingId, setPrevEditingId] = useState(editingId);
-  if (editingId !== prevEditingId) {
-    setPrevEditingId(editingId);
-    if (editingId) {
-      const r = data.find(x => x.id === editingId);
-      if (r) {
-        setLocalDoc(JSON.parse(JSON.stringify(r)));
-        setLocalRates({ ...calculateRates(r), irRate: 0, irTaxId: '' });
-        setPricingMode((r.items || []).some((item: any) => Number(item.discount || 0) > 0 || Number(item.taxRate || 0) > 0) ? 'individual' : 'global');
-      }
-    } else if (!isCreating) {
-      setLocalDoc(null);
-      setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
-    }
-  }
-
   const filtered = data.filter(r =>
     (statusFilter === 'ALL' || String(r.status || '').toUpperCase() === statusFilter) &&
     ((r as any).profileName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -223,16 +223,17 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
   const startNew = () => {
     setIsCreating(true);
     setEditingId(null);
-    setLocalDoc({
+    commitLocalDoc({
       customerId: '',
       frequency: 'MONTHLY',
       startDate: new Date().toISOString().split('T')[0],
       endDate: '',
       nextInvoiceDate: calculateNextInvoiceDate('MONTHLY', new Date().toISOString().split('T')[0]),
       currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
-      exchangeRate: globalRate,
-      items: [],
-      subtotal: 0,
+       exchangeRate: globalRate,
+       items: [],
+       warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
+       subtotal: 0,
       discountAmount: 0,
       taxAmount: 0,
       total: 0,
@@ -304,6 +305,61 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     return { items: normalizedItems, subtotal, discountAmount, taxAmount, irRate: 0, irAmount: 0, total: base + taxAmount };
   };
 
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        setIsCreating(Boolean(stored.isCreating));
+        const rates = stored.metadata?.localRates;
+        if (rates && typeof rates === 'object') setLocalRates(rates as { dRate: number; tRate: number; irRate: number; irTaxId: string });
+        const storedPricingMode = stored.metadata?.pricingMode;
+        if (storedPricingMode === 'global' || storedPricingMode === 'individual') setPricingMode(storedPricingMode);
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey || hydratedDraftKeyRef.current !== salesDraftStorageKey) return;
+    if (!localDoc || (!editingId && !isCreating)) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, {
+      editingId,
+      isCreating,
+      document: localDoc,
+      metadata: { localRates, pricingMode },
+    });
+  }, [draftHydrated, editingId, isCreating, localDoc, localRates, pricingMode, salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    if (editingId) {
+      const localSnapshot = localDocRef.current?.id === editingId ? localDocRef.current : null;
+      if (localSnapshot) {
+        commitLocalDoc(localSnapshot);
+        return;
+      }
+      const recurring = data.find((item) => item.id === editingId);
+      if (recurring) {
+        const snapshot = JSON.parse(JSON.stringify(recurring));
+        commitLocalDoc(snapshot);
+        setLocalRates({ ...calculateRates(recurring), irRate: 0, irTaxId: '' });
+        setPricingMode((recurring.items || []).some((item: any) => Number(item.discount || 0) > 0 || Number(item.taxRate || 0) > 0) ? 'individual' : 'global');
+      }
+    } else if (!isCreating) {
+      localDocRef.current = null;
+      commitLocalDoc(null);
+      setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
+    }
+  }, [data, draftHydrated, editingId, isCreating]);
+
   const handleSave = async () => {
     if (!localDoc) return;
     if (!localDoc.customerId) { toast.error('Selecciona un cliente'); return; }
@@ -345,8 +401,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
           discountAmount: localDoc.discountAmount,
           taxAmount: localDoc.taxAmount,
           total: localDoc.total,
-          status: 'ACTIVE',
-        } as any);
+           status: 'ACTIVE',
+           warehouseId: localDoc.warehouseId || null,
+         } as any);
 
         try {
           const customerName = customers.find(c => c.id === localDoc.customerId)?.name || 'Cliente';
@@ -380,7 +437,9 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
         } as any);
         toast.success('Factura recurrente actualizada', { id: saveToastId });
       }
-      setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDocRef.current = null;
+      setIsCreating(false); setEditingId(null); commitLocalDoc(null); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
@@ -445,7 +504,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { setEditingId(null); setIsCreating(false); setLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
               <h2 className="text-xl font-black uppercase tracking-tight">{isCreating ? 'Agregar Factura Recurrente' : `Factura #${localDoc.id?.slice(0, 8)}`}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar nueva factura recurrente' : 'Editar factura recurrente'}</p>
@@ -456,7 +515,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             {canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); setEditingId(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
+                  onClick={async () => { try { await recurringInvoicesService.delete(localDoc.id); clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); commitLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar'); } }}><Trash2 className="size-3 mr-2" /> Eliminar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
                 </Button>
@@ -479,6 +538,13 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                     onChange={(val) => { const customer = customers?.find((entry) => entry.id === val); const priceListId = customer?.priceListId || null; const items = (localDoc?.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); setLocalDoc({ ...localDoc, customerId: val, priceListId, items }); }}
                     placeholder="Seleccionar Cliente" 
                   /></div>
+                <SalesWarehouseSelect
+                  warehouses={warehouses}
+                  value={localDoc?.warehouseId}
+                  onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })}
+                  required={(localDoc?.items || []).some((item: any) => item.productId && resolveItemType(item) !== 'SERVICE')}
+                  helpText="Cada factura generada usará esta bodega de salida."
+                />
                 <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
                   <Select value={localDoc?.frequency || 'MONTHLY'} onValueChange={(newFrequency) => {
                       const nextInvoiceDate = calculateNextInvoiceDate(newFrequency, localDoc?.startDate || '');
@@ -729,9 +795,11 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                 const deleteToastId = toast.loading('Eliminando factura recurrente...');
                 try {
                   setDeleteLoading(true);
-                  await recurringInvoicesService.delete(pendingDeleteId);
-                  toast.success('Factura recurrente eliminada', { id: deleteToastId });
-                  setEditingId(null);
+                   await recurringInvoicesService.delete(pendingDeleteId);
+                   toast.success('Factura recurrente eliminada', { id: deleteToastId });
+                   clearSalesEditorDraft(salesDraftStorageKey);
+                   localDocRef.current = null;
+                   setEditingId(null);
                   onRefresh();
                 } catch (error: any) {
                    const msg = error?.response?.data?.message || error?.message || '';

@@ -191,9 +191,80 @@ function DashboardLayout() {
   }, [activeModule, activeSubModule]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    // optional: read from localStorage if you want persistence
     return safeGetItem('erp-sidebar-collapsed') === 'true';
   });
+
+  const mainRef = useRef<HTMLElement | null>(null);
+  const mainScrollStorageKey = `erp-scroll-position:${user?.id || 'anonymous'}:${activeModule}:${activeSubModule || ''}`;
+
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+
+    const initialSaved = Number(safeGetItem(mainScrollStorageKey) || 0);
+    let restorePending = Number.isFinite(initialSaved) && initialSaved > 0;
+    let userInteracted = false;
+    let saveFrame = 0;
+
+    const restoreScrollPosition = () => {
+      if (!restorePending || userInteracted) return;
+
+      // Read again because the authenticated user and the POS view can finish
+      // initializing after this shell effect has already mounted.
+      const saved = Number(safeGetItem(mainScrollStorageKey) || 0);
+      const savedScrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0;
+      if (savedScrollTop === 0) {
+        restorePending = false;
+        return;
+      }
+
+      const maxScrollTop = Math.max(0, main.scrollHeight - main.clientHeight);
+      // Wait until the view has content instead of replacing a saved position
+      // with zero while API data is still loading. If the current view is
+      // shorter than before, land at its last possible position and keep the
+      // original target until the view grows again.
+      if (maxScrollTop <= 0) return;
+      main.scrollTop = Math.min(savedScrollTop, maxScrollTop);
+      if (maxScrollTop >= savedScrollTop) restorePending = false;
+    };
+
+    const saveScrollPosition = () => {
+      if (saveFrame) return;
+      saveFrame = window.requestAnimationFrame(() => {
+        saveFrame = 0;
+        if (!restorePending) safeSetItem(mainScrollStorageKey, String(main.scrollTop));
+      });
+    };
+
+    const markUserInteraction = () => {
+      userInteracted = true;
+      restorePending = false;
+    };
+
+    main.addEventListener('scroll', saveScrollPosition, { passive: true });
+    main.addEventListener('wheel', markUserInteraction, { passive: true });
+    main.addEventListener('touchstart', markUserInteraction, { passive: true });
+    main.addEventListener('pointerdown', markUserInteraction, { passive: true });
+    main.addEventListener('keydown', markUserInteraction);
+    restoreScrollPosition();
+    const restoreTimers = [50, 150, 350, 700, 1200, 2000, 3500, 5000, 8000].map((delay) => window.setTimeout(restoreScrollPosition, delay));
+    const mutationObserver = typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(restoreScrollPosition)
+      : null;
+    mutationObserver?.observe(main, { childList: true, subtree: true });
+
+    return () => {
+      main.removeEventListener('scroll', saveScrollPosition);
+      main.removeEventListener('wheel', markUserInteraction);
+      main.removeEventListener('touchstart', markUserInteraction);
+      main.removeEventListener('pointerdown', markUserInteraction);
+      main.removeEventListener('keydown', markUserInteraction);
+      restoreTimers.forEach((timer) => window.clearTimeout(timer));
+      mutationObserver?.disconnect();
+      if (saveFrame) window.cancelAnimationFrame(saveFrame);
+      if (!restorePending) safeSetItem(mainScrollStorageKey, String(main.scrollTop));
+    };
+  }, [mainScrollStorageKey]);
 
   useEffect(() => {
     const handleImportPreviewOpened = () => {
@@ -333,7 +404,11 @@ function DashboardLayout() {
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
         />
-        <main className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <main
+          ref={mainRef}
+          className="scrollbar-overlay min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+          style={{ overflowAnchor: 'none' }}
+        >
           <Suspense fallback={<PageLoader />}>
             <ModuleErrorBoundary moduleName={String(currentModule)}>
               {renderContent()}

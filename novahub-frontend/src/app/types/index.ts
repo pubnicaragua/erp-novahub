@@ -136,6 +136,7 @@ export interface Estimate {
   irTaxId?: string | null;
   irAmount?: number;
   warehouseId?: string;
+  warehouse?: { id: string; name: string } | null;
   date: string;
   expiryDate: string;
   subtotal: number;
@@ -201,6 +202,7 @@ export interface SalesOrder {
   baseTotal?: number;
   accountId?: string;
   warehouseId?: string;
+  warehouse?: { id: string; name: string } | null;
   status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'draft' | 'pending_review' | 'confirmed' | 'in_progress' | 'shipped' | 'delivered' | 'cancelled';
   notes?: string;
   paymentMethod?: string;
@@ -350,6 +352,8 @@ export interface RecurringInvoice {
   exchangeRate?: number;
   baseTotal?: number;
   accountId?: string;
+  warehouseId?: string;
+  warehouse?: { id: string; name: string } | null;
   status: 'active' | 'paused' | 'expired' | 'cancelled';
   sourceRecurringExpenseId?: string;
   sourceRecurringExpenseRef?: string;
@@ -426,6 +430,8 @@ export interface SalesReturn {
   irTaxId?: string | null;
   irAmount?: number;
   invoiceId: string;
+  warehouseId?: string;
+  warehouse?: { id: string; name: string } | null;
   invoice?: Invoice;
   date: string;
   subtotal?: number;
@@ -480,6 +486,8 @@ export interface CreditNote {
   invoiceId?: string;
   invoice?: Pick<Invoice, 'id' | 'number' | 'status' | 'subtotal' | 'taxAmount' | 'discountAmount' | 'total' | 'amountPaid' | 'balance' | 'currency' | 'exchangeRate' | 'extraCostDescription' | 'extraCostAmount' | 'extraCharges' | 'deliveryDescription' | 'deliveryAmount' | 'baseTotal'>;
   salesReturnId?: string;
+  warehouseId?: string;
+  warehouse?: { id: string; name: string } | null;
   date: string;
   dueDate?: string | null;
   subtotal?: number;
@@ -488,6 +496,15 @@ export interface CreditNote {
   total: number;
   amountPaid?: number;
   balance?: number;
+  cashQueue?: {
+    id: string;
+    status: 'PENDING' | 'CLAIMED' | 'PAID' | 'CANCELLED' | string;
+    registerId?: string | null;
+    sessionId?: string | null;
+    claimedById?: string | null;
+    claimExpiresAt?: string | null;
+    createdAt?: string;
+  } | null;
   currency?: Currency;
   exchangeRate?: number;
   status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'VOIDED';

@@ -37,6 +37,8 @@ import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDo
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -45,6 +47,7 @@ interface EstimacionesViewProps {
   onConvertedToOrder?: (orderId: string) => void;
   customers?: Customer[];
   products?: Product[];
+  warehouses?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
@@ -84,10 +87,11 @@ const isLocalEstimate = (id: string | number | undefined | null) => String(id ||
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
+export function EstimacionesView({ data, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
+  const salesDraftStorageKey = getSalesEditorDraftKey('estimate', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | EstimateWorkflowStatus>('ALL');
@@ -98,9 +102,55 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const [detailEstimate, setDetailEstimate] = useState<Estimate | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
+  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
+  const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const localDraftRef = useRef<Estimate | null>(null);
   const creatingEstimateRef = useRef<Promise<Estimate> | null>(null);
   const savingEstimateRef = useRef(false);
+  const localDocRef = useRef<Estimate | null>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: Estimate | null) => {
+    localDocRef.current = nextDoc;
+    if (nextDoc && isLocalEstimate(nextDoc.id)) localDraftRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<Estimate>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        const rates = stored.metadata?.localRates;
+        if (rates && typeof rates === 'object') setLocalRates(rates as { dRate: number; tRate: number; irRate: number; irTaxId: string });
+        const storedPricingMode = stored.metadata?.pricingMode;
+        if (storedPricingMode === 'global' || storedPricingMode === 'individual') setPricingMode(storedPricingMode);
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey || hydratedDraftKeyRef.current !== salesDraftStorageKey) return;
+    if (!editingId || !localDoc) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, {
+      editingId,
+      document: localDoc,
+      metadata: { localRates, pricingMode },
+    });
+  }, [draftHydrated, editingId, localDoc, localRates, pricingMode, salesDraftStorageKey]);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -138,7 +188,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       toast.success('Cotización aprobada y enviada a Orden de Venta', { id: conversionToastId });
       onConvertedToOrder?.(order.id);
       await onRefresh();
+      clearSalesEditorDraft(salesDraftStorageKey);
       localDraftRef.current = null;
+      localDocRef.current = null;
       setEditingId(null);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización', { id: conversionToastId });
@@ -167,11 +219,15 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const handleUpdate = async (id: string | number, updates: Partial<Estimate>) => {
     try {
       if (isLocalEstimate(id)) {
-        const baseDoc = localDraftRef.current?.id === String(id) ? localDraftRef.current : localDoc;
+        const baseDoc = localDraftRef.current?.id === String(id)
+          ? localDraftRef.current
+          : localDocRef.current?.id === String(id)
+            ? localDocRef.current
+            : localDoc;
         if (!baseDoc) return;
         const nextDoc = { ...baseDoc, ...updates, items: updates.items ?? baseDoc.items } as Estimate;
         localDraftRef.current = nextDoc;
-        setLocalDoc(nextDoc);
+        commitLocalDoc(nextDoc);
         if (!hasEstimateContent(nextDoc)) return;
 
         if (creatingEstimateRef.current) {
@@ -180,7 +236,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           if (!createdDoc || isLocalEstimate(createdDoc.id)) return;
           await estimatesService.update(createdDoc.id, updates);
           localDraftRef.current = { ...createdDoc, ...updates, items: updates.items ?? createdDoc.items } as Estimate;
-          setLocalDoc(localDraftRef.current);
+          commitLocalDoc(localDraftRef.current);
           await onRefresh();
           return;
         }
@@ -208,13 +264,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           exchangeRate: nextDoc.exchangeRate || globalRate,
           baseTotal: (nextDoc as any).baseTotal || 0,
           notes: nextDoc.notes,
-          status: createStatus === 'IN_PROCESS' ? 'IN_PROCESS' : 'DRAFT',
-        } as Partial<Estimate>);
+           status: createStatus === 'IN_PROCESS' ? 'IN_PROCESS' : 'DRAFT',
+           warehouseId: nextDoc.warehouseId || null,
+         } as Partial<Estimate>);
         creatingEstimateRef.current = createRequest;
         try {
           const created = await createRequest;
           localDraftRef.current = created;
-          setLocalDoc(created);
+          commitLocalDoc(created);
           setEditingId(created.id);
           await onRefresh();
           return;
@@ -335,7 +392,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     savingEstimateRef.current = true;
     try {
       await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
+      clearSalesEditorDraft(salesDraftStorageKey);
       localDraftRef.current = null;
+      localDocRef.current = null;
       setEditingId(null);
       toast.success(status === 'IN_PROCESS' ? 'Cotización marcada en proceso' : 'Cotización guardada como borrador', { id: saveToastId });
     } catch (e: any) {
@@ -487,10 +546,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       baseTotal: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
       status: 'DRAFT',
     } as Estimate;
     localDraftRef.current = draft;
-    setLocalDoc(draft);
+    commitLocalDoc(draft);
     setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
     setPricingMode('global');
     setEditingId(draft.id);
@@ -566,30 +626,36 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     const taxAmount = base * Math.max(0, Number(tRate || 0)) / 100;
     return { items: normalizedItems, subtotal, discountAmount, taxAmount, irAmount: 0, total: base + taxAmount + additionalChargesTotal() };
   };
-  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
-  const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
-
   useEffect(() => {
+    if (!draftHydrated) return;
     const timer = setTimeout(() => {
       if (editingId) {
-        const e = data.find(x => x.id === editingId);
-        if (e) {
-          const cloned = JSON.parse(JSON.stringify(e));
-          localDraftRef.current = null;
-          setLocalDoc(cloned);
-          setLocalRates({ ...calculateRates(e), irRate: 0, irTaxId: '' });
-          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
-        } else if (localDraftRef.current?.id === editingId) {
-          setLocalDoc(localDraftRef.current);
+        const localSnapshot = localDraftRef.current?.id === editingId
+          ? localDraftRef.current
+          : localDocRef.current?.id === editingId
+            ? localDocRef.current
+            : null;
+        if (localSnapshot) {
+          commitLocalDoc(localSnapshot);
+        } else {
+          const e = data.find(x => x.id === editingId);
+          if (e) {
+            const cloned = JSON.parse(JSON.stringify(e)) as Estimate;
+            commitLocalDoc(cloned);
+            setLocalRates({ ...calculateRates(e), irRate: 0, irTaxId: '' });
+            setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
+          }
         }
       } else {
-        localDraftRef.current = null;
-        setLocalDoc(null);
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDraftRef.current = null;
+        localDocRef.current = null;
+        commitLocalDoc(null);
         setLocalRates({ dRate: 0, tRate: 0, irRate: 0, irTaxId: '' });
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
+  }, [draftHydrated, editingId, data]);
 
   const columns: ColumnDef<Estimate>[] = [
     { 
@@ -672,7 +738,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => { localDraftRef.current = null; setEditingId(null); }} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDraftRef.current = null; localDocRef.current = null; setEditingId(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -735,6 +801,16 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
+                <SalesWarehouseSelect
+                  warehouses={warehouses}
+                  value={localDoc?.warehouseId}
+                  onChange={(warehouseId) => {
+                    setLocalDoc({ ...localDoc, warehouseId } as any);
+                    void handleUpdate(localDoc!.id, { warehouseId } as any);
+                  }}
+                  required={normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS'}
+                  helpText="La cotización conservará esta bodega al convertirse en orden."
+                />
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" defaultValue={typeof localDoc?.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc?.date || ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
@@ -859,7 +935,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
               <div className="flex flex-wrap gap-2">
                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
                   const newItems = [...(localDoc.items || []), { id: Date.now().toString(), itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
-                  setLocalDoc({ ...localDoc, items: newItems } as any);
+                  commitLocalDoc({ ...localDoc, items: newItems } as Estimate);
                 }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
                 <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                   <Plus className="size-3 mr-2" /> Agregar coste extra
@@ -908,7 +984,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         const tAmount = base * (localRates.tRate / 100);
                         const newTotal = base + tAmount + additionalChargesTotal();
                         const nextDoc = { ...localDoc, items: newItems, subtotal: newSubtotal, discountAmount: dAmount, taxAmount: tAmount, total: newTotal } as any;
-                        setLocalDoc(nextDoc);
+                         commitLocalDoc(nextDoc);
                         void handleUpdate(localDoc!.id, {
                           items: newItems,
                           subtotal: newSubtotal,
@@ -934,7 +1010,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         || products.find((product) => String(product.name).trim().toLowerCase() === String(nextItems[idx].description || '').trim().toLowerCase());
                       nextItems[idx] = { ...nextItems[idx], productId: matchedProduct?.id || nextItems[idx].productId, productCode: matchedProduct?.code || nextItems[idx].productCode || nextItems[idx].code, priceListId, unitPrice: result.unitPrice ?? 0, priceMissing: result.priceMissing };
                       const calculated = pricingMode === 'individual' ? recalcIndividualTotals(nextItems) : recalcGlobalTotals(nextItems, localRates.dRate, localRates.tRate, localRates.irRate);
-                      setLocalDoc({ ...localDoc, ...calculated, priceListId });
+                       commitLocalDoc({ ...localDoc, ...calculated, priceListId } as Estimate);
                       if (source !== 'initial') void handleUpdate(localDoc!.id, { ...calculated, priceListId, items: calculated.items } as any);
                       }}
                     /></div>
@@ -1203,7 +1279,9 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             setCancelLoading(true);
             await estimatesService.update(pendingCancelId, { status: 'CANCELLED' as any });
             toast.success('Cotización cancelada', { id: cancelToastId });
+            clearSalesEditorDraft(salesDraftStorageKey);
             localDraftRef.current = null;
+            localDocRef.current = null;
             setEditingId(null);
             onRefresh();
           } catch (error: any) {

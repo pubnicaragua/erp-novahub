@@ -77,7 +77,6 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
       const canUseRetailFallback = (
         String(selectedList?.code || '').toUpperCase() === 'RETAIL'
         || String(selectedList?.name || '').trim().toLowerCase() === 'minorista'
-        || selectedList?.isDefault === true
       ) && Number(fallbackPrice) > 0;
       if (canUseRetailFallback) {
         const unitPrice = String(currency).toUpperCase() === 'USD'

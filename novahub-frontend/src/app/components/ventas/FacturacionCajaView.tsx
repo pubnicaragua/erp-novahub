@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { safeSetItem } from '../../services/safe-storage';
+import { safeGetItem, safeSetItem } from '../../services/safe-storage';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -31,11 +31,13 @@ import {
   type PosPaymentLine,
   type CashRegisterSession,
   type CashRegisterAvailability,
+  type PosWarehouseOption,
   type PotentialDuplicateSale,
   type BranchProductAvailability,
   type CreatePosHoldDto,
   type PosHoldItemInput,
   type InvoiceCashQueue,
+  type CashQueueDocument,
   consumeInvoiceCashQueueEvents,
 } from '../../services/caja.service';
 import { VariantPickerModal } from './VariantPickerModal';
@@ -48,7 +50,7 @@ import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
 import { formatSalesAmount, getMissingSalesPriceMessage, getSalesUnitPrice, sameSalesId, unwrapSalesPriceListMatrix } from '../../utils/salesPriceList';
-import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getPdfDesignSettings } from '../../utils/pdfGenerator';
@@ -76,12 +78,32 @@ interface CartSession {
   selectedCustomerId: string | undefined;
   emitDate: string;
   discountPercent: number;
-  extraCostDescription: string;
-  extraCostAmount: number;
+  extraCharges: SalesExtraChargeLine[];
+  deliveryDescription: string;
+  deliveryAmount: number;
+  selectedWarehouseId: string;
+  includeTax: boolean;
+  pricingMode: PricingMode;
+}
+
+interface PosDraftStorage {
+  version: 1;
+  branchId?: string;
+  selectedRegisterId: string;
+  selectedWarehouseId: string;
+  selectedCustomerId?: string;
+  selectedPriceListId: string;
+  emitDate: string;
+  discountPercent: number;
+  extraCharges: SalesExtraChargeLine[];
   deliveryDescription: string;
   deliveryAmount: number;
   includeTax: boolean;
   pricingMode: PricingMode;
+  productSearch: string;
+  catalogItemFilter: CatalogItemFilter;
+  cart: CartItem[];
+  sessions: Record<string, CartSession>;
 }
 
 interface InvoiceSummary {
@@ -99,6 +121,39 @@ type CatalogItemFilter = 'ALL' | 'PRODUCT' | 'SERVICE';
 
 const CATALOG_VIEW_STORAGE_KEY = 'novahub-pos-catalog-view';
 const POS_SHOW_AVAILABILITY_KEY = 'novahub-pos-show-availability';
+const POS_DRAFT_STORAGE_PREFIX = 'novahub-pos-draft:';
+
+function getPosDraftStorageKey(userId?: string | null, tenantId?: string | null) {
+  return `${POS_DRAFT_STORAGE_PREFIX}${tenantId || 'tenant'}:${userId || 'user'}`;
+}
+
+function readPosDraft(storageKey: string): PosDraftStorage | null {
+  try {
+    const parsed = JSON.parse(safeGetItem(storageKey) || 'null') as Partial<PosDraftStorage> | null;
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.cart)) return null;
+    return {
+      version: 1,
+      branchId: typeof parsed.branchId === 'string' ? parsed.branchId : undefined,
+      selectedRegisterId: typeof parsed.selectedRegisterId === 'string' ? parsed.selectedRegisterId : '',
+      selectedWarehouseId: typeof parsed.selectedWarehouseId === 'string' ? parsed.selectedWarehouseId : '',
+      selectedCustomerId: typeof parsed.selectedCustomerId === 'string' ? parsed.selectedCustomerId : undefined,
+      selectedPriceListId: typeof parsed.selectedPriceListId === 'string' ? parsed.selectedPriceListId : '',
+      emitDate: typeof parsed.emitDate === 'string' ? parsed.emitDate : getTodayInputDate(),
+      discountPercent: Number(parsed.discountPercent || 0),
+      extraCharges: Array.isArray(parsed.extraCharges) ? parsed.extraCharges : [],
+      deliveryDescription: typeof parsed.deliveryDescription === 'string' ? parsed.deliveryDescription : '',
+      deliveryAmount: Number(parsed.deliveryAmount || 0),
+      includeTax: parsed.includeTax !== false,
+      pricingMode: parsed.pricingMode === 'individual' ? 'individual' : 'global',
+      productSearch: typeof parsed.productSearch === 'string' ? parsed.productSearch : '',
+      catalogItemFilter: parsed.catalogItemFilter === 'PRODUCT' || parsed.catalogItemFilter === 'SERVICE' ? parsed.catalogItemFilter : 'ALL',
+      cart: parsed.cart as CartItem[],
+      sessions: parsed.sessions && typeof parsed.sessions === 'object' ? parsed.sessions as Record<string, CartSession> : {},
+    };
+  } catch {
+    return null;
+  }
+}
 
 function getInitialCatalogView(): CatalogViewMode {
   try {
@@ -334,6 +389,7 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     discount: item.discount,
     irRate: 0,
     irTaxId: null,
+    warehouseId: item.warehouseId,
   }));
 }
 
@@ -358,6 +414,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [manageCajasOpen, setManageCajasOpen] = useState(false);
   const [registerAvailability, setRegisterAvailability] = useState<CashRegisterAvailability | null>(null);
+  const [warehouseOptions, setWarehouseOptions] = useState<PosWarehouseOption[]>([]);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<PosInvoice[]>([]);
@@ -367,14 +424,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const checkoutIdempotencyKey = useRef<string | null>(null);
 
   const [selectedRegisterId, setSelectedRegisterId] = useState('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [priceListItems, setPriceListItems] = useState<Array<{ priceListId: string; productId: string; price: number; currency: string; exchangeRate: number; basePrice: number }>>([]);
   const [selectedPriceListId, setSelectedPriceListId] = useState('');
   const [emitDate, setEmitDate] = useState(getTodayInputDate());
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [extraCostDescription, setExtraCostDescription] = useState('');
-  const [extraCostAmount, setExtraCostAmount] = useState(0);
+  const [extraCharges, setExtraCharges] = useState<SalesExtraChargeLine[]>([]);
   const [deliveryDescription, setDeliveryDescription] = useState('');
   const [deliveryAmount, setDeliveryAmount] = useState(0);
   const [pricingMode, setPricingMode] = useState<PricingMode>('global');
@@ -383,6 +440,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const skipInitialProductSearchRef = useRef(false);
   const [catalogItemFilter, setCatalogItemFilter] = useState<CatalogItemFilter>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartSessionRevision, setCartSessionRevision] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [includeTax, setIncludeTax] = useState(true);
@@ -420,6 +478,37 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const queueClaimingRef = useRef<string | null>(null);
   const queueReleasingRef = useRef<string | null>(null);
   const reconcilingQueueRef = useRef(false);
+  const cartSessions = useRef<Map<string, CartSession>>(new Map());
+  const selectedRegisterIdRef = useRef('');
+  const selectedWarehouseIdRef = useRef('');
+  const posDraftHydratedRef = useRef(false);
+  const posDraftStorageKey = useMemo(
+    () => getPosDraftStorageKey(user?.id, user?.tenantId),
+    [user?.id, user?.tenantId],
+  );
+
+  useEffect(() => {
+    selectedRegisterIdRef.current = selectedRegisterId;
+  }, [selectedRegisterId]);
+
+  useEffect(() => {
+    selectedWarehouseIdRef.current = selectedWarehouseId;
+  }, [selectedWarehouseId]);
+
+  const getQueueDocument = (queue: InvoiceCashQueue): CashQueueDocument | null => queue.invoice || queue.creditNote || null;
+
+  const normalizedExtraCharges = useMemo(
+    () => getSalesExtraChargesPayload({ extraCharges }),
+    [extraCharges],
+  );
+  const legacyExtraCostFields = useMemo(
+    () => getLegacySalesExtraCostFields(normalizedExtraCharges),
+    [normalizedExtraCharges],
+  );
+  const extraCostAmount = useMemo(
+    () => getSalesExtraChargesAmount({ extraCharges }),
+    [extraCharges],
+  );
 
   const paymentLineRate = (currency: PaymentCurrency) => currency === baseCurrency ? 1 : Number(globalRate || 1);
   const paymentLine = (method: PosPaymentLine['method'], amount = 0, currency: PaymentCurrency = displayCurrency): PosPaymentLine => ({
@@ -542,13 +631,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     try {
       const response = await cajaService.claimInvoiceCashQueue(queue.id, { registerId: selectedRegisterId, sessionId: activeSession.id });
       const claimed = (response as any)?.data || response;
-      const invoice = claimed?.invoice ? claimed : queue;
-      setQueueInvoice(invoice);
-      setQueuePayments([paymentLine('CASH', Number(invoice.invoice.balance || 0), invoice.invoice.currency)]);
+      const claimedQueue = claimed?.invoice || claimed?.creditNote ? claimed : queue;
+      const document = getQueueDocument(claimedQueue);
+      if (!document) throw new Error('La entrada de la cola no tiene un documento cobrable.');
+      setQueueInvoice(claimedQueue);
+      setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]);
       setQueueMixedPaymentEnabled(false);
       await loadCashQueue();
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, 'La factura ya fue tomada o no se pudo reservar en esta caja.'));
+      toast.error(getErrorMessage(error, 'El documento ya fue tomado o no se pudo reservar en esta caja.'));
       void loadCashQueue();
     } finally {
       queueClaimingRef.current = null;
@@ -567,7 +658,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         setQueuePayments([]);
         setQueueMixedPaymentEnabled(false);
       }
-      toast.success(`Factura ${queue.invoice.number} liberada para cualquier cajero.`);
+      const document = getQueueDocument(queue);
+      toast.success(`${document?.number || 'Documento'} liberado para cualquier cajero.`);
       await loadCashQueue();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'No se pudo liberar la factura. Actualiza la cola e inténtalo nuevamente.'));
@@ -627,9 +719,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const getQueuePaymentSummary = () => {
     if (!queueInvoice || !activeSession) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0 };
-    const invoiceCurrency = queueInvoice.invoice.currency;
+    const document = getQueueDocument(queueInvoice);
+    if (!document) return { totalBase: 0, paidBase: 0, changeBase: 0, missingBase: 0 };
+    const invoiceCurrency = document.currency;
     const invoiceRate = invoiceCurrency === baseCurrency ? 1 : Number(activeSession.exchangeRateUSD || globalRate || 1);
-    const totalBase = toBaseAmount(Number(queueInvoice.invoice.balance || 0), invoiceCurrency, invoiceRate);
+    const totalBase = toBaseAmount(Number(document.balance || 0), invoiceCurrency, invoiceRate);
     const paidBase = queuePayments.reduce((sum, payment) => sum + toBaseAmount(
       Number(payment.amount || 0),
       payment.currency || invoiceCurrency,
@@ -647,7 +741,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const getQueuePaymentApplications = () => {
     if (!queueInvoice || !activeSession) return [] as PosPaymentLine[];
-    const invoiceCurrency = queueInvoice.invoice.currency;
+    const document = getQueueDocument(queueInvoice);
+    if (!document) return [] as PosPaymentLine[];
+    const invoiceCurrency = document.currency;
     let remainingBase = getQueuePaymentSummary().totalBase;
     return queuePayments.flatMap((payment) => {
       if (remainingBase <= 0.005) return [];
@@ -671,20 +767,23 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const submitCashQueuePayment = async () => {
     if (!queueInvoice || !activeSession || !selectedRegisterId || queueSubmittingRef.current) return;
     const queueReceipt = queueInvoice;
+    const document = getQueueDocument(queueReceipt);
+    const isCreditQueue = Boolean(queueReceipt.creditNoteId || queueReceipt.creditNote);
+    if (!document) return void toast.error('La entrada de la cola no tiene un documento cobrable.');
     const { totalBase, paidBase } = getQueuePaymentSummary();
-    const queueCustomerFavorBase = getCustomerFavorBase(queueInvoice.invoice.customerId);
+    const queueCustomerFavorBase = getCustomerFavorBase(document.customerId);
     const queueCustomerFavorAppliedBase = queuePayments
       .filter((payment) => payment.method === 'CUSTOMER_BALANCE')
-      .reduce((sum, payment) => sum + getPaymentLineBase(payment, queueInvoice.invoice.currency), 0);
+      .reduce((sum, payment) => sum + getPaymentLineBase(payment, document.currency), 0);
     if (queueCustomerFavorAppliedBase > queueCustomerFavorBase + 0.01) {
       toast.error(`El saldo a favor disponible es de ${formatCurrency(queueCustomerFavorBase, baseCurrency)}.`);
       return;
     }
-    if (queueCustomerFavorAppliedBase > 0.01 && !queueInvoice.invoice.customerId) {
+    if (queueCustomerFavorAppliedBase > 0.01 && !document.customerId) {
       toast.error('Esta factura no tiene un cliente al cual aplicar saldo a favor.');
       return;
     }
-    if (paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
+    if (!isCreditQueue && paidBase + 0.005 < totalBase) { toast.error('El monto recibido debe cubrir el saldo pendiente.'); return; }
     if (!queueMixedPaymentEnabled && queuePayments.length === 1 && queuePayments[0]?.method !== 'CASH' && paidBase > totalBase + 0.005) {
       toast.error('El monto solo puede superar el total cuando el método es efectivo.');
       return;
@@ -699,17 +798,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     try {
       await cajaService.payInvoiceCashQueue(queueInvoice.id, { registerId: selectedRegisterId, sessionId: activeSession.id, claimToken: queueInvoice.claimToken || undefined, payments: appliedPayments }, createIdempotencyKey('invoice-cash-queue'));
       const paidInvoice = {
-        ...queueReceipt.invoice,
-        customerId: queueReceipt.invoice.customerId || '',
-        date: queueReceipt.invoice.date || new Date().toISOString(),
-        subtotal: Number(queueReceipt.invoice.subtotal ?? queueReceipt.invoice.total ?? 0),
-        taxAmount: Number(queueReceipt.invoice.taxAmount || 0),
-        discountAmount: Number(queueReceipt.invoice.discountAmount || 0),
-        total: Number(queueReceipt.invoice.total || 0),
-        status: 'PAID',
+        ...document,
+        customerId: document.customerId || '',
+        date: document.date || new Date().toISOString(),
+        subtotal: Number(document.subtotal ?? document.total ?? 0),
+        taxAmount: Number(document.taxAmount || 0),
+        discountAmount: Number(document.discountAmount || 0),
+        total: Number(document.total || 0),
+        balance: Math.max(0, Number(document.balance || 0) - Number(convertBetweenCurrencies(Math.min(paidBase, totalBase), baseCurrency, document.currency, 1, Number(document.exchangeRate || 1)))),
+        status: paidBase + 0.005 >= totalBase ? 'PAID' : 'PARTIAL',
         register: queueReceipt.register ? { ...queueReceipt.register } as CashRegister : undefined,
       } as PosInvoice;
-      const receiptCart: CartItem[] = (queueReceipt.invoice.items || []).map((item) => ({
+      const receiptCart: CartItem[] = (document.items || []).map((item) => ({
         productId: item.id,
         description: item.description,
         quantity: Number(item.quantity || 0),
@@ -723,10 +823,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
        // El comprobante debe conservar lo recibido para poder mostrar el
        // vuelto; `appliedPayments` contiene únicamente lo aplicado al saldo.
        setCreatedPaymentLines([...queuePayments]);
-      setCreatedExchangeRate(Number((queueReceipt.invoice as any).exchangeRate || activeSession.exchangeRateUSD || 1));
-      setCreatedPaymentCurrency(queueReceipt.invoice.currency);
+      setCreatedExchangeRate(Number(document.exchangeRate || activeSession.exchangeRateUSD || 1));
+      setCreatedPaymentCurrency(document.currency);
       setCreatedOperationLabel('Cobro realizado correctamente');
-      toast.success(`Factura ${queueInvoice.invoice.number} cobrada en caja.${changeBase > 0.005 ? ` Cambio: ${baseCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(changeBase)}` : ''}`);
+      toast.success(`${isCreditQueue ? 'Crédito' : 'Factura'} ${document.number} cobrado en caja.${changeBase > 0.005 ? ` Cambio: ${baseCurrency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(changeBase)}` : ''}`);
       setQueueInvoice(null);
       setQueuePayments([]);
       await Promise.all([loadCashQueue(), queryClient.invalidateQueries({ queryKey: ['sales'] }), queryClient.invalidateQueries({ queryKey: ['finance'] }), queryClient.invalidateQueries({ queryKey: ['accounting'] })]);
@@ -755,8 +855,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const selectedPaymentCustomerFavorExceeded = selectedPaymentCustomerFavorAppliedBase > selectedPaymentCustomerFavorBase + 0.01;
   const [variantPickerOpen, setVariantPickerOpen] = useState(false);
   const [variantPickerProduct, setVariantPickerProduct] = useState<PosProduct | null>(null);
-
-  const cartSessions = useRef<Map<string, CartSession>>(new Map());
 
   useEffect(() => {
     if (!user?.tenantId) return;
@@ -800,17 +898,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     // Guardar sesión de la caja actual
     if (selectedRegisterId && !skipSave) {
       cartSessions.current.set(selectedRegisterId, {
-      cart,
-      selectedCustomerId,
-      emitDate,
-      discountPercent,
-        extraCostDescription,
-        extraCostAmount,
+        cart,
+        selectedCustomerId,
+        emitDate,
+        discountPercent,
+        selectedWarehouseId,
+        extraCharges,
         deliveryDescription,
         deliveryAmount,
         includeTax,
         pricingMode,
       });
+      setCartSessionRevision((current) => current + 1);
     }
 
     // Restaurar sesión de la nueva caja
@@ -820,8 +919,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setSelectedCustomerId(savedSession.selectedCustomerId);
       setEmitDate(savedSession.emitDate);
       setDiscountPercent(savedSession.discountPercent);
-      setExtraCostDescription(savedSession.extraCostDescription || '');
-      setExtraCostAmount(Number(savedSession.extraCostAmount || 0));
+      setSelectedWarehouseId(savedSession.selectedWarehouseId || warehouseOptions.find((warehouse) => warehouse.canOperate)?.id || '');
+      setExtraCharges(savedSession.extraCharges || []);
       setDeliveryDescription(savedSession.deliveryDescription || '');
       setDeliveryAmount(Number(savedSession.deliveryAmount || 0));
       setIncludeTax(savedSession.includeTax);
@@ -832,8 +931,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       setSelectedCustomerId(undefined);
       setEmitDate(getTodayInputDate());
       setDiscountPercent(0);
-      setExtraCostDescription('');
-      setExtraCostAmount(0);
+      setSelectedWarehouseId(warehouseOptions.find((warehouse) => warehouse.canOperate)?.id || '');
+      setExtraCharges([]);
       setDeliveryDescription('');
       setDeliveryAmount(0);
       setIncludeTax(true);
@@ -848,12 +947,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setLoading(true);
     skipInitialProductSearchRef.current = true;
     try {
-      const [cashRegisters, registeredCustomers] = await Promise.all([
+      const [cashRegisters, registeredCustomers, posWarehouses] = await Promise.all([
         cajaService.getRegisters(),
         cajaService.getCustomers(),
+        cajaService.getPosWarehouses(),
       ]);
       const branchRegisters = cashRegisters;
       setRegisters(branchRegisters);
+      setWarehouseOptions(posWarehouses);
 
       if (branchRegisters.length === 0) {
         try {
@@ -867,16 +968,55 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         setRegisterAvailability(null);
       }
 
-      let initialRegisterId = '';
-      if (branchRegisters.length > 0) {
-        const openRegister = branchRegisters.find(r => r.hasActiveSession);
-        initialRegisterId = openRegister ? openRegister.id : branchRegisters[0].id;
-        setSelectedRegisterId(initialRegisterId);
+      const storedDraft = readPosDraft(posDraftStorageKey);
+      const canRestoreDraft = Boolean(
+        storedDraft
+        && (!storedDraft.branchId || !branchId || storedDraft.branchId === branchId),
+      );
+      const draft = canRestoreDraft ? storedDraft : null;
+      const currentRegisterId = selectedRegisterIdRef.current;
+      const openRegister = branchRegisters.find((register) => register.hasActiveSession);
+      const fallbackRegisterId = openRegister?.id || branchRegisters[0]?.id || '';
+      const draftRegisterId = draft?.selectedRegisterId && branchRegisters.some((register) => register.id === draft.selectedRegisterId)
+        ? draft.selectedRegisterId
+        : '';
+      const initialRegisterId = currentRegisterId && branchRegisters.some((register) => register.id === currentRegisterId)
+        ? currentRegisterId
+        : draftRegisterId || fallbackRegisterId;
+      if (initialRegisterId !== currentRegisterId) setSelectedRegisterId(initialRegisterId);
+
+      const currentWarehouseId = selectedWarehouseIdRef.current;
+      const firstWarehouseId = posWarehouses.find((warehouse) => warehouse.canOperate)?.id || '';
+      const draftWarehouseId = draft?.selectedWarehouseId && posWarehouses.some((warehouse) => warehouse.id === draft.selectedWarehouseId && warehouse.canOperate)
+        ? draft.selectedWarehouseId
+        : '';
+      const initialWarehouseId = currentWarehouseId && posWarehouses.some((warehouse) => warehouse.id === currentWarehouseId && warehouse.canOperate)
+        ? currentWarehouseId
+        : draftWarehouseId || firstWarehouseId;
+      if (initialWarehouseId !== currentWarehouseId) setSelectedWarehouseId(initialWarehouseId);
+
+      if (!posDraftHydratedRef.current) {
+        if (draft) {
+          cartSessions.current = new Map(
+            Object.entries(draft.sessions).filter(([, session]) => Boolean(session && Array.isArray(session.cart))),
+          );
+          setCart(draft.cart);
+          setSelectedCustomerId(draft.selectedCustomerId);
+          setSelectedPriceListId(draft.selectedPriceListId);
+          setEmitDate(draft.emitDate);
+          setDiscountPercent(draft.discountPercent);
+          setExtraCharges(draft.extraCharges);
+          setDeliveryDescription(draft.deliveryDescription);
+          setDeliveryAmount(draft.deliveryAmount);
+          setIncludeTax(draft.includeTax);
+          setPricingMode(draft.pricingMode);
+          setProductSearch(draft.productSearch);
+          setCatalogItemFilter(draft.catalogItemFilter);
+        }
+        posDraftHydratedRef.current = true;
       }
 
-      const initialWarehouseId = branchRegisters.find(r => r.id === initialRegisterId)?.resolvedWarehouseId || undefined;
-
-      const availableProducts = await cajaService.getProducts(undefined, initialWarehouseId);
+      const availableProducts = await cajaService.getProducts(undefined, initialWarehouseId || undefined);
       setProducts(availableProducts);
       setCustomers(registeredCustomers);
     } catch (error: unknown) {
@@ -884,7 +1024,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     } finally {
       setLoading(false);
     }
-  }, [branchId]);
+  }, [branchId, posDraftStorageKey]);
 
   const loadRecentInvoices = useCallback(async (registerId: string) => {
     try {
@@ -902,6 +1042,48 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       if (branding?.logo) setCompanyLogo(branding.logo);
     }).catch(() => undefined);
   }, [loadInitialData]);
+
+  useEffect(() => {
+    if (!user?.id || !posDraftHydratedRef.current) return;
+    safeSetItem(posDraftStorageKey, JSON.stringify({
+      version: 1,
+      branchId,
+      selectedRegisterId,
+      selectedWarehouseId,
+      selectedCustomerId,
+      selectedPriceListId,
+      emitDate,
+      discountPercent,
+      extraCharges,
+      deliveryDescription,
+      deliveryAmount,
+      includeTax,
+      pricingMode,
+      productSearch,
+      catalogItemFilter,
+      cart,
+      sessions: Object.fromEntries(cartSessions.current.entries()),
+    } satisfies PosDraftStorage));
+  }, [
+    branchId,
+    cart,
+    cartSessionRevision,
+    catalogItemFilter,
+    deliveryAmount,
+    deliveryDescription,
+    discountPercent,
+    emitDate,
+    extraCharges,
+    includeTax,
+    posDraftStorageKey,
+    pricingMode,
+    productSearch,
+    selectedCustomerId,
+    selectedPriceListId,
+    selectedRegisterId,
+    selectedWarehouseId,
+    user?.id,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -971,9 +1153,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const selectedRegister = registers.find(r => r.id === selectedRegisterId);
-        const warehouseId = selectedRegister?.resolvedWarehouseId || undefined;
-        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined, warehouseId, controller.signal);
+        const availableProducts = await cajaService.getProducts(productSearch.trim() || undefined, selectedWarehouseId || undefined, controller.signal);
         if (!controller.signal.aborted) setProducts(availableProducts);
       } catch (error) {
         if (!controller.signal.aborted) console.error('Error fetching products:', error);
@@ -986,7 +1166,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       clearTimeout(timer);
       controller.abort();
     };
-  }, [productSearch, selectedRegisterId, registers]);
+  }, [productSearch, selectedRegisterId, selectedWarehouseId]);
 
   const filteredProducts = useMemo(
     () => catalogItemFilter === 'ALL'
@@ -1047,14 +1227,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const handleVariantSelected = (product: PosProduct, variant: PosProductVariant) => {
     const isService = product.itemType === 'SERVICE';
+    const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
     const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
     const priceMissing = !isService && (configuredPrice === undefined || configuredPrice === 0);
     const variantDescription = variant.attributes?.length
       ? `${product.name} - ${variant.attributes.map((a) => a.value).join(' / ')}`
       : product.name;
     const globalQty = getGlobalCartQuantity(product.id);
-    const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id);
+    const existing = cart.find((i) => i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId);
     const requestedQty = (existing?.quantity || 0) + 1;
+
+    if (product.trackInventory && !warehouseId) {
+      toast.error('Selecciona una bodega de salida antes de agregar el producto.');
+      return;
+    }
 
     if (product.trackInventory && variant.currentStock != null && requestedQty + globalQty > variant.currentStock) {
       toast.error(`Stock insuficiente para ${variantDescription}. Disponible: ${variant.currentStock}`);
@@ -1062,10 +1248,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
 
     setCart((prev) => {
-      const current = prev.find((i) => i.productId === product.id && i.variantId === variant.id);
+      const current = prev.find((i) => i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId);
       if (current) {
         return prev.map((i) =>
-          i.productId === product.id && i.variantId === variant.id
+          i.productId === product.id && i.variantId === variant.id && i.warehouseId === warehouseId
             ? { ...i, quantity: i.quantity + 1, lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice) }
             : i,
         );
@@ -1075,6 +1261,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         {
           productId: product.id,
           variantId: variant.id,
+          warehouseId,
           description: variantDescription,
           quantity: 1,
           unitPrice: configuredPrice ?? 0,
@@ -1090,12 +1277,17 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   const addItem = (product: PosProduct) => {
     const isService = product.itemType === 'SERVICE';
+    const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
+    if (product.trackInventory && !warehouseId) {
+      toast.error('Selecciona una bodega de salida antes de agregar el producto.');
+      return;
+    }
     const configuredPrice = isService ? Number(product.salePrice || 0) : getConfiguredPrice(selectedPriceListId, product.id);
     const priceMissing = !isService && configuredPrice === undefined;
     if (priceMissing) {
       toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
     }
-    const existing = cart.find((i) => i.productId === product.id);
+    const existing = cart.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
     const globalQty = getGlobalCartQuantity(product.id);
     const requestedQty = (existing?.quantity || 0) + 1;
 
@@ -1110,11 +1302,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     }
 
     setCart((prev) => {
-      const current = prev.find((i) => i.productId === product.id);
+      const current = prev.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
 
       if (current) {
         return prev.map((i) =>
-          i.productId === product.id
+          i.productId === product.id && i.warehouseId === warehouseId
             ? {
               ...i,
               quantity: i.quantity + 1,
@@ -1128,6 +1320,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         ...prev,
         {
           productId: product.id,
+          warehouseId,
           description: product.name,
           quantity: 1,
           unitPrice: configuredPrice ?? 0,
@@ -1142,7 +1335,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     });
   };
 
-  const updateQty = (productId: string, quantity: number) => {
+  const updateQty = (productId: string, quantity: number, variantId?: string, warehouseId?: string) => {
     const product = productsById.get(productId);
     let finalQty = quantity;
     if (product && product.trackInventory && product.currentStock !== null && product.currentStock !== undefined) {
@@ -1161,28 +1354,29 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setCart((prev) =>
       prev.map((item) =>
         item.productId === productId
+          && (variantId ? item.variantId === variantId : !item.variantId)
+          && item.warehouseId === warehouseId
           ? { ...item, quantity: finalQty, lineTotal: calculateLineTotal(finalQty, item.unitPrice) }
           : item,
       ),
     );
   };
 
-  const removeItem = (productId: string, variantId?: string) => {
-    setCart((prev) => prev.filter((item) => {
-      if (variantId) return !(item.productId === productId && item.variantId === variantId);
-      return item.productId !== productId;
-    }));
+  const removeItem = (productId: string, variantId?: string, warehouseId?: string) => {
+    setCart((prev) => prev.filter((item) => !(
+      item.productId === productId
+      && (variantId ? item.variantId === variantId : !item.variantId)
+      && item.warehouseId === warehouseId
+    )));
   };
 
   const refreshCatalog = useCallback(async () => {
-    const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
-    const warehouseId = selectedRegister?.resolvedWarehouseId || undefined;
     try {
-      setProducts(await cajaService.getProducts(productSearch.trim() || undefined, warehouseId));
+      setProducts(await cajaService.getProducts(productSearch.trim() || undefined, selectedWarehouseId || undefined));
     } catch {
       // Se conserva el catálogo actual si el refresco falla.
     }
-  }, [registers, selectedRegisterId, productSearch]);
+  }, [selectedWarehouseId, productSearch]);
 
   const handleHoldReservation = async (selection: HoldReservationSelection) => {
     if (holdSubmittingRef.current) return;
@@ -1214,8 +1408,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       customerId: selectedCustomerId,
       date: emitDate,
       discountPercent: pricingMode === 'global' ? discountPercent || undefined : undefined,
-      extraCostDescription: extraCostDescription.trim() || undefined,
-      extraCostAmount: extraCostAmount > 0 ? extraCostAmount : undefined,
+      extraCostDescription: legacyExtraCostFields.extraCostDescription,
+      extraCostAmount: legacyExtraCostFields.extraCostAmount > 0 ? legacyExtraCostFields.extraCostAmount : undefined,
+      extraCharges: normalizedExtraCharges,
       deliveryDescription: deliveryDescription.trim() || undefined,
       deliveryAmount: deliveryAmount > 0 ? deliveryAmount : undefined,
       pricingMode,
@@ -1274,7 +1469,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       holdCreateDto.discountPercent || 0,
       holdCreateDto.includeTax !== false,
       holdCreateDto.pricingMode,
-      holdCreateDto.extraCostAmount || 0,
+      getSalesExtraChargesAmount({ extraCharges: holdCreateDto.extraCharges }),
       holdCreateDto.deliveryAmount || 0,
     ).total;
     const holdTotalBase = toBaseAmount(holdTotal, 'NIO', 1);
@@ -1354,8 +1549,15 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     setPricingMode(mode);
   };
 
-  const updateCartItemCharges = (productId: string, changes: Partial<Pick<CartItem, 'taxRate' | 'discount'>>) => {
+  const updateCartItemCharges = (
+    productId: string,
+    changes: Partial<Pick<CartItem, 'taxRate' | 'discount'>>,
+    variantId?: string,
+    warehouseId?: string,
+  ) => {
     setCart((current) => current.map((item) => item.productId === productId
+      && item.variantId === variantId
+      && item.warehouseId === warehouseId
       ? { ...item, ...changes, taxRate: Math.min(100, Math.max(0, Number(changes.taxRate ?? item.taxRate) || 0)), discount: Math.min(100, Math.max(0, Number(changes.discount ?? item.discount) || 0)) }
       : item));
   };
@@ -1367,6 +1569,26 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const missingPriceMessage = useMemo(() => getMissingSalesPriceMessage(cart), [cart]);
 
   const selectedRegister = registers.find((r) => r.id === selectedRegisterId);
+  const directWarehouseOptions = useMemo(
+    () => warehouseOptions.filter((warehouse) => warehouse.canOperate),
+    [warehouseOptions],
+  );
+
+  const changeCartItemWarehouse = (item: CartItem, warehouseId: string) => {
+    const nextWarehouseId = warehouseId || undefined;
+    const product = productsById.get(item.productId);
+    if (product?.trackInventory && !nextWarehouseId) {
+      toast.error('Selecciona una bodega de salida para este producto.');
+      return;
+    }
+    setCart((current) => current.map((line) => (
+      line.productId === item.productId
+        && line.variantId === item.variantId
+        && line.warehouseId === item.warehouseId
+        ? { ...line, warehouseId: nextWarehouseId }
+        : line
+    )));
+  };
 
   const handleCustomerChange = (value: string) => {
     const customerId = value === GENERAL_CUSTOMER_SELECT_VALUE ? undefined : value;
@@ -1482,8 +1704,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         customCustomerName: selectedCustomerId ? undefined : GENERAL_CUSTOMER_NAME,
         date: emitDate,
         discountPercent: discountPercent || undefined,
-        extraCostDescription: extraCostDescription.trim() || undefined,
-        extraCostAmount: extraCostAmount > 0 ? extraCostAmount : undefined,
+        extraCostDescription: legacyExtraCostFields.extraCostDescription,
+        extraCostAmount: legacyExtraCostFields.extraCostAmount > 0 ? legacyExtraCostFields.extraCostAmount : undefined,
+        extraCharges: normalizedExtraCharges,
         deliveryDescription: deliveryDescription.trim() || undefined,
         deliveryAmount: deliveryAmount > 0 ? deliveryAmount : undefined,
         pricingMode,
@@ -1539,11 +1762,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       // Limpiar datos en memoria de esta caja
       setCart([]);
       setDiscountPercent(0);
-      setExtraCostDescription('');
-      setExtraCostAmount(0);
+      setExtraCharges([]);
       setDeliveryDescription('');
       setDeliveryAmount(0);
       cartSessions.current.delete(selectedRegisterId);
+      setCartSessionRevision((current) => current + 1);
 
       await loadRecentInvoices(selectedRegisterId);
 
@@ -1574,8 +1797,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
   const clearCart = () => {
     setCart([]);
     setDiscountPercent(0);
-    setExtraCostDescription('');
-    setExtraCostAmount(0);
+    setExtraCharges([]);
     setDeliveryDescription('');
     setDeliveryAmount(0);
     setPricingMode('global');
@@ -1662,28 +1884,14 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-gradient-to-r from-primary/10 via-background to-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-primary/15 p-2.5"><ShoppingCart className="size-5 text-primary" /></div>
-          <div>
-            <h2 className="text-base font-black uppercase tracking-tight">Facturación por Caja</h2>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-          <Button type="button" variant="outline" onClick={() => setShowTutorial(true)} className="h-10 rounded-xl border-primary/30 bg-background/80 text-xs font-black text-primary shadow-sm hover:bg-primary/10">
-            <CircleHelp className="mr-2 size-4" /> Cómo facturar
-          </Button>
-        </div>
-      </div>
-
       {hasOpenCashSession && <Card className="overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.07] via-card to-primary/[0.04] shadow-sm">
         <CardContent className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-emerald-500/15 p-2.5 text-emerald-600"><BellRing className="size-5" /></div>
               <div>
-                <h3 className="text-sm font-black uppercase tracking-tight">Facturas enviadas a caja</h3>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Toma una factura pendiente y cobra su saldo desde esta sesión.</p>
+                <h3 className="text-sm font-black uppercase tracking-tight">Documentos enviados a caja</h3>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Toma una factura o crédito pendiente y registra el cobro desde esta sesión.</p>
               </div>
               <Badge className="border-none bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">{cashQueue.length}</Badge>
             </div>
@@ -1710,22 +1918,25 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           {cashQueue.length > 0 ? (
             <div className="mt-4 grid gap-2 lg:grid-cols-2">
               {cashQueue.map((queue) => {
-                const customer = queue.invoice.customer?.name || queue.invoice.customCustomerName || GENERAL_CUSTOMER_NAME;
+                const document = getQueueDocument(queue);
+                if (!document) return null;
+                const isCreditQueue = Boolean(queue.creditNoteId || queue.creditNote);
+                const customer = document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME;
                 const isMine = queue.status === 'CLAIMED' && queue.claimedById === user?.id;
                 const canForceRelease = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMINISTRADOR'].includes(String(user?.role || '').toUpperCase()) || Boolean(user?.isPlatformAdmin);
                 const canRelease = isMine || canForceRelease;
                 return (
                   <div key={queue.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/80 p-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2"><span className="font-black">{queue.invoice.number}</span><Badge variant="outline" className="text-[9px]">{queue.status === 'PENDING' ? 'Pendiente' : isMine ? 'Tomada por mí' : `Tomada por ${queue.claimedBy?.name || 'otro cajero'}`}</Badge></div>
+                      <div className="flex items-center gap-2"><span className="font-black">{document.number}</span><Badge variant="outline" className="text-[9px]">{isCreditQueue ? 'Crédito' : 'Factura'}</Badge><Badge variant="outline" className="text-[9px]">{queue.status === 'PENDING' ? 'Pendiente' : isMine ? 'Tomada por mí' : `Tomada por ${queue.claimedBy?.name || 'otro cajero'}`}</Badge></div>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{customer}</p>
-                      <p className="mt-1 font-mono text-sm font-black text-primary">{queue.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queue.invoice.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
+                      <p className="mt-1 font-mono text-sm font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))} <span className="font-sans text-[10px] font-medium text-muted-foreground">pendiente</span></p>
                       {queue.status === 'CLAIMED' && queue.claimExpiresAt && <p className="mt-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">Reserva hasta {new Date(queue.claimExpiresAt).toLocaleTimeString('es-NI')}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : 'Tomar factura'}</Button>}
+                      {queue.status === 'PENDING' && <Button type="button" size="sm" className="h-9 rounded-lg bg-emerald-600 text-xs font-black text-white hover:bg-emerald-700" onClick={() => void handleClaimCashQueue(queue)} disabled={queueClaimingId !== null}><CheckCircle2 className={cn('mr-1.5 size-4', queueClaimingId === queue.id && 'animate-pulse')} /> {queueClaimingId === queue.id ? 'Tomando…' : `Tomar ${isCreditQueue ? 'crédito' : 'factura'}`}</Button>}
                       {queue.status === 'CLAIMED' && canRelease && <Button type="button" variant="outline" size="sm" className="h-9 rounded-lg border-amber-500/40 text-xs font-black text-amber-700 dark:text-amber-300" onClick={() => void handleReleaseCashQueue(queue)} disabled={queueReleasingId !== null}>{queueReleasingId === queue.id ? 'Liberando…' : 'Liberar'}</Button>}
-                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(queue.invoice.balance || 0), queue.invoice.currency)]); setQueueMixedPaymentEnabled(false); }}>Cobrar ahora</Button>}
+                      {isMine && <Button type="button" size="sm" className="h-9 rounded-lg bg-primary text-xs font-black" onClick={() => { setQueueInvoice(queue); setQueuePayments([paymentLine('CASH', Number(document.balance || 0), document.currency)]); setQueueMixedPaymentEnabled(false); }}>Cobrar ahora</Button>}
                     </div>
                   </div>
                 );
@@ -1784,7 +1995,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   <Receipt className="size-4 text-primary" /> Configuración de Emisión
                 </h3>
                 <SalesAccountingLegend flow="pos" paymentMethod={payments[0]?.method} />
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1.5" data-tour="pos-register">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja Operativa</Label>
                     <Select value={selectedRegisterId} onValueChange={handleRegisterChange}>
@@ -1799,6 +2010,28 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-1.5" data-tour="pos-warehouse">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bodega de salida</Label>
+                    <div className="relative">
+                      <Store className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-primary" />
+                      <Select
+                        value={selectedWarehouseId}
+                        onValueChange={(value) => setSelectedWarehouseId(value)}
+                        disabled={isRegisterDisabled || directWarehouseOptions.length === 0}
+                      >
+                        <SelectTrigger className="!h-11 rounded-xl border-primary/20 bg-primary/[0.04] pl-10 pr-3 shadow-sm">
+                          <SelectValue placeholder={directWarehouseOptions.length > 0 ? 'Seleccionar bodega' : 'Sin bodegas operativas'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {directWarehouseOptions.map((warehouse) => (
+                            <SelectItem key={warehouse.id} value={warehouse.id}>
+                              <span className="truncate font-semibold">{warehouse.name}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-1.5" data-tour="pos-customer">
                     <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Cliente / Empresa</Label>
@@ -2057,22 +2290,48 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
 
             <Card className="border-border/50 shadow-sm" data-tour="pos-cart">
               <CardContent className="p-5">
-                <h3 className="text-sm font-black uppercase tracking-tight mb-4">
-                  Detalle Factura{' '}
-                  {selectedRegister && (
-                    <span className="text-primary">({selectedRegister.code} - {selectedRegister.name})</span>
-                  )}
-                </h3>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-black uppercase tracking-tight">
+                    Detalle Factura{' '}
+                    {selectedRegister && (
+                      <span className="text-primary">({selectedRegister.code} - {selectedRegister.name})</span>
+                    )}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isRegisterDisabled}
+                      onClick={() => setExtraCharges((current) => [...current, { id: `extra-${Date.now()}`, description: '', amount: 0 }])}
+                      className="h-8 rounded-xl border-primary/25 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10"
+                    >
+                      <Plus className="mr-1.5 size-3" /> Agregar coste extra
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isRegisterDisabled || Boolean(deliveryDescription) || deliveryAmount > 0}
+                      title={deliveryDescription || deliveryAmount > 0 ? 'Solo se permite un delivery por factura' : undefined}
+                      onClick={() => { setDeliveryDescription('Delivery'); setDeliveryAmount(0); }}
+                      className="h-8 rounded-xl border-emerald-500/25 px-2.5 text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                    >
+                      <Plus className="mr-1.5 size-3" /> Agregar delivery
+                    </Button>
+                  </div>
+                </div>
                 {cart.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-8">
                     No hay ítems agregados en esta caja{selectedRegister ? ` (${selectedRegister.code} - ${selectedRegister.name})` : ''}.
                   </p>
                 ) : (
                   <div className="border border-border/50 rounded-xl overflow-x-auto">
-                    <table className="w-full min-w-[760px] text-xs md:min-w-0">
+                    <table className="w-full min-w-[920px] text-xs xl:min-w-0">
                       <thead>
                         <tr className="bg-muted/30 border-b border-border/30">
                           <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descripción</th>
+                          <th className="px-3 py-2.5 text-left font-black uppercase tracking-widest text-[10px] text-muted-foreground">Bodega de salida</th>
                           <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">IVA</th>
                           <th className="px-3 py-2.5 text-right font-black uppercase tracking-widest text-[10px] text-muted-foreground">Descuento (%)</th>
                           <th className="px-3 py-2.5 text-center font-black uppercase tracking-widest text-[10px] text-muted-foreground">Cant</th>
@@ -2083,15 +2342,35 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                       </thead>
                       <tbody className="divide-y divide-border/20">
                         {cart.map((item) => (
-                          <tr key={item.productId} className="hover:bg-muted/20 transition-colors">
-                            <td className="px-3 py-2 font-bold"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{item.description}</span><SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />{item.priceMissing && <PriceMissingBadge className="basis-full" />}</div></td>
+                          <tr key={`${item.productId}-${item.variantId || 'base'}-${item.warehouseId || 'service'}`} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-3 py-2 font-bold"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{item.description}</span><SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />{item.priceMissing && <PriceMissingBadge className="basis-full" />}</div></td>
+                            <td className="px-3 py-2 align-top">
+                              {productsById.get(item.productId)?.itemType === 'SERVICE' ? (
+                                <span className="text-[10px] text-muted-foreground">No aplica</span>
+                              ) : (
+                                <Select
+                                  value={item.warehouseId || ''}
+                                  onValueChange={(value) => changeCartItemWarehouse(item, value)}
+                                  disabled={isRegisterDisabled || directWarehouseOptions.length === 0}
+                                >
+                                  <SelectTrigger className="h-8 min-w-[190px] rounded-lg text-[10px]">
+                                    <SelectValue placeholder="Seleccionar bodega" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {directWarehouseOptions.map((warehouse) => (
+                                      <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-center">
                               {pricingMode === 'individual' ? (
                                 <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                                   <input
                                     type="checkbox"
                                     checked={Number(item.taxRate || 0) > 0}
-                                    onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 })}
+                                    onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 }, item.variantId, item.warehouseId)}
                                     disabled={isRegisterDisabled}
                                     className="size-3.5 accent-primary"
                                   />
@@ -2106,7 +2385,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                   min={0}
                                   max={100}
                                   value={item.discount || ''}
-                                  onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 })}
+                                  onChange={(event) => updateCartItemCharges(item.productId, { discount: Number(event.target.value) || 0 }, item.variantId, item.warehouseId)}
                                   disabled={isRegisterDisabled}
                                   className="ml-auto h-7 w-16 rounded-lg text-right text-xs font-mono"
                                   placeholder="0"
@@ -2122,6 +2401,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                     updateQty(
                                       item.productId,
                                       normalizeQuantity(e.target.value, item.quantity),
+                                      item.variantId,
+                                      item.warehouseId,
                                     )
                                   }
                                   disabled={isRegisterDisabled}
@@ -2133,7 +2414,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                             <td className="px-3 py-2 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
                             <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(pricingMode === 'individual' ? calculateIndividualLineTotal(item) : item.lineTotal)}</td>
                             <td className="px-3 py-2 text-center">
-                              <Button variant="ghost" onClick={() => removeItem(item.productId, item.variantId)}
+                              <Button variant="ghost" onClick={() => removeItem(item.productId, item.variantId, item.warehouseId)}
                                 disabled={isRegisterDisabled}
                                 className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 rounded-lg">
                                 <Trash2 className="size-3.5" />
@@ -2145,6 +2426,89 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     </table>
                   </div>
                 )}
+                {(extraCharges.length > 0 || Boolean(deliveryDescription) || deliveryAmount > 0) && (
+                  <div className="mt-5 space-y-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos adicionales</p>
+                        <p className="text-[9px] text-muted-foreground/70">Se agregan como líneas al detalle y al asiento contable.</p>
+                      </div>
+                      <span className="text-[10px] font-black text-muted-foreground">{paymentCurrency === 'USD' ? 'Dólares (US$)' : 'Córdobas (C$)'}</span>
+                    </div>
+                    {extraCharges.map((charge, index) => (
+                      <div key={charge.id} className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-border/40 bg-background/60 p-2">
+                        <span className="w-full text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:w-auto">Coste extra {index + 1}</span>
+                        <Input
+                          value={charge.description}
+                          onChange={(event) => setExtraCharges((current) => current.map((item) => item.id === charge.id ? { ...item, description: event.target.value } : item))}
+                          placeholder="Descripción"
+                          className="h-8 min-w-0 flex-1 text-xs"
+                          disabled={isRegisterDisabled}
+                        />
+                        <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                          <span className="text-[10px] font-black text-muted-foreground">{paymentCurrency === 'USD' ? '$' : 'C$'}</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={charge.amount || ''}
+                            onChange={(event) => setExtraCharges((current) => current.map((item) => item.id === charge.id ? { ...item, amount: Math.max(0, Number(event.target.value) || 0) } : item))}
+                            placeholder="Monto"
+                            className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0"
+                            disabled={isRegisterDisabled}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Eliminar coste extra ${index + 1}`}
+                          className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500"
+                          onClick={() => setExtraCharges((current) => current.filter((item) => item.id !== charge.id))}
+                          disabled={isRegisterDisabled}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    {(Boolean(deliveryDescription) || deliveryAmount > 0) && (
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-background/60 p-2">
+                        <span className="w-full text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 sm:w-auto">Delivery</span>
+                        <Input
+                          value={deliveryDescription}
+                          onChange={(event) => setDeliveryDescription(event.target.value)}
+                          placeholder="Descripción"
+                          className="h-8 min-w-0 flex-1 text-xs"
+                          disabled={isRegisterDisabled}
+                        />
+                        <div className="flex min-w-[8.5rem] items-center gap-1 rounded-md border border-input bg-background px-2">
+                          <span className="text-[10px] font-black text-muted-foreground">{paymentCurrency === 'USD' ? '$' : 'C$'}</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={deliveryAmount || ''}
+                            onChange={(event) => setDeliveryAmount(Math.max(0, Number(event.target.value) || 0))}
+                            placeholder="Monto"
+                            className="h-8 border-0 px-0 text-right text-xs shadow-none focus-visible:ring-0"
+                            disabled={isRegisterDisabled}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Eliminar delivery"
+                          className="size-7 shrink-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500"
+                          onClick={() => { setDeliveryDescription(''); setDeliveryAmount(0); }}
+                          disabled={isRegisterDisabled}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -2152,9 +2516,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           <div className="space-y-5 sticky top-24">
             <Card className="border-border/50 shadow-sm" data-tour="pos-summary">
               <CardContent className="p-5 space-y-4">
-                <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2">
-                  <Calculator className="size-4 text-primary" /> Resumen Financiero
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-tight">
+                    <Calculator className="size-4 text-primary" /> Resumen Financiero
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowTutorial(true)}
+                    className="h-9 shrink-0 rounded-xl border-primary/30 bg-background/80 px-3 text-[10px] font-black text-primary shadow-sm hover:bg-primary/10"
+                    aria-label="Abrir guía Cómo facturar"
+                  >
+                    <CircleHelp className="mr-1.5 size-3.5" /> Cómo facturar
+                  </Button>
+                </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-2">
                   <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Aplicar impuestos/descuentos:</span>
                   <Button type="button" size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => changePricingMode('global')} disabled={isRegisterDisabled}>Global</Button>
@@ -2185,18 +2560,6 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     Configura el IVA y el descuento directamente en cada producto o servicio.
                   </p>
                 )}
-                <div className="grid gap-3 border-t border-border/30 pt-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Coste extra / descripción</Label>
-                    <Input value={extraCostDescription} onChange={(event) => setExtraCostDescription(event.target.value)} placeholder="Ej. Instalación" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
-                    <Input type="number" min="0" step="0.01" value={extraCostAmount || ''} onChange={(event) => setExtraCostAmount(Math.max(0, Number(event.target.value) || 0))} placeholder="Monto" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Delivery</Label>
-                    <Input value={deliveryDescription} onChange={(event) => setDeliveryDescription(event.target.value)} placeholder="Descripción opcional" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
-                    <Input type="number" min="0" step="0.01" value={deliveryAmount || ''} onChange={(event) => setDeliveryAmount(Math.max(0, Number(event.target.value) || 0))} placeholder="Monto" className="h-9 rounded-xl" disabled={isRegisterDisabled} />
-                  </div>
-                </div>
                 <div className="space-y-2 pt-2 border-t border-border/30">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Subtotal Bruto:</span>
@@ -2210,7 +2573,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     <span className="text-muted-foreground">IVA calculado:</span>
                     <span className="font-mono">{formatCurrency(summary.tax)}</span>
                   </div>
-                  {summary.extraCost > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">{extraCostDescription.trim() || 'Coste extra'}:</span><span className="font-mono">{formatCurrency(summary.extraCost)}</span></div>}
+                  {normalizedExtraCharges.filter((charge) => charge.amount > 0).map((charge, index) => <div key={`${charge.description}-${index}`} className="flex justify-between gap-3 text-xs"><span className="min-w-0 truncate text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}:</span><span className="shrink-0 font-mono">{formatCurrency(charge.amount)}</span></div>)}
                   {summary.delivery > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">{deliveryDescription.trim() || 'Delivery'}:</span><span className="font-mono">{formatCurrency(summary.delivery)}</span></div>}
                 </div>
                 <div className="pt-3 border-t border-border/30">
@@ -2361,7 +2724,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                   holdCreateDto.discountPercent || 0,
                   holdCreateDto.includeTax !== false,
                   holdCreateDto.pricingMode,
-                  holdCreateDto.extraCostAmount || 0,
+                  getSalesExtraChargesAmount({ extraCharges: holdCreateDto.extraCharges }),
                   holdCreateDto.deliveryAmount || 0,
                 ).total
                 : null;
@@ -2466,14 +2829,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           </div>
         </div>
       )}
-      {queueInvoice && (
+      {queueInvoice && (() => {
+        const document = getQueueDocument(queueInvoice);
+        if (!document) return null;
+        const isCreditQueue = Boolean(queueInvoice.creditNoteId || queueInvoice.creditNote);
+        return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
-              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">Factura {queueInvoice.invoice.number}</h2><p className="mt-1 text-sm text-muted-foreground">{queueInvoice.invoice.customer?.name || queueInvoice.invoice.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Cobro desde cola de caja</p><h2 id="queue-payment-title" className="mt-1 text-xl font-black uppercase tracking-tight">{isCreditQueue ? 'Crédito' : 'Factura'} {document.number}</h2><p className="mt-1 text-sm text-muted-foreground">{document.customer?.name || document.customCustomerName || GENERAL_CUSTOMER_NAME}</p></div>
                <Button type="button" variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (!queueSubmitting) { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); } }} aria-label="Cerrar cobro">×</Button>
             </div>
-            <div className="mt-5 rounded-2xl bg-primary/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-2xl font-black text-primary">{queueInvoice.invoice.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(queueInvoice.invoice.balance || 0))}</p></div>
+            <div className="mt-5 rounded-2xl bg-primary/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p><p className="mt-1 font-mono text-2xl font-black text-primary">{document.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(document.balance || 0))}</p>{isCreditQueue && <p className="mt-1 text-xs font-semibold text-muted-foreground">Puedes registrar un abono o cancelar todo el saldo.</p>}</div>
              <div className="mt-5 space-y-3">
                <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
                  <div>
@@ -2497,18 +2864,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <div key={`${payment.method}-${index}`} className="rounded-xl border border-border/50 bg-muted/10 p-3">
                   <div className="grid gap-2 sm:grid-cols-[1fr_9rem_9rem_auto]">
                     <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem>{getCustomerFavorBase(queueInvoice.invoice.customerId) > 0.01 && <SelectItem value="CUSTOMER_BALANCE">Saldo a favor</SelectItem>}</SelectContent>
+                      <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem>{getCustomerFavorBase(document.customerId) > 0.01 && <SelectItem value="CUSTOMER_BALANCE">Saldo a favor</SelectItem>}</SelectContent>
                     </Select>
-                    <CurrencySelector value={payment.currency || queueInvoice.invoice.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || queueInvoice.invoice.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} />
+                    <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} />
                   <Input type="number" min="0" step="0.01" value={payment.amount || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0 } : item))} placeholder="Monto" />
                     <Button type="button" variant="ghost" disabled={queuePayments.length === 1} onClick={() => setQueuePayments((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</Button>
                   </div>
-                  {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(getCustomerFavorBase(queueInvoice.invoice.customerId), baseCurrency)}. Puedes aplicar solo una parte.</p>}
+                  {payment.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatCurrency(getCustomerFavorBase(document.customerId), baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   {requiresPaymentReference(payment.method) && <Input className="mt-2" placeholder="Referencia obligatoria" value={payment.reference || ''} onChange={(event) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
                   {isBankPaymentMethod(payment.method, true) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label="Banco de destino" />}
                 </div>
               ))}
-               {queueMixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, queueInvoice.invoice.currency)])}>+ Agregar pago mixto</Button>}
+               {queueMixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => setQueuePayments((current) => [...current, paymentLine('CARD', 0, document.currency)])}>+ Agregar pago mixto</Button>}
              </div>
             {(() => {
               const paymentSummary = getQueuePaymentSummary();
@@ -2523,7 +2890,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
              <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border/50 pt-4"><Button type="button" variant="outline" onClick={() => { setQueueInvoice(null); setQueuePayments([]); setQueueMixedPaymentEnabled(false); }} disabled={queueSubmitting}>Cancelar</Button><Button type="button" onClick={() => void submitCashQueuePayment()} disabled={queueSubmitting}>{queueSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Confirmar cobro'}</Button></div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {showTutorial && <GuidedTour steps={POS_TOUR_STEPS} onClose={() => setShowTutorial(false)} title="Facturación por Caja" />}
       <ConfirmDialog
         open={duplicateMatches.length > 0}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, Trash2, ChevronLeft, ShieldCheck
 } from 'lucide-react';
@@ -30,6 +30,8 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -135,6 +137,7 @@ interface DevolucionesViewProps {
   customers?: Customer[];
   invoices?: Invoice[];
   products?: Product[];
+  warehouses?: any[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
@@ -150,10 +153,11 @@ const statusOptions = [
   { label: 'Rechazada',  value: 'REJECTED',  color: SALES_STATUS_COLORS.REJECTED },
 ];
 
-export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
+export function DevolucionesView({ data, loading, onRefresh, customers = [], invoices = [], products = [], warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, salesAlert }: DevolucionesViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('sales-return', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-returns-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED'>('ALL');
@@ -171,17 +175,57 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   }, [highlightedAlertId]);
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
   const [isCreating, setIsCreating] = useState(false);
+  const localDocRef = useRef<any>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: any) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<any>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        setIsCreating(Boolean(stored.isCreating));
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey) return;
+    if (!localDoc || (!editingId && !isCreating)) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, { editingId, isCreating, document: localDoc });
+  }, [draftHydrated, editingId, isCreating, localDoc, salesDraftStorageKey]);
 
   const startEdit = (id: string) => {
     const r = data.find(x => x.id === id);
+    if (!r) return;
     setEditingId(id);
-    setLocalDoc(r ? JSON.parse(JSON.stringify(r)) : null);
+    setIsCreating(false);
+    commitLocalDoc(JSON.parse(JSON.stringify(r)));
   };
 
   const closeEditor = () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
+    localDocRef.current = null;
     setEditingId(null);
     setIsCreating(false);
-    setLocalDoc(null);
+    commitLocalDoc(null);
   };
 
   const filtered = data.filter(r =>
@@ -203,9 +247,10 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
   const statusOptionsForFilter = statusOptions.map((option) => ({ value: option.value, label: option.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === option.value).length }));
 
   const startNew = () => {
+    clearSalesEditorDraft(salesDraftStorageKey);
     setIsCreating(true);
     setEditingId(null);
-    setLocalDoc({
+    commitLocalDoc({
       customerId: '',
       invoiceId: '',
       date: new Date().toISOString().split('T')[0],
@@ -214,6 +259,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       total: 0,
       currency: displayCurrency,
       exchangeRate: globalRate,
+      warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
     });
   };
 
@@ -260,6 +306,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
         status: localDoc.status || 'PENDING',
         currency: localDoc.currency || displayCurrency,
         exchangeRate: localDoc.exchangeRate || globalRate,
+        warehouseId: localDoc.warehouseId || selectedInvoice?.warehouseId || null,
         priceListId: localDoc.priceListId || undefined,
       };
       if (isCreating) {
@@ -268,7 +315,9 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
       } else {
         await salesReturnsService.update(localDoc.id, payload);
       }
-      setIsCreating(false); setEditingId(null); setLocalDoc(null); onRefresh();
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDocRef.current = null;
+      setIsCreating(false); setEditingId(null); commitLocalDoc(null); onRefresh();
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar', { id: saveToastId }); }
   };
 
@@ -434,12 +483,21 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
                     setLocalDoc({
                       ...localDoc,
                       invoiceId: val,
+                      warehouseId: inv?.warehouseId || null,
                       currency: inv?.currency || localDoc?.currency || displayCurrency,
                       exchangeRate: inv?.exchangeRate || localDoc?.exchangeRate || globalRate,
                       items: invoiceItems,
                       ...invoiceTotals,
                     });
-                  }} placeholder="Seleccionar Factura" /></div>
+                   }} placeholder="Seleccionar Factura" /></div>
+                <SalesWarehouseSelect
+                  warehouses={warehouses}
+                  value={localDoc?.warehouseId || selectedInvoice?.warehouseId}
+                  onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })}
+                  disabled={Boolean(selectedInvoice?.warehouseId)}
+                  required
+                  helpText={selectedInvoice?.warehouseId ? 'La devolución debe usar la bodega de la factura origen.' : 'Se usará para recibir los productos devueltos.'}
+                />
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''} onChange={(e) => setLocalDoc({ ...localDoc, date: e.target.value })} className="h-8 text-xs" /></div>
                 {!isCreating && <div><p className="text-[10px] text-muted-foreground mb-1">Estado</p>

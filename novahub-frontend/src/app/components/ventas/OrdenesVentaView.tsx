@@ -37,6 +37,8 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { SalesWarehouseSelect, getDefaultSalesWarehouseId, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
+import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -47,6 +49,7 @@ interface OrdenesVentaViewProps {
   onClearTargetOrderId?: () => void;
   customers?: Customer[];
   products?: Product[];
+  warehouses?: any[];
   employees?: Employee[];
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
@@ -92,10 +95,11 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
   return issues;
 };
 
-export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
+export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
+  const salesDraftStorageKey = getSalesEditorDraftKey('sales-order', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [localStatusFilter, setLocalStatusFilter] = useState<OrderStatusFilter>('ALL');
   const statusFilter = controlledStatusFilter ?? localStatusFilter;
@@ -144,6 +148,50 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const savingOrderRef = useRef(false);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
+  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
+  const localDocRef = useRef<SalesOrder | null>(null);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const commitLocalDoc = (nextDoc: SalesOrder | null) => {
+    localDocRef.current = nextDoc;
+    setLocalDoc(nextDoc);
+  };
+
+  useEffect(() => {
+    localDocRef.current = localDoc;
+  }, [localDoc]);
+
+  useEffect(() => {
+    if (!salesDraftStorageKey || hydratedDraftKeyRef.current === salesDraftStorageKey) return;
+    hydratedDraftKeyRef.current = salesDraftStorageKey;
+    const stored = readSalesEditorDraft<SalesOrder>(salesDraftStorageKey);
+    const timer = window.setTimeout(() => {
+      if (stored) {
+        if (stored.document) commitLocalDoc(stored.document);
+        if (stored.editingId) setEditingId(stored.editingId);
+        const rates = stored.metadata?.localRates;
+        if (rates && typeof rates === 'object') setLocalRates(rates as { dRate: number; tRate: number });
+        const storedPricingMode = stored.metadata?.pricingMode;
+        if (storedPricingMode === 'global' || storedPricingMode === 'individual') setPricingMode(storedPricingMode);
+      }
+      setDraftHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [salesDraftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !salesDraftStorageKey || hydratedDraftKeyRef.current !== salesDraftStorageKey) return;
+    if (!editingId || !localDoc) {
+      clearSalesEditorDraft(salesDraftStorageKey);
+      return;
+    }
+    writeSalesEditorDraft(salesDraftStorageKey, {
+      editingId,
+      document: localDoc,
+      metadata: { localRates, pricingMode },
+    });
+  }, [draftHydrated, editingId, localDoc, localRates, pricingMode, salesDraftStorageKey]);
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -188,8 +236,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           toast.error(`El producto ${item.description} ya no está disponible`);
           return;
         }
-        if (product && product.itemType !== 'SERVICE' && Number(product.stock) < Number(item.quantity)) {
-          toast.error(`Stock insuficiente para ${item.description}`);
+        const availableStock = product && product.itemType !== 'SERVICE'
+          ? getProductStockForSalesWarehouse(product, orderForConversion.warehouseId)
+          : undefined;
+        if (availableStock !== undefined && availableStock < Number(item.quantity)) {
+          toast.error(`Stock insuficiente para ${item.description} en la bodega seleccionada`);
           return;
         }
       }
@@ -325,12 +376,6 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     notes: order.notes,
   });
 
-  // NOTE: intentionally NOT listening to data changes here.
-  // Resetting localDoc on every server refresh would re-mount SalesLinePriceListSelect
-  // (because deleteMany+create gives items new IDs), resetting the appliedRef and
-  // causing an infinite PATCH loop. localDoc is only reset when editingId changes.
-  // See the useEffect below (line ~207) for the single source of truth.
-
   useEffect(() => {
     if (!targetOrderId) return;
     const timer = setTimeout(() => {
@@ -445,6 +490,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     savingOrderRef.current = true;
     try {
       await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDocRef.current = null;
       setEditingId(null);
       toast.success(
         status === 'APPROVED' ? 'Orden aprobada' : status === 'IN_PROCESS' ? 'Orden marcada en proceso' : 'Orden guardada como borrador',
@@ -539,24 +586,30 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const formatNumber2 = (value: number) => formatSalesAmount(value);
   const priceInCurrency = (basePrice: number, currency: string, rate: number) => currency === 'USD' ? basePrice / (rate || 1) : basePrice;
 
-  const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
-
   useEffect(() => {
+    if (!draftHydrated) return;
     const timer = setTimeout(() => {
       if (editingId) {
-        const e = data.find(x => x.id === editingId);
-        setLocalDoc(e ? JSON.parse(JSON.stringify(e)) : null);
-        if (e) {
-          setLocalRates(calculateRates(e));
-          setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
+        const localSnapshot = localDocRef.current?.id === editingId ? localDocRef.current : null;
+        if (localSnapshot) {
+          commitLocalDoc(localSnapshot);
+        } else {
+          const e = data.find(x => x.id === editingId);
+          if (e) {
+            const cloned = JSON.parse(JSON.stringify(e)) as SalesOrder;
+            commitLocalDoc(cloned);
+            setLocalRates(calculateRates(e));
+            setPricingMode((e.items || []).some((line: any) => Number(line.discount || 0) !== 0 || Number(line.taxRate || 0) !== 0) ? 'individual' : 'global');
+          }
         }
       } else {
-        setLocalDoc(null);
+        localDocRef.current = null;
+        commitLocalDoc(null);
         setLocalRates({ dRate: 0, tRate: 0 });
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [editingId]); // Intentionally removed 'data' to prevent server-refreshes from destroying mid-edit local states
+  }, [draftHydrated, editingId, data]);
 
   const handleAddOrder = async () => {
     const createToastId = toast.loading('Creando orden de venta...');
@@ -576,9 +629,11 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
         exchangeRate: globalRate,
         status: 'DRAFT' as any,
         items: [],
+        warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
       });
       await onRefresh();
       toast.success('Orden de venta creada como borrador', { id: createToastId });
+      commitLocalDoc(newOrd);
       setEditingId(newOrd.id);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo crear la orden de venta', { id: createToastId });
@@ -734,7 +789,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); }} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -793,6 +848,16 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
+                <SalesWarehouseSelect
+                  warehouses={warehouses}
+                  value={localDoc?.warehouseId}
+                  onChange={(warehouseId) => {
+                    setLocalDoc({ ...localDoc, warehouseId } as any);
+                    void handleUpdate(localDoc!.id, { warehouseId } as any);
+                  }}
+                  required={['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(localDoc?.status))}
+                  helpText="La orden y la factura usarán esta bodega de salida."
+                />
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor</p>
                   <Combobox
@@ -1104,7 +1169,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                               </>
                             );
                           }
-                          const stock = Number(p.stock || 0);
+                          const stock = getProductStockForSalesWarehouse(p, localDoc?.warehouseId);
                           return (
                             <>
                               <Badge variant="outline" className={cn(
@@ -1161,15 +1226,18 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                     <Input 
                       type="number" 
                       min="0"
-                      max={resolveItemType(item) === 'SERVICE' ? 1000000 : Number(products.find(x => x.id === item.productId)?.stock || 1000000)}
+                       max={resolveItemType(item) === 'SERVICE' ? 1000000 : (products.find(x => x.id === item.productId) ? getProductStockForSalesWarehouse(products.find(x => x.id === item.productId), localDoc?.warehouseId) : 1000000)}
                       value={Number(item.quantity) || ''} 
                       placeholder="0"
                       onChange={(e) => {
                         let newQty = Number(e.target.value);
                         const p = products.find(x => x.id === item.productId);
-                        if (p && resolveItemType(item) !== 'SERVICE' && newQty > Number(p.stock || 0)) {
-                          toast.warning(`Stock insuficiente. Disponible: ${p.stock}`, { id: `stock-warn-${idx}` });
-                          newQty = Number(p.stock || 0);
+                        const availableStock = p && resolveItemType(item) !== 'SERVICE'
+                          ? getProductStockForSalesWarehouse(p, localDoc?.warehouseId)
+                          : undefined;
+                        if (availableStock !== undefined && newQty > availableStock) {
+                          toast.warning(`Stock insuficiente en la bodega seleccionada. Disponible: ${availableStock}`, { id: `stock-warn-${idx}` });
+                          newQty = availableStock;
                         }
                         const newItems = [...(localDoc.items || [])] as any[];
                         newItems[idx].quantity = newQty;
@@ -1463,6 +1531,8 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             setCancelLoading(true);
             await salesOrdersService.update(pendingCancelId, { status: 'CANCELLED' as any });
             toast.success('Orden cancelada', { id: cancelToastId });
+            clearSalesEditorDraft(salesDraftStorageKey);
+            localDocRef.current = null;
             if (editingId === pendingCancelId) setEditingId(null);
             await onRefresh();
           } catch (error: any) {
