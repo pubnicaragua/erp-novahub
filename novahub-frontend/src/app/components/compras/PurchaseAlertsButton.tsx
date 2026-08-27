@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BellRing, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { notificationsService } from '../../services/notifications.service';
 import { safeSetItem } from '../../services/safe-storage';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { playNotificationSound } from '../../utils/notificationSound';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +56,20 @@ export function PurchaseAlertsButton({
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => readStoredAlertIds(storageKey));
   const unreadItems = alert.items.filter((item) => !readAlertIds.has(item.id));
   const unreadCount = unreadItems.length;
+  const seenAlertIds = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    const currentIds = new Set(alert.items.map((item) => String(item.id)));
+    if (seenAlertIds.current === null) {
+      seenAlertIds.current = currentIds;
+      return;
+    }
+    const freshUnread = alert.items.filter((item) =>
+      !seenAlertIds.current!.has(String(item.id)) && !readAlertIds.has(item.id),
+    );
+    seenAlertIds.current = currentIds;
+    if (freshUnread.length > 0) playNotificationSound();
+  }, [alert.items, readAlertIds]);
 
   const markItemsAsRead = useCallback((ids: string[]) => {
     const normalizedIds = [...new Set(ids.map(String).map((id) => id.trim()).filter(Boolean))];

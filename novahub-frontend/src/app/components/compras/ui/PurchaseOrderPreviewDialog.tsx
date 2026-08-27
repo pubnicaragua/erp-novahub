@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Ban, CalendarDays, CheckCircle2, FileDown, History, Info, Truck, UserRound } from 'lucide-react';
+import { Ban, CalendarDays, CheckCircle2, FileDown, History, Info, UserRound } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../ui/sheet';
@@ -94,21 +94,7 @@ export function PurchaseOrderPreviewDialog({
   const statusMeta = STATUS_META[normalizedStatus] || STATUS_META.PENDING;
   const supplier = order?.supplier || suppliers?.find((item) => item.id === order?.supplierId);
   const items = order?.items || [];
-  const receipts = order?.receipts || [];
   const canApproveState = ['DRAFT', 'PENDING'].includes(status);
-
-  // Calculate received qty per product across all receipt items
-  const receivedByProduct = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const receipt of receipts) {
-      for (const ri of receipt.items || []) {
-        if (ri.productId) {
-          map.set(ri.productId, (map.get(ri.productId) || 0) + Number(ri.quantityReceived || 0));
-        }
-      }
-    }
-    return map;
-  }, [receipts]);
   const isRejected = ['CANCELLED', 'REJECTED'].includes(status);
   const currency = String(order?.currency || 'NIO').toUpperCase();
   const currencyPrefix = currency === 'USD' ? '$' : currency === 'NIO' ? 'C$' : currency;
@@ -221,12 +207,6 @@ export function PurchaseOrderPreviewDialog({
                           <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/30 pt-3 text-xs">
                             <div className="min-w-0"><dt className="text-[10px] uppercase text-muted-foreground">Cantidad</dt><dd className="mt-0.5 font-medium">{Number(item.quantity || 0)}</dd></div>
                             <div className="min-w-0 text-right"><dt className="text-[10px] uppercase text-muted-foreground">P. unitario</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(item.unitPrice)}</dd></div>
-                            {item.productId && receivedByProduct.has(item.productId) && (
-                              <>
-                                <div className="min-w-0"><dt className="text-[10px] uppercase text-muted-foreground">Recibido</dt><dd className="mt-0.5 font-medium text-emerald-600">{Number(receivedByProduct.get(item.productId) || 0)}</dd></div>
-                                <div className="min-w-0 text-right"><dt className="text-[10px] uppercase text-muted-foreground">Pendiente</dt><dd className="mt-0.5 font-medium text-amber-600">{Math.max(0, Number(item.quantity || 0) - Number(receivedByProduct.get(item.productId) || 0))}</dd></div>
-                              </>
-                            )}
                             <div className="min-w-0"><dt className="text-[10px] uppercase text-muted-foreground">Subtotal</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(subtotal)}</dd></div>
                             <div className="min-w-0 text-right"><dt className="text-[10px] uppercase text-muted-foreground">IVA</dt><dd className="mt-0.5 break-words font-medium">{currencyPrefix} {formatAmount(tax)}</dd></div>
                           </dl>
@@ -241,8 +221,6 @@ export function PurchaseOrderPreviewDialog({
                           <TableHead className="text-[10px] uppercase">Código</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
                           <TableHead className="text-right text-[10px] uppercase">Cant.</TableHead>
-                          {receipts.length > 0 && <TableHead className="text-right text-[10px] uppercase">Recibido</TableHead>}
-                          {receipts.length > 0 && <TableHead className="text-right text-[10px] uppercase">Pendiente</TableHead>}
                           <TableHead className="text-right text-[10px] uppercase">P. unitario</TableHead>
                           <TableHead className="text-right text-[10px] uppercase">Subtotal</TableHead>
                           <TableHead className="text-right text-[10px] uppercase">IVA</TableHead>
@@ -251,7 +229,7 @@ export function PurchaseOrderPreviewDialog({
                       </TableHeader>
                       <TableBody>
                         {items.length === 0 ? (
-                          <TableRow><TableCell colSpan={receipts.length > 0 ? 9 : 7} className="py-8 text-center text-muted-foreground">No hay artículos registrados.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay artículos registrados.</TableCell></TableRow>
                         ) : items.map((item: any, index: number) => {
                           const lineTotal = Number(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice || 0));
                           const tax = Number(item.taxAmount ?? 0);
@@ -261,16 +239,6 @@ export function PurchaseOrderPreviewDialog({
                               <TableCell className="font-mono text-[11px]">{item.code || '—'}</TableCell>
                               <TableCell className="max-w-[220px] whitespace-normal break-words text-xs">{item.name || item.description || '—'}</TableCell>
                               <TableCell className="text-right text-xs">{Number(item.quantity || 0)}</TableCell>
-                              {receipts.length > 0 && (
-                                <TableCell className="text-right text-xs text-emerald-600 font-semibold">
-                                  {item.productId ? Number(receivedByProduct.get(item.productId) || 0) : '—'}
-                                </TableCell>
-                              )}
-                              {receipts.length > 0 && (
-                                <TableCell className="text-right text-xs text-amber-600 font-semibold">
-                                  {item.productId ? Math.max(0, Number(item.quantity || 0) - Number(receivedByProduct.get(item.productId) || 0)) : '—'}
-                                </TableCell>
-                              )}
                               <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(item.unitPrice)}</TableCell>
                               <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(subtotal)}</TableCell>
                               <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(tax)}</TableCell>
@@ -283,25 +251,6 @@ export function PurchaseOrderPreviewDialog({
                   </div>
                 </div>
               </section>
-
-              {receipts.length > 0 && (
-                <section className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><Truck className="size-3.5" /> Recepciones vinculadas</h4>
-                    <Badge variant="outline" className="text-[10px]">{receipts.length} recepción{receipts.length > 1 ? 'es' : ''}</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {receipts.map((receipt: any) => (
-                      <div key={receipt.id} className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/60 p-3 text-xs">
-                        <span className="font-mono font-bold text-primary">{receipt.number}</span>
-                        <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest', receipt.status === 'APPROVED' || receipt.status === 'RECEIVED' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : receipt.status === 'CANCELLED' ? 'border-destructive/20 bg-destructive/10 text-destructive' : 'border-amber-500/20 bg-amber-500/10 text-amber-600')}>
-                          {receipt.status === 'RECEIVED' ? 'Recibida' : receipt.status === 'APPROVED' ? 'Aprobada' : receipt.status === 'CANCELLED' ? 'Anulada' : receipt.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
 
               <div className="grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-card p-4 text-sm min-[480px]:grid-cols-2 sm:grid-cols-5" data-tour="purchase-order-detail-summary">
                 <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Subtotal</span><p className="mt-1 font-mono font-bold">{currencyPrefix} {formatAmount(order.subtotal)}</p></div>

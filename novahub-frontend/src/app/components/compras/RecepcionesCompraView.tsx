@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
+  PackageCheck, Plus, Search, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
   AlertTriangle, XCircle, ArrowDown, FileText, Upload, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -35,6 +35,7 @@ import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/payme
 import { PrintButton } from '../ui/PrintButton';
 import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
 import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
@@ -42,7 +43,7 @@ const statusOpts = [
   { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
   { label: 'Recibido',      value: 'RECEIVED',       color: 'bg-primary/10 text-primary' },
   { label: 'Parcial',       value: 'PARTIAL',        color: 'bg-primary/10 text-primary' },
-  { label: 'Con Incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
+  { label: 'Recibida con incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
   { label: 'Cancelada',     value: 'REJECTED',       color: 'bg-destructive/10 text-destructive' },
 ];
 
@@ -451,6 +452,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   const [categories, setCategories] = useState<any[]>([]);
   
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailReceipt, setDetailReceipt] = useState<PurchaseReceipt | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
   const [inventoryCostOperations, setInventoryCostOperations] = useState<InventoryCostOperation[] | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<ReceiptPaymentDraft | null>(null);
@@ -494,6 +496,57 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   });
 
   const colFilters = useColumnFilters();
+  const activeReceiptInvoices = (receipt: PurchaseReceipt) =>
+    (receipt.supplierInvoices || []).filter((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED');
+  const expectedReceiptPayment = (receipt: PurchaseReceipt) => {
+    const orderTotal = Number(receipt.purchaseOrder?.total || 0);
+    const invoiceTotal = activeReceiptInvoices(receipt).reduce((sum, invoice: any) => sum + Number(invoice.total || 0), 0);
+    return orderTotal > 0 ? orderTotal : invoiceTotal || Number(receipt.total || 0);
+  };
+  const paidReceiptAmount = (receipt: PurchaseReceipt) =>
+    activeReceiptInvoices(receipt).reduce((sum, invoice: any) => sum + Number(invoice.amountPaid || 0), 0);
+  const receiptExpectedCurrency = (receipt: PurchaseReceipt) => receipt.purchaseOrder?.currency || receipt.currency;
+  const receiptPaidCurrency = (receipt: PurchaseReceipt) => activeReceiptInvoices(receipt)[0]?.currency || receipt.currency;
+  const buildReceiptPanel = (receipt: PurchaseReceipt): SalesDocumentPanelData => ({
+    id: receipt.id,
+    number: receipt.number,
+    title: 'Recepción de compra',
+    customerName: receipt.supplier?.name || 'Proveedor sin nombre',
+    hideCustomer: true,
+    status: String(receipt.status || ''),
+    sourceLabel: receipt.purchaseOrder?.number ? `Orden de compra ${receipt.purchaseOrder.number}` : undefined,
+    totalLabel: formatConvertedAmount(
+      Number(receipt.total || 0),
+      receipt.currency,
+      receipt.exchangeRate,
+    ),
+    summaryDetails: [
+      { label: 'Moneda', value: String(receipt.currency || 'NIO').toUpperCase() },
+      { label: 'Líneas', value: String(receipt.items?.length || 0) },
+      { label: 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), receiptExpectedCurrency(receipt), receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
+      { label: 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), receiptPaidCurrency(receipt), activeReceiptInvoices(receipt)[0]?.exchangeRate || receipt.exchangeRate) },
+    ],
+    metadata: [
+      { label: 'Proveedor', value: receipt.supplier?.name || 'No disponible' },
+      { label: 'Fecha de recepción', value: receipt.date ? formatDateEs(receipt.date) : 'No disponible' },
+      { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
+    ],
+    lines: (receipt.items || []).map((item) => {
+      const ordered = Number(item.quantityOrdered || 0);
+      const received = Number(item.quantityReceived || 0);
+      const rejected = Number(item.quantityRejected || 0);
+      const lineTotal = received * Number(item.unitPrice || 0);
+      return {
+        id: item.id,
+        description: item.description || item.name || item.code || 'Artículo sin descripción',
+        quantity: received,
+        unitPriceLabel: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
+        totalLabel: formatReceiptAmount(lineTotal, receipt.currency),
+        secondaryLabel: `Ordenada: ${ordered} · Recibida: ${received} · Rechazada: ${rejected}`,
+      };
+    }),
+    notes: receipt.notes,
+  });
   const filterGetters = {
     supplier: (row: PurchaseReceipt) => row.supplier?.name || '-',
     date: (row: PurchaseReceipt) => (row.date ? new Date(row.date).getTime() : null),
@@ -511,14 +564,16 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         { key: 'number', label: 'Nº', align: 'left' },
         { key: 'supplierName', label: 'Proveedor', align: 'left' },
         { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'expectedPayment', label: 'Importe comprometido', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'paidAmount', label: 'Pagado', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
         { key: 'status', label: 'Estado', align: 'center' },
       ],
       rows: filteredData.map((item) => ({
         number: item.number,
         supplierName: item.supplier?.name || 'Sin proveedor',
         date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || item.purchaseOrder?.total || 0),
+        expectedPayment: expectedReceiptPayment(item),
+        paidAmount: paidReceiptAmount(item),
         status: item.status || '',
       })),
       filters: {
@@ -546,7 +601,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     { key: 'date',      header: 'Fecha',       width: '110px',
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'M�s recientes' }, { value: 'asc', label: 'M�s antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
-    { key: 'total',     header: 'Total',       width: '145px',
+    { key: 'total',     header: 'Total recepción', width: '145px',
       headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (_value, row) => {
         const receiptStatus = String(row.status || '').toUpperCase();
@@ -576,12 +631,30 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           </div>
         );
       } },
+    { key: 'expectedPayment', header: 'Importe comprometido', width: '155px',
+      render: (_value, row) => (
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="text-sm font-black tabular-nums text-amber-600 dark:text-amber-400">
+            {formatConvertedAmount(expectedReceiptPayment(row), receiptExpectedCurrency(row), row.purchaseOrder?.exchangeRate || row.exchangeRate)}
+          </span>
+          <span className="text-[10px] font-bold text-muted-foreground">Orden original</span>
+        </div>
+      ) },
+    { key: 'paidAmount', header: 'Pagado', width: '135px',
+      render: (_value, row) => (
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="text-sm font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+            {formatConvertedAmount(paidReceiptAmount(row), receiptPaidCurrency(row), activeReceiptInvoices(row)[0]?.exchangeRate || row.exchangeRate)}
+          </span>
+          <span className="text-[10px] font-bold text-muted-foreground">Pagos registrados</span>
+        </div>
+      ) },
     { key: 'items',     header: 'Ítems',       width: '140px',
       render: (_v, row) => {
         const items = row.items || [];
         const total = items.length;
-        const faltantes = items.filter(i => Number(i.quantityReceived) < Number(i.quantityOrdered));
         const rechazados = items.filter(i => Number(i.quantityRejected||0) > 0);
+        const faltantes = items.filter(i => Number(i.quantityRejected || 0) <= 0 && Number(i.quantityReceived) < Number(i.quantityOrdered));
         return <div className="flex items-center gap-2">
           <span className="text-xs font-black tabular-nums">{total} art.</span>
           {faltantes.length > 0 && <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{faltantes.length} falt.</span>}
@@ -643,8 +716,9 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   };
 
   const openPaymentModal = (receipt: any, invoice?: any) => {
-    if (String(receipt?.status || '').toUpperCase() !== 'RECEIVED') {
-      toast.error('El pago solo se puede registrar cuando la recepción está recibida.');
+    const receiptStatus = String(receipt?.status || '').toUpperCase();
+    if (!['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus)) {
+      toast.error('El pago solo se puede registrar cuando la recepción está recibida o recibida con incidencias.');
       return;
     }
     const receiptTotals = calculateReceiptTotalsForForm(receipt.items || []);
@@ -866,7 +940,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       ? canPerform('PURCHASES_RECEIPTS', 'create')
       : RECEIPT_EDITABLE_STATUSES.includes(persistedStatus) && canPerform('PURCHASES_RECEIPTS', 'edit') && !linkedInvoice;
     const canReceiveCurrent = !isNew
-      && RECEIPT_EDITABLE_STATUSES.includes(persistedStatus)
+      && persistedStatus === 'PENDING'
       && canEditCurrent
       && canPerform('PURCHASES_RECEIPTS', 'approve');
     const currentStatus = statusOpts.find(s => s.value === receiptStatus);
@@ -1046,7 +1120,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const qOrd = Number(it.quantityOrdered||0);
                 const qRec = Number(it.quantityReceived||0);
                 const qRej = Number(it.quantityRejected||0);
-                const falt = Math.max(0, qOrd - qRec);
+                const falt = qRej > 0 ? 0 : Math.max(0, qOrd - qRec);
                 return <div key={i} className="text-[9px] font-bold text-muted-foreground">
                   {it.description || `Ítem ${i+1}`}: {falt > 0 && <span className="text-amber-500">{falt} faltante(s) </span>}
                   {qRej > 0 && <span className="text-rose-500">{qRej} rechazado(s)</span>}
@@ -1085,8 +1159,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const qOrdered = Number(item.quantityOrdered || 0);
                 const qReceived = Number(item.quantityReceived || 0);
                 const qRejected = Number(item.quantityRejected || 0);
-                const faltante = qReceived < qOrdered && qReceived >= 0;
                 const rechazado = qRejected > 0;
+                const faltante = !rechazado && qReceived < qOrdered && qReceived >= 0;
                 const missingWarehouse = item.stockApplies !== false && !String(item.warehouseId || '').trim();
                 const lineAmounts = calculateReceiptLineAmounts(item);
                 return (
@@ -1311,20 +1385,18 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   }
 
   const totalItemsReceived = data.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityReceived||0),0)||0), 0);
-  const totalFaltantes = data.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Math.max(0, Number(i.quantityOrdered||0) - Number(i.quantityReceived||0)),0)||0), 0);
   const totalRechazados = data.reduce((acc, r) => acc + (r.items?.reduce((a,i:any) => a + Number(i.quantityRejected||0),0)||0), 0);
   const withIncidencias = data.filter(r => String(r.status||'').toUpperCase() === 'WITH_INCIDENTS').length;
 
   const kpis = [
     { title: 'Recepciones',   value: data.length, icon: PackageCheck, color: 'text-blue-500', bg: 'bg-blue-500/10', kind: 'indicator' as const },
     { title: 'Ítems Recibidos', value: totalItemsReceived, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'RECEIVED' as const },
-    { title: 'Faltantes', value: totalFaltantes, icon: ArrowDown, color: 'text-amber-500', bg: 'bg-amber-500/10', kind: 'indicator' as const },
     { title: 'Incidencias', value: `${withIncidencias} rec. / ${totalRechazados} rech.`, icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-500/10', kind: 'filter' as const, filter: 'WITH_INCIDENTS' as const },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
           <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.kind} active={k.filter === statusFilter} onClick={k.filter ? () => setStatusFilter(statusFilter === k.filter ? 'ALL' : k.filter) : undefined} />
         ))}
@@ -1343,7 +1415,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-') && String(data.find((receipt) => receipt.id === id)?.status || '').toUpperCase() !== 'REJECTED');
             if (validIds.length === 0) return;
@@ -1367,8 +1439,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           } : undefined}
           actions={(row) => {
             const receiptStatus = String(row.status || '').toUpperCase();
-            const isReceived = receiptStatus === 'RECEIVED';
-            const activeInvoice = isReceived
+            const isApprovedReceipt = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus);
+            const activeInvoice = isApprovedReceipt
               ? (row.supplierInvoices || []).find((invoice: any) =>
                 String(invoice.status || '').toUpperCase() !== 'CANCELLED',
               )
@@ -1383,11 +1455,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               && canPerform('PURCHASES_PAYMENTS', 'approve');
             return (
             <div className="flex gap-1">
-              {!isReceived && RECEIPT_EDITABLE_STATUSES.includes(receiptStatus) && canPerform('PURCHASES_RECEIPTS', 'approve') && canPerform('PURCHASES_RECEIPTS', 'edit') ? (
-                <Button title={receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} aria-label={`${receiptStatus === 'PENDING' ? 'Recepcionar' : 'Continuar recepción'} ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
+              {receiptStatus === 'PENDING' && canPerform('PURCHASES_RECEIPTS', 'approve') && canPerform('PURCHASES_RECEIPTS', 'edit') && (
+                <Button title="Recepcionar" aria-label={`Recepcionar ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
                   <PackageCheck className="size-4" />
                 </Button>
-              ) : isReceived && (canRegisterPayment || canRegisterInvoice) ? (
+              )}
+              {isApprovedReceipt && (canRegisterPayment || canRegisterInvoice) && (
                 <Button
                   title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
                   aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepción'}` : `Registrar factura y pago de ${row.number || 'recepción'}`}
@@ -1398,12 +1471,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 >
                   <Banknote className="size-4" />
                 </Button>
-              ) : (
-                <Button title="Ver detalle" aria-label={`Ver detalle de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
-                  <Eye className="size-4" />
-                </Button>
               )}
-              <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoria de la Recepcion" />
+              <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoría de la recepción" />
               {canPerform('PURCHASES_RECEIPTS', 'delete') && String(row.status || '').toUpperCase() !== 'REJECTED' && (
                 <Button title="Cancelar recepción" aria-label={`Cancelar recepción ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
                   <Ban className="size-4" />
@@ -1415,6 +1484,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         />
       </div>
       {paymentDialog}
+
+      <SalesDocumentDetailSheet
+        key={detailReceipt?.id || 'receipt-detail'}
+        document={detailReceipt ? buildReceiptPanel(detailReceipt) : null}
+        entity="PURCHASE_RECEIPT"
+        open={Boolean(detailReceipt)}
+        onClose={() => setDetailReceipt(null)}
+        onOpenDocument={() => {
+          if (!detailReceipt) return;
+          const receiptId = detailReceipt.id;
+          setDetailReceipt(null);
+          setEditingId(receiptId);
+        }}
+      />
 
       <Dialog open={inventoryCostOperations !== null} onOpenChange={(open) => { if (!open) setInventoryCostOperations(null); }}>
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] !max-w-[min(96vw,1400px)] overflow-hidden rounded-3xl border-primary/20 bg-background/95 p-0 shadow-2xl backdrop-blur-xl">

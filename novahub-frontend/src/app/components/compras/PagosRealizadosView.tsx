@@ -63,6 +63,19 @@ type PurchasePaymentLine = {
   reference?: string;
 };
 
+function paymentReferenceLabel(payment: PaymentMade): string {
+  const reference = String(payment.reference || '').trim();
+  if (reference) return reference;
+  const method = String(payment.method || '').toUpperCase();
+  if (method === 'CASH') return `No aplica · ${payment.number || payment.id}`;
+  return payment.number || payment.id || 'Sin referencia';
+}
+
+function groupedPaymentReferenceLabel(payments: PaymentMade[]): string {
+  if (payments.length <= 1) return paymentReferenceLabel(payments[0] || {} as PaymentMade);
+  return payments.map((payment) => `${paymentMethodLabel(String(payment.method || '').toUpperCase())}: ${paymentReferenceLabel(payment)}`).join(' · ');
+}
+
 function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate: number, toBaseAmount: (amount: number, currency?: string, exchangeRate?: number) => number) {
   const groups = new Map<string, PaymentMade[]>();
   rows.forEach((row) => {
@@ -91,6 +104,7 @@ function groupMadePayments(rows: PaymentMade[], baseCurrency: string, globalRate
       paymentLabel: isMixed ? 'Pago mixto' : ordered.length > 1 ? 'Pago parcial' : 'Pago único',
       paymentCount: ordered.length,
       isGroupedPayment: isMixed || ordered.length > 1,
+      displayReference: groupedPaymentReferenceLabel(effective),
     } as PaymentMade;
   });
 }
@@ -244,6 +258,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
       payment.supplier?.name,
       payment.supplier?.code,
       payment.notes,
+      payment.displayReference,
       payment.date ? formatDateEs(payment.date) : '',
       payment.amount,
       Number(payment.amount || 0).toLocaleString(),
@@ -265,23 +280,47 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
+  const linkedInvoiceForPayment = (payment: PaymentMade) =>
+    payment.supplierInvoice || bills.find((bill) => bill.id === payment.supplierInvoiceId) || null;
+  const expectedPaymentAmount = (payment: PaymentMade) => {
+    const invoice = linkedInvoiceForPayment(payment) as any;
+    const orderTotal = Number(invoice?.purchaseReceipt?.purchaseOrder?.total || 0);
+    return orderTotal > 0 ? orderTotal : Number(invoice?.total || payment.amount || 0);
+  };
+  const paidPaymentAmount = (payment: PaymentMade) => {
+    const invoice = linkedInvoiceForPayment(payment) as any;
+    return invoice?.amountPaid !== undefined && invoice?.amountPaid !== null
+      ? Number(invoice.amountPaid)
+      : Number(payment.amount || 0);
+  };
+  const paymentExpectedCurrency = (payment: PaymentMade) => {
+    const invoice = linkedInvoiceForPayment(payment) as any;
+    return invoice?.purchaseReceipt?.purchaseOrder?.currency || invoice?.currency || payment.currency;
+  };
+  const paymentExpectedRate = (payment: PaymentMade) => {
+    const invoice = linkedInvoiceForPayment(payment) as any;
+    return invoice?.purchaseReceipt?.purchaseOrder?.exchangeRate || invoice?.exchangeRate || payment.exchangeRate;
+  };
+
   const { printContent } = useBrowserPrint();
 
   const handlePrint = useCallback((paperSize: PaperSize) => {
     const html = generateTableHtml({
       title: 'Pagos Realizados',
       columns: [
-        { key: 'reference', label: 'Referencia', align: 'left' },
+        { key: 'reference', label: 'Referencia / No. de pago', align: 'left' },
         { key: 'supplierName', label: 'Proveedor', align: 'left' },
         { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'expectedPayment', label: 'Importe comprometido', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
+        { key: 'paidAmount', label: 'Pagado', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
         { key: 'method', label: 'Método', align: 'center' },
       ],
       rows: filteredData.map((item) => ({
-        reference: item.reference || item.number || '',
+        reference: item.displayReference || paymentReferenceLabel(item),
         supplierName: item.supplier?.name || 'Sin proveedor',
         date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        amount: Number(item.amount || 0),
+        expectedPayment: expectedPaymentAmount(item),
+        paidAmount: paidPaymentAmount(item),
         method: item.method || '',
       })),
       filters: {
@@ -303,7 +342,8 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
 
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia', width: '130px' },
+    { key: 'reference', header: 'Referencia / No. de pago', width: '175px',
+      render: (_value, row) => <span className="text-xs font-mono text-muted-foreground">{row.displayReference || paymentReferenceLabel(row)}</span> },
     { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
       render: (val) => {
         const invoice = bills.find((bill) => bill.id === val);
@@ -315,10 +355,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     { key: 'date',      header: 'Fecha',      width: '110px',
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
-    { key: 'amount',    header: 'Monto',      width: '130px',
-      headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />,
+    { key: 'expectedPayment', header: 'Importe comprometido', width: '155px',
       render: (val, row) => (
-        <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-emerald-500" />
+        <CurrencyValuationAmount amount={expectedPaymentAmount(row)} sourceCurrency={paymentExpectedCurrency(row)} sourceExchangeRate={paymentExpectedRate(row)} className="font-black text-amber-600 dark:text-amber-400" />
+      ) },
+    { key: 'paidAmount', header: 'Pagado', width: '130px',
+      headerExtra: <ColumnFilterMenu label="Pagado" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />,
+      render: (_val, row) => (
+        <CurrencyValuationAmount amount={paidPaymentAmount(row)} sourceCurrency={linkedInvoiceForPayment(row)?.currency || row.currency} sourceExchangeRate={linkedInvoiceForPayment(row)?.exchangeRate || row.exchangeRate} className="font-black text-emerald-500" />
       ) },
     { key: 'method',    header: 'Método',     width: '160px',
       render: (val, row) => <div className="flex min-w-0 flex-col items-start gap-1"><Badge variant="outline" className="text-[9px] uppercase bg-blue-500/10 text-blue-500 border-none">{String(val || '').toUpperCase() === 'MIXED' ? 'Pago mixto' : paymentMethodLabel(String(val || '').toUpperCase())}</Badge><span className="text-[9px] font-bold text-muted-foreground">{row.paymentLabel || 'Pago único'}{row.paymentCount && row.paymentCount > 1 ? ` · ${row.paymentCount} movimientos` : ''}</span></div> },
@@ -821,7 +865,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                       <Badge variant="outline" className="text-[9px] uppercase">{payment.currency || baseCurrency}</Badge>
                     </div>
                     {payment.bankAccountId && <p className="mt-2 text-[10px] text-muted-foreground">Banco: {payment.bankAccountId}</p>}
-                    {payment.reference && <p className="mt-1 text-[10px] font-mono text-muted-foreground">Referencia: {payment.reference}</p>}
+                    <p className="mt-1 text-[10px] font-mono text-muted-foreground">Referencia / No. de pago: {paymentReferenceLabel(payment)}</p>
                   </div>
                 ))}
               </div>

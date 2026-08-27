@@ -47,6 +47,8 @@ const detailKeyLabels: Record<string, string> = {
   customerPhone: 'Teléfono del cliente',
   warehouseId: 'Almacén',
   warehouseName: 'Nombre del almacén',
+  supplierId: 'Proveedor',
+  purchaseOrderId: 'Orden de compra',
   salesOrderId: 'Orden de venta',
   estimateId: 'Cotización',
   invoiceId: 'Factura',
@@ -69,6 +71,7 @@ const detailKeyLabels: Record<string, string> = {
   updatedAt: 'Fecha de actualización',
   createdById: 'Creado por',
   updatedById: 'Actualizado por',
+  inventoryProcessedAt: 'Fecha de procesamiento de inventario',
   subtotal: 'Subtotal',
   taxAmount: 'Impuesto',
   discountAmount: 'Descuento',
@@ -101,6 +104,9 @@ const detailKeyLabels: Record<string, string> = {
   previousStatus: 'Estado anterior',
   newStatus: 'Estado nuevo',
   source: 'Origen',
+  origin: 'Origen',
+  from: 'Estado anterior',
+  to: 'Estado nuevo',
   price_list: 'Lista de precios',
   commercial_changes: 'Cambios comerciales',
   bulk_import: 'Importación masiva',
@@ -153,6 +159,7 @@ const detailValueLabels: Record<string, string> = {
   UPDATE: 'Actualización',
   DELETE: 'Eliminación',
   PENDING: 'Pendiente',
+  WITH_INCIDENTS: 'Recibida con incidencias',
   PAID: 'Pagada',
   PARTIAL: 'Parcial',
   CANCELLED: 'Anulada',
@@ -176,6 +183,9 @@ const detailValueLabels: Record<string, string> = {
   PAUSED: 'Pausada',
   EXPIRED: 'Finalizada',
   COMPLETED: 'Completada',
+  PURCHASE_ORDER: 'Orden de compra',
+  PURCHASE_RECEIPT: 'Recepción de compra',
+  DIRECT: 'Registro directo',
   OPEN: 'Abierto',
   RESOLVED: 'Resuelto',
   IN_REVIEW: 'En revisión',
@@ -239,17 +249,31 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
 
   const translateKey = (key: string) => detailKeyLabels[key] || detailValueLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 
+  const isInternalDetail = (key: string, value?: unknown) => {
+    const normalizedKey = String(key || '');
+    // Los identificadores internos sirven para trazabilidad técnica, pero no
+    // deben llenar la auditoría visible con UUID largos.
+    if (normalizedKey === 'id' || normalizedKey === 'clientTenantId' || /(?:Id|ID)$/.test(normalizedKey)) return true;
+    return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  };
+
+  const isDateDetail = (key?: string) => Boolean(key && /(?:date|at)$/i.test(key));
+
   const translateValue = (value: unknown, contextKey?: string): string => {
     if (value === null || value === undefined || value === '') return '—';
     if (Array.isArray(value)) return value.map((item) => translateValue(item, contextKey)).join(', ');
     if (typeof value === 'object') {
       return Object.entries(value as Record<string, unknown>)
+        .filter(([key, nestedValue]) => !isInternalDetail(key, nestedValue))
         .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue, key)}`)
         .join(' · ');
     }
     const stringValue = String(value);
     if (contextKey === 'fields_updated' || contextKey === 'fieldsUpdated') {
       return stringValue.split(',').map((field) => translateKey(field.trim())).join(', ');
+    }
+    if (isDateDetail(contextKey) && !Number.isNaN(new Date(stringValue).getTime())) {
+      return format(new Date(stringValue), "dd MMM yyyy, HH:mm", { locale: es });
     }
     return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
@@ -270,6 +294,9 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
           <div className="space-y-4">
             {(providedLogs ?? logs).map((log) => {
               const detailsObj = parseDetails(log.details);
+              const visibleDetailEntries = detailsObj && typeof detailsObj === 'object' && !Array.isArray(detailsObj)
+                ? Object.entries(detailsObj).filter(([key, value]) => !isInternalDetail(key, value))
+                : [];
               return (
                 <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">
                   <div className="absolute left-[-5px] top-0 size-2.5 rounded-full bg-primary ring-4 ring-background" />
@@ -294,7 +321,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                         </div>
                         {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
                       </div>
-                      {detailsObj && (
+                      {detailsObj && (typeof detailsObj !== 'object' || visibleDetailEntries.length > 0) && (
                         <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">
                           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
                             <Info className="size-3" /> Detalles:
@@ -302,7 +329,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                           <div className="text-xs font-mono text-muted-foreground">
                             {typeof detailsObj === 'object' ? (
                               <ul className="list-disc list-inside space-y-1">
-                                {Object.entries(detailsObj).map(([key, value]) => (
+                                {visibleDetailEntries.map(([key, value]) => (
                                   <li key={key}>
                                     <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
                                   </li>

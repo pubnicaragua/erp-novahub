@@ -581,6 +581,7 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus;
   requestedBy: string;
   warehouseId?: string;
+  warehouse?: Warehouse;
   address?: string;
   purchaseType?: string;
   includeTax?: boolean;
@@ -831,10 +832,29 @@ export interface PaymentMade {
   bankAccountId?: string;
   method: PaymentMethod | 'MIXED';
   reference?: string;
+  /** Valor de presentación para listados agrupados; no se persiste en backend. */
+  displayReference?: string;
   notes?: string;
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
+  supplierInvoice?: {
+    id: string;
+    number: string;
+    total?: number;
+    amountPaid?: number;
+    balance?: number;
+    currency?: Currency;
+    exchangeRate?: number;
+    status?: PaymentStatus;
+    purchaseReceipt?: {
+      status?: string;
+      total?: number;
+      currency?: Currency;
+      exchangeRate?: number;
+      purchaseOrder?: { total?: number; currency?: Currency; exchangeRate?: number };
+    } | null;
+  } | null;
   payments?: PaymentMade[];
   paymentLabel?: string;
   paymentCount?: number;

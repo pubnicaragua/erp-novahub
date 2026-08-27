@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, Pencil, Download, FileText, FileDown, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
@@ -522,6 +522,18 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [importConfirmText, setImportConfirmText] = useState('');
   const [importResults, setImportResults] = useState<{ success: number; skipped: number; failed: number; errors: string[] } | null>(null);
+  const availableWarehouseCatalog = useMemo(() => {
+    const currentWarehouse = localDoc?.warehouse;
+    const entries = currentWarehouse?.id
+      ? [...warehouseCatalog, currentWarehouse]
+      : warehouseCatalog;
+    const unique = new Map<string, any>();
+    entries.forEach((warehouse: any) => {
+      const id = String(warehouse?.id || '').trim();
+      if (id) unique.set(id, warehouse);
+    });
+    return [...unique.values()];
+  }, [localDoc?.warehouse, warehouseCatalog]);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -1226,7 +1238,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   };
 
   const handleCancelConfirm = async () => {
-    const cancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
+    const requestedCancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
+    const cancelIds = requestedCancelIds.filter((id) => {
+      const status = String(data.find((order) => order.id === id)?.status || '').toUpperCase();
+      return ['PENDING', 'DRAFT'].includes(status);
+    });
     if (cancelIds.length === 0 || !cancelReason.trim()) return;
     setCancelLoading(true);
     const cancelToastId = toast.loading(cancelIds.length === 1 ? 'Rechazando orden de compra...' : `Rechazando ${cancelIds.length} órdenes de compra...`);
@@ -1734,7 +1750,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                   <p className="text-[10px] text-foreground mb-1">Bodega destino *</p>
                   <Combobox
                     disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                    options={warehouseCatalog
+                    options={availableWarehouseCatalog
                       .filter((warehouse: any) => warehouse?.isActive !== false && (!selectedBranchId || warehouse.clientTenantId === selectedBranchId))
                       .map((warehouse: any) => ({
                         label: warehouse.name,
@@ -2253,7 +2269,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           order={previewOrder}
           suppliers={supplierCatalog}
           canApprove={false}
-          canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
+          canCancel={canPerform('PURCHASES_ORDERS', 'delete') && ['PENDING', 'DRAFT'].includes(String(previewOrder?.status || '').toUpperCase())}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
           onApprove={handleApproveOrder}
@@ -2294,7 +2310,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         </div>
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
-            const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
+            const validIds = ids.map(String).filter((id) => {
+              if (id.startsWith('new-')) return false;
+              return ['PENDING', 'DRAFT'].includes(String(data.find((order) => order.id === id)?.status || '').toUpperCase());
+            });
             if (validIds.length === 0) return;
             setPendingCancelId(null);
             setPendingBulkCancelIds(validIds);
@@ -2319,7 +2338,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><Pencil className="size-4" /></Button>
               )}
               <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadOrderPdf(row)}><FileDown className="size-4" /></Button>
-              {String(row.status || '').toUpperCase() !== 'CANCELLED' && String(row.status || '').toUpperCase() !== 'REJECTED' && canPerform('PURCHASES_ORDERS', 'delete') && (
+              {['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && canPerform('PURCHASES_ORDERS', 'delete') && (
                 <Button title="Rechazar orden" aria-label="Rechazar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
               )}
             </div>
@@ -2370,7 +2389,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           order={previewOrder}
           suppliers={supplierCatalog}
           canApprove={false}
-          canCancel={canPerform('PURCHASES_ORDERS', 'delete')}
+          canCancel={canPerform('PURCHASES_ORDERS', 'delete') && ['PENDING', 'DRAFT'].includes(String(previewOrder?.status || '').toUpperCase())}
           approving={approving}
           onClose={() => setPreviewOrder(null)}
           onApprove={handleApproveOrder}

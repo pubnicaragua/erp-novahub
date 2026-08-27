@@ -319,6 +319,14 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   };
 
   const buildOrderFromRequest = (request: PurchaseRequest, supplierId: string) => {
+    // Las solicitudes antiguas pueden traer la relación `warehouse` sin el
+    // campo plano. Conservamos siempre la bodega elegida en la solicitud.
+    const requestWarehouseId = String(
+      request.warehouseId
+      || request.warehouse?.id
+      || request.items?.find((item) => item.warehouseId)?.warehouseId
+      || '',
+    ).trim();
     const requester = request.requestedBy
       ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim()
       : (request.requestedById || 'Admin');
@@ -366,7 +374,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       supplierId,
       date: new Date().toISOString(),
       expectedDelivery: request.requiredDate || new Date(Date.now() + 7 * 86400000).toISOString(),
-      warehouseId: request.warehouseId,
+      warehouseId: requestWarehouseId,
       currency: displayCurrency,
       exchangeRate: globalRate,
       status: 'PENDING',
