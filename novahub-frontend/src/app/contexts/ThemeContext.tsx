@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
@@ -122,9 +122,7 @@ function readStoredTheme(tenantId: string): ThemeConfig {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const activeTenantId = user?.tenantId || 'default';
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
-    return readStoredTheme(user?.tenantId || 'default');
-  });
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(activeTenantId));
 
   const updateTheme = useCallback((colors: Partial<BrandColors>) => {
     setThemeConfig(prev => ({
@@ -153,20 +151,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // empresa anterior mientras se cambia de usuario o contexto. El id del
     // usuario también forma parte de la dependencia para que dos sesiones
     // distintas en el mismo tenant no compartan estado visual en memoria.
-    const syncSessionTheme = () => {
-      setThemeConfig(() => (!user ? createDefaultTheme('default') : readStoredTheme(activeTenantId)));
-    };
-    const timer = window.setTimeout(syncSessionTheme, 0);
-    return () => window.clearTimeout(timer);
+    setThemeConfig(() => (!user ? createDefaultTheme('default') : readStoredTheme(activeTenantId)));
   }, [activeTenantId, user?.id, user?.userType]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Apply brand colors while allowing the light/dark CSS variants to control
     // the sidebar surface. Previously an inline --sidebar value from branding
     // overrode .dark and left the sidebar white in dark mode.
     const root = document.documentElement;
+    // During login, logout, or tenant switching, the previous tenant can remain
+    // in state for one render. Never apply or persist that stale configuration.
+    // The default for the active tenant keeps the UI stable until its stored
+    // configuration is loaded by the synchronization effect above.
+    const activeTheme = themeConfig.tenantId === activeTenantId
+      ? themeConfig
+      : createDefaultTheme(activeTenantId);
     const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
-    Object.entries(themeConfig.colors).forEach(([key, value]) => {
+    Object.entries(activeTheme.colors).forEach(([key, value]) => {
       if (sidebarKeys.has(key)) return;
       const cssVarName = `--${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
       root.style.setProperty(cssVarName, value);
@@ -174,10 +175,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const applySidebarVariant = () => {
       const isDark = root.classList.contains('dark');
-      const sidebar = isDark ? 'oklch(0.16 0.01 155)' : themeConfig.colors.sidebar;
-      const foreground = isDark ? 'oklch(0.985 0 0)' : ensureReadableForeground(themeConfig.colors.sidebar, themeConfig.colors.sidebarForeground);
-      const primary = themeConfig.colors.sidebarPrimary;
-      const accent = isDark ? 'oklch(0.22 0.02 155)' : themeConfig.colors.sidebarAccent;
+      const sidebar = isDark ? 'oklch(0.16 0.01 155)' : activeTheme.colors.sidebar;
+      const foreground = isDark ? 'oklch(0.985 0 0)' : ensureReadableForeground(activeTheme.colors.sidebar, activeTheme.colors.sidebarForeground);
+      const primary = activeTheme.colors.sidebarPrimary;
+      const accent = isDark ? 'oklch(0.22 0.02 155)' : activeTheme.colors.sidebarAccent;
       root.style.setProperty('--sidebar', sidebar);
       root.style.setProperty('--sidebar-foreground', foreground);
       root.style.setProperty('--sidebar-primary', primary);
@@ -190,7 +191,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
 
     // No persistir un tema antiguo dentro del tenant nuevo durante la transición.
-    if (themeConfig.tenantId === activeTenantId) {
+    if (activeTheme.tenantId === activeTenantId && themeConfig.tenantId === activeTenantId) {
       safeSetItem(themeStorageKey(activeTenantId), JSON.stringify(themeConfig));
     }
     return () => observer.disconnect();

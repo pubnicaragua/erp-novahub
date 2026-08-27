@@ -596,9 +596,9 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                                 isActive && !item.submenu
-                                  ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
+                                  ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
                                   : isActive && item.submenu
-                                    ? 'bg-sidebar-accent/80 text-sidebar-foreground'
+                                    ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
                                     : 'text-sidebar-foreground/70'
                               )}
                             >
@@ -619,9 +619,9 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                             'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
                             isActive && !item.submenu
-                              ? 'bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold'
+                              ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
                               : isActive && item.submenu
-                                ? 'bg-sidebar-accent/80 text-sidebar-foreground'
+                                ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
                                 : 'text-sidebar-foreground/70'
                           )}
                         >

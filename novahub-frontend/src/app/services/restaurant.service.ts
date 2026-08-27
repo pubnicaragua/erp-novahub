@@ -61,9 +61,24 @@ export interface RestaurantSummary {
   topItems: Array<{ description: string; _sum: { quantity: number | null; total: number | null } }>;
 }
 
+export interface RestaurantPublicBranding {
+  name: string;
+  logo: string | null;
+  primaryColor: string;
+  accentColor: string;
+  theme: 'modern' | 'classic' | 'elegant' | 'rustic';
+  showImages: boolean;
+  whiteLabel: boolean;
+}
+
+export interface RestaurantMenuSettings {
+  theme: 'modern' | 'classic' | 'elegant' | 'rustic';
+  showImages: boolean;
+}
+
 export const restaurantService = {
   getPublicMenu: (tableToken: string, signal?: AbortSignal) =>
-    api.get<{ table: { name: string; code: string }; categories: RestaurantMenuCategory[] }>(`/restaurant/public/${encodeURIComponent(tableToken)}/menu`, { signal }),
+    api.get<{ table: { name: string; code: string }; categories: RestaurantMenuCategory[]; branding: RestaurantPublicBranding }>(`/restaurant/public/${encodeURIComponent(tableToken)}/menu`, { signal }),
   createPublicOrder: (tableToken: string, body: { items: Array<{ menuItemId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string }) =>
     api.idempotentPost<RestaurantOrder>(`/restaurant/public/${encodeURIComponent(tableToken)}/orders`, body),
   listTables: (branchId?: string, signal?: AbortSignal) =>
@@ -73,6 +88,9 @@ export const restaurantService = {
   updateTable: (id: string, body: Partial<RestaurantTable>) =>
     api.patch<RestaurantTable>(`/restaurant/tables/${id}`, body),
   getMenu: (signal?: AbortSignal) => api.get<RestaurantMenuCategory[]>('/restaurant/menu', { signal }),
+  getMenuSettings: (signal?: AbortSignal) => api.get<RestaurantMenuSettings>('/restaurant/settings', { signal }),
+  updateMenuSettings: (body: Partial<RestaurantMenuSettings>) =>
+    api.patch<RestaurantMenuSettings>('/restaurant/settings', body),
   createCategory: (body: { name: string; description?: string }) =>
     api.post<RestaurantMenuCategory>('/restaurant/menu/categories', body),
   createMenuItem: (body: {

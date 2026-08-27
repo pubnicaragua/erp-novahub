@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Check,
@@ -73,6 +73,29 @@ const kitchenStatus: Record<string, { label: string; className: string }> = {
 
 const money = (value: unknown, currency = 'NIO') => `${currency === 'USD' ? '$' : 'C$'} ${Number(value || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+function playOrderSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const now = context.currentTime;
+    [880, 1174.66].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.001, now + index * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + index * 0.18 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + index * 0.18 + 0.35);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now + index * 0.18);
+      oscillator.stop(now + index * 0.18 + 0.4);
+    });
+    window.setTimeout(() => { void context.close().catch(() => undefined); }, 1200);
+  } catch { /* el audio es opcional */ }
+}
+
 export function RestaurantePage() {
   const { canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
@@ -93,6 +116,25 @@ export function RestaurantePage() {
   const [registers, setRegisters] = useState<Array<{ id: string; name: string }>>([]);
   const [checkoutRegisterId, setCheckoutRegisterId] = useState('');
   const [publicLink, setPublicLink] = useState('');
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
+  const knownOrderIds = useRef<Set<string> | null>(null);
+  const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
+
+  const detectNewOrders = useCallback((nextOrders: RestaurantOrder[]) => {
+    const nextIds = new Set(nextOrders.map((order) => order.id));
+    if (knownOrderIds.current) {
+      const fresh = nextOrders.filter((order) => !knownOrderIds.current!.has(order.id) && !sessionCreatedOrderIds.current.has(order.id));
+      if (fresh.length > 0) {
+        playOrderSound();
+        setNewOrdersCount((count) => count + fresh.length);
+        const first = fresh[0];
+        toast.info(`Nuevo pedido ${fresh.map((order) => order.number).join(', ')}`, {
+          description: first.table ? `Mesa ${first.table.code} · ${first.table.name}` : first.type === 'QR' ? 'Recibido desde el QR del cliente' : 'Pedido entrante',
+        });
+      }
+    }
+    knownOrderIds.current = nextIds;
+  }, []);
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setRefreshing(true);
@@ -133,6 +175,74 @@ export function RestaurantePage() {
     return () => controller.abort();
   }, [canViewRestaurant, loadData]);
 
+  useEffect(() => {
+    if (!canViewRestaurant) return;
+
+    let stopped = false;
+    let timeoutId: number | undefined;
+    let inFlight = false;
+
+    const pollLight = async () => {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        const branchId = selectedBranchId || undefined;
+        const results = await Promise.allSettled([
+          restaurantService.listOrders(branchId),
+          restaurantService.listKitchenTickets(branchId),
+          restaurantService.listTables(branchId),
+        ]);
+        const [ordersResult, ticketsResult, tablesResult] = results;
+        if (ordersResult.status === 'fulfilled') {
+          const nextOrders = ordersResult.value || [];
+          setOrders(nextOrders);
+          detectNewOrders(nextOrders);
+        }
+        if (ticketsResult.status === 'fulfilled') setTickets(ticketsResult.value || []);
+        if (tablesResult.status === 'fulfilled') setTables(tablesResult.value || []);
+      } catch {
+        // un fallo aislado no debe detener el polling
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const scheduleNext = (delay: number) => {
+      if (stopped) return;
+      timeoutId = window.setTimeout(async () => {
+        await pollLight();
+        scheduleNext(12_000);
+      }, delay);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        window.clearTimeout(timeoutId);
+      } else {
+        scheduleNext(0);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    scheduleNext(12_000);
+
+    return () => {
+      stopped = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.clearTimeout(timeoutId);
+    };
+  }, [canViewRestaurant, selectedBranchId, detectNewOrders]);
+
+  useEffect(() => {
+    if (!canViewRestaurant) return;
+    const intervalId = window.setInterval(() => {
+      if (document.hidden) return;
+      restaurantService.getMenu().then((nextMenu) => setMenu(nextMenu || [])).catch(() => undefined);
+      restaurantService.getSummary({ branchId: selectedBranchId || undefined }).then((nextSummary) => setSummary(nextSummary || null)).catch(() => undefined);
+    }, 300_000);
+    return () => window.clearInterval(intervalId);
+  }, [canViewRestaurant, selectedBranchId]);
+
   const selectedTable = useMemo(() => tables.find((table) => table.id === selectedTableId) || null, [tables, selectedTableId]);
   const cartLines = useMemo(() => menu.flatMap((category) => category.items
     .filter((item) => cart[item.id])
@@ -161,6 +271,7 @@ export function RestaurantePage() {
         tableId: selectedTable.id,
         items: cartLines.map(({ item, quantity }) => ({ menuItemId: item.id, quantity })),
       });
+      sessionCreatedOrderIds.current.add(order.id);
       await restaurantService.sendToKitchen(order.id);
       setCart({});
       toast.success(`Comanda ${order.number} enviada a cocina.`);
@@ -301,12 +412,18 @@ export function RestaurantePage() {
             ))}
           </div>
 
-          <Tabs value={tab} className="w-full" onValueChange={(value) => setTab(value as RestaurantTab)}>
+          <Tabs value={tab} className="w-full" onValueChange={(value) => {
+            setTab(value as RestaurantTab);
+            if (value === 'comandas') setNewOrdersCount(0);
+          }}>
             <div className="mb-6 w-full overflow-x-auto custom-scrollbar">
               <TabsList className="flex h-auto w-max min-w-full gap-1.5 rounded-2xl border border-border/40 bg-gradient-to-br from-muted/30 to-muted/50 p-1.5 backdrop-blur-sm [&>button]:flex-none [&>button]:shrink-0 [&>button]:text-muted-foreground [&>button]:hover:bg-muted/50 [&>button]:hover:text-foreground">
                 {tabs.map(({ id, label, icon: Icon }) => (
                   <TabsTrigger key={id} value={id} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all">
                     <Icon className="size-4" /><span className="hidden sm:inline">{label}</span>
+                    {id === 'comandas' && newOrdersCount > 0 && (
+                      <span className="flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-black text-white shadow">{newOrdersCount}</span>
+                    )}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -374,10 +491,43 @@ function MenuBoard({ menu, onSaved }: { menu: RestaurantMenuCategory[]; onSaved:
   const [itemForm, setItemForm] = useState(emptyForm);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [theme, setTheme] = useState<'modern' | 'classic' | 'elegant' | 'rustic'>('modern');
+  const [showImages, setShowImages] = useState(true);
+  const [savingTheme, setSavingTheme] = useState(false);
 
   useEffect(() => {
     if (!itemForm.categoryId && menu[0]) setItemForm((current) => ({ ...current, categoryId: menu[0].id }));
   }, [itemForm.categoryId, menu]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    restaurantService.getMenuSettings(controller.signal).then((settings) => {
+      if (settings?.theme) setTheme(settings.theme);
+      if (typeof settings?.showImages === 'boolean') setShowImages(settings.showImages);
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const saveSettings = async (nextTheme?: 'modern' | 'classic' | 'elegant' | 'rustic', nextShowImages?: boolean) => {
+    setSavingTheme(true);
+    try {
+      await restaurantService.updateMenuSettings({ theme: nextTheme ?? theme, showImages: nextShowImages ?? showImages });
+      if (nextTheme) setTheme(nextTheme);
+      if (typeof nextShowImages === 'boolean') setShowImages(nextShowImages);
+      toast.success('Diseño de la carta actualizado.');
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'No se pudo guardar el diseño.'));
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+  const themeCards: Array<{ id: 'modern' | 'classic' | 'elegant' | 'rustic'; label: string; description: string; preview: string; header: string }> = [
+    { id: 'modern', label: 'Moderno', description: 'Fresco, verde y con degradados suaves.', preview: 'bg-[#f2faf5]', header: 'bg-gradient-to-br from-[#064e3b] to-[#10b981]' },
+    { id: 'classic', label: 'Clásico', description: 'Blanco y crema, elegancia de bistró.', preview: 'bg-[#faf7f0]', header: 'bg-[#3a3a3a]' },
+    { id: 'elegant', label: 'Elegante', description: 'Oscuro y sofisticado, estilo gourmet.', preview: 'bg-[#0f0f13]', header: 'bg-[#16161d]' },
+    { id: 'rustic', label: 'Rústico', description: 'Madera y papel, sabor casero.', preview: 'bg-[#f5efe4]', header: 'bg-[#3e2f1f]' },
+  ];
 
   const saveCategory = async () => {
     if (!categoryName.trim()) { toast.error('Escribe el nombre de la categoría.'); return; }
@@ -423,6 +573,39 @@ function MenuBoard({ menu, onSaved }: { menu: RestaurantMenuCategory[]; onSaved:
 
   return <section className="space-y-5">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Administración de carta</p><h2 className="mt-1 text-2xl font-black">Menú, precios y estaciones</h2><p className="mt-1 text-sm text-muted-foreground">Los platillos disponibles también aparecen en el enlace público de cada mesa.</p></div><Settings2 className="size-6 text-muted-foreground/40" /></div>
+    <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div><p className="text-xs font-black uppercase tracking-widest text-primary">Diseño de la carta pública</p><h3 className="mt-1 text-lg font-black">Elige el estilo que verán tus clientes</h3></div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-bold">
+          <button type="button" role="switch" aria-checked={showImages} onClick={() => void saveSettings(undefined, !showImages)} className={`relative h-6 w-11 rounded-full transition-colors ${showImages ? 'bg-primary' : 'bg-muted'}`}>
+            <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${showImages ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+          Mostrar fotos de platillos
+        </label>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {themeCards.map((card) => (
+          <button key={card.id} type="button" disabled={savingTheme} onClick={() => void saveSettings(card.id, undefined)} className={`group overflow-hidden rounded-2xl border-2 text-left transition ${theme === card.id ? 'border-primary ring-4 ring-primary/10' : 'border-border/60 hover:border-primary/40'}`}>
+            <div className={`h-14 ${card.header} flex items-center px-3`}><span className="text-xs font-black uppercase tracking-wider text-white">{card.label}</span>{theme === card.id && <span className="ml-auto rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-black text-white">Activo</span>}</div>
+            <div className={`p-3 ${card.preview}`}>
+              <div className="flex items-center gap-2">
+                <div className="size-7 rounded-lg bg-white shadow-sm" />
+                <div className="flex-1 space-y-1"><div className="h-1.5 w-3/4 rounded bg-current opacity-20" /><div className="h-1.5 w-1/2 rounded bg-current opacity-15" /></div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                <div className="h-8 rounded-lg bg-white/80 shadow-sm" />
+                <div className="h-8 rounded-lg bg-white/80 shadow-sm" />
+              </div>
+            </div>
+            <div className="border-t border-border/60 p-3">
+              <p className="text-xs font-black">{card.label}</p>
+              <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{card.description}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">El diseño se aplica de inmediato en todos los enlaces QR de las mesas. El logo y colores provienen de la identidad de tu empresa.</p>
+    </div>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <div className="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva categoría</p><h3 className="mt-1 text-lg font-black">Organiza tu carta</h3></div>
