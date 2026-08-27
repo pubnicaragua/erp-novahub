@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { rolesService } from '../../services/roles.service';
 import { ALL_PERM_MODULES, normalizePermissions, SUBMODULES_FOR_PERMS } from '../ConfiguracionPage';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
+import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../../utils/permissions';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -219,7 +219,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onRolesChange, ca
         name,
         description: String(editingRole.description || '').trim(),
         permissions,
-        allowedModules: permissions.filter((permission: any) => permission.read).map((permission: any) => permission.module),
+        allowedModules: allowedModulesFromPermissions(permissions),
         clientTenantId: tenantId,
       };
       if (editingRole.id) await rolesService.update(editingRole.id, payload);

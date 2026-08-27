@@ -309,6 +309,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     currency: localDoc?.currency,
     exchangeRate: localDoc?.exchangeRate,
     baseTotal: (localDoc as any)?.baseTotal,
+    warehouseId: localDoc?.warehouseId || null,
     notes: localDoc?.notes,
     items: (localDoc?.items || []).map((item: any) => ({
       ...item,

@@ -78,6 +78,30 @@ export function permissionValue(permission: any, action: PermissionMatrixAction)
   return false;
 }
 
+/**
+ * El alcance del rol debe salir de las filas con permiso de lectura. Mantener
+ * este cálculo en un único lugar evita que una pantalla guarde switches
+ * activos sin actualizar `allowedModules`.
+ */
+export function allowedModulesFromPermissions(input: any): string[] {
+  const permissions = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object'
+      ? Object.entries(input).map(([module, value]: [string, any]) => ({
+          module,
+          ...(value && typeof value === 'object' ? value : {}),
+        }))
+      : [];
+
+  return [...new Set(permissions
+    .map((permission: any) => ({
+      module: String(permission?.module || permission?.id || '').trim().toUpperCase(),
+      permission,
+    }))
+    .filter(({ module, permission }: { module: string; permission: any }) => module && permissionValue(permission, 'read'))
+    .map(({ module }: { module: string }) => module))];
+}
+
 export function hydratePermissionActions(permission: any, module: string) {
   return {
     module,

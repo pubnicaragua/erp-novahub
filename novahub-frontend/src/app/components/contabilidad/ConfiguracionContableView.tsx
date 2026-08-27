@@ -85,6 +85,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada al cliente', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
       { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita el costo de los productos vendidos y se acredita el inventario de la bodega', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -104,6 +105,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada en caja', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
       { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery en caja', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita el costo de los productos vendidos en Facturación por Caja', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -173,6 +175,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'returns', label: 'Devoluciones', side: 'debit', description: 'Se debita la cuenta de devoluciones', defaultCode: '4100', defaultName: 'Devoluciones y Descuentos', defaultType: 'INCOME' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la CxC (disminuye)', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'credit', description: 'Se acredita al revertir el costo de los productos del crédito', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -181,6 +184,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'returns', label: 'Devoluciones', side: 'debit', description: 'Se debita devoluciones', defaultCode: '4100', defaultName: 'Devoluciones y Descuentos', defaultType: 'INCOME' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita CxC', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'credit', description: 'Se acredita al revertir el costo de los productos devueltos', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -402,6 +406,7 @@ function isSalesVatPayableAccount(account: Pick<AccountInfo, 'name'>) {
 // cuentas por nombre cuando el código semilla no existe en el plan.
 const FIELD_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
   income: ['venta', 'ingreso', 'servicio', 'honorario', 'producto'],
+  cogs: ['costo', 'coste', 'mercaderia', 'mercaderia vendida', 'venta'],
   returns: ['devolucion', 'descuento', 'venta'],
   ivaPayable: ['iva', 'impuesto', 'por pagar'],
   ivaCreditable: ['iva', 'acreditable', 'impuesto'],

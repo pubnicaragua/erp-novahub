@@ -36,7 +36,7 @@ import { CountriesView } from './admin/CountriesView';
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
-import { hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, type PermissionMatrixAction } from '../utils/permissions';
+import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
 import { PERMISSION_SUBMODULES, SIDEBAR_PERMISSION_PARENT_ALIASES } from '../utils/sidebarPermissions';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
 import { optimizeImageFile } from '../utils/image-optimization';
@@ -580,6 +580,10 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     });
   }, [user]);
 
+  const isPermissionActionAvailable = (moduleId: string, action: PermissionMatrixAction) => action === 'viewCost'
+    ? supportsInventoryCostPermission(moduleId)
+    : supportsPermissionAction(moduleId, action);
+
   // Hex state for the color pickers
   const [primaryHex, setPrimaryHex] = useState(() => oklchToApproxHex(themeConfig.colors.primary));
   const [sidebarHex, setSidebarHex] = useState(() => oklchToApproxHex(themeConfig.colors.sidebar));
@@ -1086,15 +1090,18 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
       // Limpiar el objeto de envío para eliminar campos innecesarios o automáticos
       const { id, _count, createdAt, updatedAt, ...cleanRole } = editingRole as any;
       
+      const permissions = normalizePermissions(cleanRole.permissions).map((p: any) => ({
+        ...p,
+        // El backend conserva `write` por compatibilidad con roles antiguos;
+        // las acciones visibles de la matriz siguen siendo las canónicas.
+        write: !!(p.create || p.edit || p.write),
+      }));
       const payload = {
         name: cleanRole.name,
         description: cleanRole.description || '',
         // Asegurar compatibilidad: el backend usa 'write', el frontend granular usa 'create'/'edit'
-        permissions: normalizePermissions(cleanRole.permissions).map((p: any) => ({
-          ...p,
-          write: !!(p.create || p.edit || p.write), // compat con backend
-        })),
-        allowedModules: cleanRole.allowedModules || [],
+        permissions,
+        allowedModules: allowedModulesFromPermissions(permissions),
         clientTenantId: user?.tenantId
       };
 
@@ -1115,6 +1122,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
 
   const togglePermission = (module: string, type: PermissionMatrixAction) => {
     if (!editingRole) return;
+    if (!isPermissionActionAvailable(module, type)) return;
     let newPerms = [...normalizePermissions(editingRole.permissions).map(p => ({ ...p }))];
 
     const targetPerm = newPerms.find(p => p.module === module) as any;
@@ -1142,6 +1150,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (childModules.length > 0) {
       // Es un PADRE â†’ propagar a todos los hijos
       childModules.forEach(child => {
+        if (!isPermissionActionAvailable(child.id, type)) return;
         const childPerm = newPerms.find(p => p.module === child.id) as any;
         if (childPerm) {
           childPerm[type] = newValue;
@@ -1730,7 +1739,7 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
                                   </div>
                                 </div>
                               </td>
-                              {PERMISSION_ACTION_DEFINITIONS.map(({ key }) => <td key={key} className="px-0 py-1.5 text-center"><div className="flex justify-center"><Switch disabled={!canEditRoles} checked={permissionValue(p, key)} onCheckedChange={() => togglePermission(p.module, key)} className="scale-[0.65] sm:scale-75" /></div></td>)}
+                              {PERMISSION_ACTION_DEFINITIONS.map(({ key }) => <td key={key} className="px-0 py-1.5 text-center"><div className="flex justify-center">{!isPermissionActionAvailable(p.module, key) ? <span className="text-muted-foreground/30" aria-label="No aplica">—</span> : <Switch disabled={!canEditRoles} checked={permissionValue(p, key)} onCheckedChange={() => togglePermission(p.module, key)} className="scale-[0.65] sm:scale-75" />}</div></td>)}
                               <td className="sticky right-0 z-10 border-l border-border/50 bg-card px-0 py-1.5 text-center shadow-[-6px_0_10px_-10px_hsl(var(--foreground)/0.5)]"><div className="flex justify-center">{!isInventoryPermission ? <span className="text-muted-foreground/30" aria-label="No aplica">—</span> : <Switch disabled={!canEditRoles} checked={permissionValue(p, 'viewCost')} onCheckedChange={() => togglePermission(p.module, 'viewCost')} aria-label={`Ver costo en ${mod?.label || p.module}`} className="scale-[0.65] sm:scale-75 data-[state=checked]:bg-rose-500" />}</div></td>
                             </tr>
                           );

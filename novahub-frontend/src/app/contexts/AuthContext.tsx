@@ -726,7 +726,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
-      'configuracion', 'dashboard', 'suscripciones',
+      'configuracion', 'dashboard', 'suscripciones', 'notificaciones',
     ];
     const moduleEnumMap: Record<string, string> = {
       'ventas': 'SALES',
