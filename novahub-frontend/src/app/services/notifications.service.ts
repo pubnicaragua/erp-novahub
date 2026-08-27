@@ -34,6 +34,58 @@ const metadataObject = (value: unknown): Record<string, any> => {
   return {};
 };
 
+export type NotificationRecordLike = {
+  id: string;
+  title?: string | null;
+  content?: string | null;
+  message?: string | null;
+  metadata?: unknown;
+  isRead?: boolean;
+  read?: boolean;
+  createdAt?: string;
+  timestamp?: string;
+  userId?: string | null;
+  type?: string | null;
+};
+
+/** Defensive client-side collapse for old rows and concurrent API responses. */
+export function notificationEventKey(item: NotificationRecordLike): string {
+  const metadata = metadataObject(item.metadata);
+  const explicit = String(metadata.dedupeKey || '').trim();
+  if (explicit) return `key:${explicit}`;
+
+  const kind = String(metadata.kind || '').trim();
+  const entityId = String(
+    metadata.entityId
+    || metadata.orderId
+    || metadata.invoiceId
+    || metadata.creditId
+    || metadata.taskId
+    || metadata.reminderId
+    || metadata.eventId
+    || '',
+  ).trim();
+  return kind && entityId ? `entity:${kind}:${entityId}` : `id:${item.id}`;
+}
+
+export function dedupeNotificationRecords<T extends NotificationRecordLike>(items: T[]): T[] {
+  const grouped = new Map<string, T>();
+  for (const item of items) {
+    const groupKey = `${item.userId || 'current'}:${item.type || 'NOTIFICATION'}:${notificationEventKey(item)}`;
+    const current = grouped.get(groupKey);
+    const currentUnread = current ? (current.isRead === false || current.read === false) : false;
+    const itemUnread = item.isRead === false || item.read === false;
+    const currentDate = new Date(current?.createdAt || current?.timestamp || 0).getTime();
+    const itemDate = new Date(item.createdAt || item.timestamp || 0).getTime();
+    if (!current || (itemUnread && !currentUnread) || (itemUnread === currentUnread && itemDate > currentDate)) {
+      grouped.set(groupKey, item);
+    }
+  }
+  return [...grouped.values()].sort(
+    (left, right) => new Date(right.createdAt || right.timestamp || 0).getTime() - new Date(left.createdAt || left.timestamp || 0).getTime(),
+  );
+}
+
 const notificationDetail = (item: InboxNotificationDto): string => {
   const explicit = [item.content, item.message, item.description, item.detail]
     .map((value) => String(value ?? '').trim())
@@ -94,13 +146,13 @@ const mapInboxNotification = (item: InboxNotificationDto): Notification => {
 export const notificationsService = {
   getAll: async (signal?: AbortSignal) => {
     const data = await api.get<InboxNotificationDto[]>('/notifications/inbox', { signal });
-    return data.map(mapInboxNotification);
+    return dedupeNotificationRecords(data.map(mapInboxNotification));
   },
   markAsRead: (id: string) => api.patch<{ success: boolean }>(`/notifications/inbox/${id}/read`, {}),
   markAllAsRead: () => api.patch('/notifications/inbox/read-all', {}),
   getManagerInbox: async (groupId: string, signal?: AbortSignal) => {
     const data = await api.get<InboxNotificationDto[]>(`/notifications/manager-inbox/${groupId}`, { signal });
-    return data.map(mapInboxNotification);
+    return dedupeNotificationRecords(data.map(mapInboxNotification));
   },
   markManagerAsRead: (groupId: string, id: string) => api.patch<{ success: boolean }>(`/notifications/manager-inbox/${groupId}/${id}/read`, {}),
   delete: (id: string) => api.delete(`/notifications/inbox/${id}`),

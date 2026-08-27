@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useNotifications } from './useNotifications';
 import { playNotificationSound } from '../utils/notificationSound';
+import { useAuth } from '../contexts/AuthContext';
+import { dedupeNotificationRecords, notificationEventKey } from '../services/notifications.service';
+import { isBrowserNotificationsEnabled } from '../utils/browserNotifications';
 import { toast } from 'sonner';
 
 /**
@@ -10,23 +13,44 @@ import { toast } from 'sonner';
  * Montar una sola vez (p.ej. en DashboardLayout).
  */
 export function useIncomingNotificationAlert() {
-  const { notifications } = useNotifications();
-  const seenIds = useRef<Set<string> | null>(null);
+  const { user } = useAuth();
+  const { notifications, isFetched } = useNotifications();
+  const authUser = user as (typeof user & { clientTenantId?: string; tenantId?: string }) | null | undefined;
+  const storageKey = `nh-notification-seen:${authUser?.clientTenantId || authUser?.tenantId || 'current'}:${authUser?.id || 'current'}`;
+  const seenIds = useRef<Set<string>>(new Set());
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => undefined);
-    }
-  }, []);
+    initialized.current = false;
+    seenIds.current = new Set();
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      if (Array.isArray(stored)) seenIds.current = new Set(stored.map(String));
+    } catch { /* notification history is optional */ }
+  }, [storageKey]);
 
   useEffect(() => {
-    if (seenIds.current === null) {
-      seenIds.current = new Set(notifications.map(n => n.id));
+    if (!isFetched || initialized.current) return;
+    initialized.current = true;
+
+    // The first response is the existing history, not an incoming event.
+    // Seed it so a remount/F5 does not replay dozens of old notifications.
+    if (seenIds.current.size === 0 && notifications.length > 0) {
+      notifications.forEach(notification => seenIds.current.add(notification.id));
+      try { localStorage.setItem(storageKey, JSON.stringify([...seenIds.current].slice(-500))); } catch { /* optional history */ }
       return;
     }
-    const fresh = notifications.filter(n => !n.read && !seenIds.current!.has(n.id));
+
+    const fresh = dedupeNotificationRecords(
+      notifications.filter(n => !n.read && !seenIds.current.has(n.id)),
+    );
     if (fresh.length === 0) return;
-    fresh.forEach(n => seenIds.current!.add(n.id));
+
+    const freshKeys = new Set(fresh.map(notificationEventKey));
+    notifications
+      .filter(notification => freshKeys.has(notificationEventKey(notification)))
+      .forEach(notification => seenIds.current.add(notification.id));
+    try { localStorage.setItem(storageKey, JSON.stringify([...seenIds.current].slice(-500))); } catch { /* optional history */ }
 
     const newest = [...fresh].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] || fresh[0];
     playNotificationSound();
@@ -35,11 +59,11 @@ export function useIncomingNotificationAlert() {
       duration: 6000,
     });
 
-    if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    if (document.hidden && isBrowserNotificationsEnabled()) {
       try {
         const notification = new Notification(newest.title || 'Nueva notificación', {
           body: newest.message || '',
-          tag: newest.id,
+          tag: notificationEventKey(newest),
           icon: '/favicon.svg',
         });
         notification.onclick = () => {

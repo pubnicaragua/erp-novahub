@@ -43,6 +43,11 @@ import {
 
 type RestaurantTab = 'salon' | 'comandas' | 'cocina' | 'carta' | 'reportes';
 
+interface RestaurantePageProps {
+  activeSubModule?: string;
+  onSubModuleChange?: (subModule?: string) => void;
+}
+
 const tableStatus: Record<string, { label: string; className: string }> = {
   AVAILABLE: { label: 'Disponible', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
   OCCUPIED: { label: 'Ocupada', className: 'border-blue-200 bg-blue-50 text-blue-700' },
@@ -96,7 +101,7 @@ function playOrderSound() {
   } catch { /* el audio es opcional */ }
 }
 
-export function RestaurantePage() {
+export function RestaurantePage({ activeSubModule, onSubModuleChange }: RestaurantePageProps) {
   const { canPerform } = useAuth();
   const { accessibleBranches, selectedBranchId, setSelectedBranchId } = useBranchScope();
   const canViewRestaurant = canPerform('RESTAURANT', 'view');
@@ -117,8 +122,31 @@ export function RestaurantePage() {
   const [checkoutRegisterId, setCheckoutRegisterId] = useState('');
   const [publicLink, setPublicLink] = useState('');
   const [newOrdersCount, setNewOrdersCount] = useState(0);
+  const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const knownOrderIds = useRef<Set<string> | null>(null);
   const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const nextTab = activeSubModule as RestaurantTab | undefined;
+    if (nextTab && ['salon', 'comandas', 'cocina', 'carta', 'reportes'].includes(nextTab)) {
+      setTab(nextTab);
+    }
+  }, [activeSubModule]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { module?: string; subModule?: string; orderId?: string; targetId?: string } | undefined;
+      if (detail?.module !== 'restaurante') return;
+      const nextTab = detail.subModule as RestaurantTab | undefined;
+      if (!nextTab || !['salon', 'comandas', 'cocina', 'carta', 'reportes'].includes(nextTab)) return;
+      setTab(nextTab);
+      onSubModuleChange?.(nextTab);
+      const orderId = String(detail.orderId || detail.targetId || '').trim();
+      setTargetOrderId(orderId || null);
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, [onSubModuleChange]);
 
   const detectNewOrders = useCallback((nextOrders: RestaurantOrder[]) => {
     const nextIds = new Set(nextOrders.map((order) => order.id));
@@ -440,7 +468,7 @@ export function RestaurantePage() {
                   </section>
                   <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Nueva comanda</p><h2 className="mt-1 text-2xl font-black">{selectedTable ? `Mesa ${selectedTable.code}` : 'Selecciona una mesa'}</h2></div><ShoppingBag className="size-5 text-muted-foreground/40" /></div>{selectedTable && <div className="mb-4 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{selectedTable.name} · {selectedTable.zone || 'Salón principal'} <span className="float-right font-bold text-foreground">{money(cartTotal)}</span></div>}<div className="max-h-[430px] space-y-4 overflow-y-auto pr-1">{menu.map((category) => <div key={category.id}><p className="mb-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70">{category.name}</p><div className="space-y-2">{category.items.filter((item) => item.isAvailable).map((item) => <button type="button" key={item.id} onClick={() => addToCart(item.id)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]"><span><span className="block text-sm font-bold">{item.name}</span><span className="block text-xs text-muted-foreground">{item.prepStation}</span></span><span className="font-black text-primary">{money(item.price, item.currency)}</span></button>)}</div></div>)}{menu.length === 0 && <EmptyState icon={<Utensils className="size-8" />} title="Carta sin configurar" description="Crea las categorías y platillos en Carta para operar." />}</div><div className="mt-5 border-t border-border/60 pt-4">{cartLines.length > 0 && <div className="mb-3 space-y-2">{cartLines.map(({ item, quantity }) => <div key={item.id} className="flex items-center justify-between text-sm"><span>{quantity} × {item.name}</span><div className="flex items-center gap-2"><button type="button" onClick={() => removeFromCart(item.id)} className="rounded bg-muted px-2 py-0.5">−</button><button type="button" onClick={() => addToCart(item.id)} className="rounded bg-muted px-2 py-0.5">+</button></div></div>)}</div>}<Button className="w-full" disabled={!selectedTable || cartLines.length === 0} onClick={createOrder}><Send className="size-4" />Enviar comanda a cocina</Button></div></section>
                 </div>}
-                {tab === 'comandas' && <OrderBoard orders={orders} onSend={async (order) => { try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
+                {tab === 'comandas' && <OrderBoard orders={orders} targetOrderId={targetOrderId} onTargetHandled={() => setTargetOrderId(null)} onSend={async (order) => { try { await restaurantService.sendToKitchen(order.id); await loadData(); } catch (error: unknown) { toast.error(getApiErrorMessage(error, 'No se pudo enviar a cocina.')); } }} onStatus={changeOrderStatus} onCheckout={openCheckout} />}
                 {tab === 'cocina' && <KitchenBoard tickets={tickets} onStatus={updateKitchen} />}
                 {tab === 'carta' && <MenuBoard menu={menu} onSaved={() => loadData()} />}
                 {tab === 'reportes' && <ReportsBoard summary={summary} />}
@@ -475,8 +503,19 @@ function EmptyState({ icon, title, description, action }: { icon: React.ReactNod
   return <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-center"><div className="mb-3 rounded-2xl bg-card p-3 text-muted-foreground/50 shadow-sm">{icon}</div><p className="font-black text-foreground">{title}</p><p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>{action && <div className="mt-4">{action}</div>}</div>;
 }
 
-function OrderBoard({ orders, onSend, onStatus, onCheckout }: { orders: RestaurantOrder[]; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void }) {
-  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Comandas recientes</h2></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => <div key={order.id} className="rounded-2xl border border-border/60 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-lg font-black">{order.number}</p><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
+function OrderBoard({ orders, targetOrderId, onTargetHandled, onSend, onStatus, onCheckout }: { orders: RestaurantOrder[]; targetOrderId?: string | null; onTargetHandled?: () => void; onSend: (order: RestaurantOrder) => void; onStatus: (order: RestaurantOrder, status: string) => void; onCheckout: (order: RestaurantOrder) => void }) {
+  useEffect(() => {
+    if (!targetOrderId) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`restaurant-order-${targetOrderId}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.focus({ preventScroll: true });
+      onTargetHandled?.();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [targetOrderId, onTargetHandled, orders]);
+
+  return <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Flujo de servicio</p><h2 className="mt-1 text-2xl font-black">Comandas recientes</h2><p className="mt-1 text-sm text-muted-foreground">La comanda relacionada con el aviso queda resaltada aquí.</p></div><ClipboardList className="size-6 text-muted-foreground/40" /></div>{orders.length === 0 ? <EmptyState icon={<ClipboardList className="size-8" />} title="No hay comandas" description="Las comandas creadas desde Salón y POS aparecerán aquí." /> : <div className="grid gap-3 lg:grid-cols-2">{orders.map((order) => <div id={`restaurant-order-${order.id}`} key={order.id} tabIndex={-1} className={`rounded-2xl border p-4 transition-all duration-500 ${targetOrderId === order.id ? 'border-primary bg-primary/[0.06] ring-4 ring-primary/15 shadow-lg' : 'border-border/60'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-lg font-black">{order.number}</p><p className="text-xs text-muted-foreground">{order.table ? `Mesa ${order.table.code} · ${order.table.name}` : order.type}</p></div><Badge variant="outline">{orderStatus[order.status] || order.status}</Badge></div><div className="mt-4 space-y-1 text-sm">{order.items.map((item) => <div key={item.id} className="flex justify-between"><span>{Number(item.quantity)} × {item.description}</span><span className="font-semibold">{money(item.total, order.currency)}</span></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3"><span className="font-black">{money(order.total, order.currency)}</span><div className="flex gap-2">{['CONFIRMED', 'PENDING_CONFIRMATION'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onSend(order)}><Send className="size-3" />Cocina</Button>}{['READY', 'SERVED'].includes(order.status) && <Button size="sm" variant="outline" onClick={() => onCheckout(order)}><CreditCard className="size-3" />Cobrar</Button>}{order.status === 'READY' && <Button size="sm" onClick={() => onStatus(order, 'SERVED')}>Servido</Button>}</div></div></div>)}</div>}</section>;
 }
 
 function KitchenBoard({ tickets, onStatus }: { tickets: RestaurantKitchenTicket[]; onStatus: (ticket: RestaurantKitchenTicket, status: string) => void }) {

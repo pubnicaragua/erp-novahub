@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { Alert } from '../../types';
 import { Card, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Plus, Search, AlertTriangle, Info, AlertCircle, Eye } from 'lucide-react';
@@ -12,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
 import { alertsService } from '../../services/notificaciones.service';
 import { navigateToNotification } from '../../utils/notificationNavigation';
-import { format } from 'date-fns';
+import { NotificationTable } from './NotificationTable';
 
 interface AlertasViewProps {
   data: Alert[];
@@ -28,27 +26,6 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
 
   const errMsg = (e: any, fallback: string) => e?.response?.data?.message || e?.message || fallback;
 
-  const severityOpts = [
-    { value: 'LOW', label: 'Baja', color: 'text-blue-500' },
-    { value: 'MEDIUM', label: 'Media', color: 'text-amber-500' },
-    { value: 'HIGH', label: 'Alta', color: 'text-rose-500' },
-    { value: 'CRITICAL', label: 'Crítica', color: 'text-purple-500' },
-  ];
-
-  const columns: ColumnDef<Alert>[] = [
-    { key: 'title', header: 'Título', width: '30%', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit') },
-    { key: 'content', header: 'Mensaje', width: '40%', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit') },
-    { key: 'severity', header: 'Severidad', width: '120px', editable: canPerform('NOTIFICATIONS_ALERTS', 'edit'), type: 'select', options: severityOpts,
-      render: (val: any) => { const o = severityOpts.find(x => x.value === (val||'').toUpperCase()); return <span className={cn('text-[10px] font-bold uppercase', o?.color||'text-muted-foreground')}>{o?.label||val}</span>; } },
-    { key: 'isRead', header: 'Leída', width: '100px', render: (val: any) => <Badge variant="outline" className={cn('text-[9px] uppercase border-none', val ? 'bg-primary/10 text-primary' : 'bg-rose-500/10 text-rose-500')}>{val ? 'Sí' : 'No'}</Badge> },
-    { key: 'createdAt', header: 'Fecha', width: '150px', type: 'date', render: (val: any) => { const d = val ? new Date(val) : null; return d && !isNaN(d.getTime()) ? format(d, 'MMM dd, HH:mm') : '-'; } },
-  ];
-
-  const handleUpdate = async (id: string | number, updates: Partial<Alert>) => {
-    try { await alertsService.update(id as string, updates); toast.success('Alerta actualizada'); onRefresh(); }
-    catch (e: any) { toast.error(errMsg(e, 'Error al actualizar')); }
-  };
-
   const handleAdd = async () => {
     if (creating) return;
     setCreating(true);
@@ -57,6 +34,15 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
       toast.success('Alerta creada'); onRefresh();
     } catch (e: any) { toast.error(errMsg(e, 'Error al crear')); }
     finally { setCreating(false); }
+  };
+
+  const handleMarkRead = async (alert: Alert) => {
+    try {
+      if (!alert.isRead) await markAsRead(alert.id);
+      await onRefresh();
+    } catch (e: any) {
+      toast.error(errMsg(e, 'No se pudo marcar la alerta como leída'));
+    }
   };
 
   const handleNotificationClick = async (alert: Alert) => {
@@ -97,11 +83,21 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
           <div className="erp-list-toolbar flex min-w-0 flex-wrap items-center gap-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
             {canPerform('NOTIFICATIONS_ALERTS', 'create') && (
-              <Button data-toolbar-role="primary" onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear Alerta</Button>
+              <Button data-toolbar-role="primary" onClick={handleAdd} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Crear aviso</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowClick={handleNotificationClick} onRowUpdate={canPerform('NOTIFICATIONS_ALERTS', 'edit') ? handleUpdate : undefined} isLoading={loading} onRowDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => { try { await alertsService.delete(id as string); toast.success('Alerta eliminada'); onRefresh(); } catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); } } : undefined} />
+        <NotificationTable
+          data={filtered}
+          mode="alert"
+          loading={loading}
+          onRowClick={handleNotificationClick}
+          onMarkRead={handleMarkRead}
+          onDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => {
+            try { await alertsService.delete(id); toast.success('Alerta eliminada'); onRefresh(); }
+            catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); }
+          } : undefined}
+        />
       </Card>
     </div>
   );

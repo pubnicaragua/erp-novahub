@@ -955,12 +955,27 @@ export function ConfiguracionPage({ initialTab = 'branding' }: { initialTab?: st
     if (branding?.logo) setLogoPreview(branding.logo);
     if (branding?.industry) setCompanyIndustry(branding.industry);
     if (branding?.whiteLabel !== undefined) setWhiteLabel(branding.whiteLabel);
-    if (branding) {
-      updateTheme(generateThemeFromColor(
-        branding.primaryColor?.startsWith('oklch') ? oklchToApproxHex(branding.primaryColor) : (branding.primaryColor || '#10b981'),
-        branding.sidebarColor?.startsWith('oklch') ? oklchToApproxHex(branding.sidebarColor) : (branding.sidebarColor || '#0c1a12'),
-        branding.accentColor?.startsWith('oklch') ? oklchToApproxHex(branding.accentColor) : (branding.accentColor || '#064e3b'),
-      ));
+    // A partial branding response must not reset a valid tenant theme to the
+    // hardcoded defaults. This query is also loaded by ThemeProvider, so only
+    // apply it when at least one persisted brand color is actually present.
+    if (branding && (branding.primaryColor || branding.sidebarColor || branding.accentColor)) {
+      const serverColors: Partial<BrandColors> = {};
+      if (branding.primaryColor) {
+        serverColors.primary = branding.primaryColor.startsWith('oklch')
+          ? oklchToApproxHex(branding.primaryColor)
+          : branding.primaryColor;
+      }
+      if (branding.sidebarColor) {
+        serverColors.sidebar = branding.sidebarColor.startsWith('oklch')
+          ? oklchToApproxHex(branding.sidebarColor)
+          : branding.sidebarColor;
+      }
+      if (branding.accentColor) {
+        serverColors.accent = branding.accentColor.startsWith('oklch')
+          ? oklchToApproxHex(branding.accentColor)
+          : branding.accentColor;
+      }
+      updateTheme(serverColors);
     }
     if (currency) {
       setExchangeRateAuto(currency.auto !== false);
