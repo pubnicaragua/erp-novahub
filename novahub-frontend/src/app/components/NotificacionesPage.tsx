@@ -35,7 +35,7 @@ const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="notificaciones-alertas-table"]',
     title: 'Tabla de Alertas',
-    description: 'Creá, editá y eliminá alertas directamente. Hacé clic en una celda para editar su valor. Usá el botón Crear Alerta para agregar una nueva.',
+    description: 'Consultá las alertas del sistema, revisá su severidad y abrí el detalle relacionado. El contenido es inmutable para conservar la trazabilidad; solo se puede cambiar el estado de lectura.',
     placement: 'top',
   },
   {
@@ -48,7 +48,7 @@ const NOTIFICACIONES_TOUR_STEPS: GuidedTourStep[] = [
   {
     target: '[data-tour="notificaciones-tab-push"]',
     title: 'Notificaciones Push',
-    description: 'Comunicaciones enviadas a dispositivos móviles registrados. Tipos: Marketing, Sistema y Actualizaciones.',
+    description: 'Registro de avisos internos del ERP. Activa el permiso del navegador desde esta pestaña para recibir avisos cuando el ERP esté en segundo plano.',
     placement: 'top',
   },
 ];
@@ -89,6 +89,11 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
   const activeQuery = activeTab === 'alertas' ? alertsQuery : activeTab === 'mensajes' ? messagesQuery : pushQuery;
   const loading = activeQuery.isLoading || activeQuery.isFetching;
   const fetchData = () => activeQuery.refetch();
+  const queryError = activeQuery.error instanceof Error
+    ? activeQuery.error.message
+    : typeof activeQuery.error === 'string'
+      ? activeQuery.error
+      : '';
 
   useEffect(() => {
     if (!activeSubModule) return;
@@ -109,6 +114,19 @@ export const NotificacionesPage = ({ activeSubModule, onSubModuleChange, isSideb
             <CircleHelp className="size-5" />
           </Button>
         </header>
+
+        {activeQuery.isError && (
+          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+              <div>
+                <p className="font-semibold text-foreground">No se pudo cargar Notificaciones</p>
+                <p className="mt-1 text-sm text-muted-foreground">{queryError || 'El servicio no respondió correctamente. Intenta nuevamente.'}</p>
+              </div>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => void fetchData()}>Reintentar</Button>
+          </div>
+        )}
 
         <Tabs
           value={activeTab}

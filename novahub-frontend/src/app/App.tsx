@@ -316,11 +316,26 @@ function DashboardLayout() {
 
   useEffect(() => {
     const handler = (e: any) => {
-      const targetModule = e.detail.module === 'roles' ? 'suscripciones' : e.detail.module;
+      const detail = e.detail || {};
+      const targetModule = detail.module === 'roles' ? 'suscripciones' : detail.module;
       const allowed = targetModule === 'overview' ? hasAccess('dashboard') : hasAccess(targetModule);
       if (allowed) {
         setActiveModule(targetModule);
-        setActiveSubModule(e.detail.subModule);
+        setActiveSubModule(detail.subModule);
+
+        // Si la notificación viene desde otro módulo, la vista destino todavía
+        // no existía cuando se disparó el evento original. Reproducimos una
+        // sola vez el contexto después del render para que pueda enfocar el
+        // registro exacto (factura, comanda, producto, etc.).
+        const targetKeys = ['targetId', 'invoiceId', 'orderId', 'creditNoteId', 'taskId', 'reminderId', 'eventId', 'requestId', 'queueId', 'sessionId', 'productId', 'expenseId', 'holdId'];
+        const hasTarget = targetKeys.some((key) => Boolean(detail[key]));
+        if (hasTarget && !detail.__replayed && targetModule !== currentModule) {
+          window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('navigate-module', {
+              detail: { ...detail, __replayed: true },
+            }));
+          }, 0);
+        }
       }
     };
     const subHandler = (e: any) => {
@@ -357,7 +372,7 @@ function DashboardLayout() {
     switch (currentModule) {
       case 'inventario': return <ModuleErrorBoundary moduleName="Inventario"><InventarioPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'ventas': return <ModuleErrorBoundary moduleName="Ventas"><VentasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
-      case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage /></ModuleErrorBoundary>;
+      case 'restaurante': return <ModuleErrorBoundary moduleName="Restaurante"><RestaurantePage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} /></ModuleErrorBoundary>;
       case 'compras': return <ModuleErrorBoundary moduleName="Compras"><ComprasPage activeSubModule={activeSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'finanzas': return <ModuleErrorBoundary moduleName="Finanzas"><FinanzasPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'rh': return <RecursosHumanosPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;

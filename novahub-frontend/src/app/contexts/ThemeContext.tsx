@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { brandingService, type Branding } from '../services/branding.service';
 import { safeSetItem } from '../services/safe-storage';
 import { useAuth } from './AuthContext';
 import { ensureReadableForeground, getReadableForeground } from '../utils/color-contrast';
@@ -93,6 +93,14 @@ function themeStorageKey(tenantId: string) {
   return `erp-theme-config:${tenantId}`;
 }
 
+function brandingColors(branding: Branding): Partial<BrandColors> {
+  const colors: Partial<BrandColors> = {};
+  if (branding.primaryColor) colors.primary = branding.primaryColor;
+  if (branding.sidebarColor) colors.sidebar = branding.sidebarColor;
+  if (branding.accentColor) colors.accent = branding.accentColor;
+  return colors;
+}
+
 function readStoredTheme(tenantId: string): ThemeConfig {
   try {
     const saved = localStorage.getItem(themeStorageKey(tenantId));
@@ -121,7 +129,9 @@ function readStoredTheme(tenantId: string): ThemeConfig {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const activeTenantId = user?.tenantId || 'default';
+  // clientTenantId is the canonical active tenant after a group/branch
+  // context switch. Using tenantId alone can read/write the wrong theme key.
+  const activeTenantId = user?.clientTenantId || user?.tenantId || 'default';
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme(activeTenantId));
 
   const updateTheme = useCallback((colors: Partial<BrandColors>) => {
@@ -146,6 +156,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const applyServerBranding = useCallback((branding: Branding, tenantId: string) => {
+    const colors = brandingColors(branding);
+    setThemeConfig(previous => {
+      const base = previous.tenantId === tenantId ? previous : readStoredTheme(tenantId);
+      const nextColors = { ...base.colors, ...colors };
+      return {
+        ...base,
+        tenantId,
+        tenantName: branding.companyName || base.tenantName,
+        logo: branding.logo || base.logo,
+        colors: {
+          ...nextColors,
+          primaryForeground: defaultColors.primaryForeground,
+          accentForeground: ensureReadableForeground(nextColors.accent, nextColors.accentForeground),
+          sidebarForeground: ensureReadableForeground(nextColors.sidebar, nextColors.sidebarForeground),
+        },
+      };
+    });
+  }, []);
+
   useEffect(() => {
     // Cada empresa mantiene su propio tema. Esto evita reutilizar el color de la
     // empresa anterior mientras se cambia de usuario o contexto. El id del
@@ -161,11 +191,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     // During login, logout, or tenant switching, the previous tenant can remain
     // in state for one render. Never apply or persist that stale configuration.
-    // The default for the active tenant keeps the UI stable until its stored
-    // configuration is loaded by the synchronization effect above.
+    // Read the active tenant's persisted theme synchronously during the
+    // transition. Applying the global default here caused a visible gray/
+    // default-color flash until the synchronization effect finished.
     const activeTheme = themeConfig.tenantId === activeTenantId
       ? themeConfig
-      : createDefaultTheme(activeTenantId);
+      : readStoredTheme(activeTenantId);
     const sidebarKeys = new Set(['sidebar', 'sidebarForeground', 'sidebarPrimary', 'sidebarAccent']);
     Object.entries(activeTheme.colors).forEach(([key, value]) => {
       if (sidebarKeys.has(key)) return;
@@ -228,28 +259,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!user || activeTenantId === 'default') return;
     let cancelled = false;
 
-    api.get<any>('/branding/current')
-      .then(b => {
-        if (cancelled || !b) return;
-
-        const serverColors: Partial<BrandColors> = {};
-        if (b.primaryColor) serverColors.primary = b.primaryColor;
-        if (b.sidebarColor) serverColors.sidebar = b.sidebarColor;
-        if (b.accentColor) serverColors.accent = b.accentColor;
-
-        if (Object.keys(serverColors).length > 0) updateTheme(serverColors);
-        updateConfig({
-          tenantId: activeTenantId,
-          tenantName: b.companyName || defaultTheme.tenantName,
-          logo: b.logo || undefined,
-        });
+    brandingService.getCurrent()
+      .then(branding => {
+        // Never replace a valid persisted theme with a default palette just
+        // because the endpoint returned a partial/empty branding object.
+        if (cancelled || !branding) return;
+        applyServerBranding(branding, activeTenantId);
       })
       .catch(err => {
         if (!cancelled) console.error('Failed to fetch branding:', err);
       });
 
     return () => { cancelled = true; };
-  }, [user, activeTenantId, updateTheme, updateConfig]);
+  }, [user, activeTenantId, applyServerBranding]);
 
   const resetTheme = () => {
     setThemeConfig(createDefaultTheme(activeTenantId));

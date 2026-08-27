@@ -1,4 +1,5 @@
 import { api } from './api';
+import { dedupeNotificationRecords } from './notifications.service';
 import type { ChatMessage, Message, MessageParticipant } from '../types';
 
 const SYSTEM_PARTICIPANT: MessageParticipant = { id: 'system', name: 'Sistema' };
@@ -106,10 +107,10 @@ const normalizeMessageThreads = (response: unknown): Message[] => {
     .sort((left, right) => new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime());
 };
 
-const createCrudService = <T>(endpoint: string) => ({
+const createCrudService = <T>(endpoint: string, options?: { dedupe?: boolean }) => ({
   getAll: async (signal?: AbortSignal) => {
     const data = await api.get(endpoint, { signal }) as T[];
-    return data;
+    return options?.dedupe ? dedupeNotificationRecords(data as any[]) as T[] : data;
   },
   getById: async (id: string, signal?: AbortSignal) => {
     const data = await api.get(`${endpoint}/${id}`, { signal }) as T;
@@ -129,7 +130,7 @@ const createCrudService = <T>(endpoint: string) => ({
   }
 });
 
-export const alertsService = createCrudService<any>('/notifications/alerts');
+export const alertsService = createCrudService<any>('/notifications/alerts', { dedupe: true });
 export const messagesService = {
   getAll: async (signal?: AbortSignal) => normalizeMessageThreads(await api.get<unknown>('/notifications/messages', { signal })),
   getRecipients: (signal?: AbortSignal) => api.get<MessageParticipant[]>('/notifications/messages/recipients', { signal }),
@@ -140,7 +141,7 @@ export const messagesService = {
   markRead: (threadId: string) =>
     api.patch<{ success: true }>(`/notifications/messages/${threadId}/read`, {}),
 };
-export const pushNotificationsService = createCrudService<any>('/notifications/push');
+export const pushNotificationsService = createCrudService<any>('/notifications/push', { dedupe: true });
 
 export const notificationsCatalogService = {
   getCatalog: () => api.get<any>('/notifications/catalog'),

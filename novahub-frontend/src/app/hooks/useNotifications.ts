@@ -62,5 +62,6 @@ export function useNotifications() {
         markAllAsRead,
         clearAll,
         refresh: notificationsQuery.refetch,
+        isFetched: notificationsQuery.isFetched,
     };
 }

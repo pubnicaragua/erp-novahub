@@ -12,6 +12,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&display=swap" rel="stylesheet">
+  <script>
+    // Apply the persisted mode before React paints to prevent a light/dark
+    // flash after F5. The React theme context remains the source of truth.
+    try {
+      var mode = localStorage.getItem('erp-theme-mode');
+      if (mode === 'dark') document.documentElement.classList.add('dark');
+      if (mode === 'light') document.documentElement.classList.remove('dark');
+    } catch (_) {}
+  </script>
 </head>
 
 <body>
