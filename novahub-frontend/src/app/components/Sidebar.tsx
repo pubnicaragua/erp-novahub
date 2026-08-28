@@ -425,6 +425,25 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     if (window.innerWidth < 1024) onClose();
   };
 
+  const buildModuleHref = (module: Module | 'overview', subModule?: string) => {
+    const params = new URLSearchParams();
+    if (module !== 'overview') params.set('m', module);
+    if (subModule) params.set('sm', subModule);
+    const query = params.toString();
+    return `${window.location.pathname}${query ? `?${query}` : ''}`;
+  };
+
+  const handleNavigationLinkClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    handler: () => void,
+  ) => {
+    // Keep the browser's native behavior for Ctrl/Cmd-click, middle-click,
+    // Shift-click and Alt-click, including "Abrir vínculo en otra pestaña".
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    handler();
+  };
+
   const PARENT_MODULE_MAP: Record<string, string> = {
     ventas: 'SALES',
     compras: 'PURCHASES',
@@ -576,6 +595,18 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 const isActive = activeModule === item.id;
                 const isExpanded = expandedMenus.has(item.id);
                 const showSection = sectionHeaderIds.has(item.id);
+                const itemClassName = cn(
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors duration-150',
+                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                  isActive && !item.submenu
+                    ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
+                    : isActive && item.submenu
+                      ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
+                      : 'text-sidebar-foreground/70'
+                );
+                const itemHref = buildModuleHref(item.id as Module | 'overview');
+                const itemClickHandler = () => handleMenuClick(item);
 
                 return (
                   <React.Fragment key={item.id}>
@@ -591,46 +622,30 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                       {isCollapsed ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              onClick={() => handleMenuClick(item)}
-                              className={cn(
-                                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
-                                'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                                isActive && !item.submenu
-                                  ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
-                                  : isActive && item.submenu
-                                    ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
-                                    : 'text-sidebar-foreground/70'
-                              )}
-                            >
-                              <span className="flex items-center justify-center shrink-0">
-                                {item.icon}
-                              </span>
-                            </button>
+                            {item.submenu ? (
+                              <button onClick={itemClickHandler} className={itemClassName} aria-label={item.label}>
+                                <span className="flex items-center justify-center shrink-0">{item.icon}</span>
+                              </button>
+                            ) : (
+                              <a
+                                href={itemHref}
+                                onClick={(event) => handleNavigationLinkClick(event, itemClickHandler)}
+                                className={itemClassName}
+                                aria-label={item.label}
+                                aria-current={isActive ? 'page' : undefined}
+                              >
+                                <span className="flex items-center justify-center shrink-0">{item.icon}</span>
+                              </a>
+                            )}
                           </TooltipTrigger>
                           <TooltipContent side="right" sideOffset={10} className="font-bold text-xs bg-sidebar-accent text-sidebar-foreground border-sidebar-border shadow-lg">
                             {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
                           </TooltipContent>
                         </Tooltip>
                       ) : (
-                        <button
-                          onClick={() => handleMenuClick(item)}
-                          className={cn(
-                            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150',
-                            'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                            isActive && !item.submenu
-                              ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
-                              : isActive && item.submenu
-                                ? 'bg-primary/10 text-sidebar-foreground ring-1 ring-primary/20'
-                                : 'text-sidebar-foreground/70'
-                          )}
-                        >
-                          <span className="flex items-center justify-center shrink-0">
-                            {item.icon}
-                          </span>
-                          <>
+                        item.submenu ? (
+                          <button onClick={itemClickHandler} className={itemClassName} aria-expanded={isExpanded}>
+                            <span className="flex items-center justify-center shrink-0">{item.icon}</span>
                             <span className="flex-1 text-left truncate">
                               {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
                             </span>
@@ -643,8 +658,20 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                 <ChevronDown className="size-4 opacity-50" />
                               </motion.span>
                             )}
-                          </>
-                        </button>
+                          </button>
+                        ) : (
+                          <a
+                            href={itemHref}
+                            onClick={(event) => handleNavigationLinkClick(event, itemClickHandler)}
+                            className={itemClassName}
+                            aria-current={isActive ? 'page' : undefined}
+                          >
+                            <span className="flex items-center justify-center shrink-0">{item.icon}</span>
+                            <span className="flex-1 text-left truncate">
+                              {user?.role === 'partner' && item.id === 'clientes' ? 'Mis Clientes' : item.label}
+                            </span>
+                          </a>
+                        )
                       )}
 
                       <AnimatePresence>
@@ -658,9 +685,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                           >
                             <div className="ml-5 mt-0.5 space-y-0.5 border-l border-sidebar-border/40 pl-3 py-1">
                               {visibleSubmenu.map((subItem) => (
-                                <button
+                                <a
                                   key={subItem.id}
-                                  onClick={() => handleSubmenuClick(item.id as Module, subItem.id)}
+                                  href={buildModuleHref(item.id as Module, subItem.id)}
+                                  onClick={(event) => handleNavigationLinkClick(
+                                    event,
+                                    () => handleSubmenuClick(item.id as Module, subItem.id),
+                                  )}
                                   className={cn(
                                     'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150',
                                     'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -669,10 +700,11 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                                       ? 'bg-primary text-primary-foreground font-medium shadow-sm'
                                       : 'text-sidebar-foreground/55'
                                   )}
+                                  aria-current={activeModule === item.id && activeSubModule === subItem.id ? 'page' : undefined}
                                 >
                                   {subItem.icon}
                                   <span className="flex-1 text-left truncate">{subItem.label}</span>
-                                </button>
+                                </a>
                               ))}
                             </div>
                           </motion.div>

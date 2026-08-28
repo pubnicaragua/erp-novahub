@@ -183,7 +183,7 @@ export function FloatingChat() {
       <motion.button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group fixed right-4 bottom-6 z-50 flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-all hover:scale-110 hover:shadow-primary/60 active:scale-95 sm:size-12"
+        className="group fixed bottom-4 right-3 z-50 flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-emerald-600 text-primary-foreground shadow-2xl shadow-primary/40 ring-4 ring-primary/15 transition-[transform,box-shadow,background-color] hover:scale-110 hover:shadow-primary/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 active:scale-95 sm:bottom-6 sm:right-4 sm:size-12"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.08 }}
@@ -191,6 +191,7 @@ export function FloatingChat() {
         aria-label={open ? 'Cerrar asistente' : 'Abrir asistente de capacitación'}
         title={open ? 'Cerrar asistente' : 'Asistente NovaHub'}
       >
+        <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-background bg-emerald-300" />
         <AnimatePresence mode="wait" initial={false}>
           {open ? (
             <motion.span

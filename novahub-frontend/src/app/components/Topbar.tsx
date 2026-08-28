@@ -49,6 +49,7 @@ import { Lock } from 'lucide-react';
 import { TrialCountdownBanner } from './auth/TrialCountdownBanner';
 import { getPasswordError } from '../utils/accountValidation';
 import { useImpersonation } from '../contexts/ImpersonationContext';
+import { tenantsService, type TenantBillingInvoice } from '../services/tenants.service';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -81,11 +82,52 @@ function getAvatarInitials(name?: string) {
   return initials.map((part) => part[0]).join('').toUpperCase();
 }
 
-function getNotificationDetail(notification: { title?: string | null; message?: string | null }) {
-  const message = String(notification.message || '').trim();
-  if (message) return message;
+function getOverdueInvoices(invoices?: TenantBillingInvoice[]) {
+  const now = Date.now();
+  return (invoices || []).filter((invoice) => {
+    const status = String(invoice.status || '').toUpperCase();
+    const dueDate = invoice.dueDate ? new Date(invoice.dueDate).getTime() : Number.NaN;
+    return status !== 'PAID' && Number.isFinite(dueDate) && dueDate < now;
+  });
+}
 
+function formatInvoiceDate(value?: string | null) {
+  if (!value) return 'fecha no disponible';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'fecha no disponible'
+    : new Intl.DateTimeFormat('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+}
+
+function formatInvoiceTotal(value?: number | string | null) {
+  const amount = Number(value);
+  return Number.isFinite(amount)
+    ? new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+    : null;
+}
+
+function getNotificationDetail(
+  notification: { title?: string | null; message?: string | null },
+  options: { overdueInvoices?: TenantBillingInvoice[]; billingLoading?: boolean; billingLoaded?: boolean } = {},
+) {
+  const message = String(notification.message || '').trim();
   const title = String(notification.title || '').trim();
+
+  if (/^facturas vencidas$/i.test(title)) {
+    if (options.billingLoading) return 'Cargando el detalle de las facturas vencidas…';
+    const overdueInvoices = getOverdueInvoices(options.overdueInvoices);
+    if (overdueInvoices.length > 0) {
+      return overdueInvoices.map((invoice) => {
+        const number = String(invoice.number || invoice.id || 'sin número');
+        const total = formatInvoiceTotal(invoice.total);
+        return `Factura ${number} · vencida desde ${formatInvoiceDate(invoice.dueDate)}${total ? ` · total ${total}` : ''}`;
+      }).join('\n');
+    }
+    if (options.billingLoaded) return 'No se encontraron facturas vencidas en el estado actual de la suscripción.';
+    return 'No se pudo cargar el detalle de las facturas vencidas. Abre Suscripciones para revisarlas.';
+  }
+
+  if (message) return message;
   if (/factura/i.test(title)) return 'Revisa el cliente, vencimiento y saldo pendiente de las facturas relacionadas.';
   if (/crédito|credito|nota de crédito|nota de credito/i.test(title)) return 'Revisa el vencimiento, saldo y aplicación del crédito relacionado.';
   if (/suspendida por mora|suspensi[oó]n/i.test(title)) return 'La cuenta requiere atención. Revisa la suscripción y la causa de la suspensión.';
@@ -93,7 +135,7 @@ function getNotificationDetail(notification: { title?: string | null; message?: 
 }
 
 export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse }: TopbarProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, canPerform } = useAuth();
   const { isImpersonating, branch, manager, exitBranch } = useImpersonation();
   const isBranchManagerSession = Boolean(isImpersonating && branch);
   const workspaceName = isBranchManagerSession
@@ -113,12 +155,50 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     const timeout = window.setTimeout(() => setDismissedSupervisorBranchId(branch.id), 15_000);
     return () => window.clearTimeout(timeout);
   }, [isBranchManagerSession, branch?.id]);
-  const hasPosAccess = user?.enabledModules?.some(m => m === 'RETAIL_POS' || m === 'SALES_POS') ?? false;
+  const hasPosAccess = canPerform('RETAIL_POS', 'view');
   const { unreadCount, markAsRead, markAllAsRead, notifications } = useNotifications();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [billingHistory, setBillingHistory] = useState<{ history?: TenantBillingInvoice[] } | null>(null);
+  const [billingHistoryLoading, setBillingHistoryLoading] = useState(false);
+  const billingLoadedTenantRef = useRef<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ label: string; description: string; module: string; subModule: string; group: string }[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  const billingTenantId = user?.clientTenantId;
+  const hasOverdueSubscriptionNotice = notifications.some((notification) => (
+    /^facturas vencidas$/i.test(String(notification.title || '').trim())
+  ));
+
+  useEffect(() => {
+    billingLoadedTenantRef.current = null;
+    setBillingHistory(null);
+  }, [billingTenantId]);
+
+  useEffect(() => {
+    if (
+      !notificationsOpen
+      || !billingTenantId
+      || !hasOverdueSubscriptionNotice
+      || billingLoadedTenantRef.current === billingTenantId
+    ) return;
+
+    const controller = new AbortController();
+    billingLoadedTenantRef.current = billingTenantId;
+    setBillingHistoryLoading(true);
+    void tenantsService.getBillingHistory(billingTenantId, controller.signal)
+      .then(setBillingHistory)
+      .catch(() => {
+        if (!controller.signal.aborted) setBillingHistory(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBillingHistoryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [billingTenantId, hasOverdueSubscriptionNotice, notificationsOpen]);
+
+  const overdueInvoices = billingHistory?.history;
 
   const SEARCH_CATALOG = [
     { label: 'Facturas de Venta', description: 'Emisión, cobro y anulación de facturas', module: 'ventas', subModule: 'facturas', keywords: ['factura', 'venta', 'cobro', 'cliente'], group: 'Ventas' },
@@ -176,6 +256,15 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       return acc;
     }, {})
   );
+
+  const selectSearchResult = (item: typeof searchResults[number]) => {
+    setSearchQuery('');
+    setSearchResults([]);
+    onNavigate(item.module as Module);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('navigate-submodule', { detail: { subModule: item.subModule } }));
+    }, 100);
+  };
 
   // Close search results on outside click
   useEffect(() => {
@@ -396,7 +485,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar módulos, clientes, facturas..."
+            placeholder="Buscar módulos y secciones..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -404,37 +493,33 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             }}
             onFocus={() => searchQuery.trim() && setSearchResults(getSearchResults(searchQuery))}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && searchResults.length > 0) {
-                const first = searchResults[0];
+              if (e.key === 'Escape') {
                 setSearchQuery('');
                 setSearchResults([]);
-                onNavigate(first.module as Module);
-                setTimeout(() => {
-                  window.dispatchEvent(new CustomEvent('navigate-submodule', { detail: { subModule: first.subModule } }));
-                }, 100);
+                return;
+              }
+              if (e.key === 'Enter' && searchResults.length > 0) {
+                selectSearchResult(searchResults[0]);
               }
             }}
-            aria-label="Buscar módulos, clientes o facturas"
-            title="Buscar módulos, clientes o facturas"
+            aria-label="Buscar módulos y secciones"
+            aria-controls="topbar-search-results"
+            aria-expanded={searchResults.length > 0}
+            title="Buscar módulos y secciones"
             className="h-9 w-full min-w-0 border-border/40 bg-muted/20 pl-9 pr-2 text-xs placeholder:text-transparent focus:bg-background sm:pr-4 sm:placeholder:text-muted-foreground"
           />
           {searchResults.length > 0 && (
-            <div className="absolute top-full mt-1 left-0 right-0 bg-popover border border-border rounded-xl shadow-xl z-50 py-2 max-h-80 overflow-y-auto">
+            <div id="topbar-search-results" role="listbox" className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-xl border border-border bg-popover py-2 shadow-xl">
               {groupedResults.map(([group, items]) => (
                 <div key={group}>
                   <p className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">{group}</p>
                   {items.map((item, i) => (
                     <button
+                      type="button"
+                      role="option"
                       key={`${item.label}-${i}`}
                       className="w-full flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/70 transition-colors text-left"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSearchResults([]);
-                        onNavigate(item.module as Module);
-                        setTimeout(() => {
-                          window.dispatchEvent(new CustomEvent('navigate-submodule', { detail: { subModule: item.subModule } }));
-                        }, 100);
-                      }}
+                      onClick={() => selectSearchResult(item)}
                     >
                       <span className="size-6 rounded-md bg-primary/10 flex items-center justify-center text-primary font-bold text-[10px]">{group[0]}</span>
                       <div>
@@ -445,6 +530,11 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                   ))}
                 </div>
               ))}
+            </div>
+          )}
+          {searchQuery.trim() && searchResults.length === 0 && (
+            <div role="status" className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-xl">
+              No encontramos un módulo o sección con ese nombre.
             </div>
           )}
         </div>
@@ -569,17 +659,17 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           <PopoverContent
             align="end"
             sideOffset={8}
-            className="w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl"
+            className="topbar-notifications-panel w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl"
             style={{ maxHeight: 'var(--radix-popover-content-available-height)' }}
           >
             <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-foreground">Notificaciones</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Alertas y novedades de tu empresa</p>
+                <p className="topbar-notifications-meta mt-0.5 text-[11px]">Alertas y novedades de tu empresa</p>
               </div>
               <button
                 type="button"
-                className="shrink-0 rounded-md px-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="topbar-notifications-action shrink-0 rounded-md px-1 text-xs font-medium transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 onClick={() => {
                   setNotificationsOpen(false);
                   onNavigate('notificaciones');
@@ -594,7 +684,11 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
             >
               {notifications.length > 0 ? (
                 notifications.slice(0, 5).map((n) => {
-                  const detail = getNotificationDetail(n);
+                  const detail = getNotificationDetail(n, {
+                    overdueInvoices,
+                    billingLoading: billingHistoryLoading,
+                    billingLoaded: Boolean(billingHistory),
+                  });
                   const readableDetail = detail.startsWith('TAREA:')
                     ? detail.split(':').slice(2).join(':')
                     : detail.startsWith('RECORDATORIO:')
@@ -604,7 +698,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                     <button
                       type="button"
                       key={n.id}
-                      className="group flex w-full items-start gap-3 rounded-xl border border-border/50 bg-background/50 p-3 text-left transition-colors hover:border-primary/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="topbar-notification-item group flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       onClick={() => {
                         setNotificationsOpen(false);
                         void markAsRead(n.id);
@@ -613,14 +707,14 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                     >
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-muted-foreground/60' : 'bg-primary'}`} />
                       <div className="min-w-0 flex-1">
-                        <span className="block break-words text-sm font-semibold leading-5 text-foreground">{n.title}</span>
-                        <span className="mt-1 block break-words text-xs leading-4 text-muted-foreground">{readableDetail}</span>
+                        <span className="topbar-notification-title block break-words text-sm font-semibold leading-5">{n.title}</span>
+                        <span className="topbar-notification-detail mt-1 block whitespace-pre-line break-words text-xs leading-4">{readableDetail}</span>
                       </div>
                     </button>
                   );
                 })
               ) : (
-                <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
+                <div className="topbar-notifications-empty rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm">
                   No hay notificaciones nuevas.
                 </div>
               )}
@@ -629,7 +723,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
               <div className="border-t border-border/60 bg-muted/10 p-2">
                 <button
                   type="button"
-                  className="w-full rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="topbar-notifications-more w-full rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   onClick={() => {
                     setNotificationsOpen(false);
                     onNavigate('notificaciones');

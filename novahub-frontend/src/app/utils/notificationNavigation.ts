@@ -112,6 +112,18 @@ const withTarget = (navigation: NotificationNavigation, target: Partial<Notifica
 export function getNotificationNavigation(notification: NotificationLike): NotificationNavigation {
   const metadata = asRecord(notification.metadata);
   const target = extractTarget(metadata);
+  const text = `${notification.title || ''} ${notification.message || notification.content || ''}`.toLowerCase();
+
+  // Este aviso lo genera el ciclo de facturación del tenant, no las cuentas
+  // por cobrar del negocio. La metadata antigua apuntaba a Finanzas, por lo
+  // que corregimos el destino en el cliente hasta que llegue una ruta nueva.
+  if (
+    String(notification.title || '').trim().toLowerCase() === 'facturas vencidas'
+    && (text.includes('suspensión del servicio') || text.includes('suspension del servicio'))
+  ) {
+    return withTarget({ module: 'suscripciones' }, target);
+  }
+
   const explicit = normalizeNavigation(metadata.navigation || metadata.route || metadata);
   if (explicit) return withTarget(explicit, target);
 
@@ -120,7 +132,6 @@ export function getNotificationNavigation(notification: NotificationLike): Notif
   if (link.includes('suscrip')) return withTarget({ module: 'suscripciones' }, target);
   if (link.includes('factur')) return withTarget({ module: 'ventas', subModule: 'facturas' }, target);
 
-  const text = `${notification.title || ''} ${notification.message || notification.content || ''}`.toLowerCase();
   if (text.startsWith('tarea:') || text.includes('tarea asignada')) return withTarget({ module: 'actividades', subModule: 'tareas' }, target);
   if (text.startsWith('recordatorio:') || text.includes('recordatorio')) return withTarget({ module: 'actividades', subModule: 'recordatorios' }, target);
   if (text.includes('nómina') || text.includes('nomina') || text.includes('payroll')) return withTarget({ module: 'rh', subModule: 'nominas' }, target);

@@ -4,7 +4,7 @@ import {
   DollarSign, TrendingDown, ShoppingCart, Target,
   ArrowUpRight, Loader2, AlertTriangle, ShieldAlert,
   TrendingUp, Coins, Clock, BarChart3, Package, Store, Receipt,
-  FileDown, ClipboardCheck, CalendarDays,
+  FileDown, ClipboardCheck, CalendarDays, Settings2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -18,6 +18,8 @@ import {
 import { cajaService } from '../services/caja.service';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { ImplementationSetupDashboard } from './ImplementationSetupDashboard';
 import {
   getImplementationSetupSummary,
@@ -70,6 +72,41 @@ const LOADING_STEPS = [
   'Preparando los datos...',
 ];
 
+const KPI_DEFINITIONS = [
+  { id: 'totalRevenue', label: 'Ingresos totales', description: 'Ventas registradas en el período.', group: 'Ventas y finanzas', available: true },
+  { id: 'totalExpenses', label: 'Gastos totales', description: 'Gastos registrados en el período.', group: 'Ventas y finanzas', available: true },
+  { id: 'ordersCount', label: 'Órdenes de venta', description: 'Órdenes creadas en el período.', group: 'Ventas y finanzas', available: true },
+  { id: 'netMargin', label: 'Margen de utilidad', description: 'Margen calculado por el resumen actual.', group: 'Ventas y finanzas', available: true },
+  { id: 'pendingOrders', label: 'Órdenes pendientes', description: 'Órdenes pendientes por despacho.', group: 'Ventas y finanzas', available: true },
+  { id: 'operatingResult', label: 'Resultado operativo', description: 'Ingresos menos gastos del período.', group: 'Ventas y finanzas', available: true },
+  { id: 'productsWithSales', label: 'Productos con venta', description: 'Productos incluidos en el ranking recibido.', group: 'Productos e inventario', available: true },
+  { id: 'topSellingProduct', label: 'Producto más vendido', description: 'Primer producto del ranking de ventas.', group: 'Productos e inventario', available: true },
+  { id: 'topSellingUnits', label: 'Unidades del producto líder', description: 'Unidades del primer producto del ranking.', group: 'Productos e inventario', available: true },
+  { id: 'topSellingRevenue', label: 'Venta del producto líder', description: 'Venta acumulada del primer producto.', group: 'Productos e inventario', available: true },
+  { id: 'topMarginProduct', label: 'Producto con mayor margen', description: 'Primer producto del ranking de margen.', group: 'Productos e inventario', available: true },
+  { id: 'topMarginProfit', label: 'Utilidad del producto líder', description: 'Utilidad del primer producto del ranking.', group: 'Productos e inventario', available: true },
+  { id: 'topMarginPercent', label: 'Margen del producto líder', description: 'Margen del primer producto del ranking.', group: 'Productos e inventario', available: true },
+  { id: 'noSaleProducts', label: 'Productos sin salida', description: 'Productos sin venta reportados por el resumen.', group: 'Productos e inventario', available: true },
+  { id: 'inventoryAlerts', label: 'Alertas de inventario', description: 'Alertas recibidas para el período.', group: 'Productos e inventario', available: true },
+  { id: 'outOfStock', label: 'Productos sin stock', description: 'Alertas clasificadas como agotadas.', group: 'Productos e inventario', available: true },
+  { id: 'lowStock', label: 'Productos con stock bajo', description: 'Alertas clasificadas como stock bajo.', group: 'Productos e inventario', available: true },
+  { id: 'reorderItems', label: 'Productos para reordenar', description: 'Alertas clasificadas para reorden.', group: 'Productos e inventario', available: true },
+  { id: 'registersWithSales', label: 'Cajas con ventas', description: 'Cajas incluidas en el resumen de ventas.', group: 'Caja', available: true },
+  { id: 'topRegister', label: 'Caja con más ventas', description: 'Caja con mayor total en el resumen.', group: 'Caja', available: true },
+  { id: 'topRegisterSales', label: 'Ventas de la caja líder', description: 'Total de la caja con mayor venta.', group: 'Caja', available: true },
+  { id: 'recentTransactions', label: 'Movimientos recientes', description: 'Movimientos devueltos por el resumen.', group: 'Caja', available: true },
+  { id: 'transactionsWithTax', label: 'Movimientos con IVA', description: 'Movimientos recientes marcados con IVA.', group: 'Caja', available: true },
+  { id: 'transactionsWithoutTax', label: 'Movimientos exentos', description: 'Movimientos recientes sin IVA.', group: 'Caja', available: true },
+  { id: 'averageRecentSale', label: 'Ticket promedio reciente', description: 'Promedio de los movimientos recibidos.', group: 'Caja', available: true },
+  { id: 'largestRecentSale', label: 'Venta reciente mayor', description: 'Mayor importe entre los movimientos recibidos.', group: 'Caja', available: true },
+  { id: 'period', label: 'Período consultado', description: 'Período activo del dashboard.', group: 'Calidad de datos', available: true },
+  { id: 'topClient', label: 'Cliente con más ventas', description: 'Requiere ampliar el resumen del dashboard.', group: 'Calidad de datos', available: false },
+  { id: 'topSupplier', label: 'Proveedor con más compras', description: 'Requiere datos de compras en el resumen.', group: 'Calidad de datos', available: false },
+  { id: 'topSeller', label: 'Mejor vendedor', description: 'Requiere datos de vendedor en el resumen.', group: 'Calidad de datos', available: false },
+] as const;
+
+const DEFAULT_KPI_IDS = ['totalRevenue', 'totalExpenses', 'ordersCount', 'netMargin'];
+
 export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOverviewProps) {
   const [loading, setLoading] = useState(true);
   const [loadStep, setLoadStep] = useState(0);
@@ -84,9 +121,13 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [isExporting, setIsExporting] = useState(false);
   const [showSetupView, setShowSetupView] = useState(false);
   const [setupLoading, setSetupLoading] = useState(false);
+  const [selectedKpiIds, setSelectedKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
+  const [draftKpiIds, setDraftKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
+  const [showKpiConfig, setShowKpiConfig] = useState(false);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user, canPerform } = useAuth();
   const canViewPos = canPerform('RETAIL_POS', 'view');
+  const kpiStorageKey = `novahub.dashboard.kpis.${user?.clientTenantId || user?.tenantId || user?.id || 'default'}`;
   const returnToDashboard = () => {
     setShowSetupView(false);
     onNavigateToDashboard?.();
@@ -97,6 +138,38 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)), 2000);
     return () => clearInterval(timer);
   }, [loading]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(kpiStorageKey) || 'null');
+      if (!Array.isArray(stored)) return;
+      const valid = stored.filter((id): id is string =>
+        typeof id === 'string' && KPI_DEFINITIONS.some((definition) => definition.id === id && definition.available),
+      ).slice(0, 30);
+      if (valid.length > 0) setSelectedKpiIds(valid);
+    } catch {
+      // La preferencia visual no debe impedir cargar el dashboard.
+    }
+  }, [kpiStorageKey]);
+
+  const openKpiConfig = () => {
+    setDraftKpiIds(selectedKpiIds);
+    setShowKpiConfig(true);
+  };
+
+  const toggleKpi = (id: string, checked: boolean) => {
+    setDraftKpiIds((current) => {
+      if (checked) return current.includes(id) || current.length >= 30 ? current : [...current, id];
+      return current.filter((selectedId) => selectedId !== id);
+    });
+  };
+
+  const saveKpiConfig = () => {
+    setSelectedKpiIds(draftKpiIds);
+    try { window.localStorage.setItem(kpiStorageKey, JSON.stringify(draftKpiIds)); } catch { /* preferencia opcional */ }
+    setShowKpiConfig(false);
+    toast.success(`${draftKpiIds.length} KPI${draftKpiIds.length === 1 ? '' : 's'} configurado${draftKpiIds.length === 1 ? '' : 's'}`);
+  };
 
   const fmt = (amount: number) => formatConvertedAmount(amount);
 
@@ -251,7 +324,6 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
     if (!cajaData) { toast.error('No hay datos para exportar'); return; }
     setIsExporting(true);
     try {
-      const k = cajaData.kpis;
       const { default: jsPDF } = await import('jspdf');
       const pdfSettings = await getPdfDesignSettings('dashboard.tenant-overview');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
@@ -278,12 +350,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       doc.text('Resumen de KPIs', 20, y);
       y += 8;
 
-      const kpiRows: [string, string][] = [
-        ['Ingresos Totales', fmt(k.totalRevenue || 0)],
-        ['Gastos Totales', fmt(k.totalExpenses || 0)],
-        ['Ordenes de Venta', String(k.ordersCount || 0)],
-        ['Margen de Utilidad', `${(k.netMargin || 0).toFixed(1)}%`],
-      ];
+      const kpiRows: [string, string][] = selectedKpiData.map((kpi) => [kpi.label, String(kpi.value)]);
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -399,46 +466,43 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       ? `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`
       : String(now.getFullYear());
 
-  const kpiData = kpis ? [
-    {
-      label: `Ingresos Totales${valuationModeSuffix}`,
-      value: fmt(kpis.totalRevenue || 0),
-      extra: null,
-      icon: DollarSign,
-      accent: 'text-emerald-400',
-      glow: 'shadow-emerald-500/10',
-      iconBg: 'bg-emerald-500/10',
-    },
-    {
-      label: `Gastos Totales${valuationModeSuffix}`,
-      value: fmt(kpis.totalExpenses || 0),
-      extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null
-        ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 }
-        : null,
-      icon: TrendingDown,
-      accent: 'text-rose-400',
-      glow: 'shadow-rose-500/10',
-      iconBg: 'bg-rose-500/10',
-    },
-    {
-      label: 'Órdenes de Venta',
-      value: String(kpis.ordersCount || 0),
-      extra: { text: `${kpis.pendingOrders || 0} pendientes por despacho`, color: 'text-muted-foreground' },
-      icon: ShoppingCart,
-      accent: 'text-amber-400',
-      glow: 'shadow-amber-500/10',
-      iconBg: 'bg-amber-500/10',
-    },
-    {
-      label: 'Margen Utilidad Net.',
-      value: `${(kpis.netMargin || 0).toFixed(1)}%`,
-      extra: { text: (kpis.netMargin || 0) >= 50 ? 'Rentabilidad Óptima' : (kpis.netMargin || 0) >= 25 ? 'Rentabilidad Moderada' : 'Rentabilidad Baja', color: 'text-muted-foreground' },
-      icon: Target,
-      accent: 'text-cyan-400',
-      glow: 'shadow-cyan-500/10',
-      iconBg: 'bg-cyan-500/10',
-    },
+  const recentAmounts = transactions
+    .map((transaction: any) => Number(transaction.sourceTotal ?? transaction.total ?? 0))
+    .filter((amount: number) => Number.isFinite(amount));
+  const recentTotal = recentAmounts.reduce((sum: number, amount: number) => sum + amount, 0);
+  const topSelling = perf?.topSelling?.[0];
+  const topMargin = perf?.topMargin?.[0];
+  const topRegister = [...registers].sort((a: any, b: any) => Number(b.total || 0) - Number(a.total || 0))[0];
+  const allKpiData = kpis ? [
+    { id: 'totalRevenue', label: `Ingresos Totales${valuationModeSuffix}`, value: fmt(kpis.totalRevenue || 0), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
+    { id: 'totalExpenses', label: `Gastos Totales${valuationModeSuffix}`, value: fmt(kpis.totalExpenses || 0), extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 } : null, icon: TrendingDown, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'finanzas' as Module },
+    { id: 'ordersCount', label: 'Órdenes de venta', value: String(kpis.ordersCount || 0), extra: { text: `${kpis.pendingOrders || 0} pendientes por despacho`, color: 'text-muted-foreground' }, icon: ShoppingCart, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
+    { id: 'netMargin', label: 'Margen de utilidad neta', value: `${(kpis.netMargin || 0).toFixed(1)}%`, extra: { text: (kpis.netMargin || 0) >= 50 ? 'Rentabilidad óptima' : (kpis.netMargin || 0) >= 25 ? 'Rentabilidad moderada' : 'Rentabilidad baja', color: 'text-muted-foreground' }, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'finanzas' as Module },
+    { id: 'pendingOrders', label: 'Órdenes pendientes', value: String(kpis.pendingOrders || 0), extra: { text: 'Pendientes por despacho', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
+    { id: 'operatingResult', label: 'Resultado operativo', value: fmt(Number(kpis.totalRevenue || 0) - Number(kpis.totalExpenses || 0)), extra: { text: 'Ingresos menos gastos', color: 'text-muted-foreground' }, icon: TrendingUp, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
+    { id: 'productsWithSales', label: 'Productos con venta', value: String(perf?.topSelling?.length || 0), extra: { text: 'Ranking recibido', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'inventario' as Module },
+    { id: 'topSellingProduct', label: 'Producto más vendido', value: topSelling?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: TrendingUp, isText: true, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
+    { id: 'topSellingUnits', label: 'Unidades del producto líder', value: String(topSelling?.totalQty || 0), extra: { text: 'Unidades vendidas', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
+    { id: 'topSellingRevenue', label: 'Venta del producto líder', value: fmt(Number(topSelling?.totalRevenue || 0)), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
+    { id: 'topMarginProduct', label: 'Producto con mayor margen', value: topMargin?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: Target, isText: true, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
+    { id: 'topMarginProfit', label: 'Utilidad del producto líder', value: fmt(Number(topMargin?.profit || 0)), extra: null, icon: Coins, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
+    { id: 'topMarginPercent', label: 'Margen del producto líder', value: `${Number(topMargin?.margin || 0).toFixed(1)}%`, extra: null, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
+    { id: 'noSaleProducts', label: 'Productos sin salida', value: String(perf?.noSaleProducts?.length || 0), extra: { text: 'Productos reportados', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'inventario' as Module },
+    { id: 'inventoryAlerts', label: 'Alertas de inventario', value: String(alerts.length), extra: { text: 'Alertas recibidas', color: 'text-muted-foreground' }, icon: AlertTriangle, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'inventario' as Module },
+    { id: 'outOfStock', label: 'Productos sin stock', value: String(alerts.filter((alert: any) => alert.status === 'SIN_STOCK').length), extra: null, icon: Package, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'inventario' as Module },
+    { id: 'lowStock', label: 'Productos con stock bajo', value: String(alerts.filter((alert: any) => alert.status === 'STOCK_BAJO').length), extra: null, icon: Package, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'inventario' as Module },
+    { id: 'reorderItems', label: 'Productos para reordenar', value: String(alerts.filter((alert: any) => alert.status === 'REORDEN').length), extra: null, icon: Package, accent: 'text-orange-400', glow: 'shadow-orange-500/10', iconBg: 'bg-orange-500/10', module: 'inventario' as Module },
+    { id: 'registersWithSales', label: 'Cajas con ventas', value: String(registers.length), extra: null, icon: Store, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
+    { id: 'topRegister', label: 'Caja con más ventas', value: topRegister?.registerName || 'Sin datos', extra: null, icon: Store, isText: true, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
+    { id: 'topRegisterSales', label: 'Ventas de la caja líder', value: fmt(Number(topRegister?.total || 0)), extra: null, icon: DollarSign, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
+    { id: 'recentTransactions', label: 'Movimientos recientes', value: String(transactions.length), extra: { text: 'Movimientos recibidos', color: 'text-muted-foreground' }, icon: Receipt, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'finanzas' as Module },
+    { id: 'transactionsWithTax', label: 'Movimientos con IVA', value: String(transactions.filter((transaction: any) => transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
+    { id: 'transactionsWithoutTax', label: 'Movimientos exentos', value: String(transactions.filter((transaction: any) => !transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-slate-400', glow: 'shadow-slate-500/10', iconBg: 'bg-slate-500/10', module: 'finanzas' as Module },
+    { id: 'averageRecentSale', label: 'Ticket promedio reciente', value: fmt(recentAmounts.length ? recentTotal / recentAmounts.length : 0), extra: null, icon: DollarSign, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'ventas' as Module },
+    { id: 'largestRecentSale', label: 'Venta reciente mayor', value: fmt(recentAmounts.length ? Math.max(...recentAmounts) : 0), extra: null, icon: TrendingUp, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'ventas' as Module },
+    { id: 'period', label: 'Período consultado', value: periodLabel, extra: { text: 'Datos del resumen actual', color: 'text-muted-foreground' }, icon: CalendarDays, isText: true, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'finanzas' as Module },
   ] : [];
+  const selectedKpiData = allKpiData.filter((kpi) => selectedKpiIds.includes(kpi.id));
 
   if (loading && !cajaData) {
     return (
@@ -475,22 +539,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   return (
     <div className="space-y-6 p-4 md:p-6 pb-16">
       <CurrencyValuationBanner />
-      {/* Hero */}
+      {/* Texto comercial anterior conservado para futuras decisiones de copy, pero oculto del dashboard. */}
+      {/* Centraliza, optimiza y escala, la solución integral que tu crecimiento necesita. Supervisa el rendimiento en tiempo real, descubre nuevas oportunidades y toma decisiones estratégicas con nuestra visión analítica de 360°. */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2 relative">
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
-          <h1 className="text-3xl md:text-4xl tracking-tight text-foreground mb-2 font-bold">
-            Centraliza, optimiza y{' '}
-            <span className="bg-primary text-primary-foreground px-3 py-1 rounded-md inline-block transform -rotate-2 shadow-lg font-semibold mx-1 border border-primary/50">escala</span>,
-            <br />
-            <span className="text-xl md:text-2xl mt-3 block text-muted-foreground/90 tracking-normal font-medium">
-              la solución integral que tu crecimiento{' '}
-              <span className="text-foreground border-b-[3px] border-primary pb-0.5 inline-block transform rotate-1">necesita.</span>
-            </span>
-          </h1>
-          <p className="text-sm text-foreground/75 mt-3 max-w-xl">
-            Supervisa el rendimiento en tiempo real, descubre nuevas oportunidades y toma decisiones estratégicas con nuestra visión analítica de 360°.
-          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Resumen operativo</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground md:text-3xl">Tu operación, en una sola vista.</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">Elige los indicadores que tu equipo necesita revisar y mantenlos disponibles en cada sesión.</p>
         </div>
         <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
           <Select value={period} onValueChange={(val) => {
@@ -550,6 +606,16 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
             {setupLoading ? <Loader2 className="size-3.5 animate-spin" /> : <ClipboardCheck className="size-3.5" />}
             Implementación
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openKpiConfig}
+            className="rounded-xl border-border/60 bg-card font-black uppercase text-[10px] tracking-widest gap-1.5"
+            title="Configurar indicadores del dashboard"
+          >
+            <Settings2 className="size-3.5" />
+            Configuración
+          </Button>
         </div>
       </div>
 
@@ -597,19 +663,34 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         </motion.div>
       ) : (
         <>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/75 text-center md:text-left">
-            Período: <span className="text-foreground">{periodLabel}</span>
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground" aria-live="polite">
+              Período: <span className="text-foreground">{periodLabel}</span> · {selectedKpiData.length} KPI{selectedKpiData.length === 1 ? '' : 's'} activos
+            </p>
+            <p className="text-[10px] text-muted-foreground">Los indicadores usan el resumen del período; no generan una solicitud por tarjeta.</p>
+          </div>
 
-          {/* KPIs - dark diffused tech */}
-          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {kpiData.map((kpi, i) => {
+          {selectedKpiData.length === 0 ? (
+            <Card className="rounded-2xl border-dashed border-border/60 bg-card/70">
+              <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+                <Settings2 className="size-8 text-primary/60" />
+                <p className="text-sm font-bold text-foreground">No hay KPIs seleccionados</p>
+                <p className="max-w-md text-xs text-muted-foreground">Abre Configuración para elegir los indicadores que quieres ver en tu dashboard.</p>
+                <Button size="sm" onClick={openKpiConfig} className="rounded-xl">Configurar KPIs</Button>
+              </CardContent>
+            </Card>
+          ) : (
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {selectedKpiData.map((kpi) => {
               const Icon = kpi.icon;
               return (
-                <motion.div key={kpi.label} variants={itemVariants}>
+                <motion.div key={kpi.id} variants={itemVariants}>
                   <Card
-                    className={`relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group border-border/30 bg-card/80 backdrop-blur-sm shadow-md rounded-2xl`}
-                    onClick={() => onNavigate?.(i < 2 ? 'finanzas' : 'ventas')}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onNavigate?.(kpi.module)}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onNavigate?.(kpi.module); } }}
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border-border/30 bg-card/80 shadow-md backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     {/* ambient glow */}
                     <div className={`absolute -top-8 -right-8 size-24 rounded-full blur-2xl opacity-40 pointer-events-none ${kpi.iconBg}`} />
@@ -620,14 +701,14 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
                           <Icon className={`size-4 ${kpi.accent}`} />
                         </div>
                       </div>
-                      <p className="text-2xl font-black tracking-tighter tabular-nums text-foreground">{kpi.value}</p>
+                      <p className={`${'isText' in kpi && kpi.isText ? 'min-h-12 text-sm leading-snug' : 'text-2xl tracking-tighter'} font-black tabular-nums text-foreground break-words`}>{kpi.value}</p>
                       {kpi.extra && (
                         <p className={`text-[11px] font-bold mt-1 ${kpi.extra.color || 'text-foreground/75'}`}>
                           {kpi.extra.text}
                         </p>
                       )}
                       {!kpi.extra && <div className="h-[18px]" />}
-                      <div className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-foreground/65 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                      <div className="mt-2 flex translate-y-1 items-center gap-1 text-[9px] font-black uppercase tracking-widest text-foreground/65 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-y-0 group-hover:opacity-100">
                         <span>Ver detalle</span>
                         <ArrowUpRight className="size-3" />
                       </div>
@@ -637,6 +718,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               );
             })}
           </motion.div>
+          )}
 
           {/* Rendimiento de Productos */}
           {perf && (
@@ -877,6 +959,56 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
           </div>
         </>
       )}
+
+      <Dialog open={showKpiConfig} onOpenChange={setShowKpiConfig}>
+        <DialogContent className="max-w-3xl rounded-2xl border-border/60 bg-background">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black">
+              <Settings2 className="size-5 text-primary" /> Configurar dashboard
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona hasta 30 indicadores. Se alimentan del resumen que ya consulta el dashboard, por lo que activar más KPIs no multiplica las solicitudes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-5 overflow-y-auto pr-1">
+            {['Ventas y finanzas', 'Productos e inventario', 'Caja', 'Calidad de datos'].map((group) => (
+              <section key={group}>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-[0.16em] text-foreground">{group}</h3>
+                  <span className="text-[10px] font-bold text-muted-foreground">{KPI_DEFINITIONS.filter((definition) => definition.group === group && definition.available).length} disponibles</span>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {KPI_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
+                    const checked = draftKpiIds.includes(definition.id);
+                    return (
+                      <label key={definition.id} className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${definition.available ? 'cursor-pointer border-border/60 hover:border-primary/40 hover:bg-primary/5' : 'cursor-not-allowed border-dashed border-border/40 opacity-60'}`}>
+                        <Checkbox
+                          checked={checked}
+                          disabled={!definition.available}
+                          onCheckedChange={(value) => toggleKpi(definition.id, value === true)}
+                          aria-label={definition.label}
+                          className="mt-0.5"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-bold text-foreground">{definition.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{definition.description}{!definition.available ? ' Próximamente.' : ''}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-xs font-bold text-muted-foreground">{draftKpiIds.length}/30 seleccionados</span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setDraftKpiIds(DEFAULT_KPI_IDS)} className="rounded-xl">Restaurar base</Button>
+              <Button onClick={saveKpiConfig} className="rounded-xl">Aplicar KPIs</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

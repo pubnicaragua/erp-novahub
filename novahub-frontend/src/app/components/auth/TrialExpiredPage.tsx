@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { Clock, Sparkles, CheckCircle2, X, ArrowUpRight, Send, Loader2 } from 'lucide-react';
+import { Clock, Sparkles, CheckCircle2, ArrowUpRight, Send, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
 
 interface TrialExpiredPageProps {
-  onClose?: () => void;
   onLogout?: () => void;
 }
 
-export function TrialExpiredPage({ onClose, onLogout }: TrialExpiredPageProps) {
+export function TrialExpiredPage({ onLogout }: TrialExpiredPageProps) {
   const [showForm, setShowForm] = useState(false);
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
@@ -35,12 +34,6 @@ export function TrialExpiredPage({ onClose, onLogout }: TrialExpiredPageProps) {
       <div className="w-full max-w-2xl bg-card border border-border rounded-3xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-br from-rose-600 via-orange-600 to-amber-600 p-8 text-white relative">
-          {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose}
-              className="absolute top-4 right-4 text-white hover:bg-white/20 hover:text-white size-8">
-              <X className="size-4" />
-            </Button>
-          )}
           <div className="flex items-start gap-4">
             <div className="size-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shrink-0">
               <Clock className="size-7" />

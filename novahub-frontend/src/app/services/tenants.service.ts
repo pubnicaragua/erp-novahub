@@ -33,9 +33,24 @@ export interface TenantUser {
   createdAt: string;
 }
 
+export interface TenantBillingInvoice {
+  id: string;
+  number?: string | null;
+  date?: string | null;
+  dueDate?: string | null;
+  total?: number | string | null;
+  status?: string | null;
+}
+
+export interface TenantBillingHistory {
+  history?: TenantBillingInvoice[];
+}
+
 export const tenantsService = {
   getAll: (filters?: Record<string, any>, signal?: AbortSignal) => api.get<any[]>('/tenants', { params: filters, signal }),
   getOne: (id: string, signal?: AbortSignal) => api.get<any>(`/tenants/${id}`, { signal }),
+  getBillingHistory: (tenantId: string, signal?: AbortSignal) =>
+    api.get<TenantBillingHistory>(`/tenants/${tenantId}/billing`, { signal }),
   create: (data: CreateTenantDto) => api.post<any>('/tenants', data),
   update: (id: string, data: any) => api.patch<any>(`/tenants/${id}`, data),
   delete: (id: string) => api.delete(`/tenants/${id}`),
@@ -63,7 +78,7 @@ export const tenantsService = {
   updateUserDepartments: (tenantId: string, userId: string, departmentIds: string[], primaryDepartmentId?: string | null) =>
     api.put(`/tenants/${tenantId}/users/${userId}/departments`, { departmentIds, primaryDepartmentId }),
   linkUserToEmployee: (tenantId: string, userId: string, employeeId: string) =>
-    api.put(`/tenants/${tenantId}/users/${userId}/employee/${employeeId}`),
+    api.put(`/tenants/${tenantId}/users/${userId}/employee/${employeeId}`, {}),
   unlinkUserFromEmployee: (tenantId: string, userId: string) =>
     api.delete(`/tenants/${tenantId}/users/${userId}/employee`),
   deleteUser: (tenantId: string, userId: string) => api.delete(`/tenants/${tenantId}/users/${userId}`),

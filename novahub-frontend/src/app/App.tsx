@@ -555,6 +555,36 @@ function AppContent() {
     );
   }
 
+  const handleGuardLogout = () => {
+    safeRemoveItem('nh-auth-token');
+    logout?.();
+    window.location.reload();
+  };
+
+  // La pantalla de trial/sesión es una barrera de presentación. El backend
+  // continúa siendo la autoridad y debe rechazar cualquier mutación vencida.
+  // No montamos el ERP detrás del guard para no dejarlo accesible al retirar
+  // elementos del DOM desde las herramientas del navegador.
+  if (sessionClosed) {
+    return (
+      <>
+        <SessionClosedPage onLogout={handleGuardLogout} />
+        <SessionMonitor />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  if (trialExpired) {
+    return (
+      <>
+        <TrialExpiredPage onLogout={handleGuardLogout} />
+        <SessionMonitor />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
   if (showingSessionBranding || !isBrandingReady) {
     const isBranchManagerBranding = Boolean(isImpersonating && branch);
     const isPlatformBranding = Boolean(user?.isPlatformAdmin) && !isBranchManagerBranding;
@@ -570,24 +600,6 @@ function AppContent() {
 
   return (
     <>
-      {sessionClosed && (
-        <SessionClosedPage
-          onLogout={() => {
-            safeRemoveItem('nh-auth-token');
-            logout?.();
-            window.location.reload();
-          }}
-        />
-      )}
-      {trialExpired && (
-        <TrialExpiredPage
-          onLogout={() => {
-            safeRemoveItem('nh-auth-token');
-            logout?.();
-            window.location.reload();
-          }}
-        />
-      )}
       {(user?.userType === 'manager' || user?.role === 'manager') && !user.isPlatformAdmin && !isImpersonating ? (
         <Suspense fallback={<PageLoader />}><ManagerPage key={`manager-${sessionStartVersion}-${user.id}-${user.clientTenantId || user.tenantId}`} /></Suspense>
       ) : <DashboardLayout key={`dashboard-${sessionStartVersion}-${user?.id || 'anonymous'}-${user?.clientTenantId || user?.tenantId || ''}`} />}

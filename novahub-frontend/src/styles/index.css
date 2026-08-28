@@ -226,6 +226,48 @@ th .column-filter-menu .column-filter-icon,
   background-clip: padding-box;
 }
 
+/* Keep notification text readable in the light theme as well as dark mode.
+   The semantic classes avoid relying on low-opacity utility combinations. */
+.topbar-notifications-panel {
+  color: var(--popover-foreground);
+}
+
+.topbar-notifications-panel .topbar-notifications-meta,
+.topbar-notifications-panel .topbar-notifications-action {
+  color: color-mix(in oklch, var(--popover-foreground) 70%, transparent);
+}
+
+.topbar-notifications-panel .topbar-notifications-action:hover {
+  color: var(--primary);
+}
+
+.topbar-notifications-panel .topbar-notification-item {
+  border-color: color-mix(in oklch, var(--popover-foreground) 16%, transparent);
+  background: color-mix(in oklch, var(--popover) 94%, var(--primary) 6%);
+}
+
+.topbar-notifications-panel .topbar-notification-item:hover {
+  border-color: color-mix(in oklch, var(--primary) 42%, transparent);
+  background: color-mix(in oklch, var(--popover) 86%, var(--primary) 14%);
+}
+
+.topbar-notifications-panel .topbar-notification-title {
+  color: var(--popover-foreground);
+}
+
+.topbar-notifications-panel .topbar-notification-detail,
+.topbar-notifications-panel .topbar-notifications-empty {
+  color: color-mix(in oklch, var(--popover-foreground) 78%, transparent);
+}
+
+.notifications-table .notification-table-detail {
+  color: color-mix(in oklch, var(--foreground) 72%, transparent);
+}
+
+.notifications-table .notification-table-meta {
+  color: color-mix(in oklch, var(--foreground) 64%, transparent);
+}
+
 /* Sales module responsive guardrails. Keep layouts within the viewport and
    let dense data wrap instead of creating a second horizontal scrollbar. */
 .sales-module,
