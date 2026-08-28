@@ -160,9 +160,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
   const emptyImportRow = (): CustomerImportRow => ({ name: '', type: 'INDIVIDUAL', fiscalRegime: '', priceListCode: '', taxId: '', ruc: '', email: '', phone: '', address: '', city: '', department: '', country: 'Nicaragua', creditLimit: '', status: 'ACTIVE', notes: '' });
 
   const validateImportRows = (rows: CustomerImportRow[]) => {
-    const existingEmails = new Set(data.map((customer) => String(customer.email || '').trim().toLowerCase()).filter(Boolean));
     const existingTaxIds = new Set(data.flatMap((customer) => [customer.taxId, customer.ruc]).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
-    const seenEmails = new Set<string>();
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: CustomerImportRow = { ...row, error: undefined, warning: undefined };
@@ -171,12 +169,10 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
-      else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
       else if (row.type === 'COMPANY' && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
       if (!next.error && row.priceListCode && !priceListMatch) next.warning = 'Lista no encontrada; se importará sin lista';
-      if (email) { seenEmails.add(email); existingEmails.add(email); }
       identifiers.forEach((identifier) => { seenTaxIds.add(identifier); existingTaxIds.add(identifier); });
       return next;
     });
@@ -954,7 +950,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] overflow-y-auto rounded-3xl p-5 sm:p-6">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="size-4" /> Importar clientes</DialogTitle><DialogDescription>Carga una plantilla Excel. Luego abre la previsualización completa para corregir los datos antes de crear los clientes.</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; los correos e identificaciones duplicadas se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
+            <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground"><p className="font-black uppercase tracking-widest text-foreground">Antes de cargar</p><p className="mt-2">El número de cliente lo asigna automáticamente el sistema. La importación puede repetirse; las cédulas o RUC duplicados se marcarán como errores. Los avisos, como una lista de precios inexistente, no bloquean las filas.</p><Button variant="outline" size="sm" className="mt-3 gap-2" onClick={downloadTemplate}><Download className="size-4" /> Descargar plantilla Excel</Button></div>
             <div className="space-y-2"><label className="text-xs font-bold text-muted-foreground">Archivo Excel de clientes</label><Input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => { const file = event.target.files?.[0]; if (file) readImportFile(file); }} />{importFile && <p className="break-words text-xs text-muted-foreground">Archivo cargado: <b>{importFile.name}</b> · {importRows.length} filas detectadas</p>}</div>
             <div className="rounded-xl border p-4 text-xs text-muted-foreground"><p className="font-bold text-foreground">Flujo de trabajo</p><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Descarga la plantilla y completa los datos del cliente, sin código.</li><li>Carga el archivo; el sistema lo prepara sin mostrar cambios todavía.</li><li>Presiona “Previsualizar clientes” para editar y revisar errores.</li><li>Confirma escribiendo IMPORTAR; los clientes válidos recibirán su número automático.</li></ol></div>
           </div>

@@ -1586,15 +1586,13 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
               <SalesAccountingLegend
                 flow={isCashRegisterInvoice ? 'pos' : 'invoice'}
               />
-              {hasInventoryLines && (accountingPreflightLoading || accountingErrors.length > 0) && (
+              {hasInventoryLines && accountingErrors.length > 0 && (
                 <div role="alert" className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
                   <div className="space-y-1 text-[11px]">
                     <p className="font-black uppercase tracking-wider">Advertencia contable antes de emitir</p>
-                    <p>{accountingPreflightLoading ? 'Validando Costo de Ventas y cuenta de Inventario del almacén…' : accountingErrors.join(' ')}</p>
-                    {!accountingPreflightLoading && accountingErrors.length > 0 && (
-                      <p className="font-semibold">Configura la cuenta indicada antes de guardar la factura. No se registrará hasta que la validación sea correcta.</p>
-                    )}
+                    <p>{accountingErrors.join(' ')}</p>
+                    <p className="font-semibold">Configura la cuenta indicada antes de guardar la factura. No se registrará hasta que la validación sea correcta.</p>
                   </div>
                 </div>
               )}

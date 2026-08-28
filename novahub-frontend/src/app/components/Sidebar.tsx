@@ -539,13 +539,13 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 h-screen w-[270px] border-r border-sidebar-border bg-sidebar transition-all duration-300',
+          'fixed left-0 top-0 z-50 h-dvh min-h-0 w-[270px] border-r border-sidebar-border bg-sidebar transition-all duration-300',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:sticky lg:translate-x-0',
           isCollapsed ? 'lg:w-[72px]' : 'lg:w-[270px]'
         )}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           {/* Logo */}
           <div className={cn("flex h-16 items-center border-b border-sidebar-border px-3 overflow-visible", isCollapsed ? "justify-center" : "justify-between")}>
             <div className="flex items-center gap-3">
@@ -577,7 +577,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           </div>
 
           {/* Navigation */}
-          <div className="flex-1 min-h-0 overflow-y-auto py-3 no-scrollbar">
+          <div className="flex-1 min-h-0 overscroll-contain overflow-y-auto py-3 no-scrollbar">
             <TooltipProvider delayDuration={100}>
             <nav className="px-3 space-y-0.5">
               {activeMenuArray.map((item) => {

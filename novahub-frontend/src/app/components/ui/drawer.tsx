@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
+import { XIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
@@ -67,6 +68,10 @@ function DrawerContent({
       >
         <div className="bg-muted mx-auto mt-4 hidden h-2 w-[100px] shrink-0 rounded-full group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
         {children}
+        <DrawerPrimitive.Close aria-label="Cerrar panel" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground absolute top-4 right-4 inline-flex size-9 items-center justify-center rounded-lg opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none">
+          <XIcon className="size-4" />
+          <span className="sr-only">Cerrar panel</span>
+        </DrawerPrimitive.Close>
       </DrawerPrimitive.Content>
     </DrawerPortal>
   );

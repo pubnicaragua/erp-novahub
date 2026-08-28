@@ -124,10 +124,13 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const [selectedKpiIds, setSelectedKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
   const [draftKpiIds, setDraftKpiIds] = useState<string[]>(DEFAULT_KPI_IDS);
   const [showKpiConfig, setShowKpiConfig] = useState(false);
+  const [selectedKpi, setSelectedKpi] = useState<any | null>(null);
   const { formatConvertedAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { user, canPerform } = useAuth();
   const canViewPos = canPerform('RETAIL_POS', 'view');
-  const kpiStorageKey = `novahub.dashboard.kpis.${user?.clientTenantId || user?.tenantId || user?.id || 'default'}`;
+  const kpiStorageScope = `${user?.clientTenantId || user?.tenantId || 'default'}:${user?.id || 'anonymous'}`;
+  const kpiStorageKey = `novahub.dashboard.kpis.${kpiStorageScope}`;
+  const legacyKpiStorageKey = `novahub.dashboard.kpis.${user?.clientTenantId || user?.tenantId || user?.id || 'default'}`;
   const returnToDashboard = () => {
     setShowSetupView(false);
     onNavigateToDashboard?.();
@@ -141,15 +144,33 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(window.localStorage.getItem(kpiStorageKey) || 'null');
+      const storedKey = window.localStorage.getItem(kpiStorageKey) !== null
+        ? kpiStorageKey
+        : legacyKpiStorageKey;
+      const stored = JSON.parse(window.localStorage.getItem(storedKey) || 'null');
       if (!Array.isArray(stored)) return;
       const valid = stored.filter((id): id is string =>
         typeof id === 'string' && KPI_DEFINITIONS.some((definition) => definition.id === id && definition.available),
       ).slice(0, 30);
-      if (valid.length > 0) setSelectedKpiIds(valid);
+      if (valid.length > 0) {
+        setSelectedKpiIds(valid);
+        if (storedKey !== kpiStorageKey) window.localStorage.setItem(kpiStorageKey, JSON.stringify(valid));
+      }
     } catch {
       // La preferencia visual no debe impedir cargar el dashboard.
     }
+  }, [kpiStorageKey, legacyKpiStorageKey]);
+
+  useEffect(() => {
+    const syncKpis = (event: StorageEvent) => {
+      if (event.key !== kpiStorageKey || !event.newValue) return;
+      try {
+        const value = JSON.parse(event.newValue);
+        if (Array.isArray(value)) setSelectedKpiIds(value.filter((id): id is string => typeof id === 'string').slice(0, 30));
+      } catch { /* otra pestaña no debe interrumpir el dashboard */ }
+    };
+    window.addEventListener('storage', syncKpis);
+    return () => window.removeEventListener('storage', syncKpis);
   }, [kpiStorageKey]);
 
   const openKpiConfig = () => {
@@ -473,36 +494,51 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
   const topSelling = perf?.topSelling?.[0];
   const topMargin = perf?.topMargin?.[0];
   const topRegister = [...registers].sort((a: any, b: any) => Number(b.total || 0) - Number(a.total || 0))[0];
-  const allKpiData = kpis ? [
-    { id: 'totalRevenue', label: `Ingresos Totales${valuationModeSuffix}`, value: fmt(kpis.totalRevenue || 0), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
-    { id: 'totalExpenses', label: `Gastos Totales${valuationModeSuffix}`, value: fmt(kpis.totalExpenses || 0), extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 } : null, icon: TrendingDown, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'finanzas' as Module },
-    { id: 'ordersCount', label: 'Órdenes de venta', value: String(kpis.ordersCount || 0), extra: { text: `${kpis.pendingOrders || 0} pendientes por despacho`, color: 'text-muted-foreground' }, icon: ShoppingCart, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
-    { id: 'netMargin', label: 'Margen de utilidad neta', value: `${(kpis.netMargin || 0).toFixed(1)}%`, extra: { text: (kpis.netMargin || 0) >= 50 ? 'Rentabilidad óptima' : (kpis.netMargin || 0) >= 25 ? 'Rentabilidad moderada' : 'Rentabilidad baja', color: 'text-muted-foreground' }, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'finanzas' as Module },
-    { id: 'pendingOrders', label: 'Órdenes pendientes', value: String(kpis.pendingOrders || 0), extra: { text: 'Pendientes por despacho', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
-    { id: 'operatingResult', label: 'Resultado operativo', value: fmt(Number(kpis.totalRevenue || 0) - Number(kpis.totalExpenses || 0)), extra: { text: 'Ingresos menos gastos', color: 'text-muted-foreground' }, icon: TrendingUp, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
-    { id: 'productsWithSales', label: 'Productos con venta', value: String(perf?.topSelling?.length || 0), extra: { text: 'Ranking recibido', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'inventario' as Module },
-    { id: 'topSellingProduct', label: 'Producto más vendido', value: topSelling?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: TrendingUp, isText: true, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
-    { id: 'topSellingUnits', label: 'Unidades del producto líder', value: String(topSelling?.totalQty || 0), extra: { text: 'Unidades vendidas', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
-    { id: 'topSellingRevenue', label: 'Venta del producto líder', value: fmt(Number(topSelling?.totalRevenue || 0)), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'ventas' as Module },
-    { id: 'topMarginProduct', label: 'Producto con mayor margen', value: topMargin?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: Target, isText: true, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
-    { id: 'topMarginProfit', label: 'Utilidad del producto líder', value: fmt(Number(topMargin?.profit || 0)), extra: null, icon: Coins, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
-    { id: 'topMarginPercent', label: 'Margen del producto líder', value: `${Number(topMargin?.margin || 0).toFixed(1)}%`, extra: null, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', module: 'ventas' as Module },
-    { id: 'noSaleProducts', label: 'Productos sin salida', value: String(perf?.noSaleProducts?.length || 0), extra: { text: 'Productos reportados', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'inventario' as Module },
-    { id: 'inventoryAlerts', label: 'Alertas de inventario', value: String(alerts.length), extra: { text: 'Alertas recibidas', color: 'text-muted-foreground' }, icon: AlertTriangle, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'inventario' as Module },
-    { id: 'outOfStock', label: 'Productos sin stock', value: String(alerts.filter((alert: any) => alert.status === 'SIN_STOCK').length), extra: null, icon: Package, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', module: 'inventario' as Module },
-    { id: 'lowStock', label: 'Productos con stock bajo', value: String(alerts.filter((alert: any) => alert.status === 'STOCK_BAJO').length), extra: null, icon: Package, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'inventario' as Module },
-    { id: 'reorderItems', label: 'Productos para reordenar', value: String(alerts.filter((alert: any) => alert.status === 'REORDEN').length), extra: null, icon: Package, accent: 'text-orange-400', glow: 'shadow-orange-500/10', iconBg: 'bg-orange-500/10', module: 'inventario' as Module },
-    { id: 'registersWithSales', label: 'Cajas con ventas', value: String(registers.length), extra: null, icon: Store, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
-    { id: 'topRegister', label: 'Caja con más ventas', value: topRegister?.registerName || 'Sin datos', extra: null, icon: Store, isText: true, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
-    { id: 'topRegisterSales', label: 'Ventas de la caja líder', value: fmt(Number(topRegister?.total || 0)), extra: null, icon: DollarSign, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', module: 'ventas' as Module },
-    { id: 'recentTransactions', label: 'Movimientos recientes', value: String(transactions.length), extra: { text: 'Movimientos recibidos', color: 'text-muted-foreground' }, icon: Receipt, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'finanzas' as Module },
-    { id: 'transactionsWithTax', label: 'Movimientos con IVA', value: String(transactions.filter((transaction: any) => transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', module: 'finanzas' as Module },
-    { id: 'transactionsWithoutTax', label: 'Movimientos exentos', value: String(transactions.filter((transaction: any) => !transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-slate-400', glow: 'shadow-slate-500/10', iconBg: 'bg-slate-500/10', module: 'finanzas' as Module },
-    { id: 'averageRecentSale', label: 'Ticket promedio reciente', value: fmt(recentAmounts.length ? recentTotal / recentAmounts.length : 0), extra: null, icon: DollarSign, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'ventas' as Module },
-    { id: 'largestRecentSale', label: 'Venta reciente mayor', value: fmt(recentAmounts.length ? Math.max(...recentAmounts) : 0), extra: null, icon: TrendingUp, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'ventas' as Module },
-    { id: 'period', label: 'Período consultado', value: periodLabel, extra: { text: 'Datos del resumen actual', color: 'text-muted-foreground' }, icon: CalendarDays, isText: true, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', module: 'finanzas' as Module },
+  const productTarget = (product: any) => product?.productId
+    ? { module: 'inventario' as Module, detail: { subModule: 'productos', productId: product.productId, productCode: product.code || product.productCode } }
+    : undefined;
+  const transactionPreview = (items: any[]) => items.slice(0, 5).map((transaction, index) => ({
+    label: transaction.number || `Movimiento ${index + 1}`,
+    value: fmt(Number(transaction.sourceTotal ?? transaction.total ?? 0)),
+  }));
+  const allKpiData: any[] = kpis ? [
+    { id: 'totalRevenue', label: `Ingresos Totales${valuationModeSuffix}`, value: fmt(kpis.totalRevenue || 0), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: { module: 'finanzas' as Module, detail: { subModule: 'ingresos' } }, preview: [{ label: 'Ventas del período', value: fmt(kpis.totalRevenue || 0) }, { label: 'Período', value: periodLabel }] },
+    { id: 'totalExpenses', label: `Gastos Totales${valuationModeSuffix}`, value: fmt(kpis.totalExpenses || 0), extra: prevKpis && pctChange(kpis.totalExpenses, prevKpis.expenses) !== null ? { text: `${pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 ? '↑' : '↓'} ${Math.abs(pctChange(kpis.totalExpenses, prevKpis.expenses)!).toFixed(1)}% vs anterior`, up: pctChange(kpis.totalExpenses, prevKpis.expenses)! >= 0 } : null, icon: TrendingDown, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', target: { module: 'finanzas' as Module, detail: { subModule: 'gastos' } }, preview: [{ label: 'Gastos del período', value: fmt(kpis.totalExpenses || 0) }, { label: 'Período', value: periodLabel }] },
+    { id: 'ordersCount', label: 'Órdenes de venta', value: String(kpis.ordersCount || 0), extra: { text: `${kpis.pendingOrders || 0} pendientes por despacho`, color: 'text-muted-foreground' }, icon: ShoppingCart, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: { module: 'ventas' as Module, detail: { subModule: 'ordenes-venta' } }, preview: [{ label: 'Órdenes registradas', value: String(kpis.ordersCount || 0) }, { label: 'Pendientes', value: String(kpis.pendingOrders || 0) }] },
+    { id: 'netMargin', label: 'Margen de utilidad neta', value: `${(kpis.netMargin || 0).toFixed(1)}%`, extra: { text: (kpis.netMargin || 0) >= 50 ? 'Rentabilidad óptima' : (kpis.netMargin || 0) >= 25 ? 'Rentabilidad moderada' : 'Rentabilidad baja', color: 'text-muted-foreground' }, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', target: { module: 'finanzas' as Module, detail: { subModule: 'resumen-financiero' } }, preview: [{ label: 'Margen neto', value: `${(kpis.netMargin || 0).toFixed(1)}%` }, { label: 'Resultado operativo', value: fmt(Number(kpis.totalRevenue || 0) - Number(kpis.totalExpenses || 0)) }] },
+    { id: 'pendingOrders', label: 'Órdenes pendientes', value: String(kpis.pendingOrders || 0), extra: { text: 'Pendientes por despacho', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: { module: 'ventas' as Module, detail: { subModule: 'ordenes-venta' } }, preview: [{ label: 'Pendientes por despacho', value: String(kpis.pendingOrders || 0) }] },
+    { id: 'operatingResult', label: 'Resultado operativo', value: fmt(Number(kpis.totalRevenue || 0) - Number(kpis.totalExpenses || 0)), extra: { text: 'Ingresos menos gastos', color: 'text-muted-foreground' }, icon: TrendingUp, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: { module: 'finanzas' as Module, detail: { subModule: 'resumen-financiero' } }, preview: [{ label: 'Ingresos', value: fmt(kpis.totalRevenue || 0) }, { label: 'Gastos', value: fmt(kpis.totalExpenses || 0) }, { label: 'Resultado', value: fmt(Number(kpis.totalRevenue || 0) - Number(kpis.totalExpenses || 0)) }] },
+    { id: 'productsWithSales', label: 'Productos con venta', value: String(perf?.topSelling?.length || 0), extra: { text: 'Ranking recibido', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: { module: 'inventario' as Module, detail: { subModule: 'productos' } }, preview: [{ label: 'Productos en ranking', value: String(perf?.topSelling?.length || 0) }] },
+    { id: 'topSellingProduct', label: 'Producto más vendido', value: topSelling?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: TrendingUp, isText: true, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: productTarget(topSelling), preview: [{ label: 'Producto', value: topSelling?.name || 'Sin datos' }, { label: 'Unidades', value: String(topSelling?.totalQty || 0) }, { label: 'Venta', value: fmt(Number(topSelling?.totalRevenue || 0)) }] },
+    { id: 'topSellingUnits', label: 'Unidades del producto líder', value: String(topSelling?.totalQty || 0), extra: { text: 'Unidades vendidas', color: 'text-muted-foreground' }, icon: Package, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: productTarget(topSelling), preview: [{ label: 'Producto', value: topSelling?.name || 'Sin datos' }, { label: 'Unidades vendidas', value: String(topSelling?.totalQty || 0) }] },
+    { id: 'topSellingRevenue', label: 'Venta del producto líder', value: fmt(Number(topSelling?.totalRevenue || 0)), extra: null, icon: DollarSign, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', target: productTarget(topSelling), preview: [{ label: 'Producto', value: topSelling?.name || 'Sin datos' }, { label: 'Venta acumulada', value: fmt(Number(topSelling?.totalRevenue || 0)) }] },
+    { id: 'topMarginProduct', label: 'Producto con mayor margen', value: topMargin?.name || 'Sin datos', extra: { text: 'Primer producto del ranking', color: 'text-muted-foreground' }, icon: Target, isText: true, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', target: productTarget(topMargin), preview: [{ label: 'Producto', value: topMargin?.name || 'Sin datos' }, { label: 'Margen', value: `${Number(topMargin?.margin || 0).toFixed(1)}%` }, { label: 'Utilidad', value: fmt(Number(topMargin?.profit || 0)) }] },
+    { id: 'topMarginProfit', label: 'Utilidad del producto líder', value: fmt(Number(topMargin?.profit || 0)), extra: null, icon: Coins, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', target: productTarget(topMargin), preview: [{ label: 'Producto', value: topMargin?.name || 'Sin datos' }, { label: 'Utilidad', value: fmt(Number(topMargin?.profit || 0)) }] },
+    { id: 'topMarginPercent', label: 'Margen del producto líder', value: `${Number(topMargin?.margin || 0).toFixed(1)}%`, extra: null, icon: Target, accent: 'text-cyan-400', glow: 'shadow-cyan-500/10', iconBg: 'bg-cyan-500/10', target: productTarget(topMargin), preview: [{ label: 'Producto', value: topMargin?.name || 'Sin datos' }, { label: 'Margen', value: `${Number(topMargin?.margin || 0).toFixed(1)}%` }] },
+    { id: 'noSaleProducts', label: 'Productos sin salida', value: String(perf?.noSaleProducts?.length || 0), extra: { text: 'Productos reportados', color: 'text-muted-foreground' }, icon: Clock, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', preview: (perf?.noSaleProducts || []).slice(0, 5).map((product: any) => ({ label: product.name, value: `${product.stock ?? product.currentStock ?? 0} en stock` })) },
+    { id: 'inventoryAlerts', label: 'Alertas de inventario', value: String(alerts.length), extra: { text: 'Alertas recibidas', color: 'text-muted-foreground' }, icon: AlertTriangle, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: { module: 'inventario' as Module, detail: { subModule: 'productos' } }, preview: alerts.slice(0, 5).map((alert: any) => ({ label: alert.name, value: statusLabel[alert.status] || alert.status })) },
+    { id: 'outOfStock', label: 'Productos sin stock', value: String(alerts.filter((alert: any) => alert.status === 'SIN_STOCK').length), extra: null, icon: Package, accent: 'text-rose-400', glow: 'shadow-rose-500/10', iconBg: 'bg-rose-500/10', target: { module: 'inventario' as Module, detail: { subModule: 'productos', stockFilter: 'out' } }, preview: alerts.filter((alert: any) => alert.status === 'SIN_STOCK').slice(0, 5).map((alert: any) => ({ label: alert.name, value: 'Agotado' })) },
+    { id: 'lowStock', label: 'Productos con stock bajo', value: String(alerts.filter((alert: any) => alert.status === 'STOCK_BAJO').length), extra: null, icon: Package, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: { module: 'inventario' as Module, detail: { subModule: 'productos', stockFilter: 'low' } }, preview: alerts.filter((alert: any) => alert.status === 'STOCK_BAJO').slice(0, 5).map((alert: any) => ({ label: alert.name, value: `Stock ${alert.currentStock ?? 0}` })) },
+    { id: 'reorderItems', label: 'Productos para reordenar', value: String(alerts.filter((alert: any) => alert.status === 'REORDEN').length), extra: null, icon: Package, accent: 'text-orange-400', glow: 'shadow-orange-500/10', iconBg: 'bg-orange-500/10', preview: alerts.filter((alert: any) => alert.status === 'REORDEN').slice(0, 5).map((alert: any) => ({ label: alert.name, value: `Stock ${alert.currentStock ?? 0}` })) },
+    { id: 'registersWithSales', label: 'Cajas con ventas', value: String(registers.length), extra: null, icon: Store, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: { module: 'ventas' as Module, detail: { subModule: 'control-caja', section: 'history' } }, preview: [{ label: 'Cajas con movimiento', value: String(registers.length) }] },
+    { id: 'topRegister', label: 'Caja con más ventas', value: topRegister?.registerName || 'Sin datos', extra: null, icon: Store, isText: true, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: topRegister?.registerId ? { module: 'ventas' as Module, detail: { subModule: 'control-caja', section: 'history', registerId: topRegister.registerId } } : undefined, preview: [{ label: 'Caja', value: topRegister?.registerName || 'Sin datos' }, { label: 'Ventas', value: fmt(Number(topRegister?.total || 0)) }] },
+    { id: 'topRegisterSales', label: 'Ventas de la caja líder', value: fmt(Number(topRegister?.total || 0)), extra: null, icon: DollarSign, accent: 'text-amber-400', glow: 'shadow-amber-500/10', iconBg: 'bg-amber-500/10', target: topRegister?.registerId ? { module: 'ventas' as Module, detail: { subModule: 'control-caja', section: 'history', registerId: topRegister.registerId } } : undefined, preview: [{ label: 'Caja', value: topRegister?.registerName || 'Sin datos' }, { label: 'Total', value: fmt(Number(topRegister?.total || 0)) }] },
+    { id: 'recentTransactions', label: 'Movimientos recientes', value: String(transactions.length), extra: { text: 'Movimientos recibidos', color: 'text-muted-foreground' }, icon: Receipt, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', preview: transactionPreview(transactions) },
+    { id: 'transactionsWithTax', label: 'Movimientos con IVA', value: String(transactions.filter((transaction: any) => transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-emerald-400', glow: 'shadow-emerald-500/10', iconBg: 'bg-emerald-500/10', preview: transactionPreview(transactions.filter((transaction: any) => transaction.hasIVA)) },
+    { id: 'transactionsWithoutTax', label: 'Movimientos exentos', value: String(transactions.filter((transaction: any) => !transaction.hasIVA).length), extra: null, icon: Receipt, accent: 'text-slate-400', glow: 'shadow-slate-500/10', iconBg: 'bg-slate-500/10', preview: transactionPreview(transactions.filter((transaction: any) => !transaction.hasIVA)) },
+    { id: 'averageRecentSale', label: 'Ticket promedio reciente', value: fmt(recentAmounts.length ? recentTotal / recentAmounts.length : 0), extra: null, icon: DollarSign, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', preview: [{ label: 'Movimientos considerados', value: String(recentAmounts.length) }, { label: 'Promedio', value: fmt(recentAmounts.length ? recentTotal / recentAmounts.length : 0) }] },
+    { id: 'largestRecentSale', label: 'Venta reciente mayor', value: fmt(recentAmounts.length ? Math.max(...recentAmounts) : 0), extra: null, icon: TrendingUp, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', preview: [{ label: 'Mayor importe', value: fmt(recentAmounts.length ? Math.max(...recentAmounts) : 0) }] },
+    { id: 'period', label: 'Período consultado', value: periodLabel, extra: { text: 'Datos del resumen actual', color: 'text-muted-foreground' }, icon: CalendarDays, isText: true, accent: 'text-primary', glow: 'shadow-primary/10', iconBg: 'bg-primary/10', preview: [{ label: 'Período activo', value: periodLabel }, { label: 'Origen', value: 'Resumen operativo' }] },
   ] : [];
   const selectedKpiData = allKpiData.filter((kpi) => selectedKpiIds.includes(kpi.id));
+
+  const openKpi = (kpi: any) => {
+    if (kpi.target) {
+      navigateWithTarget(kpi.target.module, kpi.target.detail);
+      return;
+    }
+    setSelectedKpi(kpi);
+  };
 
   if (loading && !cajaData) {
     return (
@@ -545,8 +581,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         <div className="absolute -left-10 -top-10 size-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Resumen operativo</p>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground md:text-3xl">Tu operación, en una sola vista.</h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">Elige los indicadores que tu equipo necesita revisar y mantenlos disponibles en cada sesión.</p>
+           <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground md:text-3xl">Ve lo importante. Decide a tiempo.</h1>
+           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Un resumen claro de tu operación, con accesos directos al módulo correcto y vistas previas cuando el detalle aún no tiene una pantalla específica.</p>
         </div>
         <div className="flex items-center gap-2 z-10 shrink-0 flex-wrap">
           <Select value={period} onValueChange={(val) => {
@@ -667,7 +703,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground" aria-live="polite">
               Período: <span className="text-foreground">{periodLabel}</span> · {selectedKpiData.length} KPI{selectedKpiData.length === 1 ? '' : 's'} activos
             </p>
-            <p className="text-[10px] text-muted-foreground">Los indicadores usan el resumen del período; no generan una solicitud por tarjeta.</p>
+             <p className="text-[10px] text-muted-foreground">Los indicadores usan el mismo resumen; abrir una tarjeta no genera otra consulta.</p>
           </div>
 
           {selectedKpiData.length === 0 ? (
@@ -680,39 +716,40 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               </CardContent>
             </Card>
           ) : (
-          <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {selectedKpiData.map((kpi) => {
-              const Icon = kpi.icon;
-              return (
-                <motion.div key={kpi.id} variants={itemVariants}>
-                  <Card
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onNavigate?.(kpi.module)}
-                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onNavigate?.(kpi.module); } }}
-                    className="group relative cursor-pointer overflow-hidden rounded-2xl border-border/30 bg-card/80 shadow-md backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                  >
+           <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+             {selectedKpiData.map((kpi) => {
+               const Icon = kpi.icon;
+               const isInteractive = kpi.id !== 'period';
+               return (
+                 <motion.div key={kpi.id} variants={itemVariants}>
+                   <Card
+                     role={isInteractive ? 'button' : undefined}
+                     tabIndex={isInteractive ? 0 : undefined}
+                     onClick={isInteractive ? () => openKpi(kpi) : undefined}
+                     onKeyDown={isInteractive ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openKpi(kpi); } } : undefined}
+                     className={`group relative overflow-hidden rounded-2xl border-border/30 bg-card/80 shadow-md backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-300 ${isInteractive ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40' : ''}`}
+                   >
                     {/* ambient glow */}
                     <div className={`absolute -top-8 -right-8 size-24 rounded-full blur-2xl opacity-40 pointer-events-none ${kpi.iconBg}`} />
-                    <CardContent className="p-4 relative z-10">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-foreground/80">{kpi.label}</span>
-                        <div className={`size-8 items-center justify-center rounded-lg ${kpi.iconBg} flex`}>
-                          <Icon className={`size-4 ${kpi.accent}`} />
-                        </div>
-                      </div>
-                      <p className={`${'isText' in kpi && kpi.isText ? 'min-h-12 text-sm leading-snug' : 'text-2xl tracking-tighter'} font-black tabular-nums text-foreground break-words`}>{kpi.value}</p>
-                      {kpi.extra && (
-                        <p className={`text-[11px] font-bold mt-1 ${kpi.extra.color || 'text-foreground/75'}`}>
-                          {kpi.extra.text}
-                        </p>
-                      )}
-                      {!kpi.extra && <div className="h-[18px]" />}
-                      <div className="mt-2 flex translate-y-1 items-center gap-1 text-[9px] font-black uppercase tracking-widest text-foreground/65 opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                        <span>Ver detalle</span>
-                        <ArrowUpRight className="size-3" />
-                      </div>
-                    </CardContent>
+                     <CardContent className="relative z-10 flex min-h-[164px] flex-col p-4">
+                       <div className="mb-2 flex min-h-10 items-start justify-between gap-3">
+                         <span className="pt-1 text-[10px] font-black uppercase tracking-widest text-foreground/80">{kpi.label}</span>
+                         <div className={`size-8 items-center justify-center rounded-lg ${kpi.iconBg} flex`}>
+                           <Icon className={`size-4 ${kpi.accent}`} />
+                         </div>
+                       </div>
+                       <p className={`${kpi.isText ? 'min-h-12 text-sm leading-snug' : 'min-h-12 text-2xl tracking-tighter'} flex items-center font-black tabular-nums text-foreground break-words`}>{kpi.value}</p>
+                       {kpi.extra && (
+                         <p className={`mt-1 min-h-[18px] text-[11px] font-bold ${kpi.extra.color || 'text-foreground/75'}`}>
+                           {kpi.extra.text}
+                         </p>
+                       )}
+                       {!kpi.extra && <div className="min-h-[18px]" />}
+                       <div className={`mt-auto flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-foreground/65 transition-[opacity,transform] duration-300 ${isInteractive ? 'translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100' : 'opacity-60'}`}>
+                         <span>{kpi.target ? 'Abrir módulo' : isInteractive ? 'Ver vista previa' : 'Resumen informativo'}</span>
+                         {isInteractive && <ArrowUpRight className="size-3" />}
+                       </div>
+                     </CardContent>
                   </Card>
                 </motion.div>
               );
@@ -967,7 +1004,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               <Settings2 className="size-5 text-primary" /> Configurar dashboard
             </DialogTitle>
             <DialogDescription>
-              Selecciona hasta 30 indicadores. Se alimentan del resumen que ya consulta el dashboard, por lo que activar más KPIs no multiplica las solicitudes.
+              Selecciona hasta 30 indicadores. Se alimentan del resumen que ya consulta el dashboard, por lo que activar más KPIs no multiplica las solicitudes. Esta preferencia se guarda en este navegador y en esta cuenta.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[55vh] space-y-5 overflow-y-auto pr-1">
@@ -1006,6 +1043,29 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
               <Button variant="outline" onClick={() => setDraftKpiIds(DEFAULT_KPI_IDS)} className="rounded-xl">Restaurar base</Button>
               <Button onClick={saveKpiConfig} className="rounded-xl">Aplicar KPIs</Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(selectedKpi)} onOpenChange={(open) => { if (!open) setSelectedKpi(null); }}>
+        <DialogContent className="max-w-xl rounded-2xl border-border/60 bg-background">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black">
+              {selectedKpi?.icon && (() => { const PreviewIcon = selectedKpi.icon; return <PreviewIcon className={`size-5 ${selectedKpi.accent}`} />; })()}
+              {selectedKpi?.label || 'Vista previa del indicador'}
+            </DialogTitle>
+            <DialogDescription>Datos incluidos en el resumen del período seleccionado.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(selectedKpi?.preview || []).length > 0 ? selectedKpi.preview.map((row: { label: string; value: string }, index: number) => (
+              <div key={`${row.label}-${index}`} className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{row.label}</p>
+                <p className="mt-1 truncate text-sm font-bold text-foreground" title={row.value}>{row.value}</p>
+              </div>
+            )) : <p className="col-span-full rounded-xl border border-dashed border-border/60 p-5 text-center text-sm text-muted-foreground">No hay registros suficientes para mostrar una vista previa.</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedKpi(null)} className="rounded-xl">Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

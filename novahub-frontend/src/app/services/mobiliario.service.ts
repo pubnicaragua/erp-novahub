@@ -16,6 +16,8 @@ export const mobiliarioService = {
     api.delete<any>(`/company-assets/${id}`),
   importAssets: (items: Record<string, any>[]) =>
     api.post<any>('/company-assets/import', { items }),
+  syncFixedAssets: () =>
+    api.post<any>('/company-assets/sync-fixed-assets', {}),
   addAttachment: (id: string, data: { fileName: string; fileType: string; fileSize: number; fileUrl: string }) =>
     api.post<any>(`/company-assets/${id}/attachment`, data),
   removeAttachment: (id: string) =>

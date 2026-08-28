@@ -1,9 +1,8 @@
-import { BellRing, Check, Clock3, ExternalLink, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { BellRing, Check, Clock3, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
+import { formatDateEs } from '../../utils/dateFormat';
 
 export interface NotificationTableRow {
   id: string;
@@ -23,7 +22,6 @@ interface NotificationTableProps<T extends NotificationTableRow> {
   mode: 'alert' | 'push';
   onRowClick: (row: T) => void;
   onMarkRead?: (row: T) => void;
-  onDelete?: (id: string) => void;
 }
 
 const severityLabel: Record<string, string> = {
@@ -43,14 +41,14 @@ const severityClass: Record<string, string> = {
 function dateLabel(value?: string | null) {
   if (!value) return 'Sin fecha';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Sin fecha' : format(date, 'd MMM, HH:mm', { locale: es });
+  return Number.isNaN(date.getTime()) ? 'Sin fecha' : formatDateEs(value, true);
 }
 
 function rowContent(row: NotificationTableRow) {
   return String(row.content || row.message || '').trim() || 'Abre el aviso para consultar el detalle relacionado.';
 }
 
-function RowActions<T extends NotificationTableRow>({ row, onMarkRead, onDelete }: Pick<NotificationTableProps<T>, 'onMarkRead' | 'onDelete'> & { row: T }) {
+function RowActions<T extends NotificationTableRow>({ row, onMarkRead }: Pick<NotificationTableProps<T>, 'onMarkRead'> & { row: T }) {
   return (
     <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
       {!row.isRead && onMarkRead && (
@@ -58,17 +56,12 @@ function RowActions<T extends NotificationTableRow>({ row, onMarkRead, onDelete 
           <Check className="size-4" />
         </Button>
       )}
-      {onDelete && (
-        <Button type="button" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive" title="Eliminar del historial" aria-label="Eliminar del historial" onClick={() => onDelete(row.id)}>
-          <Trash2 className="size-4" />
-        </Button>
-      )}
       <ExternalLink className="ml-1 size-4 text-muted-foreground/40" aria-hidden="true" />
     </div>
   );
 }
 
-export function NotificationTable<T extends NotificationTableRow>({ data, loading, mode, onRowClick, onMarkRead, onDelete }: NotificationTableProps<T>) {
+export function NotificationTable<T extends NotificationTableRow>({ data, loading, mode, onRowClick, onMarkRead }: NotificationTableProps<T>) {
   if (loading && data.length === 0) {
     return (
       <div className="space-y-3 p-4 sm:p-6" aria-label="Cargando notificaciones">
@@ -108,7 +101,7 @@ export function NotificationTable<T extends NotificationTableRow>({ data, loadin
                   <td className="max-w-0 px-5 py-4"><p className="notification-table-detail line-clamp-2 text-sm leading-5">{rowContent(row)}</p></td>
                   <td className="px-5 py-4">{mode === 'alert' ? <Badge className={cn('border-0 text-[10px] font-bold', severityClass[severity] || 'bg-muted text-muted-foreground')}>{severityLabel[severity] || 'Informativa'}</Badge> : <Badge className={cn('border-0 text-[10px] font-bold', row.sent ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600 dark:text-amber-300')}>{row.sent ? 'Registrada' : 'Pendiente'}</Badge>}</td>
                   <td className="notification-table-meta whitespace-nowrap px-5 py-4 text-xs"><span className="inline-flex items-center gap-1.5"><Clock3 className="size-3.5" />{dateLabel(row.createdAt)}</span></td>
-                  <td className="px-5 py-3"><RowActions row={row} onMarkRead={onMarkRead} onDelete={onDelete} /></td>
+                  <td className="px-5 py-3"><RowActions row={row} onMarkRead={onMarkRead} /></td>
                 </tr>
               );
             })}
@@ -121,7 +114,7 @@ export function NotificationTable<T extends NotificationTableRow>({ data, loadin
           const severity = String(row.severity || '').toUpperCase();
           return (
             <div key={row.id} role="button" tabIndex={0} className={cn('rounded-2xl border border-border/60 bg-background p-4 text-left shadow-sm transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40', !row.isRead && 'border-primary/25 bg-primary/[0.02]')} onClick={() => onRowClick(row)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRowClick(row); } }}>
-              <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 gap-3"><span className={cn('mt-1.5 size-2 shrink-0 rounded-full', row.isRead ? 'bg-muted-foreground/30' : 'bg-primary')} /><div className="min-w-0"><p className="font-semibold text-foreground">{row.title || 'Sin título'}</p><p className="notification-table-meta mt-1 text-xs">{dateLabel(row.createdAt)}</p></div></div><RowActions row={row} onMarkRead={onMarkRead} onDelete={onDelete} /></div>
+              <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 gap-3"><span className={cn('mt-1.5 size-2 shrink-0 rounded-full', row.isRead ? 'bg-muted-foreground/30' : 'bg-primary')} /><div className="min-w-0"><p className="font-semibold text-foreground">{row.title || 'Sin título'}</p><p className="notification-table-meta mt-1 text-xs">{dateLabel(row.createdAt)}</p></div></div><RowActions row={row} onMarkRead={onMarkRead} /></div>
               <p className="notification-table-detail mt-3 line-clamp-3 text-sm leading-5">{rowContent(row)}</p>
               <div className="mt-3">{mode === 'alert' ? <Badge className={cn('border-0 text-[10px] font-bold', severityClass[severity] || 'bg-muted text-muted-foreground')}>{severityLabel[severity] || 'Informativa'}</Badge> : <Badge className={cn('border-0 text-[10px] font-bold', row.sent ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600')}>{row.sent ? 'Registrada' : 'Pendiente'}</Badge>}</div>
             </div>

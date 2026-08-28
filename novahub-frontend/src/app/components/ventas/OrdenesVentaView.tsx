@@ -792,16 +792,16 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                 {normalizeOrderStatus(localDoc?.status) === 'DRAFT' && <>
                   <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
                     onClick={() => void handleSaveOrder('DRAFT')}>
-                    Guardar Borrador
+                    Guardar
                   </Button>
                   <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
                     onClick={() => void handleSaveOrder('IN_PROCESS')}>
                     Marcar En Proceso
                   </Button>
                 </>}
-                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && <Button variant="outline" className="rounded-xl border-primary/30 font-black uppercase text-[10px] tracking-widest px-6"
+                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && <Button variant="default" className="rounded-xl bg-primary text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
                   onClick={() => void handleSaveCurrentOrder()}>
-                  Guardar cambios
+                  Guardar
                 </Button>}
               </>
             )}
