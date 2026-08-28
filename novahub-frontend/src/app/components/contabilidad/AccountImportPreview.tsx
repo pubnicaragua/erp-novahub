@@ -158,7 +158,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
 
         <ImportReviewSummary total={totalRowCount} valid={validRowCount} skipped={skippedRowCount} entityLabel="cuentas" />
 
-        <HorizontalTableScroller className="hidden min-h-0 flex-1 sm:flex" tableClassName="overflow-hidden scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+        <HorizontalTableScroller className="hidden min-h-0 min-w-0 flex-1 sm:flex" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <div className="flex min-h-0 min-w-[2200px] flex-1 flex-col">
             <div className="grid min-w-[2200px] grid-cols-[5rem_10rem_18rem_10rem_12rem_13rem_8rem_10rem_8rem_8rem_18rem] bg-muted/95 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               {['Estado', 'Código *', 'Nombre *', 'Tipo', 'Subtipo', 'Tipo de detalle', 'Moneda', 'Código padre', 'Manual', 'Activa', 'Notas'].map((label) => <div key={label} className="px-3 py-2">{label}</div>)}
@@ -166,7 +166,7 @@ export function AccountImportPreview({ rows, errors, existingAccountCodes, fileN
             {rows.length ? <VirtualizedImportList count={rows.length} estimateSize={58} className="h-[min(62vh,46rem)] flex-none min-w-[2200px]" renderItem={renderDesktopRow} /> : <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div>}
           </div>
         </HorizontalTableScroller>
-        <div className="min-h-0 flex-1 sm:hidden">
+        <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-hidden sm:hidden">
           {rows.length === 0 ? <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene cuentas válidas.</div> : <VirtualizedImportList count={rows.length} estimateSize={260} className="h-[min(62vh,46rem)] space-y-3" renderItem={renderMobileRow} />}
         </div>
 

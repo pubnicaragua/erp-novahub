@@ -81,7 +81,7 @@ import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
-import { formatCustomerBalance, getCustomerBalancePresentation, getCustomerDebt } from '../../utils/customerBalance';
+import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { toast } from 'sonner';
 import type { Customer, Estimate, Invoice } from '../../types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
@@ -345,9 +345,8 @@ export function CustomerDetailDrawer({
   const TypeIcon = typeInfo.icon;
 
   const creditLimit = Number(customer?.creditLimit ?? 0);
-  const balance = Number(customer?.balance ?? 0);
-  const balancePresentation = getCustomerBalancePresentation(balance);
-  const customerDebt = getCustomerDebt(balance);
+  const customerDebt = getCustomerDebtAmount(customer);
+  const customerFavor = getCustomerFavorAmount(customer);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
 
   const downloadHistory = async (exportFormat: 'xlsx' | 'pdf') => {
@@ -491,8 +490,9 @@ export function CustomerDetailDrawer({
 
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MetricCard label={balancePresentation.label} value={formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={DollarSign} accent={balancePresentation.amountClassName} loading={loading} />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
+                  <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
                   <MetricCard label="Tipo Cliente" value={typeInfo.label} icon={TypeIcon} accent="text-primary" loading={loading} />
                   <MetricCard label="Estado" value={statusInfo.label} icon={CheckCircle2} accent={String(customer?.status || '').toUpperCase() === 'ACTIVE' ? 'text-emerald-500' : 'text-primary'} loading={loading} />
@@ -507,11 +507,16 @@ export function CustomerDetailDrawer({
                       Plazo: {creditDays > 0 ? `${creditDays} días` : 'Contado'}
                     </Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{balancePresentation.label}</p>
-                      <p className={`mt-1 font-mono text-sm font-black ${balancePresentation.amountClassName}`}>{formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))}</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">{balancePresentation.detail}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p>
+                      <p className="mt-1 font-mono text-sm font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(customerDebt, baseCurrency)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Pendiente por cobrar</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo a favor</p>
+                      <p className="mt-1 font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(customerFavor, baseCurrency)}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Disponible para aplicar</p>
                     </div>
                     <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
                       <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">De contado (pagado)</p>
@@ -580,7 +585,8 @@ export function CustomerDetailDrawer({
                     <InfoField label="Lista de Precios" value={customer?.priceList?.name || 'Sin lista asignada'} icon={Tag} muted={!customer?.priceList} />
                     <InfoField label="Límite de Crédito Concedido" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={DollarSign} mono />
                     <InfoField label="Plazo de Crédito" value={creditDays > 0 ? `${creditDays} días` : 'Contado (0 días)'} icon={Clock} mono />
-                    <InfoField label={balancePresentation.label} value={formatCustomerBalance(balance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={DollarSign} mono />
+                    <InfoField label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} mono />
+                    <InfoField label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} mono />
                     <InfoField label="Código Interno" value={customer?.code || '—'} icon={Tag} mono />
                   </div>
 

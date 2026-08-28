@@ -190,7 +190,7 @@ export function EmployeeImportPreview({
           <p><span className="font-bold text-foreground">Catálogos y valores:</span> si un departamento o puesto no existe, puedes crearlo desde la columna de validación. El puesto se creará obligatoriamente dentro del departamento seleccionado. Tipo de contrato, frecuencia de pago y estado laboral se muestran y se reciben en español.</p>
         </div>
 
-        <div className="hidden min-h-0 flex-1 sm:flex" data-tour="hr-employee-import-preview-items">
+        <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex" data-tour="hr-employee-import-preview-items">
         <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '4230px', minWidth: '4230px', maxWidth: 'none' }} className="block w-[4230px] min-w-[4230px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">

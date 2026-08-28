@@ -124,7 +124,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (email && (existingEmails.has(email) || seenEmails.has(email))) next.error = 'Correo duplicado';
       else if (taxId && (existingTaxIds.has(taxId) || seenTaxIds.has(taxId))) next.error = 'Identificación fiscal duplicada';
-      if (!next.error) next.warning = 'Se generará un código consecutivo automáticamente';
+      if (!next.error && row.code.trim()) next.warning = 'El código proporcionado se ignorará; se generará un consecutivo automáticamente';
       if (email) { existingEmails.add(email); seenEmails.add(email); }
       if (taxId) { existingTaxIds.add(taxId); seenTaxIds.add(taxId); }
       return next;

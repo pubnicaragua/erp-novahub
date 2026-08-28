@@ -1856,7 +1856,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           {importRows.length > 0 && (
             <div className="space-y-3">
               <ImportReviewSummary total={importPreview.length} valid={importValidCount} skipped={importPreview.length - importValidCount} entityLabel="productos" />
-              <div className="hidden max-h-60 overflow-y-auto overflow-x-auto rounded-xl border border-border/40 sm:block">
+              <div className="hidden min-w-0 max-w-full max-h-60 overflow-x-auto overflow-y-hidden rounded-xl border border-border/40 scrollbar-overlay sm:block">
                 <table className="w-full min-w-[640px]">
                   <thead className="bg-muted/40 sticky top-0">
                     <tr>

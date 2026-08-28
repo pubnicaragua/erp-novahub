@@ -115,6 +115,10 @@ export interface Customer {
   contactPhone?: string;
   creditLimit: number;
   creditDays?: number | null;
+  /** Saldo calculado en moneda base; puede coexistir con saldo a favor. */
+  balanceDue?: number;
+  balanceFavor?: number;
+  availableCredit?: number;
   balance: number;
   status: EntityStatus;
   notes?: string;

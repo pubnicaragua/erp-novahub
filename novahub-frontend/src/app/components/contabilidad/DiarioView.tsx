@@ -1031,7 +1031,7 @@ export function DiarioView() {
                 <>
                   <ImportReviewSummary total={importRows.length} valid={validImportCount} skipped={invalidImportCount} entityLabel="asientos" />
 
-                  <div className="hidden overflow-hidden rounded-xl border border-border/60 sm:block">
+                  <div className="hidden min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 scrollbar-overlay sm:block">
                     <div className="min-w-[820px]">
                       <div className="grid grid-cols-[4rem_7rem_minmax(14rem,1fr)_7rem_7rem_8rem_8rem_7rem] bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                         {['Fila', 'Código', 'Descripción', 'Débito', 'Crédito', 'Fecha de corte', 'Referencia', 'Estado'].map((label) => <div key={label} className="px-3 py-2">{label}</div>)}

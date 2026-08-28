@@ -814,7 +814,7 @@ function PreviewPanel({
       </div>
     </div>
 
-    <div ref={tableScrollerRef} id="manager-inventory-import-preview-table" className="hidden max-w-full overflow-x-auto rounded-xl border border-border/60 lg:block">
+    <div ref={tableScrollerRef} id="manager-inventory-import-preview-table" className="hidden min-w-0 max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 scrollbar-overlay lg:block">
       <table className="w-full min-w-[2240px] table-fixed text-left text-xs">
         <thead className="bg-muted/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
           <tr><th className="w-14 px-2 py-2">Fila</th><th className="w-32 px-2 py-2">SKU</th><th className="w-56 px-2 py-2">Nombre</th><th className="w-44 px-2 py-2">Categoría</th><th className="w-28 px-2 py-2">Unidad</th><th className="w-32 px-2 py-2">Costo</th><th className="w-56 px-2 py-2">Ubicación destino</th><th className="w-28 px-2 py-2">Stock</th><th className="w-28 px-2 py-2">Mínimo</th><th className="w-32 px-2 py-2">Catálogo</th><th className="w-28 px-2 py-2">Actual</th><th className="w-28 px-2 py-2">Resultado</th><th className="w-60 px-2 py-2">Imagen por SKU</th><th className="w-80 px-2 py-2">Estado / observación</th></tr>
@@ -867,8 +867,10 @@ function PreviewPanel({
       })}
     </div>
     <datalist id="manager-import-categories">{categoryOptions.map((category) => <option key={category.id} value={category.name} />)}</datalist>
-    <VirtualizedImportList count={preview.rows.length} estimateSize={430} className="h-[min(70vh,48rem)] space-y-3" renderItem={renderMobileRow} />
-    <p className="text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
+    <div className="min-w-0 max-w-full lg:hidden">
+      <VirtualizedImportList count={preview.rows.length} estimateSize={430} className="h-[min(70vh,48rem)] min-w-0 max-w-full space-y-3" renderItem={renderMobileRow} />
+      <p className="text-xs text-muted-foreground">Mostrando las {preview.rows.length} filas; solo se dibujan las visibles para mantener fluida la previsualización.</p>
+    </div>
   </div>;
 }
 

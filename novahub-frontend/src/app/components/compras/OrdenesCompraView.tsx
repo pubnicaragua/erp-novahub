@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportPreviewField, ImportPreviewMobileCard, importPreviewFieldClass } from '../ui/ImportPreviewMobile';
+import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
@@ -186,6 +187,10 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   const [categoryRowIndex, setCategoryRowIndex] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const gridTemplate = '32px 144px 300px 250px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 72, { overscan: 4 });
 
   const openCategoryDialog = (index: number, initialName: string) => {
     setCategoryRowIndex(index);
@@ -290,11 +295,11 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
-        <div className="hidden min-h-0 flex-1 sm:flex">
-        <HorizontalTableScroller className="h-[clamp(500px,65vh,760px)] min-h-[500px] flex-1" tableClassName="overflow-x-scroll overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
-          <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="w-[2500px] min-w-[2500px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted shadow-sm">
-              <TableRow>
+        <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
+        <HorizontalTableScroller scrollRef={tableScrollRef} className="h-[clamp(500px,65vh,760px)] min-h-[500px] min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+          <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="block w-[2500px] min-w-[2500px]">
+            <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
+              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-36 text-[10px] uppercase">SKU</TableHead>
                 <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
@@ -313,8 +318,10 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 <TableHead className="w-32 text-right text-[10px] uppercase">Monto ret. ({currencySymbol})</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {rows.map((row, index) => {
+            <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
+              {tableVirtualizer.getVirtualItems().map((virtualRow) => {
+                const index = virtualRow.index;
+                const row = rows[index];
                 const tax = calcItemTax(row);
                 const withholding = calcItemWithholding(row);
                 const taxValue = String(row.taxType || 'GRAVADO').toUpperCase();
@@ -328,7 +335,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 const categoryValue = row.categoryId || matchingCategory?.id || '__none__';
 
                 return (
-                <TableRow key={index} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
+                <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={cn('border-b-2 border-border/70 transition-colors hover:bg-muted/20', row._hasError ? 'bg-red-500/10' : row._hasWarning ? 'bg-amber-500/5' : 'bg-background')}>
                   <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
                   <TableCell className="p-1"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} /></TableCell>
                   <TableCell className="p-1 align-top text-xs"><div className="flex min-w-[280px] flex-col gap-1"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo (requiere SKU libre)</option></select>}</div></TableCell>
@@ -367,13 +374,13 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         </HorizontalTableScroller>
         </div>
 
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Productos de la orden para revisar">
+        <section className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Productos de la orden para revisar">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          <div className="min-h-0 min-w-0 flex-1">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={520} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 

@@ -185,7 +185,7 @@ export function CustomerImportPreview({
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="clientes" />
 
-        <div className="hidden min-h-0 flex-1 sm:flex">
+        <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
           <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 flex-1" tableClassName="scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="overflow-visible" containerStyle={{ width: '3100px', minWidth: '3100px', maxWidth: 'none' }} className="block w-[3100px] min-w-[3100px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">

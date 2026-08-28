@@ -25,6 +25,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -79,8 +80,12 @@ function PriceImportPreviewPage({
   useImportPreviewLayout();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
   const validRows = rows.filter((row) => !row.error).length;
   const issueRows = rows.length - validRows;
+  const gridTemplate = `80px 176px minmax(256px, 1fr) 144px ${lists.map(() => '144px').join(' ')} minmax(208px, 1fr)`;
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58, { overscan: 4 });
 
   useEffect(() => {
     if (!result) return;
@@ -126,11 +131,11 @@ function PriceImportPreviewPage({
 
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={issueRows} entityLabel="actualizaciones de precio" />
 
-        <div className="hidden min-h-0 flex-1 sm:flex">
-        <HorizontalTableScroller className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="min-w-[1050px]">
-            <TableHeader className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-              <TableRow>
+        <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
+        <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block w-max min-w-[1050px]">
+            <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
+              <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-20 min-w-20 whitespace-nowrap text-center">Estado</TableHead>
                 <TableHead className="w-44">Código / SKU</TableHead>
                 <TableHead className="min-w-64">Producto</TableHead>
@@ -139,9 +144,12 @@ function PriceImportPreviewPage({
                 <TableHead className="min-w-52">Validación</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {rows.map((row, index) => (
-                <TableRow key={index} className={row.error ? 'bg-rose-500/5' : ''}>
+            <TableBody style={{ display: 'block', position: 'relative', height: tableVirtualizer.getTotalSize() }}>
+              {tableVirtualizer.getVirtualItems().map((virtualRow) => {
+                const index = virtualRow.index;
+                const row = rows[index];
+                return (
+                <TableRow key={virtualRow.key} ref={tableVirtualizer.measureElement} data-index={index} style={{ display: 'grid', gridTemplateColumns: gridTemplate, position: 'absolute', left: 0, top: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }} className={row.error ? 'bg-rose-500/5' : ''}>
                   <TableCell className="text-center">{row.error ? <AlertTriangle className="mx-auto size-4 text-rose-500" /> : <CheckCircle2 className="mx-auto size-4 text-emerald-500" />}</TableCell>
                   <TableCell><Input className="h-9 font-mono text-xs" value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} disabled={importing} /></TableCell>
                   <TableCell className="font-medium">{row.name || 'Producto no encontrado'}</TableCell>
@@ -149,19 +157,20 @@ function PriceImportPreviewPage({
                   {lists.map((list) => <TableCell key={list.id}><Input className="h-9 text-right" type="number" min="0" value={row.prices[list.code] ?? ''} onChange={(event) => onRowUpdate(index, list.code, event.target.value)} disabled={importing} /></TableCell>)}
                   <TableCell className={row.error ? 'text-xs font-medium text-rose-600' : 'text-xs text-emerald-600'}>{row.error || 'Correcto'}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           {!rows.length && <div className="p-12 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
         </HorizontalTableScroller>
         </div>
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Actualizaciones de precios para revisar">
+        <section className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-2xl border bg-card p-3 sm:hidden" aria-label="Actualizaciones de precios para revisar">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 pb-3">
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita los precios por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
-            {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index}>{renderMobileCard(row, index)}</div>)}</div> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
+          <div className="min-h-0 min-w-0 flex-1">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={300} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
           </div>
         </section>
 

@@ -27,7 +27,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
-import { formatCustomerBalance, getCustomerBalancePresentation } from '../../utils/customerBalance';
+import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/customerBalance';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 
 interface ClientesViewProps {
@@ -587,14 +587,18 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{(val ?? 0) === 0 || val == null ? 'Contado' : `${val} días`}</span> },
     {
       key: 'balance',
-      header: 'Saldo del cliente',
-      width: '180px',
-      render: (val) => {
-        const presentation = getCustomerBalancePresentation(val);
+      header: 'Saldos del cliente',
+      width: '200px',
+      render: (_val, row) => {
+        const debt = getCustomerDebtAmount(row);
+        const favor = getCustomerFavorAmount(row);
+        if (debt <= 0.005 && favor <= 0.005) {
+          return <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Saldo al día</span>;
+        }
         return (
-          <div className="min-w-[9rem] leading-tight">
-            <span className={cn('block text-[9px] font-black uppercase tracking-widest', presentation.amountClassName)}>{presentation.label}</span>
-            <span className={cn('text-[13px] font-black tabular-nums', presentation.amountClassName)}>{formatCustomerBalance(val, (amount) => formatConvertedAmount(amount, baseCurrency))}</span>
+          <div className="min-w-[11rem] space-y-1 leading-tight">
+            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(debt, baseCurrency)}</span></div>}
+            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(favor, baseCurrency)}</span></div>}
           </div>
         );
       },
@@ -634,7 +638,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     { key: 'department', label: 'Departamento' },
     { key: 'creditLimit', label: 'Límite de crédito' },
     { key: 'creditDays', label: 'Plazo crédito' },
-    { key: 'balance', label: 'Saldo del cliente' },
+    { key: 'balance', label: 'Saldos del cliente' },
     { key: 'status', label: 'Estado' },
   ];
   return (
@@ -645,9 +649,8 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
         <SalesKpiCard title="Particulares" value={data.filter(c => (c.type || '').toUpperCase() === 'INDIVIDUAL').length} icon={Users} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'INDIVIDUAL'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'INDIVIDUAL' ? 'ALL' : 'INDIVIDUAL')} />
         <SalesKpiCard title="Empresas" value={data.filter(c => (c.type || '').toUpperCase() === 'COMPANY').length} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={customerTypeFilter === 'COMPANY'} onClick={() => setCustomerTypeFilter(customerTypeFilter === 'COMPANY' ? 'ALL' : 'COMPANY')} />
         {(() => {
-          const totalBalance = data.reduce((acc, customer) => acc + Number(customer.balance || 0), 0);
-          const presentation = getCustomerBalancePresentation(totalBalance);
-          return <SalesKpiCard title="Saldo neto de clientes" value={formatCustomerBalance(totalBalance, (amount) => formatConvertedAmount(amount, baseCurrency))} icon={CreditCard} color={presentation.amountClassName} bg={presentation.softClassName} />;
+          const totalDue = data.reduce((acc, customer) => acc + getCustomerDebtAmount(customer), 0);
+          return <SalesKpiCard title="Cartera pendiente" value={formatConvertedAmount(totalDue, baseCurrency)} icon={CreditCard} color="text-rose-500" bg="bg-rose-500/10" />;
         })()}
       </div>
 

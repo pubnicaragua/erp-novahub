@@ -967,7 +967,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-border/50" data-tour="mobiliario-import-data">
+            <div className="min-w-0 max-w-full rounded-xl border border-border/50" data-tour="mobiliario-import-data">
               <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 <FileSpreadsheet className="size-3.5" /> Vista previa completa · {importRowsData.length} filas
               </div>

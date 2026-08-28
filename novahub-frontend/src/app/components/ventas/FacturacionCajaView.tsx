@@ -59,6 +59,7 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { playNotificationSound } from '../../utils/notificationSound';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 
 interface CartItem extends PosInvoiceItem {
   productId: string;
@@ -222,7 +223,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const registerCode = invoice.register?.code || 'N/D';
 
   const pageStyle = isTicket
-    ? '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html,body{width:80mm;margin:0;padding:0;background:#fff;color:#000}body{font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1)}body>div{width:72mm;margin:0 auto;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'
+    ? '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html{width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff}body{display:flex;justify-content:center;align-items:flex-start;width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff;color:#000;font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1)}body>div{width:72mm;max-width:72mm;margin:0;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'
     : '@page{size:letter portrait;margin:15mm}body{margin:0;padding:0;font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;font-size:11pt;color:#000;background:#fff}';
 
   const containerStyle = isTicket
@@ -519,9 +520,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     exchangeRate: paymentLineRate(currency),
   });
 
-  const getCustomerFavorBase = (customerId?: string | null) => Math.max(
-    0,
-    Number(customers.find((customer) => customer.id === customerId)?.balance || 0),
+  const getCustomerFavorBase = (customerId?: string | null) => getCustomerFavorAmount(
+    customers.find((customer) => customer.id === customerId),
   );
 
   const getPaymentLineBase = (payment: PosPaymentLine, fallbackCurrency: PaymentCurrency) => toBaseAmount(
@@ -854,6 +854,29 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     .filter((payment) => payment.method === 'CUSTOMER_BALANCE')
     .reduce((sum, payment) => sum + getPaymentLineBase(payment, paymentCurrency), 0);
   const selectedPaymentCustomerFavorExceeded = selectedPaymentCustomerFavorAppliedBase > selectedPaymentCustomerFavorBase + 0.01;
+  const handlePaymentMethodChange = (index: number, nextMethod: PosPaymentLine['method']) => {
+    setPayments((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const nextLine = {
+        ...item,
+        method: nextMethod,
+        reference: requiresPaymentReference(nextMethod) ? item.reference : undefined,
+        bankAccountId: isBankPaymentMethod(nextMethod, true) ? item.bankAccountId : undefined,
+        cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0,
+        cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0,
+      };
+      if (nextMethod !== 'CUSTOMER_BALANCE') return nextLine;
+      const currentLineBase = getPaymentLineBase(item, paymentCurrency);
+      const otherPaymentsBase = current.reduce((sum, payment) => sum + getPaymentLineBase(payment, paymentCurrency), 0) - currentLineBase;
+      const documentRate = paymentCurrency === baseCurrency ? 1 : Number(globalRate || activeSession?.exchangeRateUSD || 1);
+      const maximumBase = getMaximumCustomerFavorToApply(
+        selectedPaymentCustomerFavorBase,
+        toBaseAmount(summary.total, paymentCurrency, documentRate),
+        otherPaymentsBase,
+      );
+      return { ...nextLine, amount: maximumBase, currency: baseCurrency, exchangeRate: 1 };
+    }));
+  };
   const [variantPickerOpen, setVariantPickerOpen] = useState(false);
   const [variantPickerProduct, setVariantPickerProduct] = useState<PosProduct | null>(null);
 
@@ -2837,7 +2860,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                     {payments.map((payment, index) => (
                       <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                         <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] gap-2">
-                          <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined, cardCommissionPercent: value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: value === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
+                           <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => handlePaymentMethodChange(index, value)}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="CASH">Efectivo</SelectItem>
@@ -2889,6 +2912,29 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
         const document = getQueueDocument(queueInvoice);
         if (!document) return null;
         const isCreditQueue = Boolean(queueInvoice.creditNoteId || queueInvoice.creditNote);
+        const handleQueuePaymentMethodChange = (index: number, nextMethod: PosPaymentLine['method']) => {
+          setQueuePayments((current) => current.map((item, itemIndex) => {
+            if (itemIndex !== index) return item;
+            const nextLine = {
+              ...item,
+              method: nextMethod,
+              reference: requiresPaymentReference(nextMethod) ? item.reference : undefined,
+              bankAccountId: isBankPaymentMethod(nextMethod, true) ? item.bankAccountId : undefined,
+            };
+            if (nextMethod !== 'CUSTOMER_BALANCE') return nextLine;
+            const currentLineBase = getPaymentLineBase(item, document.currency);
+            const otherPaymentsBase = current.reduce((sum, payment) => sum + getPaymentLineBase(payment, document.currency), 0) - currentLineBase;
+            const documentRate = document.currency === baseCurrency
+              ? 1
+              : Number(document.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1);
+            const maximumBase = getMaximumCustomerFavorToApply(
+              getCustomerFavorBase(document.customerId),
+              toBaseAmount(Number(document.balance || 0), document.currency, documentRate),
+              otherPaymentsBase,
+            );
+            return { ...nextLine, amount: maximumBase, currency: baseCurrency, exchangeRate: 1 };
+          }));
+        };
         return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="queue-payment-title">
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl border border-border/60 bg-card p-5 shadow-2xl sm:p-6">
@@ -2919,7 +2965,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                {queuePayments.map((payment, index) => (
                 <div key={`${payment.method}-${index}`} className="rounded-xl border border-border/50 bg-muted/10 p-3">
                   <div className="grid gap-2 sm:grid-cols-[1fr_9rem_9rem_auto]">
-                    <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setQueuePayments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: requiresPaymentReference(value) ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value, true) ? item.bankAccountId : undefined } : item))}>
+                    <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => handleQueuePaymentMethodChange(index, value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Efectivo</SelectItem><SelectItem value="CARD">Tarjeta</SelectItem><SelectItem value="TRANSFER">Transferencia</SelectItem><SelectItem value="CHECK">Cheque</SelectItem>{getCustomerFavorBase(document.customerId) > 0.01 && <SelectItem value="CUSTOMER_BALANCE">Saldo a favor</SelectItem>}</SelectContent>
                     </Select>
                     <CurrencySelector value={payment.currency || document.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" hideLabel rateDecimals={2} disabled={payment.method === 'CUSTOMER_BALANCE' || queueSubmitting} onChange={(nextCurrency) => setQueuePayments((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const previousCurrency = item.currency || document.currency; const previousRate = previousCurrency === baseCurrency ? 1 : Number(item.exchangeRate || activeSession?.exchangeRateUSD || globalRate || 1); const nextRate = nextCurrency === baseCurrency ? 1 : Number(activeSession?.exchangeRateUSD || globalRate || 1); return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), previousCurrency, nextCurrency, previousRate, nextRate).toFixed(2)), currency: nextCurrency, exchangeRate: nextRate }; }))} />

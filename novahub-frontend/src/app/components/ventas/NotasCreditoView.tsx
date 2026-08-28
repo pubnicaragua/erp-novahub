@@ -40,6 +40,7 @@ import { Switch } from '../ui/switch';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getCustomerAvailableCreditAmount, getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 
 interface NotasCreditoViewProps {
   data: CreditNote[];
@@ -173,7 +174,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
   ), 0);
   const paymentCustomerFavorBase = paymentCredit
-    ? Math.max(0, Number((paymentCredit.customer as any)?.balance ?? customers.find((customer) => customer.id === paymentCredit.customerId)?.balance ?? 0))
+    ? getCustomerFavorAmount((paymentCredit.customer as any) || customers.find((customer) => customer.id === paymentCredit.customerId))
     : 0;
   const paymentCustomerFavorAppliedBase = paymentLines
     .filter((line) => line.method === 'CUSTOMER_BALANCE')
@@ -206,6 +207,34 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   // únicamente lo necesario al crédito.
   const paymentAmountMismatch = paymentTotalBase > paymentCreditBalanceBase + 0.01
     && (mixedPaymentEnabled || paymentLines.length !== 1 || paymentLines[0]?.method !== 'CASH');
+
+  const handlePaymentMethodChange = (index: number, nextMethod: CreditPaymentLine['method']) => {
+    setPaymentLines((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const nextLine = {
+        ...item,
+        method: nextMethod,
+        accountId: undefined,
+        bankAccountId: undefined,
+        reference: '',
+        cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0,
+        cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0,
+      };
+      if (nextMethod !== 'CUSTOMER_BALANCE' || !paymentCredit) return nextLine;
+      const currentLineBase = toBaseAmount(
+        Number(String(item.amount || '').replace(/,/g, '') || 0),
+        item.currency,
+        item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate),
+      );
+      const otherPaymentsBase = paymentTotalBase - currentLineBase;
+      const maximumBase = getMaximumCustomerFavorToApply(
+        paymentCustomerFavorBase,
+        paymentCreditBalanceBase,
+        otherPaymentsBase,
+      );
+      return { ...nextLine, amount: maximumBase.toFixed(2), currency: baseCurrency, exchangeRate: 1 };
+    }));
+  };
 
   const productCatalog = products.filter((product) => product.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((product) => product.itemType === 'SERVICE');
@@ -267,9 +296,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
   };
   const formatDate = (value?: string | null) => value ? formatDateEs(value) : 'Sin fecha';
   const availableCreditFor = (customer?: Customer) => {
-    if (!customer) return 0;
-    // El saldo negativo representa deuda; un saldo positivo representa favor.
-    return Math.max(0, Number(customer.creditLimit || 0) - Math.max(0, -Number(customer.balance || 0)));
+    return getCustomerAvailableCreditAmount(customer);
   };
 
   const goToCustomers = () => {
@@ -596,7 +623,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
         </div>
         <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
            <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), baseCurrency)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => resolveItemType(item) === 'SERVICE' ? { ...item, priceListId: null } : item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha límite de pago</p><Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
-          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite</p><p className="mt-1 text-lg font-black">{formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), baseCurrency)}</p></div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-primary">Saldo del cliente</p><p className="mt-1 text-2xl font-black">{formatConvertedAmount(Number(selectedCustomer?.balance || 0), baseCurrency)}</p><p className="mt-1 text-[10px] text-muted-foreground">Negativo: pendiente por cobrar · Positivo: saldo a favor</p></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. Configúralo en <button type="button" className="font-black underline underline-offset-2" onClick={goToCustomers}>Clientes</button> para continuar.</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
+          <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid grid-cols-2 gap-3"><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Límite</p><p className="mt-1 text-lg font-black">{formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), baseCurrency)}</p></div><div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[9px] font-black uppercase text-muted-foreground">Disponible</p><p className={cn('mt-1 text-lg font-black', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Saldo pendiente</p><p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(getCustomerDebtAmount(selectedCustomer), baseCurrency)}</p></div><div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Saldo a favor</p><p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(getCustomerFavorAmount(selectedCustomer), baseCurrency)}</p></div></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. Configúralo en <button type="button" className="font-black underline underline-offset-2" onClick={goToCustomers}>Clientes</button> para continuar.</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
@@ -814,7 +841,7 @@ export function NotasCreditoView({ data, loading, onRefresh, customers = [], pro
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as CreditPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))} disabled={paymentLoading}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as CreditPaymentLine['method'])} disabled={paymentLoading}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} rateDecimals={2} label="Moneda" disabled={paymentLoading || line.method === 'CUSTOMER_BALANCE'} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);

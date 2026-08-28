@@ -34,6 +34,7 @@ import { cn } from '../ui/utils';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
+import { getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 
 interface PagosRecibidosViewProps {
   data: PaymentReceived[];
@@ -198,9 +199,8 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
     line.currency,
     line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
   ), 0);
-  const paymentCustomerFavorBase = Math.max(
-    0,
-    Number(customers.find((customer) => customer.id === localDoc?.customerId)?.balance || 0),
+  const paymentCustomerFavorBase = getCustomerFavorAmount(
+    customers.find((customer) => customer.id === localDoc?.customerId),
   );
   const paymentCustomerFavorAppliedBase = paymentLines
     .filter((line) => line.method === 'CUSTOMER_BALANCE')
@@ -210,6 +210,49 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
     ), 0);
   const paymentCustomerFavorExceeded = paymentCustomerFavorAppliedBase > paymentCustomerFavorBase + 0.01;
+  const linkedDocumentBalanceBase = (() => {
+    const linkedDocument = localDoc?.invoiceId
+      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
+      : localDoc?.creditNoteId
+        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
+        : undefined;
+    if (!linkedDocument) return 0;
+    return toBaseAmount(
+      Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
+      (linkedDocument as any).currency,
+      Number((linkedDocument as any).exchangeRate || globalRate),
+    );
+  })();
+  const paymentChangeBase = linkedDocumentBalanceBase > 0 && paymentLines.some((line) => line.method === 'CASH')
+    ? Math.max(0, paymentTotalBase - linkedDocumentBalanceBase)
+    : 0;
+  const handlePaymentMethodChange = (index: number, nextMethod: ReceivedPaymentLine['method']) => {
+    setPaymentLines((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const nextLine = {
+        ...item,
+        method: nextMethod,
+        accountId: undefined,
+        bankAccountId: undefined,
+        reference: '',
+        cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0,
+        cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0,
+      };
+      if (nextMethod !== 'CUSTOMER_BALANCE') return nextLine;
+      const currentLineBase = toBaseAmount(
+        Number(item.amount || 0),
+        item.currency,
+        item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate),
+      );
+      const otherPaymentsBase = paymentTotalBase - currentLineBase;
+      const maximumBase = getMaximumCustomerFavorToApply(
+        paymentCustomerFavorBase,
+        linkedDocumentBalanceBase,
+        otherPaymentsBase,
+      );
+      return { ...nextLine, amount: maximumBase, currency: baseCurrency, exchangeRate: 1 };
+    }));
+  };
 
   const groupedPayments = useMemo(
     () => groupReceivedPayments(data, baseCurrency, globalRate, toBaseAmount),
@@ -280,7 +323,36 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       .map((line) => ({ ...line, amount: Number(line.amount || 0), reference: String(line.reference || '').trim() }))
       .filter((line) => line.amount > 0);
     if (!effectiveLines.length) { toast.error('Agrega al menos un medio de pago con monto mayor a 0'); return; }
-    const customerFavorAppliedBase = effectiveLines
+    const linkedDocument = localDoc.invoiceId
+      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
+      : localDoc.creditNoteId
+        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
+        : null;
+    const documentBalanceBase = linkedDocument
+      ? toBaseAmount(
+        Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
+        (linkedDocument as any).currency,
+        Number((linkedDocument as any).exchangeRate || globalRate),
+      )
+      : 0;
+    let remainingToApplyBase = documentBalanceBase;
+    let nonCashOverpayment = false;
+    const submittedLines = linkedDocument
+      ? effectiveLines.flatMap((line) => {
+        const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate);
+        const lineBase = toBaseAmount(line.amount, line.currency, lineRate);
+        if (line.method !== 'CASH' && lineBase > remainingToApplyBase + 0.01) nonCashOverpayment = true;
+        const appliedBase = Math.min(lineBase, remainingToApplyBase);
+        if (appliedBase <= 0.005) return [];
+        remainingToApplyBase = Number(Math.max(0, remainingToApplyBase - appliedBase).toFixed(2));
+        return [{
+          ...line,
+          amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2)),
+        }];
+      })
+      : effectiveLines;
+    if (nonCashOverpayment) { toast.error('Solo el efectivo puede superar el saldo y generar vuelto'); return; }
+    const customerFavorAppliedBase = submittedLines
       .filter((line) => line.method === 'CUSTOMER_BALANCE')
       .reduce((sum, line) => sum + toBaseAmount(
         line.amount,
@@ -289,31 +361,18 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       ), 0);
     if (customerFavorAppliedBase > paymentCustomerFavorBase + 0.01) { toast.error(`El saldo a favor disponible es de ${formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}`); return; }
     if (customerFavorAppliedBase > 0.01 && !localDoc.invoiceId && !localDoc.creditNoteId) { toast.error('Selecciona una factura o crédito pendiente para aplicar el saldo a favor'); return; }
-    if (effectiveLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
-    if (effectiveLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
-    if (effectiveLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
-    const linkedDocument = localDoc.invoiceId
-      ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
-      : localDoc.creditNoteId
-        ? credits.find((credit) => credit.id === localDoc.creditNoteId)
-        : null;
-    if (linkedDocument) {
-      const documentBalanceBase = toBaseAmount(
-        Number((linkedDocument as any).balance ?? (linkedDocument as any).total ?? 0),
-        (linkedDocument as any).currency,
-        Number((linkedDocument as any).exchangeRate || globalRate),
-      );
-      if (paymentTotalBase > documentBalanceBase + 0.01) { toast.error('El pago supera el saldo pendiente del documento'); return; }
-    }
+    if (submittedLines.some((line) => requiresPaymentReference(line.method) && !line.reference)) { toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque'); return; }
+    if (submittedLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) { toast.error('Selecciona la cuenta contable que recibirá cada pago'); return; }
+    if (submittedLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) { toast.error('Selecciona el banco global donde se recibió cada pago'); return; }
     const saveToastId = toast.loading('Registrando pago...');
     try {
-      const firstLine = effectiveLines[0];
+      const firstLine = submittedLines[0];
       const payload = {
         customerId: localDoc.customerId,
         invoiceId: localDoc.invoiceId || undefined,
         creditNoteId: localDoc.creditNoteId || undefined,
         date: new Date(localDoc.date).toISOString(),
-        amount: Number(effectiveLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2)),
+        amount: Number(submittedLines.reduce((sum, line) => sum + line.amount, 0).toFixed(2)),
         currency: firstLine.currency,
         exchangeRate: firstLine.exchangeRate,
         method: firstLine.method,
@@ -325,10 +384,10 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
         cardCommissionAmount: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAmount || undefined : undefined,
         cardCommissionAccountId: isCardPaymentMethod(firstLine.method) ? firstLine.cardCommissionAccountId || undefined : undefined,
       } as any;
-      if (effectiveLines.length > 1) {
+      if (submittedLines.length > 1) {
         await paymentsService.createMixed({
           ...payload,
-          payments: effectiveLines.map((line) => ({
+          payments: submittedLines.map((line) => ({
             method: line.method,
             amount: line.amount,
             currency: line.currency,
@@ -572,7 +631,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   {paymentLines.map((line, index) => (
                     <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-start">
-                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod as ReceivedPaymentLine['method'], accountId: undefined, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (paymentCustomerFavorBase > 0.01 && Boolean(localDoc.invoiceId || localDoc.creditNoteId))).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
+                        <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod as ReceivedPaymentLine['method'])}><SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{methodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || (paymentCustomerFavorBase > 0.01 && Boolean(localDoc.invoiceId || localDoc.creditNoteId))).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div>
                         <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={line.method === 'CUSTOMER_BALANCE'} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                           if (itemIndex !== index) return item;
                           const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
@@ -598,6 +657,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                  {paymentChangeBase > 0.01 && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Cambio / vuelto</span><span className="font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(paymentChangeBase, baseCurrency)}</span></div>}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Notas</p>

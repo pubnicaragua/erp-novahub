@@ -173,6 +173,9 @@ export interface PosCustomer {
   phone?: string;
   priceListId?: string | null;
   balance?: number;
+  balanceDue?: number;
+  balanceFavor?: number;
+  availableCredit?: number;
   creditLimit?: number;
 }
 

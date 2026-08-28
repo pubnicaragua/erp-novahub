@@ -94,6 +94,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita el efectivo recibido', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la cuenta por cobrar', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'customerBalance', label: 'Saldo a favor del cliente', side: 'debit', description: 'Se debita al aplicar el saldo a favor del cliente en una factura o crédito', defaultCode: '1100', defaultName: 'Saldo a favor del cliente', defaultType: 'ASSET' },
     ],
   },
   {
@@ -101,6 +102,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Venta POS pagada en el momento → banco hijo o medio de cobro + Ingresos + IVA',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
+      { key: 'customerBalance', label: 'Saldo a favor del cliente', side: 'debit', description: 'Se debita al aplicar saldo a favor en una venta POS', defaultCode: '1100', defaultName: 'Saldo a favor del cliente', defaultType: 'ASSET' },
       { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita el subtotal de la venta POS', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
       { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada en caja', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
       { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery en caja', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
@@ -419,6 +421,7 @@ const FIELD_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
   check: ['cheque', 'cheques'],
   other: ['otro', 'otros', 'varios'],
   receivable: ['cobrar', 'cliente', 'clientes', 'deuda'],
+  customerBalance: ['saldo', 'favor', 'cliente', 'cobrar'],
   payable: ['pagar', 'proveedor', 'proveedores', 'acreedor', 'acreedores'],
   inventory: ['inventario', 'mercancia', 'mercaderia', 'existencias', 'almacen', 'productos'],
   inTransit: ['transito', 'inventario', 'mercancia'],

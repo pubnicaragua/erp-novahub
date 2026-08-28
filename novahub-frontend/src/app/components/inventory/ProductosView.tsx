@@ -400,8 +400,8 @@ function ImportPreviewPage({
           </div>
         </div>
       ) : <>
-      <div className="hidden min-h-0 flex-1 sm:flex">
-      <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 flex-1" label="Desplazamiento horizontal · columna por columna">
+      <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
+      <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block min-w-[1320px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>

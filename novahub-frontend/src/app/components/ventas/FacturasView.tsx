@@ -46,6 +46,7 @@ import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
+import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -212,7 +213,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentDueDate, setPaymentDueDate] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentVoucher, setPaymentVoucher] = useState<{ payment: PaymentReceived; invoice: Invoice; remaining: number } | null>(null);
+  const [paymentVoucher, setPaymentVoucher] = useState<{ payment: PaymentReceived; invoice: Invoice; remaining: number; change: number } | null>(null);
   const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
   const [cashRegisterId, setCashRegisterId] = useState('');
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
@@ -631,7 +632,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     // factura actual, por lo que se excluye antes de calcular lo disponible.
     const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
     const limit = Math.max(0, Number(customer?.creditLimit || 0));
-    const currentDebt = Math.max(0, -Number(customer?.balance || 0));
+    const currentDebt = getCustomerDebtAmount(customer);
     const debtWithoutInvoice = Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice));
     return Math.max(0, Number((limit - debtWithoutInvoice).toFixed(2)));
   };
@@ -718,19 +719,26 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
     if (!paymentInvoice) return;
     const cashControlAlreadyLinked = Boolean(paymentInvoice.registerId || paymentInvoice.sessionId);
     const maxAmount = getInvoiceBalance(paymentInvoice);
-    const submittedPaymentLines = mixedPaymentEnabled || paymentLines.length !== 1 || paymentLines[0]?.method !== 'CASH'
-      ? paymentLines
-      : (() => {
-        const line = paymentLines[0];
-        const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
-        const receivedBase = toBaseAmount(Number(line.amount || 0), line.currency, lineRate);
-        const maximumBase = getInvoiceBalanceInBase(paymentInvoice);
-        if (receivedBase <= maximumBase + 0.01) return paymentLines;
-        return [{
-          ...line,
-          amount: Number(convertBetweenCurrencies(maximumBase, baseCurrency, line.currency, 1, lineRate).toFixed(2)),
-        }];
-      })();
+    let remainingToApplyBase = getInvoiceBalanceInBase(paymentInvoice);
+    let nonCashOverpayment = false;
+    const submittedPaymentLines = paymentLines.flatMap((line) => {
+      const lineRate = line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate || 1);
+      const receivedBase = toBaseAmount(Number(line.amount || 0), line.currency, lineRate);
+      if (line.method !== 'CASH' && receivedBase > remainingToApplyBase + 0.01) {
+        nonCashOverpayment = true;
+      }
+      const appliedBase = Math.min(receivedBase, remainingToApplyBase);
+      if (appliedBase <= 0.005) return [];
+      remainingToApplyBase = Number(Math.max(0, remainingToApplyBase - appliedBase).toFixed(2));
+      return [{
+        ...line,
+        amount: Number(convertBetweenCurrencies(appliedBase, baseCurrency, line.currency, 1, lineRate).toFixed(2)),
+      }];
+    });
+    if (nonCashOverpayment) {
+      toast.error('Solo el efectivo puede superar el saldo y generar vuelto.');
+      return;
+    }
     const amount = Number(submittedPaymentLines.reduce((sum, line) => sum + Number(line.amount || 0), 0).toFixed(2));
     if (!paymentDate || Number.isNaN(new Date(`${paymentDate}T12:00:00`).getTime())) {
       toast.error('Selecciona una fecha válida para registrar el pago');
@@ -742,7 +750,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
     ), 0).toFixed(2));
     const paymentCustomer = paymentInvoice.customer || customers.find((customer) => customer.id === paymentInvoice.customerId);
-    const customerFavorBase = Math.max(0, Number(paymentCustomer?.balance || 0));
+    const customerFavorBase = getCustomerFavorAmount(paymentCustomer);
     const customerFavorAppliedBase = Number(submittedPaymentLines
       .filter((line) => line.method === 'CUSTOMER_BALANCE')
       .reduce((sum, line) => sum + toBaseAmount(
@@ -867,7 +875,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       toast.success(remaining > 0.01 ? `Pago parcial registrado. Saldo restante: ${formatInvoiceAmount(remaining, invoice.currency, invoice.exchangeRate)}` : `Factura ${invoice.number} pagada`, {
         id: payToastId,
       });
-      if (paymentForVoucher) setPaymentVoucher({ payment: paymentForVoucher, invoice, remaining });
+      if (paymentForVoucher) setPaymentVoucher({ payment: paymentForVoucher, invoice, remaining, change: paymentChangeInInvoiceCurrency });
       setPaymentDialogOpen(false);
       await onRefresh();
     } catch (e: any) {
@@ -1110,7 +1118,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const paymentCreditAfterBase = Math.max(0, Number((paymentCreditAvailableBase - paymentRemainingBase).toFixed(2)));
   const paymentPartialCreditFits = paymentHasActiveCredit || paymentRemainingBase <= paymentCreditAvailableBase + 0.01;
   const paymentCustomer = paymentInvoice?.customer || (paymentInvoice?.customerId ? customers.find((customer) => customer.id === paymentInvoice.customerId) : undefined);
-  const paymentCustomerFavorBase = Math.max(0, Number(paymentCustomer?.balance || 0));
+  const paymentCustomerFavorBase = getCustomerFavorAmount(paymentCustomer);
   const paymentCustomerFavorAppliedBase = Number(paymentLines
     .filter((line) => line.method === 'CUSTOMER_BALANCE')
     .reduce((sum, line) => sum + toBaseAmount(
@@ -1119,7 +1127,33 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
       line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate),
     ), 0).toFixed(2));
   const paymentCustomerFavorExceeded = paymentCustomerFavorAppliedBase > paymentCustomerFavorBase + 0.01;
-  const paymentChangeInInvoiceCurrency = paymentInvoice && !mixedPaymentEnabled && paymentLines.length === 1 && paymentLines[0]?.method === 'CASH'
+  const handlePaymentMethodChange = (index: number, nextMethod: string) => {
+    setPaymentLines((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const nextLine = {
+        ...item,
+        method: nextMethod,
+        bankAccountId: undefined,
+        reference: '',
+        cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0,
+        cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0,
+      };
+      if (nextMethod !== 'CUSTOMER_BALANCE' || !paymentInvoice) return nextLine;
+      const currentLineBase = toBaseAmount(
+        Number(item.amount || 0),
+        item.currency,
+        item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate),
+      );
+      const otherPaymentsBase = paymentTotalBase - currentLineBase;
+      const maximumBase = getMaximumCustomerFavorToApply(
+        paymentCustomerFavorBase,
+        getInvoiceBalanceInBase(paymentInvoice),
+        otherPaymentsBase,
+      );
+      return { ...nextLine, amount: maximumBase, currency: baseCurrency, exchangeRate: 1 };
+    }));
+  };
+  const paymentChangeInInvoiceCurrency = paymentInvoice && paymentLines.some((line) => line.method === 'CASH')
     ? Math.max(0, paymentTotalInInvoiceCurrency - getInvoiceBalance(paymentInvoice))
     : 0;
   const paymentChangeToDeliverInInvoiceCurrency = paymentRemainingInInvoiceCurrency > 0.01
@@ -2353,7 +2387,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <div className="flex items-end gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                        <Select value={line.method} onValueChange={(nextMethod) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: nextMethod, bankAccountId: undefined, reference: '', cardCommissionPercent: nextMethod === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: nextMethod === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
+                        <Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod)}>
                           <SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
                           <SelectContent>{paymentMethodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                         </Select>
@@ -2523,6 +2557,12 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     </p>
                   </div>
                 </div>
+                {paymentVoucher.change > 0.01 && (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Cambio / vuelto entregado</p>
+                    <p className="mt-1 text-lg font-black text-emerald-600 dark:text-emerald-400">{formatInvoiceAmount(paymentVoucher.change, invoiceCurrency, paymentVoucher.invoice.exchangeRate)}</p>
+                  </div>
+                )}
                 {hasFinancialBreakdown && (
                   <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
                     <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Resumen del documento</p>
