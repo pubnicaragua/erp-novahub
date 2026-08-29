@@ -438,6 +438,8 @@ function managerAccessCanViewInventoryCost(access: ManagerOverview['group']['man
 
 function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = true }: { overview?: ManagerOverview; groupId?: string; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean }) {
   const metrics = overview?.metrics;
+  const visibleBranches = overview?.branches || [];
+  const activeBranches = visibleBranches.filter((branch) => branch.isActive !== false).length;
   const cards = [
     { label: 'Sucursales visibles', value: metrics?.branches, icon: Building2, tone: 'text-primary bg-primary/10' },
     { label: 'Usuarios generales', value: metrics?.users, icon: Users, tone: 'text-primary bg-primary/10' },
@@ -448,6 +450,33 @@ function OverviewContent({ overview, groupId, onEnterBranch, canEnterBranch = tr
   ];
   return <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">{cards.map((card, index) => { const Icon = card.icon; return <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}><Card className="h-full rounded-3xl border-border/60 bg-card/50"><CardContent className="p-5"><div className={`mb-4 flex size-11 items-center justify-center rounded-2xl ${card.tone}`}><Icon className="size-5" /></div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{card.label}</p><p className="mt-1 text-3xl font-black tracking-tight">{typeof card.value === 'string' ? card.value : formatNumber(card.value)}</p></CardContent></Card></motion.div>; })}</div>
+    <Card className="rounded-3xl border-primary/20 bg-primary/[0.04]">
+      <CardContent className="space-y-4 p-5 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><BarChart3 className="size-5" /></div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Indicadores de supervisión</p>
+              <p className="mt-1 text-sm text-muted-foreground">Recuento visible de sucursales del grupo, sin exponer el detalle operativo.</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="w-fit rounded-full border-primary/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">Vista Manager · solo lectura</Badge>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { label: 'Sucursales visibles', value: visibleBranches.length },
+            { label: 'Sucursales activas', value: activeBranches },
+            { label: 'Cobertura del grupo', value: `${activeBranches}/${visibleBranches.length}` },
+          ].map((kpi) => (
+            <div key={kpi.label} className="rounded-2xl border border-border/60 bg-card/70 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{kpi.label}</p>
+              <p className="mt-1 text-2xl font-black tracking-tight">{typeof kpi.value === 'number' ? formatNumber(kpi.value) : kpi.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Estos indicadores no redirigen ni cargan información adicional. Para revisar una sucursal, utiliza «Ir a sucursal» y entra en modo supervisor.</p>
+      </CardContent>
+    </Card>
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
       <Card className="overflow-hidden rounded-3xl border-border/60 xl:col-span-2">
         <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">

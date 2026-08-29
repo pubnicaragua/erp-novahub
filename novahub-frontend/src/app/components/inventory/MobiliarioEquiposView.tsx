@@ -411,7 +411,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   const handleAttachFile = async (asset: AssetRow, file: File) => {
     setAttachmentBusy(true);
     try {
-      const uploaded = await storageService.uploadFile('company-assets', file, { folder: `assets/${asset.code}` });
+      const uploaded = await storageService.uploadFile('purchase-evidence', file, { folder: `assets/${asset.code}` });
       await mobiliarioService.addAttachment(asset.id, {
         fileName: file.name,
         fileType: file.type || 'application/octet-stream',
@@ -470,6 +470,10 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
   };
 
   const confirmImport = async () => {
+    if (!canViewInventoryCost) {
+      toast.error('Para importar activos y sincronizarlos con Activos Fijos se requiere el permiso Ver costo en Inventario.');
+      return;
+    }
     setImporting(true);
     setImportProgress(10);
     try {
@@ -478,15 +482,12 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       const m = String(cutoff.getMonth() + 1).padStart(2, '0');
       const d = String(cutoff.getDate()).padStart(2, '0');
       const defaultDate = `${y}-${m}-${d}`;
-      const items = importRowsData.map((row) => {
-        const item = row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate };
-        return canViewInventoryCost ? item : { ...item, cost: 0, currency: 'USD', exchangeRate: null };
-      });
+      const items = importRowsData.map((row) => row.acquisitionDate ? row : { ...row, acquisitionDate: defaultDate });
       setImportProgress(35);
       const res = await mobiliarioService.importAssets(items);
       setImportProgress(90);
       setImportResult(res);
-      toast.success(`Importación completada: ${res?.createdCount ?? 0} creados, ${res?.skippedCount ?? 0} omitidos`);
+      toast.success(`Importación completada: ${res?.createdCount ?? 0} activos y ${res?.fixedAssetCount ?? 0} registros en Activos Fijos`);
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       listQuery.refetch();
       setImportProgress(100);
@@ -495,6 +496,27 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
     } finally {
       setImporting(false);
       setImportProgress(0);
+    }
+  };
+
+  const handleSyncFixedAssets = async () => {
+    if (!canViewInventoryCost) {
+      toast.error('Para sincronizar Activos Fijos se requiere el permiso Ver costo en Inventario.');
+      return;
+    }
+    try {
+      const result = await mobiliarioService.syncFixedAssets();
+      setImportResult((previous: any) => ({
+        ...(previous || {}),
+        repairedFixedAssetCount: result?.createdCount ?? 0,
+        fixedAssetSkippedCount: result?.skippedCount ?? 0,
+        fixedAssetSkipped: (result?.skipped || []).map((item: any) => ({ row: item.code, error: item.error })),
+      }));
+      toast.success(`${result?.createdCount ?? 0} activo(s) sincronizado(s) con Activos Fijos`);
+      queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      listQuery.refetch();
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudieron sincronizar los Activos Fijos');
     }
   };
 
@@ -551,6 +573,9 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           <Button variant="outline" size="sm" onClick={() => downloadTemplate(canViewInventoryCost)} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <FileDown className="size-4" /> Plantilla
           </Button>
+          {canViewInventoryCost && <Button variant="outline" size="sm" onClick={handleSyncFixedAssets} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+            <RefreshCw className="size-4" /> Sincronizar Activos Fijos
+          </Button>}
           <Button variant="outline" size="sm" onClick={() => document.getElementById('mobiliario-import-file')?.click()} className="h-10 w-full gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
             <Upload className="size-4" /> Importar Excel
           </Button>
@@ -929,7 +954,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           <DialogHeader data-tour="mobiliario-import-title">
             <DialogTitle>Importar Mobiliario y Equipos</DialogTitle>
             <DialogDescription>
-              {importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; las filas con errores se omiten sin afectar al resto.
+              {importFileName} · {importRowsData.length} filas detectadas. Los códigos vacíos se asignan automáticamente; cada activo con costo mayor que 0 también se registra en Activos Fijos.
             </DialogDescription>
             <InventoryViewTutorial label="Cómo importar mobiliario" targetPrefix="mobiliario-import" copy={{ data: { description: 'Revisa el archivo, las filas detectadas y los errores antes de registrar los activos.' }, actions: { description: 'Confirma la importación para crear los activos válidos.' } }} />
           </DialogHeader>
@@ -945,16 +970,35 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
           </div>
           {importResult ? (
             <div className="space-y-3" data-tour="mobiliario-import-data">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
                   <p className="text-2xl font-black text-emerald-600">{importResult.createdCount ?? 0}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Creados</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Activos creados</p>
+                </div>
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-center">
+                  <p className="text-2xl font-black text-blue-600">{importResult.fixedAssetCount ?? 0}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">En Activos Fijos</p>
                 </div>
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
                   <p className="text-2xl font-black text-rose-600">{importResult.skippedCount ?? 0}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Omitidos</p>
                 </div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                  <p className="text-2xl font-black text-amber-600">{importResult.fixedAssetSkippedCount ?? 0}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sin Activo Fijo</p>
+                </div>
               </div>
+              {(importResult.fixedAssetSkipped || []).length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-700">Revisión contable</p>
+                  {(importResult.fixedAssetSkipped as any[]).map((item, i) => (
+                    <div key={i} className="border-b border-amber-500/20 py-1.5 text-[11px] last:border-0">
+                      <span className="mr-2 font-mono text-muted-foreground">Fila {item.row}</span>
+                      <span className="text-amber-700">{item.error}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {(importResult.skipped || []).length > 0 && (
                 <div className="max-h-48 overflow-y-auto rounded-xl border border-border/50">
                   {(importResult.skipped as any[]).map((s, i) => (

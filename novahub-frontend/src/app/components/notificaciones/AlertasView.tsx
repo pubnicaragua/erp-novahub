@@ -93,10 +93,6 @@ export const AlertasView: React.FC<AlertasViewProps> = ({ data, loading, onRefre
           loading={loading}
           onRowClick={handleNotificationClick}
           onMarkRead={handleMarkRead}
-          onDelete={canPerform('NOTIFICATIONS_ALERTS', 'delete') ? async (id) => {
-            try { await alertsService.delete(id); toast.success('Alerta eliminada'); onRefresh(); }
-            catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); }
-          } : undefined}
         />
       </Card>
     </div>

@@ -136,10 +136,6 @@ export const PushView: React.FC<PushViewProps> = ({ data, loading, onRefresh }) 
           loading={loading}
           onRowClick={handleNotificationClick}
           onMarkRead={handleMarkRead}
-          onDelete={canPerform('NOTIFICATIONS_PUSH', 'delete') ? async (id) => {
-            try { await pushNotificationsService.delete(id); toast.success('Aviso eliminado'); onRefresh(); }
-            catch (e: any) { toast.error(errMsg(e, 'Error al eliminar')); }
-          } : undefined}
         />
       </Card>
     </div>

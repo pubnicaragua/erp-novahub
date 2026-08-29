@@ -711,7 +711,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 {normalizeEstimateStatus(localDoc?.status) === 'DRAFT' && <>
                   <Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-6"
                     onClick={() => void handleSaveEstimate('DRAFT')}>
-                    Guardar Borrador
+                    Guardar
                   </Button>
                   <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6"
                     onClick={() => void handleSaveEstimate('IN_PROCESS')}>

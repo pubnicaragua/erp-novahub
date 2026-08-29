@@ -213,15 +213,15 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
       <AnimatePresence>
         {showSettings && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <Card className="rounded-2xl border-border/40 bg-white/80 backdrop-blur-xl">
+            <Card className="rounded-2xl border-border/60 bg-card/95 backdrop-blur-xl">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Configurar Columnas</p>
-                  <Button variant="ghost" size="icon" className="size-6" onClick={() => setShowSettings(false)}><X className="size-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" title="Cerrar configuración" aria-label="Cerrar configuración de columnas" onClick={() => setShowSettings(false)}><X className="size-3.5" /></Button>
                 </div>
                 <div className="space-y-2">
                   {columns.map((col) => (
-                    <div key={col.id} className="flex items-center gap-2 rounded-xl border border-border/40 bg-white/60 p-2">
+                    <div key={col.id} className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/80 p-2">
                       {editingColumn === col.id ? (
                         <>
                           <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="size-6 cursor-pointer rounded border-0" />
@@ -241,7 +241,7 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-white/40 p-2">
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border/60 bg-card/70 p-2">
                   <input type="color" value={newColumnColor} onChange={(e) => { setNewColumnColor(e.target.value); }} className="size-6 cursor-pointer rounded border-0" />
                   <Input value={newColumnLabel} onChange={(e) => setNewColumnLabel(e.target.value)} placeholder="Nueva columna..." className="h-7 flex-1 text-xs" onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()} />
                   <Button size="icon" variant="ghost" className="size-7" onClick={handleAddColumn} disabled={!newColumnLabel.trim()}><Plus className="size-3.5 text-primary" /></Button>
@@ -265,13 +265,13 @@ export function EstimacionesKanban({ data, onRefresh, onStatusChange, onViewDeta
                 isOver ? 'ring-2 ring-offset-2' : '',
               )}
               style={{
-                background: isOver ? hexToRgba(col.color, 0.06) : 'rgba(255,255,255,0.55)',
+                background: isOver ? hexToRgba(col.color, 0.06) : 'hsl(var(--card) / 0.82)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: `1px solid ${isOver ? hexToRgba(col.color, 0.3) : 'rgba(255,255,255,0.35)'}`,
+                border: `1px solid ${isOver ? hexToRgba(col.color, 0.3) : 'hsl(var(--border) / 0.7)'}`,
                 boxShadow: isOver
                   ? `0 8px 32px ${hexToRgba(col.color, 0.12)}, 0 2px 8px rgba(0,0,0,0.04)`
-                  : '0 1px 8px rgba(0,0,0,0.04)',
+                  : '0 1px 8px hsl(var(--foreground) / 0.06)',
                 ringColor: col.color,
               }}
               onDragEnter={(e) => handleDragEnter(e, col.value)}
@@ -357,11 +357,11 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
         isDragging && 'opacity-40 scale-[0.97]',
       )}
       style={{
-        background: 'rgba(255,255,255,0.78)',
+        background: 'hsl(var(--card) / 0.94)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255,255,255,0.5)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.03)',
+        border: '1px solid hsl(var(--border) / 0.7)',
+        boxShadow: '0 4px 20px hsl(var(--foreground) / 0.08), 0 1px 4px hsl(var(--foreground) / 0.04)',
       }}
       onClick={() => onViewDetail(estimate)}
     >
@@ -418,7 +418,7 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
       )}
 
       {/* Footer */}
-      <div className="flex items-end justify-between border-t border-white/40 pt-2.5">
+      <div className="flex items-end justify-between border-t border-border/60 pt-2.5">
         <div>
           <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/40">Total</p>
           <p className="text-sm font-black tabular-nums" style={{ color: column.color }}>

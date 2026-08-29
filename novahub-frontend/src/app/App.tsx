@@ -18,6 +18,7 @@ import { Topbar } from './components/Topbar';
 import { ModuleErrorBoundary } from './components/ui/ModuleErrorBoundary';
 import { PublicAccessPage } from './components/public/PublicAccessPage';
 import { PublicRestaurantMenuPage } from './components/public/PublicRestaurantMenuPage';
+import { ArcaSupplyEcommercePreviewPage } from './components/public/ArcaSupplyEcommercePreviewPage';
 import { FloatingChat } from './components/ai/FloatingChat';
 import { useIncomingNotificationAlert } from './hooks/useIncomingNotificationAlert';
 import { safeGetItem, safeSetItem, safeRemoveItem } from './services/safe-storage';
@@ -525,6 +526,9 @@ function AppContent() {
   if (location.pathname.startsWith('/restaurant/menu/')) {
     const tableToken = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
     return <PublicRestaurantMenuPage tableToken={tableToken} />;
+  }
+  if (location.pathname === '/preview/arca-supply' || location.pathname === '/ecommerce/arcasupply') {
+    return <ArcaSupplyEcommercePreviewPage />;
   }
 
   // Ruta pública de registro: no requiere autenticación y evita el guard.

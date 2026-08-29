@@ -55,6 +55,12 @@ const PDF_GUIDES = [
     module: 'FINANCIAL',
     fileUrl: new URL('../../../../documentos-novahub/Manual_Asientos_Contables_NovaERP.pdf', import.meta.url).href,
   },
+  {
+    title: 'Formato de Reportes',
+    description: 'Modelo visual para reportes operativos y gerenciales de NovaHub, con la estructura y presentación de referencia para imprimir o compartir.',
+    module: 'FINANCIAL',
+    fileUrl: new URL('../../../../documentos-novahub/FORMATO DE REPORTES.pdf', import.meta.url).href,
+  },
 ];
 
 export function TrainingHubView() {
@@ -263,7 +269,7 @@ export function TrainingHubView() {
               <p className="text-[10px] font-black uppercase tracking-widest text-primary">Material de referencia</p>
               <h2 id="pdf-guides-title" className="text-2xl font-black uppercase italic tracking-tight">Guías en PDF</h2>
             </div>
-            <p className="text-xs text-muted-foreground">Abren en una pestaña segura sin descargar el archivo al servidor.</p>
+            <p className="text-xs text-muted-foreground">Consulta cada documento en una pestaña nueva con el formato original.</p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {PDF_GUIDES.filter((guide) => activeCategory === 'ALL' || guide.module === activeCategory).map((guide) => (
