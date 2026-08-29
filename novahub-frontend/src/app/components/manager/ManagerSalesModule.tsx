@@ -22,7 +22,7 @@ import { generateSalesTransactionPDF } from '../../utils/pdfGenerator';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { exportManagerQuotesExcel, exportManagerQuotesPdf } from '../../utils/managerQuotesExport';
 import { exportManagerSalesExcel, exportManagerSalesPdf } from '../../utils/managerSalesExport';
-import { exportCustomerTransactionsExcel, exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
+import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { formatCurrencyAmount, formatCurrencyDescriptor, getCurrencyMetadata } from '../../utils/currency';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
@@ -31,6 +31,8 @@ import { ColumnFilterMenu, type ColumnSort, type ColumnSortType } from '../ui/Co
 import { toast } from 'sonner';
 import { ManagerSalesCashSheet, ManagerSalesDeliverySheet, ManagerSalesPriceListSheet } from './ManagerSalesOperationalSheets';
 import { ManagerInvoiceSeriesSettings } from './ManagerInvoiceSeriesSettings';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -369,7 +371,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
     toast.success('WhatsApp quedó preparado con el documento', { id: preparingToastId });
   };
 
-  const downloadCustomerHistory = async (format: 'xlsx' | 'pdf') => {
+  const downloadCustomerHistory = async () => {
     if (!selectedCustomer?.id) return;
     setExportingCustomerHistory(true);
     try {
@@ -389,8 +391,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
         primaryColor: themeConfig?.colors?.primary,
         pdfDesign: customer.pdfDesign,
       };
-      if (format === 'pdf') await exportCustomerTransactionsPdf(options);
-      else await exportCustomerTransactionsExcel(options);
+      await exportCustomerTransactionsPdf(options);
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo descargar el historial del cliente.');
     } finally {
@@ -439,7 +440,7 @@ export function ManagerSalesModule({ view, onViewChange, groupId, businessUnitId
       {view === 'cash' && <CashRegisterSummary rows={metrics.registerSummary || []} reportCurrency={activeReportCurrency} />}
       {query.isLoading ? <LoadingState /> : query.error ? <EmptyState title="No se pudo cargar la vista" description="Verifica el permiso Manager de Ventas y vuelve a actualizar." /> : effectiveLayoutMode === 'cards' ? <SalesCards view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} onDetail={openOperationalDetail} priceListMode={priceListMode} /> : <SalesTable view={view} rows={displayRows} showBranch={multipleBranches} reportCurrency={activeReportCurrency} sortState={columnSorts} onSort={changeColumnSort} onDetail={openOperationalDetail} priceListMode={priceListMode} />}
       <Pagination page={response?.meta.page || page} totalPages={response?.meta.totalPages || 1} total={response?.meta.total || 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
-      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} canEnterBranch={canEnterBranch} onExportHistory={(format) => { void downloadCustomerHistory(format); }} exportingHistory={exportingCustomerHistory} />
+      <ManagerCustomerDetailSheet groupId={groupId} customer={selectedCustomer} reportCurrency={activeReportCurrency} onOpenChange={(open) => { if (!open) setSelectedCustomer(null); }} onEnterBranch={onEnterBranch} canEnterBranch={canEnterBranch} onExportHistory={() => { void downloadCustomerHistory(); }} exportingHistory={exportingCustomerHistory} />
       <SalesDocumentDetailSheet
         key={selectedQuote?.id || 'manager-quote-detail'}
         document={selectedQuote ? buildManagerQuotePanel(quoteDetail?.quote || selectedQuote, quoteDetail?.history) : null}
@@ -533,20 +534,25 @@ function SalesTable({ view, rows, showBranch, reportCurrency, sortState, onSort,
   const isCustomerTable = view === 'customers';
   const isQuoteTable = view === 'quotes';
   const isDocumentTable = ['orders', 'invoices', 'recurring', 'payments', 'creditnotes', 'credits'].includes(view);
+  const { openingId, startOpening } = useDetailOpeningFeedback();
+  const openDetail = (row: any) => startOpening(row.id, () => onDetail?.(row));
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: any) => {
     if (!onDetail || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
-    onDetail(row);
+    openDetail(row);
   };
-  return <Card className="overflow-hidden rounded-3xl border-border/60 shadow-sm"><CardHeader className="border-b border-border/60"><CardTitle className="text-lg font-black uppercase italic tracking-tight">{viewLabels[view]}</CardTitle><p className="text-sm text-muted-foreground">{isCustomerTable ? 'Selecciona cualquier parte del registro para consultar el detalle del cliente.' : isQuoteTable ? 'Selecciona una cotización para consultar sus líneas y el historial de aprobación.' : isDocumentTable || ['deliveries', 'cash', 'pricelists'].includes(view) ? 'Selecciona cualquier parte del registro para consultar el detalle, historial y acciones disponibles.' : 'Ordena los registros desde los encabezados. Los datos son de solo lectura.'}</p></CardHeader><CardContent className="p-0">{rows.length ? <div className="sales-responsive-table overflow-x-auto"><Table className={cn(isCustomerTable ? 'min-w-[1480px]' : isQuoteTable ? 'min-w-[1280px]' : isDocumentTable || ['deliveries', 'cash', 'pricelists'].includes(view) ? 'min-w-[1280px]' : 'min-w-[980px]')}><TableHeader><TableRow>{columns.map((column) => <TableHead key={column.label} className={cn(column.numeric && 'text-right')}><div className={cn('flex items-center gap-1.5', column.numeric && 'justify-end')}><span>{column.label}</span>{column.sortKey && <ColumnFilterMenu label={column.label} compact sort={sortState[`${view}:${column.sortKey}`] || null} onSort={(sort) => onSort(column.sortKey!, sort)} sortType={column.sortType} />}</div></TableHead>)}</TableRow></TableHeader><TableBody>{rows.map((row) => <TableRow key={row.id} tabIndex={onDetail ? 0 : undefined} role={onDetail ? 'button' : undefined} aria-label={onDetail ? `Ver detalle de ${row.number || row.name || viewLabels[view]}` : undefined} className={cn(onDetail && 'cursor-pointer transition-colors hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40')} onClick={() => onDetail?.(row)} onKeyDown={(event) => handleRowKeyDown(event, row)}>{columns.map((column) => <TableCell key={`${row.id}-${column.label}`} className={cn('max-w-64 align-top whitespace-normal', column.numeric && 'text-right font-semibold')}>{column.render(row)}</TableCell>)}</TableRow>)}</TableBody></Table></div> : <EmptyState title="Sin registros" description="No hay información para el rubro, sucursal y filtros seleccionados." />}</CardContent></Card>;
+  return <Card className="overflow-hidden rounded-3xl border-border/60 shadow-sm"><CardHeader className="border-b border-border/60"><CardTitle className="text-lg font-black uppercase italic tracking-tight">{viewLabels[view]}</CardTitle><p className="text-sm text-muted-foreground">{isCustomerTable ? 'Selecciona cualquier parte del registro para consultar el detalle del cliente.' : isQuoteTable ? 'Selecciona una cotización para consultar sus líneas y el historial de aprobación.' : isDocumentTable || ['deliveries', 'cash', 'pricelists'].includes(view) ? 'Selecciona cualquier parte del registro para consultar el detalle, historial y acciones disponibles.' : 'Ordena los registros desde los encabezados. Los datos son de solo lectura.'}</p></CardHeader><CardContent className="p-0">{rows.length ? <div className="sales-responsive-table overflow-x-auto"><Table className={cn(isCustomerTable ? 'min-w-[1480px]' : isQuoteTable ? 'min-w-[1280px]' : isDocumentTable || ['deliveries', 'cash', 'pricelists'].includes(view) ? 'min-w-[1280px]' : 'min-w-[980px]')}><TableHeader><TableRow>{columns.map((column) => <TableHead key={column.label} className={cn(column.numeric && 'text-right')}><div className={cn('flex items-center gap-1.5', column.numeric && 'justify-end')}><span>{column.label}</span>{column.sortKey && <ColumnFilterMenu label={column.label} compact sort={sortState[`${view}:${column.sortKey}`] || null} onSort={(sort) => onSort(column.sortKey!, sort)} sortType={column.sortType} />}</div></TableHead>)}</TableRow></TableHeader><TableBody>{rows.map((row) => { const isOpening = openingId != null && String(openingId) === String(row.id); return <TableRow key={row.id} tabIndex={onDetail ? 0 : undefined} role={onDetail ? 'button' : undefined} aria-busy={isOpening || undefined} data-detail-opening={isOpening ? 'true' : undefined} aria-label={onDetail ? `Ver detalle de ${row.number || row.name || viewLabels[view]}` : undefined} className={cn(onDetail && 'cursor-pointer transition-colors hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40')} onClick={() => openDetail(row)} onKeyDown={(event) => handleRowKeyDown(event, row)}>{columns.map((column, index) => <TableCell key={`${row.id}-${column.label}`} className={cn('max-w-64 align-top whitespace-normal', column.numeric && 'text-right font-semibold')}><div className={index === 0 ? 'flex min-w-0 items-center gap-2' : undefined}>{column.render(row)}{index === 0 && isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</div></TableCell>)}</TableRow>; })}</TableBody></Table></div> : <EmptyState title="Sin registros" description="No hay información para el rubro, sucursal y filtros seleccionados." />}</CardContent></Card>;
 }
 
 function SalesCards({ view, rows, showBranch, reportCurrency, onDetail, priceListMode = 'lists' }: { view: ManagerSalesView; rows: any[]; showBranch: boolean; reportCurrency: string; onDetail?: (row: any) => void; priceListMode?: 'lists' | 'prices' }) {
+  const { openingId, startOpening } = useDetailOpeningFeedback();
+  const openDetail = (row: any) => startOpening(row.id, () => onDetail?.(row));
   if (!rows.length) return <EmptyState title="Sin registros" description="No hay información para el rubro, sucursal y filtros seleccionados." />;
-  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => view === 'customers' ? <CustomerCard key={row.id} customer={row} onDetail={onDetail} /> : view === 'quotes' ? <QuoteCard key={row.id} quote={row} onDetail={onDetail} /> : <ManagerSalesRecordCard key={row.id} view={view} row={row} showBranch={showBranch} reportCurrency={reportCurrency} onDetail={onDetail} priceListMode={priceListMode} />)}</div>;
+  return <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map((row) => view === 'customers' ? <CustomerCard key={row.id} customer={row} onDetail={openDetail} openingId={openingId} /> : view === 'quotes' ? <QuoteCard key={row.id} quote={row} onDetail={openDetail} openingId={openingId} /> : <ManagerSalesRecordCard key={row.id} view={view} row={row} showBranch={showBranch} reportCurrency={reportCurrency} onDetail={openDetail} openingId={openingId} priceListMode={priceListMode} />)}</div>;
 }
 
-function ManagerSalesRecordCard({ view, row, showBranch, reportCurrency, onDetail, priceListMode = 'lists' }: { view: ManagerSalesView; row: any; showBranch: boolean; reportCurrency: string; onDetail?: (row: any) => void; priceListMode?: 'lists' | 'prices' }) {
+function ManagerSalesRecordCard({ view, row, showBranch, reportCurrency, onDetail, openingId, priceListMode = 'lists' }: { view: ManagerSalesView; row: any; showBranch: boolean; reportCurrency: string; onDetail?: (row: any) => void; openingId?: string | number | null; priceListMode?: 'lists' | 'prices' }) {
+  const isOpening = openingId != null && String(openingId) === String(row.id);
   const documentView = ['orders', 'invoices', 'recurring', 'payments', 'creditnotes', 'credits'].includes(view);
   const title = row.number || row.name || row.productName || row.listName || row.registerName || String(row.id || '').slice(0, 8) || 'Registro';
   const status = view === 'pricelists' ? (row.isActive == null ? (row.listActive ? 'ACTIVE' : 'INACTIVE') : (row.isActive ? 'ACTIVE' : 'INACTIVE')) : row.status || row.paymentStatus || row.deliveryStatus;
@@ -577,7 +583,7 @@ function ManagerSalesRecordCard({ view, row, showBranch, reportCurrency, onDetai
   };
   return <Card role={onDetail ? 'button' : undefined} tabIndex={onDetail ? 0 : undefined} aria-label={onDetail ? `Ver detalle de ${title}` : undefined} onClick={() => onDetail?.(row)} onKeyDown={handleKeyDown} className={cn('rounded-2xl border-border/60 shadow-sm', onDetail && 'cursor-pointer transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40')}>
     <CardContent className="space-y-4 p-5">
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-base font-black text-primary">{title}</p>{documentView ? <p className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{row.branchName || 'Sucursal no identificada'}</span></p> : showBranch && <Badge variant="secondary" className="mt-1 max-w-full truncate">{row.branchName}</Badge>}</div>{statusBadge(status)}</div>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-base font-black text-primary">{title}</p>{documentView ? <p className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{row.branchName || 'Sucursal no identificada'}</span></p> : showBranch && <Badge variant="secondary" className="mt-1 max-w-full truncate">{row.branchName}</Badge>}</div><div className="flex shrink-0 items-center gap-2">{isOpening && <span role="status" className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}{statusBadge(status)}</div></div>
       <div className="space-y-2">{values.map(([label, value]) => <div key={label} className="flex items-start justify-between gap-3 text-sm"><span className="shrink-0 text-xs text-muted-foreground">{label}</span><span className="min-w-0 break-words text-right font-semibold">{value}</span></div>)}</div>
       {onDetail && <p className="border-t border-border/50 pt-3 text-[10px] font-black uppercase tracking-widest text-primary">Abrir detalle e historial</p>}
     </CardContent>
@@ -656,7 +662,8 @@ function sortRows(rows: any[], columns: TableColumn[], state: Record<string, Col
   });
 }
 
-function QuoteCard({ quote, onDetail }: { quote: any; onDetail?: (row: any) => void }) {
+function QuoteCard({ quote, onDetail, openingId }: { quote: any; onDetail?: (row: any) => void; openingId?: string | number | null }) {
+  const isOpening = openingId != null && String(openingId) === String(quote.id);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onDetail || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
@@ -666,7 +673,7 @@ function QuoteCard({ quote, onDetail }: { quote: any; onDetail?: (row: any) => v
     <CardContent className="space-y-4 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0"><p className="truncate font-mono text-base font-black text-primary">{quote.number || 'Sin número'}</p><p className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{quote.branchName || 'Sucursal no identificada'}</span></p></div>
-        {statusBadge(quote.status)}
+        <div className="flex shrink-0 items-center gap-2">{isOpening && <span role="status" className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}{statusBadge(quote.status)}</div>
       </div>
       <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 truncate text-sm font-bold">{quote.customerName || 'Cliente ocasional'}</p></div>
       <div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-muted-foreground">Emisión</p><p className="font-semibold">{formatDate(quote.date)}</p></div><div><p className="text-xs text-muted-foreground">Validez</p><p className="font-semibold">{formatDate(quote.expiryDate)}</p></div></div>
@@ -764,7 +771,8 @@ function buildManagerSalesDocumentPanel(document: any, entity: string, history?:
   return { id: document.id, number: document.number || 'Sin número', title, customerName, status: String(status), sourceLabel: document.branchName || 'Sucursal no identificada', totalLabel: detailMoney(total), summaryDetails, metadata: [...currencyMetadata, ...metadata], lines, notes: document.notes, reason: document.reason, history: history || [] };
 }
 
-function CustomerCard({ customer, onDetail }: { customer: any; onDetail?: (row: any) => void }) {
+function CustomerCard({ customer, onDetail, openingId }: { customer: any; onDetail?: (row: any) => void; openingId?: string | number | null }) {
+  const isOpening = openingId != null && String(openingId) === String(customer.id);
   const status = customerStatusInfo(customer.status);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onDetail || (event.key !== 'Enter' && event.key !== ' ')) return;
@@ -778,7 +786,7 @@ function CustomerCard({ customer, onDetail }: { customer: any; onDetail?: (row: 
           <p className="truncate text-base font-black">{customerValue(customer.name, 'Cliente')}</p>
           <p className="mt-1 flex items-start gap-1.5 text-xs font-semibold text-primary"><Building2 className="mt-0.5 size-3.5 shrink-0" /><span className="break-words">{customerValue(customer.branchName, 'Sucursal no identificada')}</span></p>
         </div>
-        <Badge variant="outline" className={cn('shrink-0 font-black', status.className)}>{status.label}</Badge>
+        <div className="flex shrink-0 items-center gap-2">{isOpening && <span role="status" className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}<Badge variant="outline" className={cn('shrink-0 font-black', status.className)}>{status.label}</Badge></div>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs"><span className="rounded-lg bg-muted/40 px-2 py-1 font-mono font-bold">{customerValue(customer.code, customer.id?.slice(0, 8) || '—')}</span><Badge variant="secondary">{customerTypeLabel(customer.type)}</Badge></div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -794,7 +802,7 @@ function CustomerCard({ customer, onDetail }: { customer: any; onDetail?: (row: 
   </Card>;
 }
 
-function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenChange, onEnterBranch, canEnterBranch = false, onExportHistory, exportingHistory = false }: { groupId: string; customer: any | null; reportCurrency: string; onOpenChange: (open: boolean) => void; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean; onExportHistory?: (format: 'xlsx' | 'pdf') => void; exportingHistory?: boolean }) {
+function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenChange, onEnterBranch, canEnterBranch = false, onExportHistory, exportingHistory = false }: { groupId: string; customer: any | null; reportCurrency: string; onOpenChange: (open: boolean) => void; onEnterBranch?: (groupId: string, branchId: string) => Promise<void>; canEnterBranch?: boolean; onExportHistory?: () => void; exportingHistory?: boolean }) {
   const [activeTab, setActiveTab] = useState<'general' | 'facturas' | 'historial'>('general');
   const [detail, setDetail] = useState<ManagerCustomerDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -847,6 +855,16 @@ function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenC
               <SheetDescription className="flex flex-wrap items-center gap-2 text-xs"><span className="font-mono font-bold">{customerValue(record?.code, record?.id?.slice(0, 8) || '—')}</span><span>·</span><span>{customerTypeLabel(record?.type)}</span><span>·</span><span className="font-semibold text-primary">{customerValue(record?.branchName, 'Sucursal no identificada')}</span></SheetDescription>
             </div>
           </div>
+          <div className="flex justify-end" data-tour="manager-customer-detail-actions">
+            <PdfDownloadButton
+              label="Exportar"
+              includeRoll={false}
+              showStandardOptions={false}
+              onDownload={() => undefined}
+              firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del cliente', onSelect: () => onExportHistory?.() }}
+              disabled={!customer || loading || exportingHistory || transactions.length === 0}
+            />
+          </div>
           <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 text-xs font-bold">
             <TabsTrigger value="general" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><UserRound className="size-3.5" /> General</TabsTrigger>
             <TabsTrigger value="facturas" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><FileText className="size-3.5" /> Facturas ({invoices.length})</TabsTrigger>
@@ -865,7 +883,7 @@ function ManagerCustomerDetailSheet({ groupId, customer, reportCurrency, onOpenC
               <DuplicateCustomerSection matches={duplicateCustomers} loading={loading} hasIdentifiers={Boolean(record?.taxId || record?.ruc)} />
             </TabsContent>
             <TabsContent value="facturas" className="mt-0 outline-none"><ManagerCustomerInvoices invoices={invoices} loading={loading} reportCurrency={reportCurrency} /></TabsContent>
-            <TabsContent value="historial" className="mt-0 outline-none"><ManagerCustomerHistory transactions={transactions} loading={loading} reportCurrency={reportCurrency} onExport={onExportHistory} exporting={exportingHistory} /></TabsContent>
+            <TabsContent value="historial" className="mt-0 outline-none"><ManagerCustomerHistory transactions={transactions} loading={loading} reportCurrency={reportCurrency} /></TabsContent>
           </div>
         </ScrollArea>
         <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 bg-background/95 px-6 py-3 backdrop-blur-md"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consulta de solo lectura</p><div className="flex flex-wrap items-center justify-end gap-2">{onEnterBranch && canEnterBranch && recordBranchId && <Button variant="outline" size="sm" onClick={() => { onOpenChange(false); void onEnterBranch(groupId, recordBranchId); }} className="gap-1.5 rounded-xl text-xs font-bold text-primary hover:text-primary"><Building2 className="size-3.5" /> Ir a su sucursal <ArrowUpRight className="size-3.5" /></Button>}<Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="gap-1.5 rounded-xl text-xs font-bold">Cerrar <ChevronRight className="size-3" /></Button></div></div>
@@ -887,8 +905,8 @@ function ManagerCustomerInvoices({ invoices, loading, reportCurrency }: { invoic
   return <Card className="overflow-hidden rounded-2xl border-border/60 shadow-sm"><div className="hidden overflow-x-auto xl:block"><Table className="min-w-[800px]"><TableHeader><TableRow><TableHead>Factura</TableHead><TableHead>Fecha</TableHead><TableHead>Vencimiento</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Total original / equivalencia</TableHead></TableRow></TableHeader><TableBody>{invoices.map((invoice) => <TableRow key={invoice.id}><TableCell className="font-mono text-xs font-bold">{customerValue(invoice.number, 'Sin número')}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.date)}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(invoice.dueDate)}</TableCell><TableCell><Badge variant="outline" className="text-[9px] font-black">{statusLabel(invoice.status)}</Badge></TableCell><TableCell className="text-right"><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></TableCell></TableRow>)}</TableBody></Table></div><div className="space-y-3 p-3 xl:hidden">{invoices.map((invoice) => <article key={invoice.id} className="rounded-xl border border-border/50 bg-muted/10 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-mono text-sm font-black">{customerValue(invoice.number, 'Sin número')}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatDate(invoice.date)} · Vence {formatDate(invoice.dueDate)}</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{statusLabel(invoice.status)}</Badge></div><div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total original</span><MoneyPair row={invoice} original={invoice.total} equivalent={invoice.reportTotal} reportCurrency={reportCurrency} compact /></div></article>)}</div></Card>;
 }
 
-function ManagerCustomerHistory({ transactions, loading, reportCurrency, onExport, exporting = false }: { transactions: ManagerCustomerDetailResponse['transactions']; loading: boolean; reportCurrency: string; onExport?: (format: 'xlsx' | 'pdf') => void; exporting?: boolean }) {
-  return <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><Activity className="size-4 text-primary" /> Operaciones relacionadas</h3><p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y notas vinculadas a este cliente.</p></div><div className="flex items-center gap-2">{onExport && <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-[10px] font-bold" disabled={loading || exporting}>{exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />} Descargar historial</Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48 rounded-xl p-1.5"><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => onExport('xlsx')}><FileSpreadsheet className="size-3.5 text-primary" /> Excel (.xlsx)</DropdownMenuItem><DropdownMenuItem className="gap-2 rounded-lg py-2 text-xs" onClick={() => onExport('pdf')}><FileText className="size-3.5 text-primary" /> PDF (.pdf)</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}<Badge variant="outline" className="shrink-0 text-[9px] font-black">{loading ? '…' : transactions.length}</Badge></div></div>{loading ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones comerciales registradas para este cliente.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((transaction) => <div key={`${transaction.kind}-${transaction.id}`} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{customerValue(transaction.number, 'Sin número')}{transaction.description ? ` · ${transaction.description}` : ''}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{formatDate(transaction.date)}</p><p className="text-[10px] font-black">{transaction.amount == null ? statusLabel(transaction.status) : formatMoney(transaction.amount, transaction.currency)}</p>{transaction.amount != null && <p className="text-[9px] font-bold text-primary">Equiv. {transaction.reportAmount == null ? 'No disponible' : formatMoney(transaction.reportAmount, reportCurrency, true)}</p>}<p className="text-[9px] text-muted-foreground">{statusLabel(transaction.status)}</p></div></div>)}</div>}</Card>;
+function ManagerCustomerHistory({ transactions, loading, reportCurrency }: { transactions: ManagerCustomerDetailResponse['transactions']; loading: boolean; reportCurrency: string }) {
+  return <Card className="rounded-2xl border-border/60 bg-card p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/80"><Activity className="size-4 text-primary" /> Operaciones relacionadas</h3><p className="mt-1 text-[11px] text-muted-foreground">Cotizaciones, órdenes, facturas, pagos y notas vinculadas a este cliente.</p></div><Badge variant="outline" className="shrink-0 text-[9px] font-black">{loading ? '…' : transactions.length}</Badge></div>{loading ? <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div> : transactions.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-border/50 p-4 text-xs text-muted-foreground">Aún no hay operaciones comerciales registradas para este cliente.</p> : <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">{transactions.slice(0, 50).map((transaction) => <div key={`${transaction.kind}-${transaction.id}`} className="flex items-center justify-between gap-3 p-3"><div className="flex min-w-0 items-center gap-3"><div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div><div className="min-w-0"><p className="truncate text-xs font-bold">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{customerValue(transaction.number, 'Sin número')}{transaction.description ? ` · ${transaction.description}` : ''}</p></div></div><div className="shrink-0 text-right"><p className="text-[10px] font-bold text-muted-foreground">{formatDate(transaction.date)}</p><p className="text-[10px] font-black">{transaction.amount == null ? statusLabel(transaction.status) : formatMoney(transaction.amount, transaction.currency)}</p>{transaction.amount != null && <p className="text-[9px] font-bold text-primary">Equiv. {transaction.reportAmount == null ? 'No disponible' : formatMoney(transaction.reportAmount, reportCurrency, true)}</p>}<p className="text-[9px] text-muted-foreground">{statusLabel(transaction.status)}</p></div></div>)}</div>}</Card>;
 }
 
 function DetailSection({ title, icon: Icon, children }: { title: string; icon: typeof FileText; children: ReactNode }) {

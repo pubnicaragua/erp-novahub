@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Award, Banknote, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3, CreditCard, FileText, History, Mail, MapPin, Pencil, Phone, ShieldCheck, User } from 'lucide-react';
+import { Activity, Award, Banknote, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3, CreditCard, FileText, History, Loader2, Mail, MapPin, Pencil, Phone, ShieldCheck, User } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -160,7 +160,7 @@ export function EmployeeDetailDrawer({ employeeId, employeeSnapshot, onOpenChang
                   <SheetTitle className="truncate text-lg font-black tracking-tight">{employee ? `${employee.firstName} ${employee.lastName}` : 'Cargando empleado…'}</SheetTitle>
                   {employee && <Badge variant="outline" className={`text-[9px] font-black uppercase tracking-wider ${statusClass}`}>{statusLabel(employee.employmentStatus)}</Badge>}
                 </div>
-                <SheetDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs"><span className="font-mono font-bold">{employee?.employeeNumber || '—'}</span><span>•</span><span>{employee?.email || 'Sin correo'}</span>{employee?.nationalId && <><span>•</span><span>Cédula {employee.nationalId}</span></>}</SheetDescription>
+                <SheetDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs"><span className="font-mono font-bold">{employee?.employeeNumber || '—'}</span><span>•</span><span>{employee?.email || 'Sin correo'}</span>{employee?.nationalId && <><span>•</span><span>Cédula {employee.nationalId}</span></>}{loading && <span role="status" className="inline-flex items-center gap-1 font-bold text-primary"><Loader2 className="size-3 animate-spin" /> Cargando detalle…</span>}</SheetDescription>
               </div>
             </div>
             <div className="flex flex-wrap gap-2" data-tour="hr-employee-detail-actions">

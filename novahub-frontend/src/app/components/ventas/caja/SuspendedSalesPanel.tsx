@@ -196,7 +196,7 @@ export function SuspendedSalesPanel({
                           <tbody className="divide-y divide-border/20">
                             {hold.items.map((item) => (
                               <tr key={item.id}>
-                                <td className="px-3 py-1.5 font-bold">{item.description}</td>
+                                <td className="px-3 py-1.5"><span className="block font-bold">{item.description}</span>{item.commercialNoteSnapshot && <span className="block text-[10px] font-normal text-muted-foreground">Nota: {item.commercialNoteSnapshot}</span>}</td>
                                 <td className="px-3 py-1.5 text-center font-mono">{item.quantity}</td>
                                 <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{formatSalesAmount(item.unitPrice)}</td>
                                 <td className="px-3 py-1.5 text-right font-mono font-bold">{formatSalesAmount(item.total)}</td>

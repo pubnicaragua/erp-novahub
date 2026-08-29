@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { ArrowUpRight, Building2, CalendarDays, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
@@ -50,6 +50,7 @@ interface SalesDocumentDetailSheetProps {
   onWhatsApp?: () => void;
   hasWhatsApp?: boolean;
   onDownloadPdf?: (format: PdfDownloadFormat) => void;
+  extraActions?: ReactNode;
 }
 
 const statusLabels: Record<string, string> = {
@@ -103,6 +104,7 @@ export function SalesDocumentDetailSheet({
   onWhatsApp,
   hasWhatsApp = true,
   onDownloadPdf,
+  extraActions,
 }: SalesDocumentDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -116,26 +118,26 @@ export function SalesDocumentDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-      <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 border-l border-border/50 bg-background p-0 sm:max-w-xl">
+      <SheetContent side="right" className="flex w-full min-w-0 max-w-full flex-col gap-0 overflow-x-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <FileText className="size-5" />
             </div>
             <div className="min-w-0">
-              <SheetTitle className="truncate text-lg font-black uppercase tracking-tight">Detalle de {document.title.toLowerCase()}</SheetTitle>
-              <SheetDescription className="mt-1 truncate text-xs">{document.number} · {document.customerName}</SheetDescription>
+              <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
+                <span className="break-words">{document.title} {document.number}</span>
+                <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesStatusColor(statusColor)}`}>
+                  {statusLabel}
+                </Badge>
+              </SheetTitle>
+              {document.sourceLabel && <Badge className="mt-1 w-fit max-w-full border-none bg-primary/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-primary">{document.sourceLabel}</Badge>}
+              <SheetDescription className="mt-1 truncate text-xs">{document.customerName}</SheetDescription>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesStatusColor(statusColor)}`}>
-              {statusLabel}
-            </Badge>
-            {document.sourceLabel && <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">{document.sourceLabel}</Badge>}
           </div>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-5 sm:p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList className="h-10 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 font-bold text-xs">
               <TabsTrigger value="general" className="shrink-0 gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><FileText className="size-3.5" /> General</TabsTrigger>
@@ -165,6 +167,7 @@ export function SalesDocumentDetailSheet({
                 {onWhatsApp && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} title={hasWhatsApp ? 'Preparar mensaje en WhatsApp' : 'El cliente no tiene teléfono registrado'} onClick={onWhatsApp}>
                   <MessageCircle className="size-4 shrink-0" /> WhatsApp
                 </Button>}
+                {extraActions}
                 {onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} />}
               </section>
 
@@ -188,7 +191,7 @@ export function SalesDocumentDetailSheet({
                     <div key={line.id} className="flex min-w-0 items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-semibold text-foreground">{line.description || 'Artículo sin descripción'}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{line.quantity ?? 0}{line.unitPriceLabel ? ` × ${line.unitPriceLabel}` : ''}</p>
+                        <p className="mt-1 break-words text-xs text-muted-foreground">{line.quantity ?? 0}{line.unitPriceLabel ? ` × ${line.unitPriceLabel}` : ''}</p>
                         {line.secondaryLabel && <p className="mt-1 text-[11px] font-medium text-muted-foreground">{line.secondaryLabel}</p>}
                       </div>
                       {line.totalLabel && <p className="shrink-0 text-sm font-black tabular-nums">{line.totalLabel}</p>}
@@ -218,6 +221,11 @@ export function SalesDocumentDetailSheet({
             </TabsContent>
           </Tabs>
         </div>
+        <SheetFooter className="border-t border-border/50 bg-background/95 px-5 py-3 backdrop-blur-md sm:px-6">
+          <Button type="button" variant="outline" size="sm" onClick={onClose} className="ml-auto gap-1.5 rounded-xl font-bold text-xs">
+            Cerrar <ChevronRight className="size-3" />
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

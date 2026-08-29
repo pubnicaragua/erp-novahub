@@ -163,6 +163,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       productId: value,
       serviceName: itemType === 'SERVICE' ? (selectedProduct?.name || newItems[idx].serviceName || '') : '',
       description: selectedProduct?.name || newItems[idx].description || '',
+      commercialNoteSnapshot: selectedProduct?.commercialNote || null,
       unitPrice,
       total: Number(newItems[idx].quantity || 1) * unitPrice,
     };
@@ -284,6 +285,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
     lines: (row.items || []).map((item) => ({
       id: item.id,
       description: item.description || item.serviceName || 'Artículo sin descripción',
+      secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
       totalLabel: formatConvertedAmount(Number(item.total || 0), row.currency, row.exchangeRate),
@@ -383,6 +385,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
       itemType: resolvedItemType,
       serviceName: resolvedItemType === 'SERVICE' ? (item.serviceName || item.description || '') : undefined,
       description: item.description || item.serviceName || '',
+      commercialNoteSnapshot: item.commercialNoteSnapshot || null,
       quantity: Number(item.quantity || 1),
       unitPrice: Number(item.unitPrice || 0),
       total: Number(item.total || 0),
@@ -656,6 +659,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
                           options={getItemCatalog(item).map((product: any) => ({
                             label: `${String(product.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code || ''} - ${product.name}`,
                             value: product.id,
+                            description: product.commercialNote ? `Nota: ${product.commercialNote}` : undefined,
                           }))}
                           value={item.productId || ''}
                           onChange={(value) => handleCatalogItemChange(idx, value)}
@@ -752,7 +756,7 @@ export function FacturasRecurrentesView({ data, loading, onRefresh, customers = 
             </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="recurring" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

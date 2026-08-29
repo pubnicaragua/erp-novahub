@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   ClipboardList, Search, Eye, X, AlertTriangle,
-  CheckCircle, FileDown, Send, Ban,
-  Building2,
+  CheckCircle, Send, Ban,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -24,13 +23,13 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { generatePurchaseRequestPDF } from '../../utils/pdfGenerator';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { EditableDataTable, type ColumnDef } from '../ui/EditableDataTable';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
+import { getPurchasePriorityOption } from '../../utils/purchasePriority';
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: 'bg-muted/20 text-muted-foreground',
@@ -52,6 +51,11 @@ const PRIORITY_STYLES: Record<string, string> = {
   URGENT: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   CRITICAL: 'bg-destructive/10 text-destructive',
 };
+
+function PurchasePriorityBadge({ value, className }: { value: unknown; className?: string }) {
+  const priority = getPurchasePriorityOption(value);
+  return <Badge variant="outline" className={cn(className, 'border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[priority.value])}>{priority.label}</Badge>;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Pendiente', SUBMITTED: 'Pendiente', RECEIVED: 'Pendiente',
@@ -135,36 +139,27 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
     });
   }, [data, search, statusFilter]);
 
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Solicitudes de Compra',
-      columns: [
-        { key: 'number', label: 'Nº', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filtered.map((item) => ({
-        number: item.number,
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.management?.[0]?.total || 0),
-        status: normalizeRequestStatus(item.status),
-      })),
-      filters: {
-        'Búsqueda': search || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Solicitudes de Compra',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filtered, search, printContent, user?.tenantName]);
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de solicitudes...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Solicitudes de compra',
+        rows: filtered,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'N° Solicitud', value: (row) => row.number },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || row.management?.[0]?.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', value: (row) => row.date ? new Date(row.date).toLocaleDateString('es-NI') : '—' },
+          { label: 'Total', align: 'right', value: (row) => { const management = row.management?.[0]; return management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : '—'; } },
+          { label: 'Estado', align: 'center', value: (row) => STATUS_LABELS[normalizeRequestStatus(row.status)] },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
   const getActiveManagement = (pr: PurchaseRequest): PurchaseManagement | undefined =>
     pr.management?.[0];
@@ -172,10 +167,34 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const actionButtonClass = 'rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors';
   const actionIconClass = 'size-3.5';
 
+  const renderRequestActions = (req: PurchaseRequest, card = false) => {
+    const requestStatus = normalizeRequestStatus(req.status);
+    const isPending = requestStatus === 'PENDING_APPROVAL';
+    const isLoading = actionLoading === req.id;
+    const buttonClass = 'size-8 rounded-lg';
+    return (
+      <div className={cn('flex flex-wrap items-center justify-end gap-1', card && 'w-full')} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+        <Button type="button" variant="ghost" size="icon" className={cn(actionButtonClass, buttonClass)} onClick={() => setDetailOpen(req)} title="Ver detalle" aria-label="Ver detalle de la solicitud">
+          <Eye className={actionIconClass} />
+        </Button>
+        {canApproveRequests && isPending && (
+          <Button type="button" variant="ghost" size="icon" className={cn(actionButtonClass, buttonClass)} onClick={() => handleRequestApprove(req)} disabled={isLoading} title="Aprobar solicitud y enviar a órdenes de compra" aria-label="Aprobar solicitud y enviar a órdenes de compra">
+            <Send className={actionIconClass} />
+          </Button>
+        )}
+        {canCancelRequests && isPending && (
+          <Button type="button" variant="ghost" size="icon" className={cn(actionButtonClass, buttonClass)} onClick={() => handleRequestCancel(req)} disabled={isLoading} title="Anular solicitud de compra" aria-label="Anular solicitud de compra">
+            <Ban className={actionIconClass} />
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   const columns: ColumnDef<PurchaseRequest>[] = [
     {
       key: 'number',
-      header: 'N°',
+      header: 'N° Solicitud',
       width: '140px',
       render: (value) => <span className="font-mono text-xs font-black text-primary">{value}</span>,
     },
@@ -202,11 +221,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       key: 'priority',
       header: 'Prioridad',
       width: '115px',
-      render: (value) => (
-        <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[String(value || 'NORMAL').toUpperCase()] || PRIORITY_STYLES.NORMAL)}>
-          {value || 'NORMAL'}
-        </Badge>
-      ),
+      render: (value) => <PurchasePriorityBadge value={value} />,
     },
     {
       key: 'supplier',
@@ -377,7 +392,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       warehouseId: requestWarehouseId,
       currency: displayCurrency,
       exchangeRate: globalRate,
-      status: 'PENDING',
+      status: 'DRAFT',
       purchaseType: 'INVENTORY',
       requestedBy: requester,
       purchaseRequestId: request.id,
@@ -421,19 +436,69 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
   const formatRequestAmount = (amount: number | string | undefined | null, currency?: string, rate?: number) =>
     formatConvertedAmount(Number(amount || 0), (currency || displayCurrency) as any, rate ?? globalRate);
 
-  const handleDownloadRequestPdf = async (request: PurchaseRequest) => {
+  const handleDownloadRequestPdf = async (request: PurchaseRequest, format: PdfDownloadFormat = 'configured') => {
     if (!canExportRequests) return;
     const pdfToastId = toast.loading('Generando PDF de la solicitud de compra...');
     try {
-      await generatePurchaseRequestPDF({
-        request,
+      const management = getActiveManagement(request);
+      await generatePurchaseRecordPDF({
+        format,
+        targetKey: 'compras.purchase-request',
+        document: {
+          title: 'Solicitud de compra',
+          number: request.number,
+          date: request.date ? new Date(request.date).toLocaleDateString('es-NI') : undefined,
+          status: STATUS_LABELS[normalizeRequestStatus(request.status)],
+          supplier: request.supplier?.name || management?.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Solicitante', value: `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || '—' },
+            { label: 'Bodega', value: request.warehouse?.name || '—' },
+            { label: 'Prioridad', value: getPurchasePriorityOption(request.priority).label },
+            { label: 'Fecha requerida', value: request.requiredDate ? new Date(request.requiredDate).toLocaleDateString('es-NI') : '—' },
+            ...(management ? [{ label: 'Cotización', value: management.quotationNumber || '—' }, { label: 'Proveedor cotizado', value: management.supplier?.name || '—' }] : []),
+          ],
+          lines: management?.items?.length
+            ? management.items.map((item: any) => ({ description: item.description || 'Artículo sin descripción', quantity: item.quantityProposed || item.quantityRequested || 0, unitPrice: formatRequestAmount(item.unitPrice, management.currency, management.exchangeRate), total: formatRequestAmount(item.total, management.currency, management.exchangeRate) }))
+            : (request.items || []).map((item: any) => ({ description: item.description || item.name || 'Artículo sin descripción', quantity: item.quantity || 0, secondary: `Stock actual: ${item.currentStock ?? '—'} · Stock mínimo: ${item.minStock ?? '—'}` })),
+          total: management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : undefined,
+          totalLabel: 'Total cotizado',
+          notes: request.notes || request.justification,
+        },
         tenantName: user?.tenantName || 'Nova Hub',
-        formatAmount: (amount, currency, rate) => formatRequestAmount(amount, currency, rate),
       });
       toast.success('PDF descargado', { id: pdfToastId });
     } catch (e: any) {
       toast.error(e?.message || 'No se pudo generar el PDF', { id: pdfToastId });
     }
+  };
+
+  const buildRequestPanel = (request: PurchaseRequest): SalesDocumentPanelData => {
+    const management = getActiveManagement(request);
+    return {
+      id: request.id,
+      number: request.number,
+      title: 'Solicitud de compra',
+      customerName: request.supplier?.name || management?.supplier?.name || 'Sin proveedor',
+      hideCustomer: true,
+      status: normalizeRequestStatus(request.status),
+      sourceLabel: management ? 'Gestión de compra' : undefined,
+      totalLabel: management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : 'Sin cotización',
+      summaryDetails: [
+        { label: 'Artículos', value: String(request.items?.length || 0) },
+        { label: 'Prioridad', value: getPurchasePriorityOption(request.priority).label },
+        { label: 'Bodega', value: request.warehouse?.name || 'No indicada' },
+      ],
+      metadata: [
+        { label: 'Solicitante', value: `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || 'No disponible' },
+        { label: 'Proveedor', value: request.supplier?.name || management?.supplier?.name || 'No asignado' },
+        { label: 'Fecha requerida', value: request.requiredDate ? new Date(request.requiredDate).toLocaleDateString('es-NI') : 'No disponible' },
+        ...(management ? [{ label: 'Cotización', value: management.quotationNumber || 'No indicada' }] : []),
+      ],
+      lines: management?.items?.length
+        ? management.items.map((item: any, index) => ({ id: String(item.id || index), description: item.description || 'Artículo sin descripción', quantity: Number(item.quantityProposed || item.quantityRequested || 0), unitPriceLabel: formatRequestAmount(item.unitPrice, management.currency, management.exchangeRate), totalLabel: formatRequestAmount(item.total, management.currency, management.exchangeRate), secondaryLabel: `Solicitado: ${item.quantityRequested || 0} · Propuesto: ${item.quantityProposed || 0}` }))
+        : (request.items || []).map((item: any, index) => ({ id: String(item.id || index), description: item.description || item.name || 'Artículo sin descripción', quantity: Number(item.quantity || 0), secondaryLabel: `Stock actual: ${item.currentStock ?? '—'} · Stock mínimo: ${item.minStock ?? '—'}` })),
+      notes: request.notes || request.justification,
+    };
   };
 
   const requestKpis = [
@@ -472,9 +537,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           <Badge variant="secondary" className="text-xs">{data.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-        <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
+        <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
         <PurchaseViewTutorial view="requests" />
-        <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de solicitudes de compra" />
+        <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
         </div>
       </div>
 
@@ -503,36 +568,9 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
           pagination={pagination}
           layoutMode="responsive"
           highlightedRowId={highlightedAlertId}
-          actionsWidth="w-48"
-          actions={(req) => {
-            const mgmt = getActiveManagement(req);
-            return (
-              <div className="flex gap-1">
-                {canExportRequests && <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadRequestPdf(req)}>
-                  <FileDown className="size-4" />
-                </Button>}
-                <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailOpen(req)}>
-                  <Eye className="size-4" />
-                </Button>
-                {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
-                  <Button title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id}>
-                    <Send className="size-4" />
-                  </Button>
-                  {canCancelRequests && <Button title="Anular solicitud" aria-label="Anular solicitud" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id}>
-                    <Ban className="size-4" />
-                  </Button>}
-                </>}
-                {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && <>
-                  {canApproveManagement && <Button title="Aprobar gestión" aria-label="Aprobar gestión" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id}>
-                    <CheckCircle className="size-4" />
-                  </Button>}
-                  {canRejectManagement && <Button title="Rechazar gestión" aria-label="Rechazar gestión" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id}>
-                    <X className="size-4" />
-                  </Button>}
-                </>}
-              </div>
-            );
-          }}
+          actionsWidth="w-64"
+          onRowClick={(req) => setDetailOpen(req)}
+          actions={(req) => renderRequestActions(req)}
         />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">No hay solicitudes de compra</CardContent></Card>
@@ -563,7 +601,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prioridad</p>
-                      <Badge variant="outline" className={cn('mt-1 border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[req.priority] || PRIORITY_STYLES.NORMAL)}>{req.priority}</Badge>
+                      <PurchasePriorityBadge value={req.priority} className="mt-1" />
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Artículos</p>
@@ -574,32 +612,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
                     <p className="truncate text-xs text-muted-foreground">
                       Solicitante: <span className="font-semibold text-foreground">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</span>
                     </p>
-                    <div className="mt-3 flex flex-wrap justify-end gap-1">
-                      {canExportRequests && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => void handleDownloadRequestPdf(req)} title="Descargar PDF" aria-label="Descargar PDF">
-                        <FileDown className={actionIconClass} />
-                      </Button>}
-                      <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => setDetailOpen(req)} title="Ver detalle" aria-label="Ver detalle">
-                        <Eye className={actionIconClass} />
-                      </Button>
-                      {canApproveRequests && normalizeRequestStatus(req.status) === 'PENDING_APPROVAL' && <>
-                        <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestApprove(req)} disabled={actionLoading === req.id} title="Aprobar y enviar a orden de compra" aria-label="Aprobar y enviar a orden de compra">
-                          <Send className={actionIconClass} />
-                        </Button>
-                        {canCancelRequests && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRequestCancel(req)} disabled={actionLoading === req.id} title="Anular solicitud" aria-label="Anular solicitud">
-                          <Ban className={actionIconClass} />
-                        </Button>}
-                      </>}
-                      {(canApproveManagement || canRejectManagement) && normalizeRequestStatus(req.status) !== 'CANCELLED' && mgmt?.status === 'PENDING_APPROVAL' && (
-                        <>
-                          {canApproveManagement && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleApproveManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Aprobar gestión">
-                            <CheckCircle className={actionIconClass} />
-                          </Button>}
-                          {canRejectManagement && <Button variant="ghost" size="sm" className={cn(actionButtonClass, 'h-8 px-2')} onClick={() => handleRejectManagement(mgmt)} disabled={actionLoading === mgmt.id} title="Rechazar gestión">
-                            <X className={actionIconClass} />
-                          </Button>}
-                        </>
-                      )}
-                    </div>
+                    <div className="mt-3">{renderRequestActions(req, true)}</div>
                   </div>
                 </CardContent>
               </motion.article>
@@ -609,128 +622,22 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
       )}
       </div>
 
-      {/* Detail drawer */}
-      <Sheet open={Boolean(detailOpen)} onOpenChange={(open) => { if (!open) setDetailOpen(null); }}>
-        <SheetContent side="right" className="w-full gap-0 border-l border-border/50 bg-background p-0 sm:max-w-2xl">
-          {detailOpen && (() => {
-            const mgmt = getActiveManagement(detailOpen);
-            const requestStatus = normalizeRequestStatus(detailOpen.status);
-            return (
-              <>
-                <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="purchases-request-detail-title">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                      <ClipboardList className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <SheetTitle className="flex flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
-                    Solicitud {detailOpen.number}
-                        <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[requestStatus])}>
-                          {STATUS_LABELS[requestStatus]}
-                        </Badge>
-                      </SheetTitle>
-                      <SheetDescription className="mt-1 line-clamp-2 text-xs">
-                        {detailOpen.justification || 'Solicitud generada desde inventario'}
-                      </SheetDescription>
-                    </div>
-                  </div>
-                  {mgmt && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>Gestión de compra</span>
-                      <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[mgmt.status])}>
-                        {STATUS_LABELS[mgmt.status] || mgmt.status.replace(/_/g, ' ')}
-                      </Badge>
-                    </div>
-                  )}
-                  <PurchaseViewTutorial view="requests" context="form" labelOverride="Cómo consultar solicitud" stepKeys={['title', 'data', 'actions']} targetPrefix="purchases-request-detail" />
-                </SheetHeader>
-
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" data-tour="purchases-request-detail-data">
-                  <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Solicitante</span><p className="mt-1 break-words font-medium">{detailOpen.requestedBy?.firstName} {detailOpen.requestedBy?.lastName}</p></div>
-                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Bodega</span><p className="mt-1 break-words font-medium">{detailOpen.warehouse?.name || '—'}</p></div>
-                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Prioridad</span><p className="mt-1"><Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', PRIORITY_STYLES[detailOpen.priority] || PRIORITY_STYLES.NORMAL)}>{detailOpen.priority}</Badge></p></div>
-                    <div className="rounded-xl border border-border/50 bg-muted/20 p-3"><span className="text-[10px] font-bold uppercase text-muted-foreground">Fecha requerida</span><p className="mt-1 font-medium">{detailOpen.requiredDate ? new Date(detailOpen.requiredDate).toLocaleDateString() : '—'}</p></div>
-                  </div>
-
-                  <section className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Artículos solicitados</h4>
-                      <Badge variant="outline" className="text-[10px]">{detailOpen.items?.length || 0} artículos</Badge>
-                    </div>
-                    <div className="space-y-2">
-                      {(detailOpen.items || []).map((item, i) => {
-                        const managementItem = (mgmt?.items || []).find((candidate: any) => (
-                          (candidate.productId && item.productId && candidate.productId === item.productId)
-                          || (candidate.description && item.description && candidate.description === item.description)
-                        ));
-                        return (
-                          <div key={item.id || i} className="rounded-xl border border-border/50 bg-card/60 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="break-words text-sm font-semibold">{item.description || 'Producto sin descripción'}</p>
-                                <p className="mt-1 font-mono text-[10px] text-muted-foreground">{item.productId ? item.productId.slice(0, 8) : 'Sin código'}{(detailOpen.supplier?.name || mgmt?.supplier?.name) ? ` · ${detailOpen.supplier?.name || mgmt?.supplier?.name}` : ''}</p>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <p className="font-mono text-sm font-black">{item.quantity}</p>
-                                <p className="text-[10px] text-muted-foreground">solicitadas</p>
-                              </div>
-                            </div>
-                            <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/30 pt-2 text-xs">
-                              <span className="text-muted-foreground">Stock actual <b className="ml-1 text-foreground">{item.currentStock}</b></span>
-                              <span className="text-center text-muted-foreground">Stock mín <b className="ml-1 text-foreground">{item.minStock ?? '—'}</b></span>
-                              <span className="text-right text-muted-foreground">Total <b className="ml-1 font-mono text-foreground">{managementItem ? formatRequestAmount(managementItem.total, mgmt?.currency, mgmt?.exchangeRate) : '—'}</b></span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-
-                  {detailOpen.notes && <p className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm text-muted-foreground">Notas: {detailOpen.notes}</p>}
-
-                  {mgmt && (
-                    <section className="space-y-3 border-t border-border/50 pt-5">
-                      <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary"><Building2 className="size-3.5" /> Gestión de compra</h4>
-                      <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/50 bg-muted/20 p-4 text-sm sm:grid-cols-4">
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span><p className="mt-1 break-words font-medium">{detailOpen.supplier?.name || mgmt.supplier?.name || '—'}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Cotización</span><p className="mt-1 font-mono">{mgmt.quotationNumber || '—'}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Total ({displayCurrency})</span><p className="mt-1 font-mono font-bold">{formatRequestAmount(mgmt.total, mgmt.currency, mgmt.exchangeRate)}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Moneda origen</span><p className="mt-1">{mgmt.currency || displayCurrency}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Contacto</span><p className="mt-1 break-words">{mgmt.supplierContact || '—'}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Pago</span><p className="mt-1 break-words">{mgmt.paymentTerms || '—'}{mgmt.creditDays ? ` (${mgmt.creditDays}d)` : ''}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Anticipo</span><p className="mt-1 font-mono">{formatRequestAmount(mgmt.advancePayment, mgmt.currency, mgmt.exchangeRate)}</p></div>
-                        <div><span className="text-[10px] font-bold uppercase text-muted-foreground">Envío</span><p className="mt-1 font-mono">{formatRequestAmount(mgmt.shippingCost, mgmt.currency, mgmt.exchangeRate)}</p></div>
-                      </div>
-
-                      <div className="space-y-2">
-                        {(mgmt.items || []).map((item, i) => (
-                          <div key={item.id || i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border/50 p-3 text-xs">
-                            <div className="min-w-0"><p className="break-words font-semibold">{item.description}</p><p className="mt-1 text-muted-foreground">Solicitado {item.quantityRequested} · Propuesto {item.quantityProposed} · Dto. {item.discount}%</p></div>
-                            <div className="text-right"><p className="font-mono">{formatRequestAmount(item.unitPrice, mgmt.currency, mgmt.exchangeRate)} / ud.</p><p className="mt-1 font-mono font-bold text-primary">{formatRequestAmount(item.total, mgmt.currency, mgmt.exchangeRate)}</p></div>
-                          </div>
-                        ))}
-                      </div>
-                      {mgmt.internalNotes && <p className="text-sm text-muted-foreground">Notas internas: {mgmt.internalNotes}</p>}
-                      {mgmt.notes && <p className="text-sm text-muted-foreground">Notas: {mgmt.notes}</p>}
-                      {mgmt.approvedBy && <p className="text-sm text-muted-foreground">Aprobado por: {mgmt.approvedBy.name} {mgmt.approvedAt ? `el ${new Date(mgmt.approvedAt).toLocaleDateString()}` : ''}</p>}
-                      {mgmt.rejectionReason && <p className="text-sm text-red-500">Motivo de rechazo: {mgmt.rejectionReason}</p>}
-                    </section>
-                  )}
-                </div>
-
-                <SheetFooter className="border-t border-border/50 bg-background px-5 py-4 sm:px-6" data-tour="purchases-request-detail-actions">
-                  <div className="w-full">
-                    {canExportRequests && <Button variant="outline" className="h-10 w-full gap-2" onClick={() => void handleDownloadRequestPdf(detailOpen)}>
-                      <FileDown className="size-4" /> Descargar PDF
-                    </Button>}
-                  </div>
-                </SheetFooter>
-              </>
-            );
-          })()}
-        </SheetContent>
-      </Sheet>
+      <SalesDocumentDetailSheet
+        key={detailOpen?.id || 'purchase-request-detail'}
+        document={detailOpen ? buildRequestPanel(detailOpen) : null}
+        entity="PURCHASE_REQUEST"
+        open={Boolean(detailOpen)}
+        onClose={() => setDetailOpen(null)}
+        extraActions={detailOpen && (() => {
+          const management = getActiveManagement(detailOpen);
+          return <>
+            {management && management.status === 'PENDING_APPROVAL' && canApproveManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => handleApproveManagement(management)} disabled={actionLoading === management.id}><CheckCircle className="size-4" /> Aprobar gestión</Button>}
+            {management && management.status === 'PENDING_APPROVAL' && canRejectManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => handleRejectManagement(management)} disabled={actionLoading === management.id}><X className="size-4" /> Rechazar gestión</Button>}
+            {management && management.status === 'APPROVED' && canConvertManagement && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-primary" onClick={() => handleConvertToOrder(management)} disabled={actionLoading === management.id}><Send className="size-4" /> Convertir a orden</Button>}
+          </>;
+        })()}
+        onDownloadPdf={canExportRequests ? (format) => detailOpen ? void handleDownloadRequestPdf(detailOpen, format) : undefined : undefined}
+      />
 
       <PromptDialog
         open={Boolean(pendingRejectManagement)}

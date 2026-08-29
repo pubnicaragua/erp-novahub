@@ -573,6 +573,7 @@ export function ProductDetailDrawer({
                       </span>
                     </>
                   )}
+                  {loading && <span role="status" className="inline-flex items-center gap-1 font-bold text-primary"><Loader2 className="size-3 animate-spin" /> Cargando detalle…</span>}
                 </SheetDescription>
               </div>
             </div>
@@ -705,6 +706,12 @@ export function ProductDetailDrawer({
                         value={product?.description || product?.descriptionHtml || 'Sin descripción'}
                         icon={Info}
                         muted={!product?.description && !product?.descriptionHtml}
+                      />
+                      <InfoField
+                        label="Nota comercial"
+                        value={product?.commercialNote || 'Sin nota comercial'}
+                        icon={Info}
+                        muted={!product?.commercialNote}
                       />
                       {!isService && canViewInventoryCost && (
                         <InfoField

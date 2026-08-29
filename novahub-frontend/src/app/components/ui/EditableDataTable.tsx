@@ -9,7 +9,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -107,6 +107,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false);
   const [mobileActionsRow, setMobileActionsRow] = useState<T | null>(null);
   const rowClickTimerRef = useRef<number | null>(null);
+  const openingRowTimerRef = useRef<number | null>(null);
+  const [openingRowId, setOpeningRowId] = useState<string | number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const pointerInsideTable = useRef(false);
   const scrollAnimationRef = useRef<number | null>(null);
@@ -116,6 +118,21 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     const match = /^w-(\d+)$/.exec(actionsWidth);
     return match ? Number(match[1]) * 4 : 128;
   })();
+  const markRowOpening = useCallback((row: T) => {
+    const rowId = row[idField];
+    setOpeningRowId(rowId);
+    if (openingRowTimerRef.current !== null) window.clearTimeout(openingRowTimerRef.current);
+    openingRowTimerRef.current = window.setTimeout(() => {
+      setOpeningRowId((current) => String(current) === String(rowId) ? null : current);
+      openingRowTimerRef.current = null;
+    }, 900);
+  }, [idField]);
+
+  const openRowDetail = useCallback((row: T) => {
+    markRowOpening(row);
+    onRowClick?.(row);
+  }, [markRowOpening, onRowClick]);
+
   const handleRowInteraction = useCallback((event: React.MouseEvent, row: T, doubleClick = false) => {
     const target = event.target as HTMLElement;
     if (target.closest('button, input, select, textarea')) return;
@@ -132,13 +149,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       if (rowClickTimerRef.current !== null) window.clearTimeout(rowClickTimerRef.current);
       rowClickTimerRef.current = window.setTimeout(() => {
         rowClickTimerRef.current = null;
-        onRowClick?.(row);
-      }, 220);
+        openRowDetail(row);
+      }, 160);
       return;
     }
 
-    onRowClick?.(row);
-  }, [onRowClick, onRowDoubleClick]);
+    openRowDetail(row);
+  }, [onRowDoubleClick, openRowDetail]);
+
+  useEffect(() => () => {
+    if (rowClickTimerRef.current !== null) window.clearTimeout(rowClickTimerRef.current);
+    if (openingRowTimerRef.current !== null) window.clearTimeout(openingRowTimerRef.current);
+  }, []);
   const tableMinWidth = fitContent
     ? columns.reduce((total, column) => total + (Number.parseInt(String(column.width || ''), 10) || 140), 0) + (showSelection ? 48 : 0) + actionColumnWidth
     : undefined;
@@ -504,6 +526,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               const isDraft = draftRows.has(rowId);
               const isSelected = selectedIds.has(rowId);
               const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
+              const isOpening = openingRowId != null && String(openingRowId) === String(rowId);
 
               return (
                 <TableRow 
@@ -517,6 +540,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-l-primary ring-1 ring-inset ring-primary/50"
                       : isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"
                   )}
+                  aria-busy={isOpening || undefined}
+                  data-detail-opening={isOpening ? 'true' : undefined}
                 >
                   {showSelection && (
                     <TableCell className="text-center">
@@ -625,6 +650,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   })}
                   <TableCell data-actions-column="true" className={cn('h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto', actionsWidth)}>
                     <div data-action-group="true" className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
+                      {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary" title="Abriendo detalle">
+                        <Loader2 className="size-3 animate-spin" /> <span className="hidden 2xl:inline">Abriendo…</span>
+                      </span>}
                       {actions ? actions(row) : (
                         onRowDelete && (
                           <Button
@@ -663,6 +691,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           const rowId = row[idField];
           const isSelected = selectedIds.has(rowId);
           const isHighlighted = highlightedRowId != null && String(highlightedRowId) === String(rowId);
+          const isOpening = openingRowId != null && String(openingRowId) === String(rowId);
           return (
             <motion.article
               key={rowId}
@@ -674,6 +703,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 (onRowClick || onRowDoubleClick) && !editOnPencilOnly && 'cursor-pointer',
                 isHighlighted ? 'border-primary bg-primary/10 ring-2 ring-primary/40' : isSelected && 'border-primary/50 bg-primary/5'
               )}
+              aria-busy={isOpening || undefined}
+              data-detail-opening={isOpening ? 'true' : undefined}
             >
               <div className="flex items-start justify-between gap-3 border-b border-border/40 p-4">
                 <div className="flex min-w-0 items-start gap-3">
@@ -692,6 +723,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       {String(row.code || row.number || rowId)}
                     </p>
                   </div>
+                  {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary">
+                    <Loader2 className="size-3 animate-spin" /> Abriendo…
+                  </span>}
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2">

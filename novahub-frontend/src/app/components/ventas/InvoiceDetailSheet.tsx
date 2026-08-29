@@ -161,6 +161,7 @@ export function InvoiceDetailSheet({
                 <div key={item.id} className="flex min-w-0 items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
                     <p className="break-words text-sm font-semibold text-foreground">{item.description || 'Artículo sin descripción'}</p>
+                    {item.commercialNoteSnapshot && <p className="mt-1 break-words text-[11px] text-primary/80">Nota: {item.commercialNoteSnapshot}</p>}
                     <p className="mt-1 text-xs text-muted-foreground">{Number(item.quantity || 0)} × {formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate)}</p>
                   </div>
                   <p className="shrink-0 text-sm font-black tabular-nums">{formatAmount(Number(item.total || 0), invoice.currency, invoice.exchangeRate)}</p>

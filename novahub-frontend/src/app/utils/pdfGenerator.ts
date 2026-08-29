@@ -2,11 +2,12 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfDocumentDesignService } from '../services/pdf-document-design.service';
 import { getPdfTemplateTarget } from '../services/pdf-document-catalog';
-import { sanitizeHtml2CanvasOklch } from './export-utils';
+import { getBase64Image, sanitizeHtml2CanvasOklch } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
+import { getPurchasePriorityOption } from './purchasePriority';
 
 type PdfRgb = [number, number, number];
 
@@ -162,6 +163,12 @@ function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character);
 }
 
+function commercialItemDescription(item: any, fallback = 'Producto') {
+  const description = String(item?.description || item?.name || fallback);
+  const note = String(item?.commercialNoteSnapshot || item?.commercialNote || '').trim();
+  return note ? `${description}\nNota: ${note}` : description;
+}
+
 function htmlFieldStyle(field: any) {
   return `position:absolute;left:${Number(field.x) || 0}%;top:${Number(field.y) || 0}%;width:${Number(field.width) || 30}%;min-height:${Number(field.height) || 7}%;`;
 }
@@ -211,7 +218,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     return `<div data-template-field="${id}" style="${htmlFieldStyle(meta)}${extra}">${content}</div>`;
   };
   const items = Array.isArray(estimate.items) ? estimate.items : [];
-  const rows = (items.length ? items : [{ description: 'Sin productos', quantity: 0, unitPrice: 0, total: 0 }]).map((item: any, index: number) => `<div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 5 : 8}px;border-top:${tableBorder};border-radius:${tableLayout === 'cards' ? 4 : 0}px;background:${['striped', 'ledger', 'accent'].includes(tableLayout) && index % 2 ? '#f8fafc' : '#fff'};"><span>${escapeHtml(item.description || item.name || 'Producto')}</span><span>${escapeHtml(item.quantity || 0)}</span><span>${escapeHtml(formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate))}</span><strong style="color:${tableLayout === 'accent' ? primary : text}">${escapeHtml(formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate))}</strong></div>`).join('');
+  const rows = (items.length ? items : [{ description: 'Sin productos', quantity: 0, unitPrice: 0, total: 0 }]).map((item: any, index: number) => `<div style="display:grid;grid-template-columns:1fr 12% 18% 18%;gap:4px;padding:${tableLayout === 'compact' ? 5 : 8}px;border-top:${tableBorder};border-radius:${tableLayout === 'cards' ? 4 : 0}px;background:${['striped', 'ledger', 'accent'].includes(tableLayout) && index % 2 ? '#f8fafc' : '#fff'};"><span style="white-space:pre-line">${escapeHtml(commercialItemDescription(item))}</span><span>${escapeHtml(item.quantity || 0)}</span><span>${escapeHtml(formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate))}</span><strong style="color:${tableLayout === 'accent' ? primary : text}">${escapeHtml(formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate))}</strong></div>`).join('');
   const headerBackground = bannerHeader ? primary : '#f7fbf9';
   const headerBorder = bannerHeader ? 'none' : `1px solid ${line}`;
   const logoSource = design.logoUrl || tenantLogo || NOVAHUB_LOGO_DATA_URL;
@@ -470,7 +477,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
 
   // 6. Configuración de ítems (Tabla)
   const tableData = (estimate.items || []).map((item: any) => [
-    item.description || 'Producto Customizado',
+    commercialItemDescription(item, 'Producto Customizado'),
     Number(item.quantity).toString(),
     formatAmount(Number(item.unitPrice), estimate.currency, estimate.exchangeRate),
     formatAmount(Number(item.total), estimate.currency, estimate.exchangeRate)
@@ -1146,7 +1153,7 @@ async function generateSalesTicketPDF({
     : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
   const additionalChargeLines = getSalesPdfAdditionalCharges(transaction);
   const estimatedItemHeight = items.reduce((height: number, item: any) => {
-    const descriptionLines = Math.max(1, Math.ceil(String(item.description || item.name || 'Producto').length / (width === 58 ? 24 : 36)));
+    const descriptionLines = Math.max(1, commercialItemDescription(item).split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / (width === 58 ? 24 : 36))), 0));
     return height + 8 + descriptionLines * 3.6;
   }, 0);
   const notesHeight = transaction.notes ? Math.min(24, Math.max(6, String(transaction.notes).length / (width === 58 ? 20 : 30) * 3.2)) : 0;
@@ -1228,7 +1235,7 @@ async function generateSalesTicketPDF({
   doc.text('DETALLE', margin, y);
   y += 4;
   items.forEach((item: any) => {
-    const description = String(item.description || item.name || 'Producto');
+    const description = commercialItemDescription(item);
     const descriptionLines = doc.splitTextToSize(description, contentWidth);
     doc.setFont(fontName, 'normal');
     doc.setFontSize(7.5);
@@ -1384,86 +1391,286 @@ export async function generateSalesTransactionPDF({
   });
 }
 
-export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo }: any) => {
-  const settings = await getPdfDesignSettings('compras.supplier-history');
+export interface ConfiguredHistoryPdfColumn {
+  header: string;
+  value: (row: any) => unknown;
+  align?: 'left' | 'center' | 'right';
+}
+
+export interface ConfiguredHistoryPdfOptions {
+  targetKey: string;
+  title: string;
+  subtitle?: string;
+  subjectLabel: string;
+  subjectName: string;
+  tenantName: string;
+  rows: any[];
+  columns: ConfiguredHistoryPdfColumn[];
+  tenantLogo?: string | null;
+  format?: PdfDownloadFormat;
+  designOverride?: any;
+  fileName: string;
+  save?: boolean;
+}
+
+const configuredPdfFont = (value: unknown) => {
+  const selected = String(value || 'helvetica').trim().toLowerCase();
+  if (['times', 'times new roman', 'georgia', 'garamond', 'cambria', 'palatino linotype', 'bookman'].includes(selected)) return 'times';
+  if (['courier', 'courier new', 'consolas', 'monaco'].includes(selected)) return 'courier';
+  return 'helvetica';
+};
+
+const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownloadFormat) => {
+  if (format === 'configured') return settings;
+  return {
+    ...settings,
+    paperSize: format === 'A4' ? 'A4' : format === 'legal' ? 'LEGAL' : format === 'oficio' ? 'OFICIO' : 'LETTER',
+    orientation: 'portrait',
+  };
+};
+
+const safePdfFileName = (value: string) => {
+  const normalized = String(value || 'historial.pdf').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'historial.pdf';
+  return normalized.toLowerCase().endsWith('.pdf') ? normalized : `${normalized}.pdf`;
+};
+
+/** Genera historiales con el mismo motor visual que las plantillas configurables. */
+export const generateConfiguredHistoryPDF = async ({
+  targetKey,
+  title,
+  subtitle,
+  subjectLabel,
+  subjectName,
+  tenantName,
+  rows,
+  columns,
+  tenantLogo,
+  format = 'configured',
+  designOverride,
+  fileName,
+  save = true,
+}: ConfiguredHistoryPdfOptions): Promise<{ doc: jsPDF; blob: Blob }> => {
+  const fetchedSettings = designOverride
+    ? (designOverride?.settings && typeof designOverride.settings === 'object' ? designOverride.settings : designOverride)
+    : await getPdfDesignSettings(targetKey);
+  const settings = configuredHistoryPaper(
+    (fetchedSettings && typeof fetchedSettings === 'object' ? fetchedSettings : {}) as Record<string, any>,
+    format,
+  );
   const doc = new jsPDF(pdfDesignPaper(settings));
-  
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
-  
-  let titleY = 25;
-  if (tenantLogo) {
-    try {
-      doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
-      titleY = 38;
-      doc.setFontSize(14);
-    } catch (error) {
-      doc.setFontSize(22);
-    }
-  } else {
-    doc.setFontSize(22);
+  const lineColor = pdfDesignColor(settings.lineColor, [226, 232, 240]);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = Math.max(8, Math.min(28, Number(settings.margins) || 14));
+  const rightEdge = pageWidth - margin;
+  const fontName = configuredPdfFont(settings.fontFamily);
+  const baseFontSize = Math.max(7, Math.min(13, Number(settings.fontSize) || 9));
+  const headerLayout = String(settings.headerLayout || 'split');
+  const tableLayout = String(settings.tableLayout || 'standard');
+  const isBannerHeader = ['banner', 'ribbon', 'corner', 'double-band'].includes(headerLayout);
+  const isCenteredHeader = ['centered', 'editorial'].includes(headerLayout);
+  const headerHeight = isCenteredHeader ? 68 : headerLayout === 'compact' ? 45 : isBannerHeader ? 52 : 58;
+  const headerTextColor: PdfRgb = isBannerHeader ? [255, 255, 255] : textColor;
+  const companyName = settings.showCompanyName === false ? '' : String(settings.companyName || tenantName || 'Nuestra Empresa');
+  const logoSource = String(settings.logoUrl || tenantLogo || '');
+  const logo = logoSource.startsWith('data:') ? logoSource : logoSource ? await getBase64Image(logoSource) : null;
+  const logoSize = logo ? fitPdfImage(doc, logo, Math.max(18, Math.min(70, Number(settings.logoSize) || 42)), headerLayout === 'compact' ? 17 : 22) : { width: 0, height: 0 };
+  const logoPosition = String(settings.logoPosition || 'left');
+  const logoX = logoPosition === 'center' ? (pageWidth - logoSize.width) / 2 : logoPosition === 'right' ? rightEdge - logoSize.width : margin;
+  const logoY = isBannerHeader ? 12 : 10;
+  const headerMeta = [settings.slogan, settings.fiscalInfo, settings.address, settings.phone, settings.email].filter(Boolean).join(' · ');
+  const reportRows = Array.isArray(rows) ? rows : [];
+
+  if (isBannerHeader) {
+    doc.setFillColor(...primaryColor);
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
   }
-  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Historial de Compras (Productos y Servicios)', 14, titleY + 7);
-  
-  doc.setFontSize(18);
-  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.setFont('helvetica', 'bold');
-  doc.text('HISTORIAL', 196, 25, { align: 'right' });
-  
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Proveedor: ${supplier.name || 'N/A'}`, 196, 32, { align: 'right' });
-  doc.text(`Fecha Emisión: ${new Date().toLocaleDateString()}`, 196, 38, { align: 'right' });
-  
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.5);
-  doc.line(14, 46, 196, 46);
+  if (headerLayout === 'topline') {
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(1.5);
+    doc.line(margin, 8, rightEdge, 8);
+  }
+  if (headerLayout === 'sidebar') {
+    doc.setFillColor(...primaryColor);
+    doc.rect(0, 0, 5, headerHeight, 'F');
+  }
+  if (headerLayout === 'boxed') {
+    doc.setDrawColor(...lineColor);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin - 2, 7, pageWidth - (margin * 2) + 4, headerHeight - 12, 3, 3, 'S');
+  }
+  if (headerLayout === 'double-band') {
+    doc.setFillColor(...lineColor);
+    doc.rect(0, headerHeight - 5, pageWidth, 5, 'F');
+  }
 
-  const tableData = items.map((item: any) => [
-    item.date,
-    item.type,
-    item.docNumber,
-    item.description || 'N/A',
-    Number(item.quantity).toString(),
-    formatAmount(Number(item.unitPrice), item.currency, item.exchangeRate),
-    formatAmount(Number(item.total), item.currency, item.exchangeRate)
-  ]);
+  const putLogo = () => {
+    if (!logo) return;
+    try {
+      const imageType = logo.startsWith('data:image/jpeg') || logo.startsWith('data:image/jpg') ? 'JPEG' : 'PNG';
+      doc.addImage(logo, imageType, logoX, logoY, logoSize.width, logoSize.height, undefined, 'FAST');
+    } catch {
+      // El contenido del historial debe seguir siendo descargable si el logo no es compatible.
+    }
+  };
 
+  doc.setFont(fontName, 'normal');
+  if (isCenteredHeader) {
+    putLogo();
+    const centerX = pageWidth / 2;
+    let centerY = logo ? logoY + logoSize.height + 5 : 12;
+    doc.setTextColor(...headerTextColor);
+    if (companyName) {
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(logo ? 14 : 17);
+      doc.text(companyName, centerX, centerY, { align: 'center' });
+      centerY += 6;
+    }
+    if (headerMeta) {
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(Math.max(7, baseFontSize - 1));
+      doc.text(doc.splitTextToSize(headerMeta, pageWidth - margin * 2), centerX, centerY, { align: 'center' });
+      centerY += 8;
+    }
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(15);
+    doc.text(title.toUpperCase(), centerX, centerY + 2, { align: 'center' });
+  } else {
+    putLogo();
+    // La ficha del documento ocupa la derecha; cuando el logo está a la
+    // derecha la identidad debe quedarse a la izquierda para no superponer
+    // el nombre de la empresa con el título del historial.
+    const identityX = logoPosition === 'left' ? logoX + logoSize.width + (logo ? 6 : 0) : margin;
+    const identityAlign = 'left';
+    doc.setTextColor(...headerTextColor);
+    if (companyName) {
+      doc.setFont(fontName, 'bold');
+      doc.setFontSize(logo ? 14 : 18);
+      doc.text(companyName, identityX, logo ? logoY + 8 : 20, { align: identityAlign as any });
+    }
+    if (headerMeta) {
+      doc.setFont(fontName, 'normal');
+      doc.setFontSize(Math.max(7, baseFontSize - 1));
+      const metadataY = logo ? logoY + 15 : 27;
+      doc.text(doc.splitTextToSize(headerMeta, Math.max(55, pageWidth * 0.45)), identityX, metadataY, { align: identityAlign as any });
+    }
+    doc.setTextColor(...headerTextColor);
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(16);
+    doc.text(title.toUpperCase(), rightEdge, 21, { align: 'right' });
+    doc.setFont(fontName, 'normal');
+    doc.setFontSize(Math.max(7, baseFontSize - 1));
+    doc.text(`${subjectLabel}: ${subjectName || 'N/A'}`, rightEdge, 30, { align: 'right' });
+    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-NI')}`, rightEdge, 37, { align: 'right' });
+    if (subtitle) doc.text(subtitle, rightEdge, 44, { align: 'right' });
+  }
+
+  if (settings.separator !== 'none' && !isBannerHeader) {
+    doc.setDrawColor(...lineColor);
+    doc.setLineWidth(0.5);
+    if (settings.separator === 'dashed') doc.setLineDashPattern([2, 2], 0);
+    doc.line(margin, headerHeight, rightEdge, headerHeight);
+    doc.setLineDashPattern([], 0);
+  }
+
+  if (settings.watermark) {
+    doc.setTextColor(226, 232, 240);
+    doc.setFont(fontName, 'bold');
+    doc.setFontSize(42);
+    doc.text(String(settings.watermark), pageWidth / 2, pageHeight / 2, { align: 'center', angle: -28 });
+  }
+
+  const subjectBoxY = headerHeight + 5;
+  const subjectBoxH = 25;
+  doc.setFillColor(247, 251, 249);
+  doc.setDrawColor(...lineColor);
+  doc.roundedRect(margin, subjectBoxY, pageWidth - margin * 2, subjectBoxH, 2.5, 2.5, 'FD');
+  doc.setTextColor(...primaryColor);
+  doc.setFont(fontName, 'bold');
+  doc.setFontSize(Math.max(7, baseFontSize - 1));
+  doc.text(subjectLabel.toUpperCase(), margin + 6, subjectBoxY + 8);
+  doc.setTextColor(...textColor);
+  doc.setFontSize(Math.max(9, baseFontSize + 1));
+  doc.text(subjectName || 'N/A', margin + 6, subjectBoxY + 17);
+  doc.setFont(fontName, 'normal');
+  doc.setFontSize(Math.max(7, baseFontSize - 1));
+  doc.text(`Registros: ${reportRows.length}`, rightEdge - 6, subjectBoxY + 11, { align: 'right' });
+  if (subtitle) doc.text(subtitle, rightEdge - 6, subjectBoxY + 18, { align: 'right' });
+
+  const tableTheme = tableLayout === 'striped' || tableLayout === 'ledger' ? 'striped' : tableLayout === 'minimal' ? 'plain' : 'grid';
+  const lightTableHeader = tableLayout === 'minimal';
+  const tableColumnStyles = Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left' }])) as any;
   autoTable(doc, {
-    startY: 55,
-    head: [['Fecha', 'Tipo', 'Documento', 'Descripción', 'Cant.', 'Precio U.', 'Total']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold', halign: 'center' },
-    bodyStyles: { textColor: textColor, fontSize: 8 },
-    columnStyles: {
-      0: { cellWidth: 20, halign: 'center' },
-      1: { cellWidth: 20, halign: 'center' },
-      2: { cellWidth: 25, halign: 'center' },
-      3: { cellWidth: 'auto', halign: 'left' },
-      4: { cellWidth: 15, halign: 'center' },
-      5: { cellWidth: 25, halign: 'right' },
-      6: { cellWidth: 25, halign: 'right' }
+    startY: subjectBoxY + subjectBoxH + 8,
+    head: [columns.map((column) => column.header)],
+    body: reportRows.length
+      ? reportRows.map((row) => columns.map((column) => String(column.value(row) ?? '—')))
+      : [columns.map(() => '—')],
+    theme: tableTheme,
+    margin: { left: margin, right: margin, bottom: 22 },
+    headStyles: {
+      fillColor: lightTableHeader ? [248, 250, 252] : primaryColor,
+      textColor: lightTableHeader ? textColor : [255, 255, 255],
+      font: fontName,
+      fontSize: baseFontSize,
+      fontStyle: 'bold',
+      halign: 'center',
+      cellPadding: tableLayout === 'compact' ? 2.5 : 4,
     },
-    styles: { overflow: 'linebreak', cellPadding: 3 }
+    bodyStyles: { font: fontName, textColor, fontSize: baseFontSize, cellPadding: tableLayout === 'compact' ? 2.5 : tableLayout === 'cards' ? 4 : 3.5 },
+    columnStyles: tableColumnStyles,
+    styles: { font: fontName, overflow: 'linebreak', lineWidth: tableLayout === 'minimal' ? 0 : 0.15, lineColor },
+    tableLineWidth: tableLayout === 'minimal' ? 0 : 0.2,
+    tableLineColor: lineColor,
+    alternateRowStyles: ['striped', 'ledger', 'accent', 'cards'].includes(tableLayout) ? { fillColor: [248, 250, 252] } : undefined,
   });
 
-  const pageHeight = doc.internal.pageSize.height;
-  
-  doc.setFontSize(8);
-  doc.setTextColor(148, 163, 184);
-  doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Compras`, 14, pageHeight - 10);
+  const pageCount = doc.internal.getNumberOfPages();
+  const footerText = String(settings.footerText || `Documento generado por ${tenantName || 'Nuestra Empresa'}`);
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont(fontName, 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(doc.splitTextToSize(footerText, Math.max(40, pageWidth - margin * 2 - 42)), margin, pageHeight - 15);
+    if (settings.showPageNumber !== false) {
+      const pageText = settings.pageNumberFormat === 'number-only'
+        ? String(page)
+        : settings.pageNumberFormat === 'custom'
+          ? String(settings.pageNumberCustom || 'Página {page} de {pages}').replace('{page}', String(page)).replace('{pages}', String(pageCount))
+          : `Página ${page} de ${pageCount}`;
+      doc.text(pageText, rightEdge, pageHeight - 10, { align: 'right' });
+    }
+  }
 
-  doc.save(`Historial_${supplier.name.replace(/\s+/g, '_')}.pdf`);
+  const blob = doc.output('blob');
+  if (save) doc.save(safePdfFileName(fileName));
+  return { doc, blob };
 };
+
+export const generateSupplierHistoryPDF = async ({ supplier, items, tenantName, formatAmount, tenantLogo, format = 'configured' }: any) => generateConfiguredHistoryPDF({
+  targetKey: 'compras.supplier-history',
+  title: 'Historial de compras',
+  subtitle: 'Productos y servicios adquiridos',
+  subjectLabel: 'Proveedor',
+  subjectName: supplier?.name || 'N/A',
+  tenantName: tenantName || 'Nuestra Empresa',
+  rows: items,
+  tenantLogo,
+  format,
+  fileName: `Historial_${String(supplier?.name || 'Proveedor').replace(/\s+/g, '_')}.pdf`,
+  columns: [
+    { header: 'Fecha', align: 'center', value: (item: any) => item.date || '—' },
+    { header: 'Tipo', align: 'center', value: (item: any) => item.type || '—' },
+    { header: 'Documento', align: 'center', value: (item: any) => item.docNumber || '—' },
+    { header: 'Descripción', value: (item: any) => commercialItemDescription(item, 'N/A') },
+    { header: 'Cant.', align: 'center', value: (item: any) => Number(item.quantity ?? 0).toString() },
+    { header: 'Precio U.', align: 'right', value: (item: any) => formatAmount(Number(item.unitPrice || 0), item.currency, item.exchangeRate) },
+    { header: 'Total', align: 'right', value: (item: any) => formatAmount(Number(item.total || 0), item.currency, item.exchangeRate) },
+  ],
+});
 
 export const generateExpensePDF = async ({
   expense,
@@ -1560,9 +1767,11 @@ export const generatePurchaseOrderPDF = async ({
   doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
   const orderStatusLabels: Record<string, string> = {
     DRAFT: 'Borrador',
-    PENDING: 'Pendiente',
+    PENDING: 'En proceso',
+    IN_PROCESS: 'En proceso',
     APPROVED: 'Aprobada',
-    CANCELLED: 'Anulada',
+    CANCELLED: 'Rechazada',
+    REJECTED: 'Rechazada',
   };
   const orderStatus = orderStatusLabels[String(order.status || '').toUpperCase()] || order.status || 'Sin estado';
   const orderOrigin = order.purchaseRequestNumber || order.purchaseRequestId
@@ -1577,7 +1786,6 @@ export const generatePurchaseOrderPDF = async ({
       ['Dirección', order.address || '-'],
       ['Estado', orderStatus],
       ['Origen', orderOrigin],
-      ['Moneda', order.currency || '-'],
       ['Evidencia', order.evidenceFileName || 'No adjunta'],
     ],
     theme: 'grid',
@@ -1589,7 +1797,7 @@ export const generatePurchaseOrderPDF = async ({
 
   const itemsRows = (order.items || []).map((item: any) => [
     item.code || '-',
-    item.name || item.description || '-',
+    commercialItemDescription(item, '-'),
     item.category || '-',
     item.stockApplies ? Number(item.stock || 0).toString() : '-',
     Number(item.quantity || 0).toString(),
@@ -1691,7 +1899,7 @@ export const generatePurchaseRequestPDF = async ({
     body: [
       ['Solicitante', request.requestedBy ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim() : '-'],
       ['Bodega', request.warehouse?.name || '-'],
-      ['Prioridad', request.priority || '-'],
+      ['Prioridad', getPurchasePriorityOption(request.priority).label],
       ['Fecha requerida', request.requiredDate ? new Date(request.requiredDate).toLocaleDateString() : '-'],
       ['Justificación', request.justification || '-'],
       ['Moneda de origen', management?.currency || '-'],
@@ -1710,7 +1918,7 @@ export const generatePurchaseRequestPDF = async ({
     ));
     return [
       item.product?.code || item.productId?.slice?.(0, 8) || '-',
-      item.description || '-',
+      commercialItemDescription(item, '-'),
       Number(item.quantity || 0).toString(),
       Number(item.currentStock || 0).toString(),
       managementItem ? formatAmount(Number(managementItem.total || 0), management.currency, management.exchangeRate) : '-',
@@ -1812,7 +2020,7 @@ export const generateRecurringInvoicePDF = async ({
 
   const itemsRows = (recurringInvoice.items || []).map((item: any) => [
     String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto',
-    item.description || item.serviceName || '-',
+    commercialItemDescription({ ...item, description: item.description || item.serviceName }, '-'),
     Number(item.quantity || 0).toString(),
     formatAmount(Number(item.unitPrice || 0), recurringInvoice.currency, recurringInvoice.exchangeRate),
     formatAmount(Number(item.total || 0), recurringInvoice.currency, recurringInvoice.exchangeRate),
@@ -1911,7 +2119,7 @@ export const generateSupplierInvoicePDF = async ({
   });
 
   const itemsRows = (invoice.items || []).map((item: any) => [
-    item.description || '-',
+    commercialItemDescription(item, '-'),
     Number(item.quantity || 0).toString(),
     formatAmount(Number(item.unitPrice || 0), invoice.currency, invoice.exchangeRate),
     `${Number(item.taxRate || 0).toFixed(2)}%`,

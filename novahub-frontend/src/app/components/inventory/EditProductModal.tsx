@@ -69,6 +69,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
           code: product.code,
           name: product.name,
           description: product.description || '',
+          commercialNote: product.commercialNote || '',
           categoryId: product.categoryId || '',
           priceCurrency: baseCurrency || 'NIO',
           salePrice: Number(product.salePrice) || 0,
@@ -242,6 +243,7 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
         code: draft.code,
         name: draft.name,
         description: draft.description || '',
+        commercialNote: draft.commercialNote || '',
         categoryId: draft.categoryId,
          ...(canViewInventoryCost ? { costPrice: Number(draft.costPrice || 0) * rate } : {}),
         trackSerialNumbers: Boolean(draft.trackSerialNumbers),
@@ -382,6 +384,17 @@ export function EditProductModal({ product, categories, warehouses = [], itemTyp
                   className="h-8 text-xs mt-1"
                   placeholder="Descripción del producto"
                 />
+                <div className="mt-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Nota comercial</label>
+                  <Input
+                    value={draft.commercialNote || ''}
+                    onChange={e => handleUpdate('commercialNote', Array.from(e.target.value).slice(0, 100).join(''))}
+                    maxLength={100}
+                    className="h-8 text-xs mt-1"
+                    placeholder="Nota visible en ventas, compras y facturas"
+                  />
+                  <p className="mt-1 text-right text-[10px] text-muted-foreground">{Array.from(String(draft.commercialNote || '')).length}/100</p>
+                </div>
               </div>
 
               <div className="sm:col-span-2 md:col-span-5">

@@ -167,6 +167,7 @@ export interface EstimateItem {
   estimateId: string;
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   taxRate: number;
@@ -234,6 +235,7 @@ export interface SalesOrderItem {
   salesOrderId: string;
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   taxRate: number;
@@ -323,6 +325,7 @@ export interface InvoiceItem {
   invoiceId: string;
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   taxRate: number;
@@ -374,6 +377,7 @@ export interface RecurringInvoiceItem {
   itemType?: 'product' | 'service' | 'PRODUCT' | 'SERVICE';
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   serviceName?: string;
   quantity: number;
   unitPrice: number;
@@ -461,6 +465,7 @@ export interface SalesReturnItem {
   invoiceItemId?: string;
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   originalQuantity?: number;
   quantityToInventory?: number;
@@ -524,6 +529,7 @@ export interface CreditNoteItem {
   creditNoteId: string;
   productId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   taxRate?: number;
@@ -606,13 +612,14 @@ export interface PurchaseOrder {
   updatedAt: string;
 }
 
-export type PurchaseOrderStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type PurchaseOrderStatus = 'draft' | 'in_process' | 'approved' | 'rejected' | 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED' | 'pending' | 'PENDING' | 'cancelled' | 'CANCELLED';
 
 export interface PurchaseOrderItem {
   id: string;
   purchaseOrderId: string;
   productId?: string;
   description?: string;
+  commercialNoteSnapshot?: string | null;
   code?: string;
   name?: string;
   category?: string;
@@ -715,6 +722,7 @@ export interface PurchaseReceiptItem {
   productId?: string;
   warehouseId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantityOrdered: number;
   quantityReceived: number;
   quantityRejected?: number;
@@ -776,6 +784,7 @@ export interface SupplierInvoiceItem {
   id: string;
   supplierInvoiceId: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   taxRate: number;
@@ -1078,6 +1087,7 @@ export interface Product {
   sku: string;
   name: string;
   description?: string;
+  commercialNote?: string | null;
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
   categoryId?: string;

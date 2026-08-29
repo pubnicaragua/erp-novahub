@@ -1136,9 +1136,9 @@ enum SalesOrderStatus {
 
 enum PurchaseOrderStatus {
   DRAFT
-  PENDING
+  IN_PROCESS
   APPROVED
-  CANCELLED
+  REJECTED
 }
 
 enum ReceiptStatus {

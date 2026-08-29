@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Download, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, X, Pencil
+  Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, CheckCircle2, Ban, Lock, CircleDollarSign, Send, Pencil, X
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -22,8 +23,6 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { storageService } from '../../services/storage.service';
-import { generateExpensePDF } from '../../utils/pdfGenerator';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -34,10 +33,12 @@ import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
 import { requiresPaymentReference } from '../../utils/paymentMethods';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
@@ -77,7 +78,7 @@ const statusOpts = [
 
 export function GastosView({ data, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -191,36 +192,27 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Gastos',
-      columns: [
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'category', label: 'Categoría', align: 'left' },
-        { key: 'description', label: 'Descripción', align: 'left' },
-        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        category: item.category || '',
-        description: item.description || '',
-        amount: Number(item.amount || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Gastos',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de gastos...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Gastos',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Categoría', value: (row) => row.category || '—' },
+          { label: 'Descripción', value: (row) => row.description || '—' },
+          { label: 'Monto', align: 'right', value: (row) => formatConvertedAmount(Number(row.amount || 0), row.currency, row.exchangeRate) },
+          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
   const categoryOptions = Array.from(new Set(filtered.map((g) => String(g.category || '').toUpperCase()).filter(Boolean)))
     .map((value) => ({ value, label: value === 'OTRO' ? 'Otro' : value, count: filtered.filter((g) => String(g.category || '').toUpperCase() === value).length }));
@@ -551,6 +543,35 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
     }
   };
 
+  const handleDownloadExpensePdf = async (expense: Expense, format: PdfDownloadFormat = 'configured') => {
+    const exportToastId = toast.loading('Generando PDF del gasto...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.expense',
+        document: {
+          title: 'Gasto',
+          number: String(expense.number || expense.id),
+          date: expense.date ? formatDateEs(expense.date) : undefined,
+          status: statusOpts.find((option) => option.value === String(expense.status || '').toUpperCase())?.label || expense.status,
+          supplier: expense.supplier?.name || expense.paidTo || 'Sin proveedor',
+          fields: [
+            { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
+            { label: 'Fuente de pago', value: paymentSourceLabel(expense.paymentSource) },
+            { label: 'Referencia', value: expense.reference || '—' },
+          ],
+          total: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
+          totalLabel: 'Monto',
+          notes: expense.notes,
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const isPaidLocked = !isNew && String(localDoc.status || '').toUpperCase() === 'PAID';
@@ -592,19 +613,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 </Button>
               </div>
             )}
-            <Button
-              variant="outline"
-              className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-              onClick={() => generateExpensePDF({
-                expense: localDoc,
-                tenantName: 'Nova Hub',
-                targetKey: 'compras.expense',
-                formatAmount: (amount: number, currency?: string, rate?: number) =>
-                  formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-              })}
-            >
-              <Download className="size-3 mr-2" /> Exportar PDF
-            </Button>
+            <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />
           </div>
         </div>
 
@@ -628,26 +637,26 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                    <select
+                    <Select
                       disabled={!canMutate}
                       value={localDoc.category || 'OPERATIVO'}
-                      onChange={(e) => {
-                        const cat = e.target.value;
+                      onValueChange={(cat) => {
                         const matched = expenseCategories.find(c => c.name.toUpperCase() === cat);
                         setLocalDoc({ ...localDoc, category: cat, expenseCategoryId: matched ? matched.id : '' });
                       }}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs uppercase"
                     >
-                      <option value="OPERATIVO">Operativo</option>
-                      <option value="ADMINISTRATIVO">Administrativo</option>
-                      <option value="VENTAS">Ventas / Marketing</option>
-                      <option value="FINANCIERO">Financiero</option>
-                      <option value="OTRO">Otro</option>
-                      {expenseCategories.length > 0 && <option disabled>── Catálogo ──</option>}
-                      {expenseCategories.map(c => (
-                        <option key={c.id} value={c.name.toUpperCase()}>{c.name}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-8 text-xs uppercase"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OPERATIVO">Operativo</SelectItem>
+                        <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                        <SelectItem value="VENTAS">Ventas / Marketing</SelectItem>
+                        <SelectItem value="FINANCIERO">Financiero</SelectItem>
+                        <SelectItem value="OTRO">Otro</SelectItem>
+                        {expenseCategories
+                          .filter((category) => !['OPERATIVO', 'ADMINISTRATIVO', 'VENTAS', 'FINANCIERO', 'OTRO'].includes(String(category.name || '').toUpperCase()))
+                          .map((category) => <SelectItem key={category.id} value={String(category.name).toUpperCase()}>{category.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
@@ -738,17 +747,16 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Valor del Gasto</p>
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                   <div className="w-1/2">
-                      <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                      <select
+                   <div className="w-1/2 min-w-0">
+                      <CurrencySelector
+                        value={localDoc.currency || baseCurrency}
+                        baseCurrency={baseCurrency}
+                        exchangeRate={globalRate}
+                        label="Moneda"
+                        rateDecimals={2}
                         disabled={!canMutate}
-                        value={localDoc.currency || 'NIO'}
-                        onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
-                        className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                      >
-                        <option value="NIO">NIO</option>
-                        <option value="USD">USD</option>
-                      </select>
+                        onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
+                      />
                    </div>
                    <div className="w-1/2 flex flex-col items-end">
                       <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
@@ -800,6 +808,27 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   ];
 
   const detailExpense = selectedExpenseDetail ? data.find((x) => x.id === selectedExpenseDetail.id) || selectedExpenseDetail : null;
+  const buildExpensePanel = (expense: Expense): SalesDocumentPanelData => ({
+    id: expense.id,
+    number: String(expense.number || expense.id),
+    title: 'Gasto',
+    customerName: expense.supplier?.name || expense.paidTo || 'Sin proveedor',
+    hideCustomer: true,
+    status: String(expense.status || 'DRAFT').toUpperCase(),
+    totalLabel: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
+    summaryDetails: [
+      { label: 'Categoría', value: String(expense.category || '').toUpperCase() === 'OTRO' ? expense.categoryCustom || 'Otro' : expense.category || '—' },
+      { label: 'Método', value: paymentSourceLabel(expense.paymentSource) },
+    ],
+    metadata: [
+      { label: 'Fecha', value: expense.date ? `${formatDateEs(expense.date)}${expense.time ? ` · ${expense.time}` : ''}` : 'No disponible' },
+      { label: 'Proveedor', value: expense.supplier?.name || expense.paidTo || 'No disponible' },
+      { label: 'Referencia', value: expense.reference || 'No disponible' },
+      { label: 'Moneda', value: String(expense.currency || baseCurrency).toUpperCase() },
+    ],
+    lines: [{ id: expense.id, description: expense.description || 'Gasto sin descripción', quantity: 1, totalLabel: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate) }],
+    notes: expense.notes,
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -846,8 +875,8 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos</h2></div>
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="expenses" className="w-full justify-center sm:w-auto" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
               <Popover>
@@ -907,19 +936,16 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
               </Button>
             )}
             {activeKpiFilter.type === 'category' && (
-              <select
+              <Select
                 value={selectedCategory}
-                onChange={(e) => {
-                  const category = e.target.value;
+                onValueChange={(category) => {
                   setSelectedCategory(category);
                   setActiveKpiFilter({ type: 'category', category });
                 }}
-                className="col-span-2 h-10 min-w-0 w-full rounded-xl border border-input bg-background px-3 text-xs font-bold uppercase sm:col-span-1 sm:w-auto"
               >
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+                <SelectTrigger className="col-span-2 h-10 min-w-0 w-full rounded-xl text-xs font-bold uppercase sm:col-span-1 sm:w-auto"><SelectValue /></SelectTrigger>
+                <SelectContent>{uniqueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
+              </Select>
             )}
             {activeKpiFilter.type !== 'none' && (
               <Button
@@ -936,7 +962,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             )}
           </div>
         </div>
-        <div className={`grid min-w-0 grid-cols-1 gap-6 ${detailExpense ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'}`}>
+        <div className="min-w-0">
           <div className="min-w-0">
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={canPerform('PURCHASES_EXPENSES', 'delete') ? async (ids) => {
@@ -953,41 +979,30 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             }
           } : undefined}
           actions={(row) => (
-            <div className="flex gap-1">
-              {canPerform('PURCHASES_EXPENSES', 'edit') && String(row.status || '').toUpperCase() === 'DRAFT' && (
-                <Button title="Enviar gasto a pendientes" aria-label="Enviar gasto a pendientes" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={() => void handleStatusAction(row, 'PENDING')}><Send className="size-4" /></Button>
-              )}
-              {canPerform('PURCHASES_EXPENSES', 'approve') && String(row.status || '').toUpperCase() === 'PENDING' && (
-                <Button title="Registrar pago del gasto" aria-label="Registrar pago del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => openPaymentDialog(row)}><CircleDollarSign className="size-4" /></Button>
-              )}
-              {(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase())) && (
-                <Button title={canPerform('PURCHASES_EXPENSES', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}><Eye className="size-4" /></Button>
-              )}
-              {String(row.status || '').toUpperCase() === 'PAID' && (
-                <Button title="Ver (gasto pagado y contabilizado, solo lectura)" aria-label="Ver gasto" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted/40" onClick={() => setEditingId(row.id)}><Lock className="size-4" /></Button>
-              )}
-              <PurchaseAuditButton entity="EXPENSE" entityId={row.id} title="Auditoria del Gasto" />
-              {canPerform('PURCHASES_EXPENSES', 'delete') && String(row.status || '').toUpperCase() !== 'PAID' && (
-                <Button title="Anular gasto" aria-label="Anular gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
+            <div className="flex items-center gap-1">
+              <Button title="Ver detalle" aria-label="Ver detalle del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedExpenseDetail(row)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_EXPENSES', 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase()) && (
+                <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setEditingId(row.id); }}><Pencil className="size-4" /></Button>
               )}
             </div>
           )}
         />
         </div>
-        {detailExpense && (
-          <ExpenseDetailPanel
-            expense={detailExpense}
-            supplierName={suppliers.find((s) => s.id === detailExpense.supplierId)?.name || detailExpense.supplier?.name}
-            canEdit={canPerform('PURCHASES_EXPENSES', 'edit')}
-            canApprove={canPerform('PURCHASES_EXPENSES', 'approve')}
-            canDelete={canPerform('PURCHASES_EXPENSES', 'delete')}
-            onClose={() => setSelectedExpenseDetail(null)}
-            onEdit={() => setEditingId(detailExpense.id)}
-            onMarkPending={() => void handleStatusAction(detailExpense, 'PENDING')}
-            onPay={() => openPaymentDialog(detailExpense)}
-            onDelete={() => setPendingDeleteId(detailExpense.id)}
-          />
-        )}
+        <SalesDocumentDetailSheet
+          document={detailExpense ? buildExpensePanel(detailExpense) : null}
+          entity="EXPENSE"
+          open={Boolean(detailExpense)}
+          onClose={() => setSelectedExpenseDetail(null)}
+          extraActions={detailExpense && (() => {
+            const status = String(detailExpense.status || '').toUpperCase();
+            return <>
+              {canPerform('PURCHASES_EXPENSES', 'edit') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
+              {canPerform('PURCHASES_EXPENSES', 'approve') && status === 'PENDING' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => { setSelectedExpenseDetail(null); openPaymentDialog(detailExpense); }}><CircleDollarSign className="size-4" /> Registrar pago</Button>}
+              {canPerform('PURCHASES_EXPENSES', 'delete') && status !== 'PAID' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
+            </>;
+          })()}
+          onDownloadPdf={(format) => detailExpense ? void handleDownloadExpensePdf(detailExpense, format) : undefined}
+        />
         </div>
         <ConfirmDialog
           open={!!pendingDeleteId}
@@ -1019,9 +1034,10 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
-                    <select value={paymentMethod} onChange={(event) => { const nextMethod = event.target.value as typeof paymentMethod; setPaymentMethod(nextMethod); if (!requiresPaymentReference(nextMethod)) setPaymentReference(''); }} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                      {paymentMethodOptions.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                    </select>
+                    <Select value={paymentMethod} onValueChange={(nextMethod) => { const method = nextMethod as typeof paymentMethod; setPaymentMethod(method); if (!requiresPaymentReference(method)) setPaymentReference(''); }}>
+                      <SelectTrigger className="h-10 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                      <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
                   {requiresPaymentReference(paymentMethod) && <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
@@ -1133,133 +1149,3 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   );
 }
 
-function DetailField({ label, value, mono = false, full = false }: { label: string; value?: React.ReactNode; mono?: boolean; full?: boolean }) {
-  if (value === undefined || value === null || value === '') return null;
-  return (
-    <div className={full ? 'col-span-2' : ''}>
-      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">{label}</p>
-      <p className={`mt-0.5 break-words text-xs font-semibold ${mono ? 'font-mono' : ''}`}>{value}</p>
-    </div>
-  );
-}
-
-function ExpenseDetailPanel({
-  expense,
-  supplierName,
-  canEdit,
-  canApprove,
-  canDelete,
-  onClose,
-  onEdit,
-  onMarkPending,
-  onPay,
-  onDelete,
-}: {
-  expense: Expense;
-  supplierName?: string;
-  canEdit: boolean;
-  canApprove: boolean;
-  canDelete: boolean;
-  onClose: () => void;
-  onEdit: () => void;
-  onMarkPending: () => void;
-  onPay: () => void;
-  onDelete: () => void;
-}) {
-  const { formatConvertedAmount } = useCurrency();
-  const statusKey = String(expense.status || '').toUpperCase();
-  const statusLabel = statusKey === 'PAID' ? 'Pagado' : statusKey === 'PENDING' || statusKey === 'APPROVED' ? 'Pendiente' : statusKey === 'REJECTED' ? 'Rechazado' : 'Borrador';
-  const statusColor = statusKey === 'PAID' ? 'bg-emerald-500/10 text-emerald-600' : statusKey === 'PENDING' || statusKey === 'APPROVED' ? 'bg-amber-500/10 text-amber-600' : 'bg-slate-500/10 text-slate-500';
-
-  return (
-    <Card className="min-w-0 self-start rounded-2xl border-border/50 bg-card/70 p-5 shadow-sm animate-in slide-in-from-right duration-300">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{expense.number}</p>
-          <h3 className="mt-1 text-lg font-black leading-tight">{expense.description}</h3>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Badge variant="outline" className={cn('border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', statusColor)}>{statusLabel}</Badge>
-          <Button variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground" onClick={onClose} aria-label="Cerrar detalle"><X className="size-4" /></Button>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/40 pt-4">
-        <DetailField label="Fecha" value={`${formatDateEs(expense.date)}${expense.time ? ` · ${expense.time}` : ''}`} />
-        <DetailField
-          label="Categoría"
-          value={String(expense.category || '').toUpperCase() === 'OTRO' ? (expense.categoryCustom || 'OTRO') : expense.category || '—'}
-        />
-        <DetailField label="Pagado a" value={expense.paidTo} />
-        <DetailField label="Proveedor" value={supplierName} />
-        <DetailField label="Fuente de pago" value={paymentSourceLabel(expense.paymentSource)} />
-        <DetailField label="Referencia" value={expense.reference} mono />
-        {expense.notes && <DetailField label="Notas" value={expense.notes} full />}
-        {expense.evidenceFileName && (
-          <div className="col-span-2 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
-            <FileText className="size-3.5 shrink-0 text-primary" />
-            {expense.evidenceFileUrl ? (
-              <a href={expense.evidenceFileUrl} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[11px] font-bold text-primary hover:underline">{expense.evidenceFileName}</a>
-            ) : (
-              <span className="min-w-0 truncate text-[11px] font-semibold">{expense.evidenceFileName}</span>
-            )}
-            {expense.evidenceFileSize ? <span className="shrink-0 text-[10px] text-muted-foreground/60">{Math.round(expense.evidenceFileSize / 1024)} KB</span> : null}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 flex items-end justify-between gap-3 rounded-xl border border-border/40 bg-muted/20 p-4">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Monto</p>
-          <p className="text-2xl font-black text-rose-500">{formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate)}</p>
-          <p className="text-[10px] text-muted-foreground/70">
-            {Number(expense.amount || 0).toLocaleString()} {expense.currency}
-            {expense.exchangeRate ? ` · TC ${Number(expense.exchangeRate).toLocaleString()}` : ''}
-          </p>
-        </div>
-        {statusKey === 'PAID' && (
-          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-600">
-            <Lock className="size-3" /> Contabilizado
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-border/40 pt-4">
-        {canEdit && statusKey === 'DRAFT' && (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-amber-600" onClick={onMarkPending}>
-            <Send className="size-3.5" /> Enviar a pendientes
-          </Button>
-        )}
-        {canApprove && statusKey === 'PENDING' && (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-emerald-600" onClick={onPay}>
-            <CircleDollarSign className="size-3.5" /> Registrar pago
-          </Button>
-        )}
-        {canEdit && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(statusKey) && (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest" onClick={onEdit}>
-            <Pencil className="size-3.5" /> Editar
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest"
-          onClick={() => generateExpensePDF({
-            expense,
-            tenantName: 'Nova Hub',
-            targetKey: 'compras.expense',
-            formatAmount: (amount: number, currency?: string, rate?: number) => formatConvertedAmount(Number(amount || 0), currency || (expense.currency as any), rate || expense.exchangeRate),
-          })}
-        >
-          <Download className="size-3.5" /> PDF
-        </Button>
-        <PurchaseAuditButton entity="EXPENSE" entityId={expense.id} title="Auditoría del Gasto" />
-        {canDelete && statusKey !== 'PAID' && (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-rose-500" onClick={onDelete}>
-            <Ban className="size-3.5" /> Anular
-          </Button>
-        )}
-      </div>
-    </Card>
-  );
-}

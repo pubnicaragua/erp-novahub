@@ -36,6 +36,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 
 interface AccountNode {
   id: string;
@@ -181,8 +182,9 @@ interface PlanCuentasViewProps {
 }
 
 export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewProps) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
   const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
 
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(true, signal)), {
     refetchOnMount: 'always',
@@ -196,7 +198,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [transactionsPageSize, setTransactionsPageSize] = useState(50);
   const [selectedTransaction, setSelectedTransaction] = useState<AccountTransaction | null>(null);
-  const [visibleAccountColumnKeys, setVisibleAccountColumnKeys] = useState<AccountColumnKey[]>(DEFAULT_ACCOUNT_COLUMN_KEYS);
+  const [visibleAccountColumnKeys, setVisibleAccountColumnKeys] = useLocalStorageState<AccountColumnKey[]>(`accounting-accounts-columns-${tenantKey}`, DEFAULT_ACCOUNT_COLUMN_KEYS, 24 * 365);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
 
   const accountTransactionsQuery = useAccountingQuery<any>(

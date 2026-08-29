@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, Pencil, Download, FileText, FileDown, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { TaxDetail } from '../ui/TaxSelector';
 import { isTaxExempt } from '../../utils/taxUtils';
@@ -33,18 +34,19 @@ import { cn } from '../ui/utils';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { generatePurchaseOrderPDF } from '../../utils/pdfGenerator';
-import { PurchaseOrderPreviewDialog } from './ui/PurchaseOrderPreviewDialog';
+import { generatePurchaseRecordPDF, generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
+import { CurrencySelector } from '../ui/CurrencySelector';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES, PURCHASE_ORDER_STATUS_OPTIONS } from '../../utils/purchaseOrderStatus';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 
 interface Props {
   data: PurchaseOrder[];
@@ -76,6 +78,7 @@ type PurchaseImportRow = {
   productId?: string;
   skuResolution?: 'LINK_EXISTING' | 'MANUAL';
   description: string;
+  commercialNoteSnapshot?: string | null;
   category: string;
   categoryId?: string;
   quantity: string | number;
@@ -189,7 +192,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   const [creatingCategory, setCreatingCategory] = useState(false);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = '32px 144px 300px 250px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
+  const gridTemplate = '32px 144px 300px 250px 180px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
   const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 72, { overscan: 4 });
 
   const openCategoryDialog = (index: number, initialName: string) => {
@@ -238,6 +241,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
           <ImportPreviewField label="Stock actual"><div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-xs font-black text-primary">{row.currentStock ?? '—'}</div></ImportPreviewField>
           <ImportPreviewField label="Aviso / vínculo" className="sm:col-span-2"><div className="space-y-2"><p className={`break-words text-xs ${row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}`}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</p>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className={importPreviewFieldClass} disabled={importing}><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo</option></select>}</div></ImportPreviewField>
           <ImportPreviewField label="Descripción *" className="sm:col-span-2"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`${importPreviewFieldClass} ${!row.description ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Nota comercial"><div><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><p className="mt-1 text-[10px] text-muted-foreground">{Array.from(row.commercialNoteSnapshot || '').length}/100</p></div></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2"><div className="flex min-w-0 items-center gap-1"><select aria-label={`Categoría de ${row.sku || `fila ${index + 1}`}`} value={categoryValue} onChange={(event) => onCategoryChange(index, event.target.value === '__none__' ? '' : event.target.value)} className={`${importPreviewFieldClass} min-w-0 flex-1 ${row._hasError ? 'border-red-500' : matchingCategory ? '' : 'border-amber-500/70 text-amber-700'}`} disabled={importing}><option value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría *'}</option>{categoryOptions.filter((category: any) => category.isActive !== false).map((category: any) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg border-amber-500/50 p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => openCategoryDialog(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button></div></ImportPreviewField>
           <ImportPreviewField label="Cantidad"><Input type="number" min={0} value={row.quantity} onChange={(event) => onRowUpdate(index, 'quantity', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label={`Precio unitario (${currencySymbol})`}><Input type="number" min={0} step="any" value={row.unitPrice} onChange={(event) => onRowUpdate(index, 'unitPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
@@ -304,6 +308,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                 <TableHead className="w-36 text-[10px] uppercase">SKU</TableHead>
                 <TableHead className="min-w-[300px] text-[10px] uppercase">Aviso / vínculo</TableHead>
                 <TableHead className="min-w-[240px] text-[10px] uppercase">Descripción</TableHead>
+                <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
                 <TableHead className="w-40 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-24 text-right text-[10px] uppercase">Stock actual</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Cantidad</TableHead>
@@ -340,6 +345,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
                   <TableCell className="p-1"><Input value={row.sku} onChange={(event) => onRowUpdate(index, 'sku', event.target.value)} className={`h-8 text-xs font-mono ${row._skuStatus === 'duplicate' ? 'border-red-500' : row._skuStatus === 'missing' ? 'border-amber-500' : ''}`} /></TableCell>
                   <TableCell className="p-1 align-top text-xs"><div className="flex min-w-[280px] flex-col gap-1"><span className={row._hasError ? 'text-red-500' : row._hasWarning ? 'text-amber-500' : 'text-emerald-500'}>{row._errorMessage || row._warningMessage || row._skuMessage || 'Correcto'}</span>{row._skuStatus === 'found' && <select aria-label={`Resolución de SKU ${row.sku}`} value={skuLinked ? 'LINK_EXISTING' : 'MANUAL'} onChange={(event) => onRowUpdate(index, 'skuResolution', event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="LINK_EXISTING">Vincular producto existente</option><option value="MANUAL">Crear producto nuevo (requiere SKU libre)</option></select>}</div></TableCell>
                   <TableCell className="min-w-[240px] p-1"><Input value={row.description} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={`h-8 w-full text-xs ${!row.description ? 'border-red-500' : ''}`} /></TableCell>
+                  <TableCell className="p-1"><Input value={row.commercialNoteSnapshot || ''} maxLength={100} onChange={(event) => onRowUpdate(index, 'commercialNoteSnapshot', event.target.value)} className="h-8 w-full text-xs" title={row.commercialNoteSnapshot || undefined} /></TableCell>
                   <TableCell className="p-1 align-top">
                     <div className="flex min-w-[250px] items-center gap-1">
                       <select
@@ -414,11 +420,31 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
 
 const normalizeImportHeader = (value: unknown) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 
-const statusOpts = [
-  { label: 'Pendiente',  value: 'PENDING',    color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  { label: 'Aprobada',   value: 'APPROVED',   color: 'bg-primary/10 text-primary' },
-  { label: 'Rechazada',  value: 'CANCELLED',  color: 'bg-destructive/10 text-destructive' },
-];
+const mergeImportCatalogOptions = (configured: ImportCatalogOption[], fallback: ImportCatalogOption[]) => {
+  const byCode = new Map<string, ImportCatalogOption>(fallback.map((option) => [option.code, option]));
+  configured.forEach((option) => byCode.set(option.code, option));
+  return Array.from(byCode.values());
+};
+
+const normalizeImportCatalogValue = (
+  value: unknown,
+  options: ImportCatalogOption[],
+  fallbackCode: string,
+  noneAliases: string[] = [],
+) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallbackCode;
+  const normalized = normalizeImportHeader(raw);
+  if (noneAliases.some((alias) => normalizeImportHeader(alias) === normalized)) return fallbackCode;
+
+  const option = options.find((candidate) => [
+    candidate.code,
+    candidate.name,
+    `${candidate.name} (${candidate.rate}%)`,
+    `${candidate.name} ${candidate.rate}%`,
+  ].some((alias) => normalizeImportHeader(alias) === normalized));
+  return option?.code || raw.toUpperCase();
+};
 
 function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: number } {
   const tt = (item.taxType || 'GRAVADO').toUpperCase();
@@ -459,8 +485,9 @@ const LINKED_PRODUCT_LOCKED_FIELDS = new Set([
 
 const formatInputNumber = (value: unknown) => {
   if (value === '' || value === null || value === undefined) return '';
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toFixed(2) : '';
+  // No formatear durante la edición: toFixed(2) convertía "3" en "3.00"
+  // después de cada pulsación y hacía imposible escribir precios enteros.
+  return String(value);
 };
 
 const formatInputInteger = (value: unknown) => {
@@ -477,7 +504,7 @@ const normalizeProductCode = (product: any) => String(product?.code || product?.
 
 export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, formatConvertedAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
@@ -550,7 +577,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [supplierCatalog, productCatalog, productCategories]);
 
   useEffect(() => {
-    if (!importModalOpen && !importPreviewOpen) return;
+    if (!importIntroOpen && !importModalOpen && !importPreviewOpen) return;
     let active = true;
     const readCatalog = (response: any, fallback: ImportCatalogOption[]) => {
       const entries = (Array.isArray(response) ? response : response?.data || [])
@@ -578,7 +605,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     });
 
     return () => { active = false; };
-  }, [importModalOpen, importPreviewOpen]);
+  }, [importIntroOpen, importModalOpen, importPreviewOpen]);
 
   useEffect(() => {
     if (initialStatus) setStatusFilter(initialStatus);
@@ -593,8 +620,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   const validateImportRows = useCallback((rows: PurchaseImportRow[], catalog = products) => {
     const skuCounts = new Map<string, number>();
     const existingOrderSkus = new Set(((localDoc?.items || []) as any[]).map((item) => String(item.code || item.sku || '').trim().toLowerCase()).filter(Boolean));
-    const validTaxCodes = new Set([...FALLBACK_IMPORT_TAX_OPTIONS, ...taxOptions].map((option) => option.code));
-    const validWithholdingCodes = new Set(['NONE', ...FALLBACK_IMPORT_WITHHOLDING_OPTIONS, ...withholdingOptions].map((option: any) => typeof option === 'string' ? option : option.code));
+    const importTaxOptions = mergeImportCatalogOptions(taxOptions, FALLBACK_IMPORT_TAX_OPTIONS);
+    const importWithholdingOptions = mergeImportCatalogOptions(withholdingOptions, FALLBACK_IMPORT_WITHHOLDING_OPTIONS);
+    const validTaxCodes = new Set(importTaxOptions.map((option) => option.code));
+    const validWithholdingCodes = new Set(['NONE', ...importWithholdingOptions.map((option) => option.code)]);
     rows.forEach((row) => {
       const sku = String(row.sku || '').trim().toLowerCase();
       if (sku) skuCounts.set(sku, (skuCounts.get(sku) || 0) + 1);
@@ -610,10 +639,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       const importedUnitPrice = Number(row.unitPrice);
       const productCost = Number(linkedProduct?.costPrice ?? linkedProduct?.cost ?? linkedProduct?.lastPurchasePrice ?? 0);
       const unitPrice = linkedProduct && (!Number.isFinite(importedUnitPrice) || importedUnitPrice === 0) ? productCost : importedUnitPrice;
-      const taxType = String(row.taxType || 'GRAVADO').toUpperCase();
-      const withholdingType = String(row.withholdingType || 'NONE').toUpperCase();
-      const taxOption = taxOptions.find((option) => option.code === taxType);
-      const withholdingOption = withholdingOptions.find((option) => option.code === withholdingType);
+      const taxType = normalizeImportCatalogValue(row.taxType, importTaxOptions, 'GRAVADO');
+      const withholdingType = normalizeImportCatalogValue(row.withholdingType, importWithholdingOptions, 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']);
+      const taxOption = importTaxOptions.find((option) => option.code === taxType);
+      const withholdingOption = importWithholdingOptions.find((option) => option.code === withholdingType);
       const categoryName = String(row.category || linkedProduct?.category?.name || linkedProduct?.category || '').trim();
       const categoryByName = categories.find((category: any) => String(category.name || '').trim().toLowerCase() === categoryName.toLowerCase());
       const resolvedCategoryId = String(row.categoryId || linkedProduct?.categoryId || linkedProduct?.category?.id || categoryByName?.id || '').trim();
@@ -640,12 +669,17 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         sku && product && forceManualSku ? 'SKU coincide con inventario; escribe otro SKU para crear un producto nuevo' : '',
       ].filter(Boolean);
 
+      const commercialNoteSnapshot = String(linkedProduct?.commercialNote || row.commercialNoteSnapshot || '').trim();
+      const noteLength = Array.from(commercialNoteSnapshot).length;
+      const noteError = noteLength > 100 ? 'La nota comercial no puede superar los 100 caracteres' : '';
+
       return {
         ...row,
         sku: linkedProduct?.code || sku,
         productId: linkedProduct?.id,
         currentStock: linkedProduct?.stock != null ? Number(linkedProduct.stock) : linkedProduct?.inventoryLevels?.reduce((sum: number, level: any) => sum + Number(level.quantity || 0), 0),
         description: String(row.description || linkedProduct?.name || '').trim(),
+        commercialNoteSnapshot,
         category: categoryName,
         categoryId: resolvedCategoryId,
         unitPrice,
@@ -657,8 +691,8 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         withholdingBase,
         withholdingRate,
         withholdingTotal: withholdingBase * withholdingRate / 100,
-        _hasError: errors.length > 0,
-        _errorMessage: errors[0],
+        _hasError: errors.length > 0 || Boolean(noteError),
+        _errorMessage: errors[0] || noteError,
         _hasWarning: warningParts.length > 0,
         _warningMessage: warningParts.join(' · '),
         _skuStatus: (skuCounts.get(sku.toLowerCase())! > 1 ? 'duplicate' : product ? 'found' : sku ? 'missing' : undefined) as PurchaseImportRow['_skuStatus'],
@@ -731,11 +765,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
   }, [products]);
 
   const handleDownloadPurchaseTemplate = useCallback(() => {
-    const headers = ['SKU', 'Descripción', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
+    const headers = ['SKU', 'Descripción', 'Nota comercial', 'Categoría', 'Cantidad', 'Precio unitario', 'Tipo IVA', 'Base IVA', 'Tasa IVA', 'Retención', 'Base retención', 'Tasa retención'];
     const exampleProduct = products[0];
+    // taxOptions/withholdingOptions ya contienen el catálogo del tenant; solo
+    // contienen los respaldos cuando el catálogo aún no responde.
+    const activeTaxOptions = taxOptions.filter((option) => option.isActive !== false);
+    const activeWithholdingOptions = withholdingOptions.filter((option) => option.isActive !== false && option.code !== 'NONE');
+    const exampleTax = activeTaxOptions[0] || taxOptions[0] || FALLBACK_IMPORT_TAX_OPTIONS[0] || { code: 'GRAVADO', name: 'IVA gravado', rate: 15 };
+    const formatGuideOptions = (options: ImportCatalogOption[]) => options.length > 0
+      ? options.map((option) => `${option.name} (${option.rate}%)`).join(' · ')
+      : 'No hay opciones activas configuradas';
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
-      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), taxOptions[0]?.code || 'GRAVADO', '', taxOptions[0]?.rate ?? 15, 'NONE', '', 0],
+      [exampleProduct?.code || 'SKU-001', exampleProduct?.name || 'Producto de ejemplo', exampleProduct?.commercialNote || 'Nota comercial de ejemplo', exampleProduct?.category?.name || exampleProduct?.category || 'Categoría', 1, Number(exampleProduct?.costPrice || exampleProduct?.cost || 0), exampleTax.name, '', exampleTax.rate, 'Sin retención', '', 0],
     ]);
     ws['!cols'] = headers.map((header) => ({ wch: Math.max(13, Math.min(30, header.length + 3)) }));
     const guide = XLSX.utils.aoa_to_sheet([
@@ -744,9 +786,13 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       ['Campo', 'Regla'],
       ['SKU', 'Obligatorio. Si existe en el inventario, se vinculará automáticamente; si se repite en el archivo se marcará como error.'],
       ['Descripción / Categoría', 'Si el SKU existe, se completan desde inventario cuando estén vacíos. Para un SKU no encontrado, ambos campos son obligatorios y se agregará como producto nuevo al recepcionar.'],
+      ['Nota comercial', 'Opcional. Máximo 100 caracteres; se conservará como nota de la línea y se mostrará en ventas, compras y factura.'],
       ['Cantidad / Precio unitario', 'La cantidad debe ser mayor que cero y el precio no puede ser negativo.'],
-      ['Tipo IVA / Base IVA / Tasa IVA', 'Usa una opción del catálogo de IVA. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
-      ['Retención / Base retención / Tasa retención', 'Usa NONE si no aplica; de lo contrario selecciona una retención del catálogo. La base y la tasa se calculan automáticamente y no son editables.'],
+      ['Tipo IVA / Base IVA / Tasa IVA', 'Escribe el nombre en español de una opción configurada. La base y la tasa se calculan automáticamente según la cantidad, el precio y la opción seleccionada; no son editables.'],
+      ['Opciones de IVA configuradas', formatGuideOptions(activeTaxOptions)],
+      ['Retención / Base retención / Tasa retención', 'Escribe "Sin retención" cuando no aplique; de lo contrario escribe el nombre en español de una retención configurada. La base y la tasa se calculan automáticamente y no son editables.'],
+      ['Opciones de retención configuradas', ['Sin retención', ...activeWithholdingOptions.map((option) => `${option.name} (${option.rate}%)`)].join(' · ')],
+      ['Compatibilidad', 'El sistema también reconoce los códigos internos de IVA y retención si el archivo los conserva de una exportación anterior.'],
       ['Cuentas contables', 'No se solicitan por producto. El asiento utiliza las cuentas configuradas en Contabilidad > Configuración para el evento de compra pagada.'],
       ['Previsualización', 'La carga no modifica la orden inmediatamente. Corrige los errores y confirma para agregar los ítems.'],
     ]);
@@ -756,7 +802,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
     XLSX.writeFile(workbook, 'plantilla_importacion_ordenes_compra.xlsx');
     toast.success('Plantilla de órdenes descargada');
-  }, [products, taxOptions]);
+  }, [products, taxOptions, withholdingOptions]);
 
   const handlePurchaseImportFile = useCallback(async (file: File) => {
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -776,6 +822,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           const fieldAliases: Record<string, string[]> = {
             sku: ['sku', 'codigo / sku', 'codigo', 'código', 'code', 'product code'],
             description: ['descripcion', 'descripción', 'description', 'nombre', 'producto'],
+            commercialNote: ['nota comercial', 'nota', 'commercial note', 'commercialnote'],
             category: ['categoria', 'categoría', 'category'],
             quantity: ['cantidad', 'quantity', 'qty'],
             unitPrice: ['precio unitario', 'precio', 'unit price', 'cost price'],
@@ -801,14 +848,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             .filter((row) => row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== ''))
             .map((row) => ({
               sku: text(row, 'sku'),
-              description: text(row, 'description'),
+            description: text(row, 'description'),
+              commercialNoteSnapshot: text(row, 'commercialNote'),
               category: text(row, 'category'),
               quantity: number(row, 'quantity', 0),
               unitPrice: number(row, 'unitPrice', 0),
-              taxType: text(row, 'taxType', 'GRAVADO').toUpperCase(),
+              taxType: normalizeImportCatalogValue(text(row, 'taxType', 'GRAVADO'), mergeImportCatalogOptions(taxOptions, FALLBACK_IMPORT_TAX_OPTIONS), 'GRAVADO'),
               taxBase: number(row, 'taxBase', ''),
               taxRate: number(row, 'taxRate', ''),
-              withholdingType: text(row, 'withholdingType', 'NONE').toUpperCase(),
+              withholdingType: normalizeImportCatalogValue(text(row, 'withholdingType', 'NONE'), mergeImportCatalogOptions(withholdingOptions, FALLBACK_IMPORT_WITHHOLDING_OPTIONS), 'NONE', ['NONE', 'SIN RETENCION', 'NO APLICA', 'NINGUNA']),
               withholdingBase: number(row, 'withholdingBase', ''),
               withholdingRate: number(row, 'withholdingRate', ''),
               currentStock: undefined,
@@ -830,7 +878,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       setPreviewLoading(false);
       setPreviewProgress(0);
     }
-  }, [importCurrency, resolveImportProducts, validateImportRows]);
+  }, [importCurrency, resolveImportProducts, taxOptions, validateImportRows, withholdingOptions]);
 
   const handleOpenPurchaseImportPreview = useCallback(() => {
     if (previewLoading || importProcessing || importing || importData.length === 0) return;
@@ -932,6 +980,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       SKU: row.sku,
       Descripción: row.description,
+      'Nota comercial': row.commercialNoteSnapshot || '',
       Categoría: row.category,
       Cantidad: row.quantity,
       'Precio unitario': row.unitPrice,
@@ -977,6 +1026,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         code: row.sku,
         name: row.description || row.sku,
         description: row.description || row.sku,
+        commercialNoteSnapshot: row.commercialNoteSnapshot || null,
         category: row.category,
         categoryId: row.categoryId
           || categories.find((c: any) => String(c.name || '').trim().toLowerCase() === String(row.category || '').trim().toLowerCase())?.id
@@ -1120,12 +1170,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filtered = data.filter(o => {
-    const orderStatus = String(o.status || '').toUpperCase();
+    const orderStatus = normalizePurchaseOrderStatus(o.status);
     if (statusFilter === 'TO_APPROVE') {
-      if (!['PENDING', 'DRAFT'].includes(orderStatus)) return false;
-    } else if (statusFilter === 'CANCELLED' && !['CANCELLED', 'REJECTED'].includes(orderStatus)) {
-      return false;
-    } else if (statusFilter !== 'ALL' && statusFilter !== 'CANCELLED' && orderStatus !== statusFilter) {
+      if (!PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+    } else if (statusFilter !== 'ALL' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) {
       return false;
     }
     if (!normalizedSearchTerm) return true;
@@ -1154,46 +1202,53 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     supplier: (row: PurchaseOrder) => row.supplier?.name || '-',
     date: (row: PurchaseOrder) => (row.date ? new Date(row.date).getTime() : null),
     total: (row: PurchaseOrder) => Number(row.total || 0),
+    itemCount: (row: PurchaseOrder) => row.items?.length || 0,
+    status: (row: PurchaseOrder) => normalizePurchaseOrderStatus(row.status),
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const { printContent } = useBrowserPrint();
+  const statusOptionsForFilter = PURCHASE_ORDER_STATUS_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+    count: filtered.filter((order) => normalizePurchaseOrderStatus(order.status) === option.value).length,
+  }));
+  const itemCountOptions = [...new Set(filtered.map((order) => order.items?.length || 0))]
+    .sort((a, b) => a - b)
+    .map((value) => ({
+      value: String(value),
+      label: `${value} ${value === 1 ? 'ítem' : 'ítems'}`,
+      count: filtered.filter((order) => (order.items?.length || 0) === value).length,
+    }));
 
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Órdenes de Compra',
-      columns: [
-        { key: 'number', label: 'Nº', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Órdenes de Compra',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de órdenes de compra...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Órdenes de compra',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'N° Orden', value: (row) => row.number },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Ítems', align: 'center', value: (row) => String(row.items?.length || 0) },
+          { label: 'Total', align: 'right', value: (row) => formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate) },
+          { label: 'Estado', align: 'center', value: (row) => getPurchaseOrderStatusOption(row.status).label },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
   const distinctSuppliers = [...new Map(filtered.map((o) => [o.supplier?.name || '-', o.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((o) => (o.supplier?.name || '-') === label).length }));
 
   const columns: ColumnDef<PurchaseOrder>[] = [
-    { key: 'number',   header: 'Número',   width: '140px',
-      headerExtra: <ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
+    { key: 'number',   header: 'N° Orden',   width: '140px',
+      headerExtra: <ColumnFilterMenu label="N° Orden" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
       render: (val, row) => (
         <div className="flex flex-col items-start gap-1">
           <span className="font-black font-mono text-primary text-xs">{val}</span>
@@ -1204,23 +1259,23 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           )}
         </div>
       ) },
-    { key: 'purchaseRequestNumber', header: 'Solicitud', width: '110px',
-      render: (_val, row) => <span className="text-xs text-muted-foreground">{row.purchaseRequestNumber || '-'}</span> },
     { key: 'supplier', header: 'Proveedor',
       headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
     { key: 'date',     header: 'Fecha',     width: '110px',
       headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '-'}</span> },
-    { key: 'currency', header: 'Moneda', width: '100px',
-      render: (val, row) => <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[10px] font-black text-primary">{String(val || row.currency || 'NIO').toUpperCase()}</Badge> },
+    { key: 'itemCount', header: 'Ítems', width: '90px',
+      headerExtra: <ColumnFilterMenu label="Ítems" options={itemCountOptions} selected={colFilters.state.itemCount?.values || []} onSelect={(values) => colFilters.setValues('itemCount', values)} sort={colFilters.state.itemCount?.sort || null} onSort={(sort) => colFilters.setSort('itemCount', sort)} sortType="number" />,
+      render: (_val, row) => <span className="font-bold tabular-nums text-sm">{row.items?.length || 0}</span> },
     { key: 'total',    header: 'Total',     width: '130px',
       headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
       render: (val, row) => (
         <CurrencyValuationAmount amount={Number(val || 0)} sourceCurrency={row.currency} sourceExchangeRate={row.exchangeRate} className="font-black text-foreground" />
       ) },
     { key: 'status',   header: 'Estado',    width: '120px',
-      render: (val) => { const raw = String(val || '').toUpperCase(); const o = statusOpts.find(x => x.value === (raw === 'DRAFT' ? 'PENDING' : raw)); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color || 'bg-muted/20 text-muted-foreground')}>{o?.label || 'Pendiente'}</Badge>; } },
+      headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
+      render: (val) => { const option = getPurchaseOrderStatusOption(val); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', option.color)}>{option.label}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseOrder>) => {
@@ -1233,7 +1288,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     const requestedCancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
     const cancelIds = requestedCancelIds.filter((id) => {
       const status = String(data.find((order) => order.id === id)?.status || '').toUpperCase();
-      return ['PENDING', 'DRAFT'].includes(status);
+      return PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(status));
     });
     if (cancelIds.length === 0 || !cancelReason.trim()) return;
     setCancelLoading(true);
@@ -1276,14 +1331,35 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     }
   };
 
-  const handleDownloadOrderPdf = async (order: Partial<PurchaseOrder>) => {
+  const handleDownloadOrderPdf = async (order: Partial<PurchaseOrder>, format: PdfDownloadFormat = 'configured') => {
     const pdfToastId = toast.loading('Generando PDF de la orden de compra...');
     try {
-      await generatePurchaseOrderPDF({
-        order,
+      await generatePurchaseRecordPDF({
+        format,
+        targetKey: 'compras.purchase-order',
+        document: {
+          title: 'Orden de compra',
+          number: String(order.number || 'Sin número'),
+          date: order.date ? formatDateEs(order.date) : undefined,
+          status: getPurchaseOrderStatusOption(order.status).label,
+          supplier: order.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Solicitud de compra', value: order.purchaseRequestNumber || 'No vinculada' },
+            { label: 'Dirección', value: order.address || '—' },
+            { label: 'Bodega', value: order.warehouse?.name || '—' },
+          ],
+          lines: (order.items || []).map((item: any) => ({
+            description: item.description || item.name || item.code || 'Artículo sin descripción',
+            quantity: Number(item.quantity || 0),
+            unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate || globalRate),
+            total: formatConvertedAmount(Number(item.total || (Number(item.quantity || 0) * Number(item.unitPrice || 0))), order.currency, order.exchangeRate || globalRate),
+            secondary: [item.code ? `Código: ${item.code}${item.category ? ` · ${item.category}` : ''}` : item.category, item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : ''].filter(Boolean).join(' · '),
+          })),
+          total: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate || globalRate),
+          totalLabel: 'Total',
+          notes: order.notes,
+        },
         tenantName: user?.tenantName || 'Nova Hub',
-        formatAmount: (amount: number, currency?: string, rate?: number) =>
-          formatConvertedAmount(Number(amount || 0), currency || (order.currency as any) || displayCurrency, rate || order.exchangeRate || globalRate),
       });
       toast.success('PDF descargado', { id: pdfToastId });
     } catch (e: any) {
@@ -1291,7 +1367,53 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     }
   };
 
-  const handleSaveDoc = async (newStatus: 'DRAFT' | 'PENDING' = 'PENDING') => {
+  const buildOrderPanel = (order: Partial<PurchaseOrder>): SalesDocumentPanelData => ({
+    id: String(order.id || ''),
+    number: String(order.number || 'Sin número'),
+    title: 'Orden de compra',
+    customerName: order.supplier?.name || 'Sin proveedor',
+    hideCustomer: true,
+    status: normalizePurchaseOrderStatus(order.status),
+    sourceLabel: order.purchaseRequestId || order.purchaseRequestNumber ? 'Desde solicitud de compra' : undefined,
+    totalLabel: formatConvertedAmount(Number(order.total || 0), order.currency, order.exchangeRate || globalRate),
+    summaryDetails: [
+      { label: 'Líneas', value: String(order.items?.length || 0) },
+      { label: 'Bodega', value: order.warehouse?.name || 'No indicada' },
+      { label: 'Moneda', value: String(order.currency || displayCurrency).toUpperCase() },
+    ],
+    metadata: [
+      { label: 'Proveedor', value: order.supplier?.name || 'No disponible' },
+      { label: 'Fecha', value: order.date ? formatDateEs(order.date) : 'No disponible' },
+      { label: 'Dirección', value: order.address || 'No disponible' },
+    ],
+    lines: (order.items || []).map((item: any, index) => ({
+      id: String(item.id || item.productId || index),
+      description: item.description || item.name || item.code || 'Artículo sin descripción',
+      quantity: Number(item.quantity || 0),
+      unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate || globalRate),
+      totalLabel: formatConvertedAmount(Number(item.total || (Number(item.quantity || 0) * Number(item.unitPrice || 0))), order.currency, order.exchangeRate || globalRate),
+      secondaryLabel: [item.code ? `Código: ${item.code}${item.category ? ` · ${item.category}` : ''}` : item.category, item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : ''].filter(Boolean).join(' · '),
+    })),
+    notes: order.notes,
+  });
+
+  const renderOrderDetailPanel = () => (
+    <SalesDocumentDetailSheet
+      key={previewOrder?.id || 'purchase-order-detail'}
+      document={previewOrder ? buildOrderPanel(previewOrder) : null}
+      entity="PURCHASE_ORDER"
+      open={Boolean(previewOrder)}
+      onClose={() => setPreviewOrder(null)}
+      onOpenDocument={() => {
+        if (!previewOrder) return;
+        setPreviewOrder(null);
+        setEditingId(String(previewOrder.id));
+      }}
+      onDownloadPdf={(format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined}
+    />
+  );
+
+  const handleSaveDoc = async (newStatus: 'DRAFT' | 'IN_PROCESS' = 'DRAFT') => {
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!String(localDoc.address || '').trim()) return toast.error('Debe ingresar la dirección');
     if ((localDoc.items || []).length === 0) return toast.error('Debe agregar al menos un ítem');
@@ -1328,10 +1450,12 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       };
     });
     const calculatedTotals = calculateTotals(normalizedItems as any[]);
-    const currentOrderStatus = String(localDoc.status || 'PENDING').toUpperCase();
+    const currentOrderStatus = normalizePurchaseOrderStatus(localDoc.status);
     const statusToSave = editingId === 'NEW'
       ? newStatus
-      : (['DRAFT', 'PENDING'].includes(newStatus) && currentOrderStatus !== 'APPROVED' ? newStatus : currentOrderStatus);
+      : (PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(newStatus) && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(currentOrderStatus)
+        ? (currentOrderStatus === 'IN_PROCESS' && newStatus === 'DRAFT' ? currentOrderStatus : newStatus)
+        : currentOrderStatus);
     const orderCurrency = normalizePurchaseCurrency(localDoc.currency || displayCurrency);
     const orderExchangeRate = orderCurrency === 'NIO' ? 1 : (Number(localDoc.exchangeRate) > 0 ? Number(localDoc.exchangeRate) : globalRate);
     const cleanedDoc: any = {
@@ -1406,7 +1530,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             await purchaseRequestsService.changeStatus(created.purchaseRequestId, 'APPROVED', undefined, created.supplierId);
           } catch { /* la solicitud se podrá aprobar manualmente */ }
         }
-        toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada como pendiente', { id: saveToastId });
+        toast.success(statusToSave === 'DRAFT' ? 'Orden guardada como borrador' : 'Orden guardada en proceso', { id: saveToastId });
       } else {
         await purchaseOrdersService.update(editingId!, cleanedDoc);
         toast.success('Orden guardada', { id: saveToastId });
@@ -1525,6 +1649,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
       code: selected.code || selected.sku || '',
       name: selected.name || '',
       description: selected.description || selected.name || '',
+      commercialNoteSnapshot: selected.commercialNote || null,
       category: selected.category?.name || selected.category || categoryId || '',
       categoryId,
       stockApplies: localDoc.purchaseType === 'SERVICE' ? false : true,
@@ -1624,7 +1749,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
 
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
-    const currentStatus = String(localDoc.status || 'DRAFT').toUpperCase();
+    const currentStatus = normalizePurchaseOrderStatus(localDoc.status);
     const orderCurrency = normalizePurchaseCurrency(localDoc.currency || displayCurrency);
     const orderCurrencySymbol = getCurrencySymbol(orderCurrency);
     const equivalentCurrency = orderCurrency === 'USD' ? 'NIO' : 'USD';
@@ -1641,7 +1766,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
     );
     const canEditOrderItems = isNew
       ? canPerform('PURCHASES_ORDERS', 'create')
-      : canPerform('PURCHASES_ORDERS', 'edit') && ['DRAFT', 'PENDING'].includes(currentStatus);
+      : canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(currentStatus);
     const isItemMasterFieldDisabled = (item: any) => Boolean(item.productId) || !canEditOrderItems;
     const financialTotals = calculateTotals((localDoc.items || []) as any[]);
     
@@ -1658,12 +1783,9 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle del registro</p>
                 {localDoc.purchaseRequestNumber && (
                   <Badge className="border-none bg-orange-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-orange-500">
-                    Desde solicitud · {localDoc.purchaseRequestNumber}
+                    Desde solicitud
                   </Badge>
                 )}
-                <Badge variant="outline" className="border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[8px] font-black uppercase text-primary">
-                  Moneda: {String(localDoc.currency || displayCurrency).toUpperCase()}
-                </Badge>
               </div>
             </div>
           </div>
@@ -1691,18 +1813,20 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
                   Guardar borrador
                 </Button>
-                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                  Enviar a pendiente
+                <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                  Guardar
                 </Button>
               </>
             )}
-            {!isNew && ['DRAFT', 'PENDING'].includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
+            {!isNew && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(currentStatus) && canPerform('PURCHASES_ORDERS', 'edit') && (
               <>
-                <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-                  Guardar borrador
-                </Button>
-                <Button onClick={() => handleSaveDoc('PENDING')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
-                  Enviar a pendiente
+                {currentStatus === 'DRAFT' && (
+                  <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                    Guardar borrador
+                  </Button>
+                )}
+                <Button onClick={() => handleSaveDoc('IN_PROCESS')} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
+                  Guardar
                 </Button>
               </>
             )}
@@ -1775,29 +1899,25 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     className="h-8 text-xs" 
                   />
                 </div>
-                <div>
-                  <p className="text-[10px] text-foreground mb-1">Moneda de la orden</p>
-                  <select 
-                    disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
-                    value={normalizePurchaseCurrency(localDoc.currency || displayCurrency)}
-                    onChange={(e) => {
-                      const currency = e.target.value as any;
-                      setLocalDoc({ ...localDoc, currency, exchangeRate: currency === 'NIO' ? 1 : globalRate });
-                    }}
-                    className="h-9 w-full rounded-lg border-2 border-border/80 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
-                  >
-                    <option value="NIO">NIO · Córdobas</option>
-                    <option value="USD">USD · Dólares</option>
-                  </select>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Global: <span className="font-bold text-foreground">{getCurrencyLabel(displayCurrency)}</span> · Tasa aplicada: <span className="font-bold text-foreground">{normalizePurchaseCurrency(localDoc.currency || displayCurrency) === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)} NIO/USD</span></p>
-                </div>
+                <CurrencySelector
+                  value={localDoc.currency || displayCurrency}
+                  baseCurrency={baseCurrency}
+                  exchangeRate={globalRate}
+                  label="Moneda de la orden"
+                  rateDecimals={2}
+                  disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
+                  onChange={(nextCurrency) => setLocalDoc({
+                    ...localDoc,
+                    currency: nextCurrency,
+                    exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate,
+                  })}
+                />
                 <div>
                     <p className="text-[10px] text-foreground mb-1">Tipo de Compra</p>
-                    <select
+                    <Select
                       disabled={isNew ? !canPerform('PURCHASES_ORDERS', 'create') : !canPerform('PURCHASES_ORDERS', 'edit')}
                       value={localDoc.purchaseType || 'INVENTORY'}
-                      onChange={(e) => {
-                        const pt = e.target.value;
+                      onValueChange={(pt) => {
                         setLocalDoc({ ...localDoc, purchaseType: pt });
                         if (pt === 'SERVICE') {
                           const updatedItems = (localDoc.items || []).map((item: any) => ({
@@ -1806,13 +1926,15 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                           setLocalDoc((prev: any) => prev ? { ...prev, purchaseType: pt, items: updatedItems } : prev);
                         }
                       }}
-                      className="h-9 w-full rounded-lg border-2 border-border/80 bg-background px-2 text-xs font-bold uppercase shadow-sm outline-none focus:border-primary"
                     >
-                      <option value="INVENTORY">Inventario</option>
-                      <option value="ASSET">Activo Fijo</option>
-                      <option value="SERVICE">Servicio</option>
-                      <option value="ADMIN">Gasto Administrativo</option>
-                    </select>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar tipo de compra" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INVENTORY">Inventario</SelectItem>
+                        <SelectItem value="ASSET">Activo Fijo</SelectItem>
+                        <SelectItem value="SERVICE">Servicio</SelectItem>
+                        <SelectItem value="ADMIN">Gasto Administrativo</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 <div className="order-2 col-span-2">
                   <p className="text-[10px] text-foreground mb-1">Dirección</p>
@@ -1957,7 +2079,10 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                             ...products.filter(Boolean).map((p: any) => ({
                               label: p.name || 'Producto',
                               value: String(p.id),
-                              description: `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                              description: [
+                                `${p.code || p.sku || 'SIN-COD'} · ${p.category?.name || p.category || 'Sin categoría'}`,
+                                p.commercialNote ? `Nota: ${p.commercialNote}` : null,
+                              ].filter(Boolean).join(' · '),
                             }))
                           ]}
                           value={item.productId ? String(item.productId) : '__none__'}
@@ -2011,21 +2136,22 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
                     </div>
                     <div className="col-span-1 min-w-0 xl:col-span-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Categoría</p>
-                      <select
+                      <Select
                         disabled={isItemMasterFieldDisabled(item)}
-                        value={item.categoryId || ''}
-                        onChange={(e) => {
-                          const cat = categories.find((c: any) => String(c.id) === String(e.target.value));
-                          handleItemChange(idx, 'categoryId', e.target.value);
+                        value={item.categoryId || '__none__'}
+                        onValueChange={(categoryId) => {
+                          const normalizedCategoryId = categoryId === '__none__' ? '' : categoryId;
+                          const cat = categories.find((c: any) => String(c.id) === String(normalizedCategoryId));
+                          handleItemChange(idx, 'categoryId', normalizedCategoryId);
                           handleItemChange(idx, 'category', cat?.name || '');
                         }}
-                        className={cn("h-8 w-full rounded-md border border-input bg-background px-2 text-xs", item.categoryId ? "" : "text-muted-foreground/50")}
                       >
-                        <option value="">Sin categoría</option>
-                        {categories.map((c: any) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className={cn("h-8 w-full text-xs", item.categoryId ? "" : "text-muted-foreground/50")}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin categoría</SelectItem>
+                          {categories.map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="col-span-1 min-w-0 xl:col-span-1">
                       <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1">Stock actual</p>
@@ -2256,43 +2382,34 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
           </div>
         </ConfirmDialog>
 
-        <PurchaseOrderPreviewDialog
-          open={!!previewOrder}
-          order={previewOrder}
-          suppliers={supplierCatalog}
-          canApprove={false}
-          canCancel={canPerform('PURCHASES_ORDERS', 'delete') && ['PENDING', 'DRAFT'].includes(String(previewOrder?.status || '').toUpperCase())}
-          approving={approving}
-          onClose={() => setPreviewOrder(null)}
-          onApprove={handleApproveOrder}
-          onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
-          onDownloadPdf={() => previewOrder && void handleDownloadOrderPdf(previewOrder)}
-        />
+        {renderOrderDetailPanel()}
       </div>
     );
   }
 
+  const countOrdersByStatus = (status: 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'REJECTED') => data.filter((order) => normalizePurchaseOrderStatus(order.status) === status).length;
   const kpis = [
     { title: 'Total órdenes', value: data.length, icon: ClipboardList, color: 'text-primary', bg: 'bg-primary/10', filter: 'ALL' },
-    { title: 'Pendientes', value: data.filter(o => ['PENDING', 'DRAFT'].includes((o.status || '').toUpperCase())).length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10', filter: 'TO_APPROVE' },
-    { title: 'Aprobadas', value: data.filter(o => (o.status || '').toUpperCase() === 'APPROVED').length, icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', filter: 'APPROVED' },
-    { title: 'Rechazadas', value: data.filter(o => ['CANCELLED', 'REJECTED'].includes((o.status || '').toUpperCase())).length, icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10', filter: 'CANCELLED' },
+    { title: 'Borradores', value: countOrdersByStatus('DRAFT'), icon: FileText, color: 'text-amber-500', bg: 'bg-amber-500/10', filter: 'DRAFT' },
+    { title: 'En proceso', value: countOrdersByStatus('IN_PROCESS'), icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10', filter: 'IN_PROCESS' },
+    { title: 'Aprobadas', value: countOrdersByStatus('APPROVED'), icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', filter: 'APPROVED' },
+    { title: 'Rechazadas', value: countOrdersByStatus('REJECTED'), icon: Ban, color: 'text-rose-500', bg: 'bg-rose-500/10', filter: 'REJECTED' },
   ];
 
   return (
     <div className="min-w-0 max-w-full space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="purchases-list-kpis">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-tour="purchases-list-kpis">
         {kpis.map((k, i) => (
-          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind={k.filter ? 'filter' : 'indicator'} active={k.filter ? statusFilter === k.filter : false} onClick={k.filter ? () => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next === 'TO_APPROVE' ? 'ALL' : next); } : undefined} />
+          <PurchaseKpiCard key={i} title={k.title} value={k.value} icon={k.icon} color={k.color} bg={k.bg} kind="filter" active={statusFilter === k.filter} onClick={() => { const next = statusFilter === k.filter ? 'ALL' : k.filter; setStatusFilter(next); onStatusChange?.(next); }} />
         ))}
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Órdenes de Compra</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
             <PurchaseViewTutorial view="orders" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes de compra" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_ORDERS', 'create') && (
@@ -2300,11 +2417,11 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'delete') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               if (id.startsWith('new-')) return false;
-              return ['PENDING', 'DRAFT'].includes(String(data.find((order) => order.id === id)?.status || '').toUpperCase());
+              return PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(data.find((order) => order.id === id)?.status));
             });
             if (validIds.length === 0) return;
             setPendingCancelId(null);
@@ -2312,30 +2429,19 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             setCancelReason('');
           } : undefined}
           actions={(row) => (
-            <div className="flex gap-1">
-              <Button
-                title="Ver detalle"
-                aria-label="Ver detalle de la orden"
-                variant="ghost"
-                size="icon"
-                className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                onClick={() => setPreviewOrder(row)}
-              >
+            <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+              <Button title="Ver detalle" aria-label="Ver detalle de la orden" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPreviewOrder(row)}>
                 <Eye className="size-4" />
               </Button>
-              {canPerform('PURCHASES_ORDERS', 'approve') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Aprobar orden" aria-label="Aprobar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setPendingApproveOrder(row)}><CheckCircle2 className="size-4" /></Button>
-              )}
-              {canPerform('PURCHASES_ORDERS', 'edit') && ['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Editar orden" aria-label="Editar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-muted hover:text-foreground" onClick={() => setEditingId(row.id)}><Pencil className="size-4" /></Button>
-              )}
-              <Button title="Descargar PDF" aria-label="Descargar PDF" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => void handleDownloadOrderPdf(row)}><FileDown className="size-4" /></Button>
-              {['PENDING', 'DRAFT'].includes(String(row.status || '').toUpperCase()) && canPerform('PURCHASES_ORDERS', 'delete') && (
-                <Button title="Rechazar orden" aria-label="Rechazar orden" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-destructive/10 hover:text-destructive" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
-              )}
+              {canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button title="Editar orden de compra" aria-label="Editar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(String(row.id))}><Pencil className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'delete') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Rechazar orden de compra" aria-label="Rechazar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(row.id)); setCancelReason(''); }}><Ban className="size-4" /></Button>}
             </div>
           )}
         />
+
+        {renderOrderDetailPanel()}
+
         <ConfirmDialog
           open={Boolean(pendingCancelId || pendingBulkCancelIds.length > 0)}
           onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingBulkCancelIds([]); setCancelReason(''); } }}
@@ -2375,19 +2481,6 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
             <p className="mt-1">Después podrás abrir la recepción pendiente, indicar lo recibido y procesar el inventario.</p>
           </div>
         </ConfirmDialog>
-
-        <PurchaseOrderPreviewDialog
-          open={!!previewOrder}
-          order={previewOrder}
-          suppliers={supplierCatalog}
-          canApprove={false}
-          canCancel={canPerform('PURCHASES_ORDERS', 'delete') && ['PENDING', 'DRAFT'].includes(String(previewOrder?.status || '').toUpperCase())}
-          approving={approving}
-          onClose={() => setPreviewOrder(null)}
-          onApprove={handleApproveOrder}
-          onCancel={(id) => { setPreviewOrder(null); setPendingCancelId(id); setCancelReason(''); }}
-          onDownloadPdf={() => previewOrder && void handleDownloadOrderPdf(previewOrder)}
-        />
 
         <PurchaseVariantPickerModal
           open={variantPickerOpen}

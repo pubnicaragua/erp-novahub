@@ -1,5 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode } from 'lucide-react';
+import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Copy, Barcode, SlidersHorizontal } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
 import { Card } from '../ui/card';
@@ -17,6 +17,7 @@ import { Checkbox } from '../ui/checkbox';
 import { toast } from 'sonner';
 import { MultiSelectFilter } from './MultiSelectFilter';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { inventoryService } from '../../services/inventario.service';
 import { purchaseRequestsService } from '../../services/compras.service';
 import { employeesService } from '../../services/rh.service';
@@ -38,6 +39,8 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../utils/purchasePriority';
+import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 
 const WAREHOUSE_TYPES = [
   { value: 'MAIN', label: 'Principal' },
@@ -66,9 +69,9 @@ const TAX_OPTIONS = [
 
 const PRODUCTS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="inventory-products-title"]', title: 'Vista de Productos', description: 'Aquí administras el catálogo, el costo, el stock y la distribución por bodega. Los precios de venta se gestionan desde Listas de precios.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Productos muestra el total, disponibles, stock bajo y sin stock. Servicios muestra categorías, promedio semanal y precio promedio. Las tarjetas de existencias filtran la lista; los valores de referencia solo informan.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-filters"]', title: 'Buscar y filtrar', description: 'Busca por nombre o SKU y filtra por categoría, bodega o nivel de stock para encontrar rápidamente los productos.', placement: 'bottom' },
-  { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Desde aquí puedes cargar imágenes masivamente en cualquier momento, iniciar la importación inicial, consultar solicitudes de reabastecimiento y crear categorías o Bodegas cuando corresponda.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-kpis"]', title: 'Indicadores y filtros rápidos', description: 'Cada tarjeta identifica si es un Filtro o un Indicador. En Productos, las tarjetas de existencias filtran la lista; en Servicios, los valores de referencia solo informan.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-filter-toggle"]', title: 'Filtros del catálogo', description: 'Los filtros permanecen ocultos para dejar la vista despejada. Pulsa este botón para desplegar la búsqueda, bodegas, estado, unidad, impuesto y stock; si hay filtros activos, verás el contador aquí.', placement: 'bottom' },
+  { target: '[data-tour="inventory-products-actions"]', title: 'Acciones del catálogo', description: 'Estas acciones permanecen disponibles en todo momento: crear productos, importar el catálogo, actualizar imágenes, solicitar una compra, imprimir etiquetas y abrir la ayuda de Inventario.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-actions"]', title: 'Imágenes e importación inicial', description: 'El botón para importar productos permanece disponible en esta vista. La carga masiva de imágenes también puede utilizarse en cualquier momento y en ambos casos usa ZIP o RAR con archivos llamados como el SKU.', tip: 'Los errores se omiten y los precios faltantes se muestran como avisos.', placement: 'bottom' },
   { target: '[data-tour="inventory-products-table"]', title: 'Registros y edición', description: 'Consulta los productos, edita únicamente los campos permitidos y abre el detalle haciendo clic en el registro o en su imagen.', placement: 'top' },
   { target: '[data-tour="inventory-products-pagination"]', title: 'Paginación', description: 'Selecciona 50, 100 o 200 registros, revisa el rango mostrado y utiliza los controles para ir al inicio, anterior, siguiente o final.', placement: 'top' },
@@ -80,6 +83,7 @@ const PRODUCT_TABLE_WIDTHS = {
   selector: '40px',
   code: '112px',
   name: '224px',
+  note: '180px',
   category: '144px',
   unit: '112px',
   min: '80px',
@@ -91,6 +95,8 @@ const PRODUCT_TABLE_WIDTHS = {
   status: '112px',
   actions: '128px',
 } as const;
+
+const SOLICITUD_PAGE_SIZE = 50;
 
 const normalizeImportHeader = (value: unknown) => String(value ?? '')
   .normalize('NFD')
@@ -138,6 +144,7 @@ interface EditingProduct {
   code: string;
   name: string;
   description?: string;
+  commercialNote?: string | null;
   categoryId: string;
   salePrice: number | '';
   priceCurrency?: string;
@@ -232,6 +239,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       <TableCell>{row._hasError ? <AlertTriangle className="size-4 text-red-500" /> : row._hasWarning ? <AlertTriangle className="size-4 text-amber-500" /> : <Check className="size-4 text-emerald-500" />}</TableCell>
       <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-red-500' : ''}`} /></TableCell>
       <TableCell className="min-w-[220px] p-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-red-500' : ''}`} /></TableCell>
+      <TableCell className="min-w-[180px] p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className="h-8 w-full text-xs" /></TableCell>
       <TableCell className="p-1 text-center">
         {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-emerald-500" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-red-500" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
       </TableCell>
@@ -305,8 +313,8 @@ function ImportPreviewPage({
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [rowsReady, setRowsReady] = useState(false);
   const gridTemplate = canViewInventoryCost
-    ? '32px 128px minmax(220px, 1fr) 80px 128px 112px 112px 112px 112px 112px 96px 96px 160px 160px'
-    : '32px 128px minmax(220px, 1fr) 80px 128px 112px 112px 112px 96px 96px 160px 160px';
+    ? '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 112px 96px 96px 160px 160px'
+    : '32px 128px minmax(220px, 1fr) 180px 80px 128px 112px 112px 112px 112px 96px 96px 160px 160px';
   const tableVirtualizer = useVirtualizedImportRows(rowsReady ? importData.length : 0, tableScrollRef, 58, { overscan: 2 });
   const categoryNames = useMemo(() => new Set(categoryOptions.map((category: any) => String(category.name || '').trim().toLowerCase()).filter(Boolean)), [categoryOptions]);
   const warehouseNames = useMemo(() => new Set(warehouseOptions.map((warehouse: any) => String(warehouse.name || '').trim().toLowerCase()).filter(Boolean)), [warehouseOptions]);
@@ -348,6 +356,7 @@ function ImportPreviewPage({
           <ImportPreviewField label="Código *"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`${importPreviewFieldClass} font-mono ${!row.code ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-red-500' : ''}`} disabled={importing} /></ImportPreviewField>
+          <ImportPreviewField label="Nota comercial" className="sm:col-span-2"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2">
             {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-amber-500/60 text-amber-600`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-amber-600" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
           </ImportPreviewField>
@@ -402,12 +411,13 @@ function ImportPreviewPage({
       ) : <>
       <div className="hidden min-h-0 min-w-0 max-w-full flex-1 sm:flex">
       <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
-          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block min-w-[1320px]">
+          <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block min-w-[1500px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Código</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">Nombre</TableHead>
+                <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
                 <TableHead className="w-20 text-center text-[10px] uppercase">Imagen</TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Unidad</TableHead>
@@ -468,9 +478,11 @@ function ImportPreviewPage({
 }
 
 export function ProductosView({ products, summaryProducts, categories, warehouses = [], productWarehouseOptions = [], branches = [], series = [], movements = [], onRefresh, pagination, onSearchChange, onCategoryChange, onWarehouseChange, onUnitChange, onTaxRateChange, onStockStatusChange, itemType, isSidebarCollapsed = true, targetProductId, initialStockFilter, productStatusFilter: controlledProductStatusFilter, onProductStatusFilterChange, onClearTargetProduct, selectedBranchId = '', branchWarehouseIds = [], stockWarehouseIds = [], unitFilter: controlledUnitFilter, taxRateFilter: controlledTaxRateFilter, stockStatusFilter: controlledStockStatusFilter }: ProductosViewProps) {
+  const { openingId, startOpening } = useDetailOpeningFeedback();
   const { formatAmount, baseCurrency, exchangeRate } = useCurrency();
   const { user, canPerform } = useAuth();
   const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost');
+  const canCreatePurchaseRequest = canPerform('PURCHASES', 'create');
   const branchWarehouseIdSet = useMemo(() => new Set(branchWarehouseIds), [branchWarehouseIds]);
   const stockWarehouseIdSet = useMemo(
     () => new Set(stockWarehouseIds.length > 0 ? stockWarehouseIds : warehouses.map((warehouse: any) => warehouse.id).filter(Boolean)),
@@ -531,6 +543,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [warehouseFilters, setWarehouseFilters] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showAllWarehouseProducts, setShowAllWarehouseProducts] = useState(true);
   // Almacenes vinculados a alguna sucursal (todas las sucursales): se usa para
   // ocultar los productos de almacenes sin vínculo cuando el check está inactivo.
@@ -588,6 +601,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [statusChanging, setStatusChanging] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [productDetail, setProductDetail] = useState<any | null>(null);
+  const openProductDetail = (product: any) => startOpening(product.id, () => setProductDetail(product));
   const [expandedProductImage, setExpandedProductImage] = useState<{ src: string; alt: string } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
@@ -621,6 +635,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     if (importValidationTimerRef.current !== null) window.clearTimeout(importValidationTimerRef.current);
     if (previewMountTimerRef.current !== null) window.clearTimeout(previewMountTimerRef.current);
     if (previewFinishTimerRef.current !== null) window.clearTimeout(previewFinishTimerRef.current);
+    if (solicitudPreparationTimerRef.current !== null) window.clearTimeout(solicitudPreparationTimerRef.current);
   }, []);
   
   const [skuErrors, setSkuErrors] = useState<Map<string, string>>(new Map());
@@ -661,6 +676,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   const [solicitudWarehouseFilter, setSolicitudWarehouseFilter] = useState('ALL');
   const [solicitudCatalogProducts, setSolicitudCatalogProducts] = useState<any[]>([]);
   const [solicitudCatalogLoading, setSolicitudCatalogLoading] = useState(false);
+  const [solicitudOnlySelected, setSolicitudOnlySelected] = useState(false);
+  const [solicitudPage, setSolicitudPage] = useState(1);
+  const solicitudPreparationTimerRef = useRef<number | null>(null);
+
+  const clearSolicitudPreparation = () => {
+    if (solicitudPreparationTimerRef.current !== null) {
+      window.clearTimeout(solicitudPreparationTimerRef.current);
+      solicitudPreparationTimerRef.current = null;
+    }
+  };
+
+  const closeSolicitud = () => {
+    if (solicitudCreating) return;
+    clearSolicitudPreparation();
+    setSolicitudOpen(false);
+  };
 
   const loadSolicitudEmployees = async () => {
     if (solicitudEmployees.length > 0) return;
@@ -681,21 +712,25 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   useEffect(() => {
     if (!solicitudOpen) return;
 
-    // El resumen de inventario ya trae el catálogo completo con sus niveles
-    // por bodega. Usarlo aquí evita que el modal quede limitado a la página
-    // actual de productos y evita una segunda fuente de datos incompleta.
-    const summaryCatalog = (summaryProducts || []).filter((product: any) =>
-      String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
-    );
-    if (summaryCatalog.length > 0) {
-      setSolicitudCatalogProducts(summaryCatalog);
-      setSolicitudCatalogLoading(false);
-      return;
-    }
-
     const controller = new AbortController();
+    setSolicitudCatalogLoading(true);
     const timer = window.setTimeout(async () => {
-      setSolicitudCatalogLoading(true);
+      if (controller.signal.aborted) return;
+
+      // El resumen de inventario ya trae el catálogo completo con sus niveles
+      // por bodega. Prepararlo después del primer paint deja que el modal abra
+      // de inmediato y muestre feedback mientras se procesa la lista.
+      const summaryCatalog = (summaryProducts || []).filter((product: any) =>
+        String(product.itemType || product.type || 'PRODUCT').toUpperCase() === 'PRODUCT',
+      );
+      if (summaryCatalog.length > 0) {
+        startTransition(() => {
+          setSolicitudCatalogProducts(summaryCatalog);
+          setSolicitudCatalogLoading(false);
+        });
+        return;
+      }
+
       try {
         const response = await inventoryService.getProducts({
           type: 'PRODUCT',
@@ -718,7 +753,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       } finally {
         if (!controller.signal.aborted) setSolicitudCatalogLoading(false);
       }
-    }, 250);
+    }, 0);
 
     return () => {
       window.clearTimeout(timer);
@@ -754,8 +789,15 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   };
 
   const filteredSolicitudProducts = useMemo(() => {
-    const search = solicitudProductSearch.trim().toLowerCase();
+    const search = normalizeImportHeader(solicitudProductSearch);
+    const selectedProductIds = new Set(solicitudProducts.map((item) => String(item.productId)));
     return solicitudCatalogProducts.filter((product: any) => {
+      const isSelected = selectedProductIds.has(String(product?.id));
+      // Cuando la solicitud nació desde una selección de la tabla, el modal
+      // muestra esos registros al abrirse; una búsqueda explícita habilita
+      // resultados adicionales para agregarlos. Sin selección de tabla se
+      // conserva el catálogo visible como antes.
+      if (solicitudOnlySelected && !search && !isSelected) return false;
       const categoryId = String(product?.categoryId || product?.category?.id || '');
       const categoryName = String(product?.category?.name || product?.categoryName || '');
       const productWarehouseIds = [
@@ -766,9 +808,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const snapshot = getSolicitudProductSnapshot(product);
       const threshold = snapshot.minStock > 0 ? snapshot.minStock : 2;
       const matchesSearch = !search
-        || String(product?.name || '').toLowerCase().includes(search)
-        || String(product?.code || '').toLowerCase().includes(search)
-        || categoryName.toLowerCase().includes(search);
+        || normalizeImportHeader(product?.name).includes(search)
+        || normalizeImportHeader(product?.code).includes(search)
+        || normalizeImportHeader(categoryName).includes(search);
       const matchesCategory = solicitudCategoryFilter === 'ALL' || categoryId === solicitudCategoryFilter;
       const matchesWarehouse = solicitudWarehouseFilter === 'ALL'
         || productWarehouseIds.length === 0
@@ -781,7 +823,22 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ));
       return matchesSearch && matchesCategory && matchesWarehouse && matchesStock;
     });
-  }, [solicitudCatalogProducts, solicitudProductSearch, solicitudCategoryFilter, solicitudStockFilter, solicitudWarehouseFilter, stockByProduct, stockWarehouseIdSet]);
+  }, [solicitudCatalogProducts, solicitudProductSearch, solicitudCategoryFilter, solicitudStockFilter, solicitudWarehouseFilter, solicitudProducts, solicitudOnlySelected, stockByProduct, stockWarehouseIdSet]);
+
+  const solicitudPageCount = Math.max(1, Math.ceil(filteredSolicitudProducts.length / SOLICITUD_PAGE_SIZE));
+  const safeSolicitudPage = Math.min(solicitudPage, solicitudPageCount);
+  const visibleSolicitudProducts = useMemo(() => {
+    const start = (safeSolicitudPage - 1) * SOLICITUD_PAGE_SIZE;
+    return filteredSolicitudProducts.slice(start, start + SOLICITUD_PAGE_SIZE);
+  }, [filteredSolicitudProducts, safeSolicitudPage]);
+
+  useEffect(() => {
+    if (solicitudPage !== safeSolicitudPage) setSolicitudPage(safeSolicitudPage);
+  }, [safeSolicitudPage, solicitudPage]);
+
+  useEffect(() => {
+    setSolicitudPage(1);
+  }, [solicitudProductSearch, solicitudCategoryFilter, solicitudStockFilter, solicitudWarehouseFilter, solicitudOnlySelected]);
 
   const solicitudCategories = useMemo(() => {
     const categoriesById = new Map<string, string>();
@@ -807,30 +864,16 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
   });
 
   const openLowStockSolicitud = () => {
-    const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
-    const lowStock = catalog.filter((p: any) => {
-      if (String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'PRODUCT') return false;
-      const stockLevels = Array.isArray(p?.stockLevels) ? p.stockLevels : [];
-      const levels = stockLevels.length > 0 ? stockLevels : (Array.isArray(p?.allocations) ? p.allocations : []);
-      return levels.some((level: any) => {
-        const quantity = Number(level?.quantity || 0);
-        const minimum = Number(level?.minStock || 0);
-        return quantity <= (minimum > 0 ? minimum : 2);
-      });
-    });
+    clearSolicitudPreparation();
     loadSolicitudEmployees();
     setSolicitudWarehouseId('');
+    setSolicitudOnlySelected(false);
     setSolicitudWarehouseFilter('ALL');
+    setSolicitudPage(1);
+    setSolicitudCatalogLoading(true);
     // La bodega destino todavía no está seleccionada; las cantidades y el
     // stock se recalculan al elegirla y antes de enviar la solicitud.
-    setSolicitudProducts(lowStock.map((product: any) => ({
-      productId: product.id,
-      productName: product.name,
-      code: product.code ?? '',
-      currentStock: 0,
-      minStock: 0,
-      quantity: 1,
-    })));
+    setSolicitudProducts([]);
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
     setSolicitudPriority('NORMAL');
@@ -838,6 +881,28 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     setSolicitudCategoryFilter('ALL');
     setSolicitudStockFilter('ALL');
     setSolicitudOpen(true);
+    solicitudPreparationTimerRef.current = window.setTimeout(() => {
+      solicitudPreparationTimerRef.current = null;
+      const catalog = summaryProducts && summaryProducts.length > 0 ? summaryProducts : products;
+      const lowStock = catalog.filter((p: any) => {
+        if (String(p.itemType || p.type || 'PRODUCT').toUpperCase() !== 'PRODUCT') return false;
+        const stockLevels = Array.isArray(p?.stockLevels) ? p.stockLevels : [];
+        const levels = stockLevels.length > 0 ? stockLevels : (Array.isArray(p?.allocations) ? p.allocations : []);
+        return levels.some((level: any) => {
+          const quantity = Number(level?.quantity || 0);
+          const minimum = Number(level?.minStock || 0);
+          return quantity <= (minimum > 0 ? minimum : 2);
+        });
+      });
+      startTransition(() => setSolicitudProducts(lowStock.map((product: any) => ({
+        productId: product.id,
+        productName: product.name,
+        code: product.code ?? '',
+        currentStock: 0,
+        minStock: 0,
+        quantity: 1,
+      }))));
+    }, 0);
   };
 
   const openSelectedSolicitud = () => {
@@ -845,7 +910,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     loadSolicitudEmployees();
     const selected = products.filter((p: any) => selectedIds.has(p.id));
     setSolicitudWarehouseId('');
+    setSolicitudOnlySelected(true);
     setSolicitudWarehouseFilter('ALL');
+    setSolicitudPage(1);
+    setSolicitudCatalogLoading(true);
     setSolicitudProducts(buildSolicitudItems(selected));
     setSolicitudJustification('');
     setSolicitudRequiredDate('');
@@ -893,7 +961,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       });
       await purchaseRequestsService.create({
         status: 'PENDING_APPROVAL',
-        priority: solicitudPriority,
+        priority: normalizePurchasePriority(solicitudPriority),
         justification: solicitudJustification || 'Solicitud generada desde inventario',
         warehouseId: solicitudWarehouseId,
         requiredDate: solicitudRequiredDate || undefined,
@@ -1097,6 +1165,31 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     };
   }, [products, summaryProducts]);
 
+  const inventoryKpis = isServiceView
+    ? [
+        { title: 'Servicios', value: inventorySummary.total, icon: Package, color: 'text-primary', bg: 'bg-primary/10', kind: 'indicator' as const },
+        { title: 'Categorías', value: serviceSummary.categories, icon: PackageSearch, color: 'text-blue-600', bg: 'bg-blue-500/10', kind: 'indicator' as const },
+        { title: 'Promedio semanal', value: serviceSummary.weeklyAverage.toFixed(1), icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-500/10', kind: 'indicator' as const },
+        { title: 'Precio promedio', value: formatAmount(serviceSummary.averagePrice), icon: Barcode, color: 'text-amber-600', bg: 'bg-amber-500/10', kind: 'indicator' as const },
+      ]
+    : [
+        { title: 'Productos', value: inventorySummary.total, icon: Package, color: 'text-foreground', bg: 'bg-muted/50', kind: 'filter' as const, filter: 'all' as const },
+        { title: 'Disponibles', value: inventorySummary.available, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'available' as const },
+        { title: 'Stock bajo', value: inventorySummary.low, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-500/10', kind: 'filter' as const, filter: 'low' as const },
+        { title: 'Sin stock', value: inventorySummary.out, icon: Ban, color: 'text-rose-600', bg: 'bg-rose-500/10', kind: 'filter' as const, filter: 'out' as const },
+      ];
+  const activeProductFilterCount = [
+    Boolean(searchTerm.trim()),
+    warehouseFilters.length > 0,
+    stockFilter !== 'all',
+    availabilityFilter !== 'all',
+    !isServiceView && effectiveProductStatusFilter !== 'ALL',
+    Boolean(effectiveUnitFilter),
+    Boolean(effectiveTaxRateFilter),
+    Boolean(effectiveStockStatusFilter),
+    !showAllWarehouseProducts,
+  ].filter(Boolean).length;
+
   // ─── Estadísticas por almacén y sucursal (stock real de /inventory/stock) ──
   const warehouseStockStats = useMemo(() => {
     const stats = new Map<string, { products: number; units: number }>();
@@ -1194,6 +1287,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       code: '',
       name: '',
       description: '',
+      commercialNote: '',
       categoryId: categories[0]?.id || '',
       salePrice: '',
       priceCurrency: baseCurrency,
@@ -1218,6 +1312,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       code: product.code,
       name: product.name,
       description: product.description || '',
+      commercialNote: product.commercialNote || '',
       categoryId: product.categoryId || '',
       salePrice: Number(product.salePrice) || 0,
       priceCurrency: product.priceCurrency || baseCurrency,
@@ -1300,6 +1395,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         }
       } else if (field === 'initialStock' || field === 'minStock' || field === 'maxStock') {
         finalValue = Math.max(0, Number(value) || 0);
+      } else if (field === 'commercialNote') {
+        finalValue = Array.from(String(value ?? '')).slice(0, 100).join('');
       }
       const nextProduct = { ...current, [field]: finalValue };
       if (field === 'minStock' || field === 'maxStock') {
@@ -1411,6 +1508,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           code: product.code,
           name: product.name,
           description: product.description || '',
+          commercialNote: product.commercialNote || '',
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
           salePriceOriginal: Number(product.salePrice || 0),
@@ -1470,6 +1568,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           code: product.code,
           name: product.name,
           description: product.description || '',
+          commercialNote: product.commercialNote || '',
           categoryId: product.categoryId,
           salePrice: Number(product.salePrice || 0) * (product.priceCurrency === baseCurrency ? 1 : product.priceCurrency === 'USD' ? 1 / exchangeRate : exchangeRate),
           salePriceOriginal: Number(product.salePrice || 0),
@@ -1743,6 +1842,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </div>
           </div>
         </TableCell>
+        <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>
+          <Input
+            value={product.commercialNote || ''}
+            onChange={(e) => handleUpdateField(product.id, 'commercialNote', e.target.value)}
+            onKeyDown={(e) => handleKeyDown(e, product.id)}
+            placeholder="Nota comercial"
+            maxLength={100}
+            className="h-8 w-full min-w-0 text-xs"
+            disabled={isSaving}
+          />
+          <span className="mt-1 block text-right text-[9px] text-muted-foreground">{Array.from(String(product.commercialNote || '')).length}/100</span>
+        </TableCell>
         <TableCell className="align-top pt-3" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}>
           <div className="space-y-1.5 min-w-0">
             <Select 
@@ -2012,10 +2123,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   // ==================== EXCEL IMPORT ====================
   const handleDownloadTemplate = useCallback(() => {
-    const headers = ['Código / SKU', 'Nombre', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Stock inicial', 'Stock mínimo', 'Bodega'];
-    if (canViewInventoryCost) headers.splice(7, 0, 'Costo');
-    const sampleRow: any[] = ['SKU-001', 'Ejemplo producto', categories[0]?.name || 'Categoría', '', 150, 140, 130, 0, 0, warehouses[0]?.name || ''];
-    if (canViewInventoryCost) sampleRow.splice(7, 0, 100);
+    const headers = ['Código / SKU', 'Nombre', 'Nota comercial', 'Categoría', 'Unidad', 'Precio Minorista', 'Precio Mayorista', 'Precio Distribuidor', 'Stock inicial', 'Stock mínimo', 'Bodega'];
+    if (canViewInventoryCost) headers.splice(8, 0, 'Costo');
+    const sampleRow: any[] = ['SKU-001', 'Ejemplo producto', 'Presentación o detalle comercial', categories[0]?.name || 'Categoría', '', 150, 140, 130, 0, 0, warehouses[0]?.name || ''];
+    if (canViewInventoryCost) sampleRow.splice(8, 0, 100);
     const ws = XLSX.utils.aoa_to_sheet([
       headers,
       sampleRow,
@@ -2029,6 +2140,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       ['Campo', 'Regla'],
       ['Código / SKU', 'Obligatorio y único dentro de la empresa. La carga inicial del catálogo es única por empresa.'],
       ['Nombre', 'Obligatorio. En Productos solo se podrá editar nombre, SKU e imagen posteriormente.'],
+      ['Nota comercial', 'Opcional. Texto visible en los selectores y documentos de venta/compra; máximo 100 caracteres.'],
       ['Categoría', 'Debe coincidir con una categoría existente de productos; durante la previsualización puedes elegir otra o crearla.'],
       ['Bodega', 'Obligatoria únicamente si Stock inicial es mayor que cero. Debe ser una bodega activa de la sucursal.'],
       ...(canViewInventoryCost ? [['Costo', 'Costo unitario de referencia para valoración de inventario.']] : []),
@@ -2042,7 +2154,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
-      'Código / SKU': row.code || '', Nombre: row.name || '', Categoría: row.category || '', Bodega: row.warehouse || '',
+      'Código / SKU': row.code || '', Nombre: row.name || '', 'Nota comercial': row.commercialNote || '', Categoría: row.category || '', Bodega: row.warehouse || '',
       ...(canViewInventoryCost ? { Costo: row.costPrice ?? '' } : {}),
       Minorista: row.prices?.RETAIL ?? '', Mayorista: row.prices?.WHOLESALE ?? '', Distribuidor: row.prices?.DISTRIBUTOR ?? '',
       Clasificación: row._hasError ? 'Error' : 'Advertencia', Detalle: row._errorMessage || row._warningMessage || 'Revisar fila',
@@ -2062,6 +2174,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
     });
     return rows.map((row) => {
       const code = String(row.code || '').trim();
+      const commercialNote = String(row.commercialNote || '').trim();
       const categoryOk = categoryNames.has(String(row.category || '').trim().toLowerCase());
       const cost = row.costPrice === '' || row.costPrice === undefined || row.costPrice === null ? undefined : Number(row.costPrice);
       const prices = row.prices || {};
@@ -2081,6 +2194,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
       const errors = [
         !code ? 'SKU requerido' : codeCounts.get(code.toLowerCase())! > 1 ? 'SKU duplicado en la plantilla' : '',
         !String(row.name || '').trim() ? 'Nombre requerido' : '',
+        Array.from(commercialNote).length > 100 ? 'Nota comercial supera 100 caracteres' : '',
         !categoryOk ? 'Categoría no encontrada' : '',
         canViewInventoryCost && (cost === undefined || !Number.isFinite(cost) || cost < 0) ? 'Costo requerido y debe ser válido' : '',
         invalidPrice ? `Precio ${invalidPrice[0]} inválido` : !hasAtLeastOnePrice ? 'Debe incluir al menos un precio de venta' : '',
@@ -2092,6 +2206,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         ...row,
         code,
         name: String(row.name || '').trim(),
+        commercialNote,
         ...(canViewInventoryCost ? { costPrice: cost } : {}),
         salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
         _hasError: errors.length > 0,
@@ -2125,6 +2240,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         const aliases: Record<string, string[]> = {
           code: ['código / sku', 'código', 'codigo', 'code', 'sku'], name: ['nombre', 'name', 'producto'], description: ['descripción', 'descripcion', 'description'], category: ['categoría', 'categoria', 'category', 'cat'], taxRate: ['tasa iva', 'iva', 'tax rate'], imageUrl: ['imagen url', 'imagen', 'image url'], barcode: ['código de barras', 'barcode'], brand: ['marca', 'brand'], model: ['modelo', 'model'], color: ['color'], weight: ['peso', 'weight'], weightUnit: ['unidad peso', 'weight unit'], dimensions: ['dimensiones', 'dimensions'], width: ['ancho', 'width'], height: ['alto', 'height'], depth: ['profundidad', 'depth'], dimensionUnit: ['unidad dimensión', 'dimension unit'], warranty: ['garantía', 'garantia', 'warranty'], estimatedDuration: ['duración estimada', 'duracion estimada'], unit: ['unidad', 'unit', 'medida'], trackInventory: ['control de inventario', 'track inventory'], minStock: ['stock mínimo', 'stock minimo', 'min stock'], costPrice: ['costo', 'precio costo', 'cost price'], lastPurchasePrice: ['último costo', 'ultimo costo', 'last purchase price'], initialStock: ['stock inicial', 'initial stock', 'cantidad', 'qty'], warehouse: ['bodega', 'almacén', 'almacen', 'warehouse'], trackBatch: ['control de lotes', 'track batch'], trackSeries: ['control de series', 'track series'], attributes: ['atributos json', 'atributos', 'attributes'], retailPrice: ['precio minorista', 'minorista', 'retail price'], wholesalePrice: ['precio mayorista', 'mayorista', 'wholesale price'], distributorPrice: ['precio distribuidor', 'distribuidor', 'distributor price'],
         };
+        aliases.commercialNote = ['nota comercial', 'nota', 'commercial note', 'commercialnote'];
         for (const [key, alts] of Object.entries(aliases)) {
           const normalizedAliases = alts.map((alias) => normalizeImportHeader(alias));
           const idx = headers.findIndex((header: string) => normalizedAliases.some((alias) => header === alias || header.startsWith(`${alias} `)));
@@ -2141,6 +2257,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             name: String(get('name') || '').trim(),
             category: String(get('category') || '').trim(),
             itemType: 'PRODUCT',
+            commercialNote: String(get('commercialNote') || '').trim(),
             description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? 0.15, imageUrl: String(get('imageUrl') || '').trim() || undefined, barcode: String(get('barcode') || '').trim() || undefined, brand: String(get('brand') || '').trim() || undefined, model: String(get('model') || '').trim() || undefined, color: String(get('color') || '').trim() || undefined, weight: toNumber('weight'), weightUnit: String(get('weightUnit') || '').trim() || undefined, dimensions: String(get('dimensions') || '').trim() || undefined, width: toNumber('width'), height: toNumber('height'), depth: toNumber('depth'), dimensionUnit: String(get('dimensionUnit') || '').trim() || undefined, warranty: String(get('warranty') || '').trim() || undefined, estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', lastPurchasePrice: toNumber('lastPurchasePrice'), trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', trackSeries: String(get('trackSeries') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: Number(prices.RETAIL ?? prices.WHOLESALE ?? prices.DISTRIBUTOR ?? 0),
@@ -2301,6 +2418,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           code: row.code,
           name: row.name,
           categoryId: cat?.id,
+          commercialNote: row.commercialNote,
           description: row.description, taxRate: row.taxRate, imageUrl: row.imageUrl, barcode: row.barcode, brand: row.brand, model: row.model, color: row.color, weight: row.weight, weightUnit: row.weightUnit, dimensions: row.dimensions, width: row.width, height: row.height, depth: row.depth, dimensionUnit: row.dimensionUnit, warranty: row.warranty, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
           unit: String(row.unit ?? '').trim(),
           ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
@@ -2475,30 +2593,18 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           <p className="text-xs font-medium text-muted-foreground">{displayWarehouseOptions.length} bodegas visibles</p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-tour="inventory-products-kpis">
-          {[
-            { id: 'all', label: isServiceView ? 'Servicios' : 'Productos', value: inventorySummary.total, tone: 'text-foreground' },
-            ...(isServiceView ? [
-              { id: 'service-categories', label: 'Categorías', value: serviceSummary.categories, tone: 'text-blue-600' },
-              { id: 'service-weekly-average', label: 'Promedio de servicios por semana', value: serviceSummary.weeklyAverage, tone: 'text-emerald-600', decimals: 1 },
-              { id: 'service-average', label: 'Precio promedio', value: serviceSummary.averagePrice, tone: 'text-amber-600', isCurrency: true },
-            ] : [
-              { id: 'available', label: 'Disponibles', value: inventorySummary.available, tone: 'text-emerald-600' },
-              { id: 'low', label: 'Stock bajo', value: inventorySummary.low, tone: 'text-amber-600' },
-              { id: 'out', label: 'Sin stock', value: inventorySummary.out, tone: 'text-rose-600' },
-            ]),
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={['all', 'available', 'low', 'out'].includes(item.id) && stockFilter === item.id}
-              onClick={() => ['all', 'available', 'low', 'out'].includes(item.id) && setStockFilter(item.id as typeof stockFilter)}
-              className={`min-w-0 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                stockFilter === item.id ? 'border-primary bg-primary/5' : 'border-border/70 bg-muted/20 hover:bg-muted/50'
-              }`}
-            >
-              <span className="block text-xs font-semibold text-muted-foreground">{item.label}</span>
-              <span className={`mt-1 block text-2xl font-black tabular-nums ${item.tone}`}>{'isCurrency' in item && item.isCurrency ? formatAmount(item.value) : 'decimals' in item && item.decimals !== undefined ? item.value.toFixed(item.decimals) : item.value}</span>
-            </button>
+          {inventoryKpis.map((item) => (
+            <SalesKpiCard
+              key={item.title}
+              title={item.title}
+              value={item.value}
+              icon={item.icon}
+              color={item.color}
+              bg={item.bg}
+              kind={item.kind}
+              active={'filter' in item ? stockFilter === item.filter : false}
+              onClick={'filter' in item ? () => setStockFilter(item.filter) : undefined}
+            />
           ))}
         </div>
         {!isServiceView && selectedBranchId && (() => {
@@ -2540,9 +2646,27 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         })()}
       </div>
 
-      {/* ─── Barra de herramientas: patrón de filtros y acciones de Ventas ─── */}
-      <div className="erp-composite-toolbar mb-4 flex flex-wrap items-center justify-between gap-3" data-tour="inventory-products-filters">
-        <div className="erp-toolbar-filter-group flex min-w-0 flex-1 flex-wrap items-center gap-2" data-toolbar-role="filters">
+      {/* ─── Acciones fijas + filtros desplegables ─── */}
+      <div className="mb-4 flex min-w-0 flex-col gap-3">
+        <div className="erp-composite-toolbar flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-tour="inventory-products-filter-toggle"
+              aria-expanded={filtersOpen}
+              aria-controls="inventory-products-filter-panel"
+              className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+              onClick={() => setFiltersOpen((open) => !open)}
+              title={filtersOpen ? 'Ocultar filtros del catálogo' : 'Mostrar filtros del catálogo'}
+            >
+              <SlidersHorizontal className="mr-2 size-4" /> {filtersOpen ? 'Ocultar filtros' : 'Filtros'}
+              {activeProductFilterCount > 0 && <Badge variant="secondary" className="ml-1 text-[10px]">{activeProductFilterCount}</Badge>}
+            </Button>
+            {filtersOpen && (
+              <div id="inventory-products-filter-panel" className="mt-3 max-w-full rounded-2xl border border-border/50 bg-muted/10 p-3" data-tour="inventory-products-filters">
+                <div className="erp-toolbar-filter-group flex min-w-0 flex-wrap items-center gap-2" data-toolbar-role="filters">
           <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
@@ -2627,16 +2751,19 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <X className="mr-2 size-4" /> Limpiar
             </Button>
           )}
-        </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-        <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto" data-tour="inventory-products-actions">
+          <div className="erp-toolbar-primary-group flex w-full max-w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto" data-tour="inventory-products-actions">
           {canPerform('INVENTORY_PRODUCTS', 'create') && (
             <Button type="button" size="sm" data-toolbar-role="primary" className="h-10 shrink-0 rounded-xl border border-primary/20 bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 md:order-last" onClick={() => setCreateModalOpen(true)}>
               <Plus className="mr-2 size-4" /> Nuevo
             </Button>
           )}
-          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
-            <CircleHelp className="mr-2 size-4" /> Cómo
+          <Button type="button" size="sm" variant="outline" data-toolbar-role="help" aria-label="Cómo usar la vista de productos" title="Cómo usar la vista de productos" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowTutorial(true)}>
+            <CircleHelp className="mr-2 size-4" /> Cómo usar la vista de productos
           </Button>
           {!isServiceView && canPerform('INVENTORY', 'edit') && (
             <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={() => setInitialImportIntroOpen(true)} title="Importar el catálogo inicial desde una plantilla">
@@ -2648,9 +2775,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <ImageIcon className="mr-2 size-4" /> Imágenes
             </Button>
           )}
-          {!isServiceView && (
-            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
-              <PackageSearch className="mr-2 size-4" />{selectedIds.size > 0 ? `Comprar (${selectedIds.size})` : 'Solicitudes'}
+          {!isServiceView && canCreatePurchaseRequest && (
+            <Button type="button" size="sm" variant="outline" aria-label="Solicitar compra" title="Crear una solicitud de compra desde inventario" className="h-10 shrink-0 rounded-xl border-primary/40 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10" onClick={selectedIds.size > 0 ? openSelectedSolicitud : openLowStockSolicitud}>
+              <PackageSearch className="mr-2 size-4" />{selectedIds.size > 0 ? `Solicitar compra (${selectedIds.size})` : 'Solicitar compra'}
             </Button>
           )}
           {!isServiceView && canPerform('INVENTORY_PRODUCTS', 'export') && (
@@ -2659,7 +2786,8 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             </Button>
           )}
         </div>
-      </div>
+          </div>
+        </div>
 
       {/* Mobile cards: the desktop table stays available at md+ without forcing page overflow. */}
       <div className="space-y-3 xl:hidden" data-tour="inventory-products-table">
@@ -2677,7 +2805,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
           const costPrice = Number(product.costPrice || 0);
           const maxStock = getProductMaxStock(product);
           return (
-            <Card key={product.id} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => setProductDetail(product)}>
+            <Card key={product.id} aria-busy={String(openingId) === String(product.id) || undefined} data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => openProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
                 <button
                   type="button"
@@ -2694,12 +2822,13 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold" title={product.name}>{product.name}</p>
+                      <p className="flex min-w-0 items-center gap-2 truncate font-semibold" title={product.name}>{product.name}{String(openingId) === String(product.id) && <span role="status" className="inline-flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}</p>
                       <p className="truncate font-mono text-xs text-muted-foreground">{product.code}</p>
                     </div>
                     <Badge variant="outline" className="shrink-0 text-[9px] font-black uppercase">{isServiceView ? 'Servicio' : 'Producto'}</Badge>
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">{product.category?.name || 'Sin categoría'}</p>
+                  <p className="mt-1 max-w-full truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}><span className="font-semibold">Nota:</span> {product.commercialNote || '—'}</p>
                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-4">
                     {isServiceView && <div>
                       <span className="text-muted-foreground">{isServiceView ? 'Precio' : 'Precio venta'}</span>
@@ -2780,7 +2909,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
 
       {/* Desktop table */}
       <div className="hidden max-w-full overflow-x-auto rounded-lg border xl:block" data-tour="inventory-products-table">
-        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '920px' : '1176px' }}>
+        <Table className="w-full table-fixed" style={{ minWidth: isServiceView ? '1100px' : '1356px' }}>
           <TableHeader>
             <TableRow className="bg-muted/50 border-b border-border/50">
               <TableHead style={{ width: PRODUCT_TABLE_WIDTHS.selector, minWidth: PRODUCT_TABLE_WIDTHS.selector }}>
@@ -2793,6 +2922,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.code, minWidth: PRODUCT_TABLE_WIDTHS.code }}><span className="inline-flex items-center gap-1">Código<ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} /></span></TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.name, minWidth: PRODUCT_TABLE_WIDTHS.name }}><span className="inline-flex items-center gap-1">{isServiceView ? 'Servicio' : 'Nombre'}<ColumnFilterMenu label={isServiceView ? 'Servicio' : 'Nombre'} sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Más recientes' }]} /></span></TableHead>
+              <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.note, minWidth: PRODUCT_TABLE_WIDTHS.note }}>Nota comercial</TableHead>
               <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.category, minWidth: PRODUCT_TABLE_WIDTHS.category }}><span className="inline-flex items-center gap-1">Categoría<ColumnFilterMenu label="Categoría" options={categoryOptions} selected={colFilters.state.category?.values || []} onSelect={(values) => colFilters.setValues('category', values)} sort={colFilters.state.category?.sort || null} onSort={(sort) => colFilters.setSort('category', sort)} /></span></TableHead>
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest" style={{ width: PRODUCT_TABLE_WIDTHS.unit, minWidth: PRODUCT_TABLE_WIDTHS.unit }}>U.Medida</TableHead>}
               {!isServiceView && <TableHead className="font-black text-[10px] uppercase tracking-widest text-right" style={{ width: PRODUCT_TABLE_WIDTHS.min, minWidth: PRODUCT_TABLE_WIDTHS.min }}>Min</TableHead>}
@@ -2814,7 +2944,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             {/* Existing products */}
             {filteredData.length === 0 && editingRows.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={isServiceView ? 8 : canViewInventoryCost ? 11 : 10} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={isServiceView ? 9 : canViewInventoryCost ? 12 : 11} className="text-center py-12 text-muted-foreground">
                   <Package className="size-10 mx-auto mb-2 opacity-20" />
                   <p className="font-medium">{products.length > 0 ? 'No hay coincidencias' : `No hay ${isServiceView ? 'servicios' : 'productos'} registrados`}</p>
                   <p className="text-sm">
@@ -2850,7 +2980,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                    <TableRow 
                       key={product.id} 
                       className={`group hover:bg-muted/30 cursor-pointer ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-inset ring-primary/60' : ''}`}
-                      onClick={() => setProductDetail(product)}
+                      aria-busy={String(openingId) === String(product.id) || undefined}
+                      data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined}
+                      onClick={() => openProductDetail(product)}
                       onDoubleClick={() => canPerform('INVENTORY_PRODUCTS', 'edit') && handleEditRow(product)}
                      >
                      <TableCell className="w-10">
@@ -2886,7 +3018,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                             className="block min-w-0 max-w-full flex-1 truncate text-left text-sm font-medium hover:text-primary underline-offset-2 hover:underline"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setProductDetail(product);
+                              openProductDetail(product);
                             }}
                           >
                             {product.name}
@@ -2907,6 +3039,11 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     </TableCell>
                     <TableCell>
                       <span className="text-xs text-muted-foreground">{product.category?.name || '-'}</span>
+                    </TableCell>
+                    <TableCell className="max-w-[180px]">
+                      <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={product.commercialNote || undefined}>
+                        {product.commercialNote || '—'}
+                      </span>
                     </TableCell>
                     {!isServiceView && <TableCell>
                       <span className="text-xs text-muted-foreground capitalize">{product.unit || 'unidad'}</span>
@@ -3403,6 +3540,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
                           <TableHead className="text-[10px] uppercase w-32">Código</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
+                          <TableHead className="text-[10px] uppercase w-44">Nota comercial</TableHead>
                             <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
                           <TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead>
@@ -3441,6 +3579,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                                 className={`h-8 text-xs ${!row.name ? 'border-red-500' : ''}`}
                               />
                             </TableCell>
+                            <TableCell className="p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(e) => handleImportRowUpdate(i, 'commercialNote', e.target.value)} className="h-8 text-xs" /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></TableCell>
                             <TableCell className="p-1">
                               {importCategoryOptions.some((category: any) => category.name?.toLowerCase() === String(row.category || '').trim().toLowerCase()) ? (
                                 <Input
@@ -3555,6 +3694,7 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <p>• <b>Código</b> (requerido)</p>
                 <p>• <b>Nombre</b> (requerido)</p>
+                <p>• <b>Nota comercial</b> (máximo 100 caracteres)</p>
                 <p>• <b>Categoría</b></p>
                 <p>• <b>Precios por lista</b></p>
                 {canViewInventoryCost && <p>• <b>Costo</b></p>}
@@ -3642,18 +3782,25 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
         </DialogContent>
       </Dialog>
 
-      <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o && !solicitudCreating) setSolicitudOpen(false); }}>
-        <DialogContent className="sm:max-w-3xl max-h-[82vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <PackageSearch className="size-4" /> Solicitud de Compra ({solicitudProducts.length} productos)
+      <Dialog open={solicitudOpen} onOpenChange={(o) => { if (!o) closeSolicitud(); }}>
+        <DialogContent className="!flex !w-[calc(100vw-1rem)] !max-w-[1100px] max-h-[min(90vh,calc(100dvh-1rem))] flex-col overflow-hidden rounded-3xl p-4 sm:p-6">
+          <DialogHeader className="shrink-0 border-b border-border/40 pb-4">
+            <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 pr-8">
+              <PackageSearch className="size-4 shrink-0 text-primary" />
+              <span className="min-w-0 break-words">Solicitud de compra</span>
+              <Badge variant="outline" className="text-[10px]">{solicitudOnlySelected ? 'Selección de tabla' : 'Búsqueda de productos'}</Badge>
+              <Badge variant="secondary" className="text-[10px]">{solicitudProducts.length} productos</Badge>
+              {solicitudCatalogLoading && <Badge variant="outline" className="gap-1 text-[10px] text-primary"><Loader2 className="size-3 animate-spin" /> Cargando productos</Badge>}
             </DialogTitle>
-            <DialogDescription>
-              Revisa y ajusta la cantidad a solicitar de cada producto. La solicitud se guardará en Compras &gt; Solicitudes.
+            <DialogDescription className="break-words pr-8">
+              {solicitudOnlySelected
+                ? 'Se muestran inicialmente los productos que seleccionaste en la tabla. Usa el buscador para localizar y agregar otro producto.'
+                : 'El catálogo se muestra como antes. Para localizar un producto, búscalo por nombre, código o categoría.'} La solicitud se guardará en Compras &gt; Solicitudes.
             </DialogDescription>
-            <InventoryViewTutorial label="Cómo crear solicitud de compra" targetPrefix="inventory-request" copy={{ data: { description: 'Selecciona empleado, bodega, justificación, fecha, prioridad y productos a solicitar.' }, actions: { description: 'Crea la solicitud para enviarla al flujo de Compras.' } }} />
+            <InventoryViewTutorial label="Cómo crear una solicitud de compra" targetPrefix="inventory-request" copy={{ data: { description: solicitudOnlySelected ? 'Completa los datos de la solicitud, revisa la selección de la tabla y usa el buscador para agregar productos por nombre, código o categoría.' : 'Selecciona empleado, bodega, justificación, fecha, prioridad y productos a solicitar. Para agregar un producto adicional, búscalo por nombre, código o categoría.' }, actions: { description: 'Crea la solicitud para enviarla al flujo de Compras.' } }} />
           </DialogHeader>
-          <div className="space-y-4" data-tour="inventory-request-data">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1" data-tour="inventory-request-data">
+          <div className="space-y-4 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Empleado solicitante *</label>
@@ -3689,12 +3836,10 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Prioridad</label>
-                <Select value={solicitudPriority} onValueChange={setSolicitudPriority} disabled={solicitudCreating}>
+                <Select value={normalizePurchasePriority(solicitudPriority)} onValueChange={(value) => setSolicitudPriority(normalizePurchasePriority(value))} disabled={solicitudCreating}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NORMAL">Normal</SelectItem>
-                    <SelectItem value="URGENT">Urgente</SelectItem>
-                    <SelectItem value="CRITICAL">Crítico</SelectItem>
+                    {PURCHASE_PRIORITY_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -3702,22 +3847,23 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
             <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-3">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <label htmlFor="solicitud-product-search" className="text-xs font-black uppercase tracking-wide">Productos</label>
-                  <p className="text-[11px] text-muted-foreground">Marca el check para incluir un producto y habilitar la cantidad a solicitar.</p>
+                  <div className="text-xs font-black uppercase tracking-wide">{solicitudOnlySelected ? 'Productos seleccionados' : 'Productos para solicitar'}</div>
+                  <p className="text-[11px] text-muted-foreground">{solicitudOnlySelected ? 'La solicitud parte de tu selección. Busca por nombre, código o categoría para agregar otro producto.' : 'El catálogo se muestra como antes. Puedes filtrar por nombre, código, categoría, stock o bodega.'}</p>
                 </div>
-                <Badge variant="secondary" className="w-fit text-[10px]">{filteredSolicitudProducts.length} de {solicitudCatalogProducts.length}</Badge>
+                <Badge variant="secondary" className="w-fit text-[10px]">{solicitudOnlySelected ? (solicitudProductSearch.trim() ? `${filteredSolicitudProducts.length} resultados` : `${filteredSolicitudProducts.length} seleccionados`) : `${filteredSolicitudProducts.length} visibles · ${solicitudProducts.length} incluidos`}</Badge>
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                <div className="relative md:col-span-1">
+                <div className={`relative ${solicitudOnlySelected ? 'md:col-span-3' : 'md:col-span-1'}`}>
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="solicitud-product-search"
                     value={solicitudProductSearch}
                     onChange={(event) => setSolicitudProductSearch(event.target.value)}
-                    placeholder="Buscar por nombre o código..."
+                    placeholder={solicitudOnlySelected ? 'Buscar para agregar por nombre, código o categoría...' : 'Buscar por nombre, código o categoría...'}
                     className="h-9 bg-background pl-9 pr-9"
                     disabled={solicitudCreating}
                     autoComplete="off"
+                    aria-label="Buscar productos por nombre, código o categoría"
                   />
                   {solicitudProductSearch && (
                     <button type="button" className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setSolicitudProductSearch('')} aria-label="Limpiar búsqueda de productos">
@@ -3725,14 +3871,14 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     </button>
                   )}
                 </div>
-                <Select value={solicitudCategoryFilter} onValueChange={setSolicitudCategoryFilter} disabled={solicitudCreating}>
+                {!solicitudOnlySelected && <Select value={solicitudCategoryFilter} onValueChange={setSolicitudCategoryFilter} disabled={solicitudCreating}>
                   <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">Todas las categorías</SelectItem>
                     {solicitudCategories.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
                   </SelectContent>
-                </Select>
-                <Select value={solicitudStockFilter} onValueChange={(value) => setSolicitudStockFilter(value as typeof solicitudStockFilter)} disabled={solicitudCreating}>
+                </Select>}
+                {!solicitudOnlySelected && <Select value={solicitudStockFilter} onValueChange={(value) => setSolicitudStockFilter(value as typeof solicitudStockFilter)} disabled={solicitudCreating}>
                   <SelectTrigger className="h-9 bg-background"><SelectValue placeholder="Todos los niveles de stock" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">Todos los niveles de stock</SelectItem>
@@ -3740,9 +3886,9 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     <SelectItem value="LOW">Bajo el mínimo</SelectItem>
                     <SelectItem value="OUT">Sin existencia</SelectItem>
                   </SelectContent>
-                </Select>
+                </Select>}
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {!solicitudOnlySelected && <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Filtrar stock por bodega</label>
                 <Select value={solicitudWarehouseFilter} onValueChange={setSolicitudWarehouseFilter} disabled={solicitudCreating}>
                   <SelectTrigger className="h-8 w-full bg-background text-xs sm:w-72"><SelectValue placeholder="Todas las bodegas" /></SelectTrigger>
@@ -3751,56 +3897,115 @@ export function ProductosView({ products, summaryProducts, categories, warehouse
                     {warehouses.map((warehouse: any) => <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="max-h-72 overflow-y-auto rounded-xl border border-border/60 bg-background/70">
+              </div>}
+              <div className="max-h-[min(42vh,28rem)] max-w-full overflow-x-hidden overflow-y-auto rounded-xl border border-border/60 bg-background/70">
                 {solicitudCatalogLoading ? (
                   <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando productos...</div>
                 ) : filteredSolicitudProducts.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12 text-center font-black text-[10px] uppercase">Sel.</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase">Producto</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase">Categoría</TableHead>
-                        <TableHead className="text-right font-black text-[10px] uppercase">Stock</TableHead>
-                        <TableHead className="text-right font-black text-[10px] uppercase">Min</TableHead>
-                        <TableHead className="w-32 text-right font-black text-[10px] uppercase">Cantidad</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredSolicitudProducts.map((product: any) => {
+                  <>
+                    <div className="hidden max-w-full overflow-hidden md:block">
+                      <Table className="w-full table-fixed" containerClassName="overflow-x-hidden">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[8%] text-center font-black text-[10px] uppercase">Sel.</TableHead>
+                            <TableHead className="w-[37%] font-black text-[10px] uppercase">Producto</TableHead>
+                            <TableHead className="w-[20%] font-black text-[10px] uppercase">Categoría</TableHead>
+                            <TableHead className="w-[10%] text-right font-black text-[10px] uppercase">Stock</TableHead>
+                            <TableHead className="w-[10%] text-right font-black text-[10px] uppercase">Min</TableHead>
+                            <TableHead className="w-[15%] text-right font-black text-[10px] uppercase">Cantidad</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleSolicitudProducts.map((product: any) => {
+                            const selectedItem = solicitudProducts.find((item) => item.productId === product.id);
+                            const snapshot = getSolicitudProductSnapshot(product);
+                            const isSelected = Boolean(selectedItem);
+                            return (
+                              <TableRow key={product.id} className={isSelected ? 'bg-primary/[0.06]' : undefined}>
+                                <TableCell className="text-center align-middle">
+                                  <Checkbox checked={isSelected} onCheckedChange={() => toggleSolicitudProduct(product)} disabled={solicitudCreating} aria-label={`Seleccionar ${product.name}`} />
+                                </TableCell>
+                                <TableCell className="max-w-0 whitespace-normal align-middle text-xs font-medium">
+                                  <div className="min-w-0">
+                                    <span className="block break-words">{product.name}</span>
+                                    <span className="block break-all font-mono text-[10px] text-muted-foreground">{product.code || 'Sin código'}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="max-w-0 whitespace-normal align-middle text-xs text-muted-foreground"><span className="block break-words">{product.category?.name || product.categoryName || 'Sin categoría'}</span></TableCell>
+                                <TableCell className={`align-middle text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
+                                <TableCell className="align-middle text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
+                                <TableCell className="align-middle text-right">
+                                  <Input type="number" min={1} className="ml-auto h-8 w-full max-w-[6rem] text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="grid gap-2 p-2 md:hidden">
+                      {visibleSolicitudProducts.map((product: any) => {
                         const selectedItem = solicitudProducts.find((item) => item.productId === product.id);
                         const snapshot = getSolicitudProductSnapshot(product);
                         const isSelected = Boolean(selectedItem);
                         return (
-                          <TableRow key={product.id} className={isSelected ? 'bg-primary/[0.06]' : undefined}>
-                            <TableCell className="text-center">
-                              <Checkbox checked={isSelected} onCheckedChange={() => toggleSolicitudProduct(product)} disabled={solicitudCreating} aria-label={`Seleccionar ${product.name}`} />
-                            </TableCell>
-                            <TableCell className="min-w-0 font-medium text-xs">
-                              <span className="block truncate">{product.name}</span>
-                              <span className="font-mono text-[10px] text-muted-foreground">{product.code || 'Sin código'}</span>
-                            </TableCell>
-                            <TableCell className="max-w-32 truncate text-xs text-muted-foreground">{product.category?.name || product.categoryName || 'Sin categoría'}</TableCell>
-                            <TableCell className={`text-right text-xs tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'font-bold text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</TableCell>
-                            <TableCell className="text-right text-xs tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</TableCell>
-                            <TableCell className="text-right">
-                              <Input type="number" min={1} className="ml-auto h-8 w-24 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
-                            </TableCell>
-                          </TableRow>
+                          <article key={product.id} className={`min-w-0 rounded-xl border p-3 transition-colors ${isSelected ? 'border-primary/50 bg-primary/[0.06]' : 'border-border/60 bg-background/70'}`}>
+                            <div className="flex min-w-0 items-start gap-3">
+                              <Checkbox className="mt-0.5 shrink-0" checked={isSelected} onCheckedChange={() => toggleSolicitudProduct(product)} disabled={solicitudCreating} aria-label={`Seleccionar ${product.name}`} />
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-sm font-bold leading-tight">{product.name}</p>
+                                <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">{product.code || 'Sin código'}</p>
+                                <Badge variant="outline" className="mt-2 max-w-full whitespace-normal break-words text-[10px] font-medium">{product.category?.name || product.categoryName || 'Sin categoría'}</Badge>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                              <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2">
+                                <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Stock actual</span>
+                                <span className={`mt-1 block font-bold tabular-nums ${snapshot.currentStock !== null && snapshot.currentStock <= Number(snapshot.minStock || 0) ? 'text-orange-500' : ''}`}>{snapshot.currentStock === null ? '—' : snapshot.currentStock}</span>
+                              </div>
+                              <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2">
+                                <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Mínimo</span>
+                                <span className="mt-1 block font-bold tabular-nums">{snapshot.minStock === null ? '—' : snapshot.minStock}</span>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+                              <label htmlFor={`solicitud-quantity-${product.id}`} className="min-w-0 text-xs font-bold">Cantidad a solicitar</label>
+                              <Input id={`solicitud-quantity-${product.id}`} type="number" min={1} className="h-9 w-24 shrink-0 text-right text-xs" value={isSelected ? selectedItem.quantity : ''} onChange={(event) => updateSolicitudQuantity(product.id, Number(event.target.value))} disabled={!isSelected || solicitudCreating} placeholder="—" aria-label={`Cantidad a solicitar de ${product.name}`} />
+                            </div>
+                          </article>
                         );
                       })}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </>
                 ) : (
-                  <p className="px-3 py-8 text-center text-xs text-muted-foreground">No se encontraron productos con los filtros seleccionados.</p>
+                  <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                    <p>{solicitudOnlySelected && !solicitudProductSearch.trim() ? 'No quedan productos seleccionados en la tabla.' : 'No se encontraron productos con los filtros seleccionados.'}</p>
+                    {solicitudOnlySelected && !solicitudProductSearch.trim() && <p className="mt-1 text-[11px]">Busca por nombre, código o categoría para agregar otro producto.</p>}
+                  </div>
                 )}
               </div>
+              {filteredSolicitudProducts.length > SOLICITUD_PAGE_SIZE && (
+                <div className="flex flex-col gap-2 pt-1 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Mostrando {((safeSolicitudPage - 1) * SOLICITUD_PAGE_SIZE) + 1}–{Math.min(safeSolicitudPage * SOLICITUD_PAGE_SIZE, filteredSolicitudProducts.length)} de {filteredSolicitudProducts.length} productos
+                  </span>
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <Button type="button" variant="outline" size="icon" className="size-8" onClick={() => setSolicitudPage((page) => Math.max(1, page - 1))} disabled={safeSolicitudPage === 1 || solicitudCatalogLoading} aria-label="Página anterior de productos">
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <span className="min-w-20 text-center font-semibold">Página {safeSolicitudPage} de {solicitudPageCount}</span>
+                    <Button type="button" variant="outline" size="icon" className="size-8" onClick={() => setSolicitudPage((page) => Math.min(solicitudPageCount, page + 1))} disabled={safeSolicitudPage === solicitudPageCount || solicitudCatalogLoading} aria-label="Página siguiente de productos">
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          <DialogFooter data-tour="inventory-request-actions">
-            <Button variant="outline" onClick={() => setSolicitudOpen(false)} disabled={solicitudCreating}>Cancelar</Button>
-            <Button onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/40 pt-4 sm:gap-0" data-tour="inventory-request-actions">
+            <Button className="w-full sm:w-auto" variant="outline" onClick={closeSolicitud} disabled={solicitudCreating}><X className="mr-1 size-3.5" /> Cancelar</Button>
+            <Button className="w-full sm:w-auto" onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
               {solicitudCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
               <Send className="size-3.5 mr-1" /> Crear Solicitud
             </Button>

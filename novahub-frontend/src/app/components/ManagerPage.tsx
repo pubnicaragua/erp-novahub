@@ -33,6 +33,7 @@ import { emptyManagerPermissionState, MANAGER_PERMISSION_OPTIONS, managerPermiss
 import { getBusinessTypeLabel } from '../constants/businessTypes';
 import { parseSpreadsheetInWorker } from '../utils/import-spreadsheet';
 import { VirtualizedImportList } from './ui/VirtualizedImportList';
+import { Input } from './ui/input';
 
 const numberFormat = new Intl.NumberFormat('es-NI', { maximumFractionDigits: 2 });
 const formatNumber = (value: unknown) => numberFormat.format(Number(value || 0));
@@ -607,9 +608,9 @@ function ConsolidatedContent({ trialBalance, profitLoss, balanceSheet, branchCom
   return <div className="space-y-6">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Filtros:</p>
-      <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-xl border border-border/60 bg-card px-3 text-xs font-bold" />
+      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-xl border border-border/60 bg-card px-3 text-xs font-bold" />
       <span className="text-[10px] font-bold text-foreground/70">a</span>
-      <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-xl border border-border/60 bg-card px-3 text-xs font-bold" />
+      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-xl border border-border/60 bg-card px-3 text-xs font-bold" />
     </div>
     {loading ? <div className="flex min-h-[200px] items-center justify-center text-muted-foreground"><RefreshCw className="mr-2 size-4 animate-spin" /> Cargando estados financieros...</div> : <>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

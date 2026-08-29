@@ -468,6 +468,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
     lines: (estimate.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate),
       totalLabel: formatConvertedAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate),
@@ -612,7 +613,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
   const columns: ColumnDef<Estimate>[] = [
     { 
       key: 'number', 
-      header: 'Número', 
+      header: 'N° Cotización',
       width: '140px',
       render: (val, row) => (
         <span 
@@ -913,7 +914,11 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                 <div key={item.id || idx} data-item-layout="standard" className="sales-item-row grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border/50 bg-muted/5 p-3 items-start xl:grid-cols-12 xl:gap-2 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
                   <div className={cn("min-w-0 xl:col-span-5", pricingMode === 'individual' && "xl:col-span-5")}>
                       <div className="flex min-w-0 flex-wrap items-center gap-1"><div className="min-w-0 flex-1"><Combobox
-                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({ label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`, value: p.id }))}
+                      options={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog).map(p => ({
+                        label: `${resolveItemType(item) === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code} - ${p.name}`,
+                        value: p.id,
+                        description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined,
+                      }))}
                       value={item.productId || ''}
                       onChange={(val) => {
                         const newItems = [...(localDoc.items || [])] as any[];
@@ -926,12 +931,14 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
                         newItems[idx].productId = val;
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
+                          newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
                           newItems[idx].productCode = selectedProd.code;
                           const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
                           newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                         } else {
                           newItems[idx].description = 'Producto Customizado';
+                          newItems[idx].commercialNoteSnapshot = null;
                           newItems[idx].unitPrice = 0;
                           newItems[idx].total = 0;
                         }
@@ -1144,7 +1151,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="quotes" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de cotizaciones" />
+            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} showKanban ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

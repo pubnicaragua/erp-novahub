@@ -695,7 +695,7 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución" dataTour="customers-layout" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
             {canPerform('SALES_CLIENTS', 'create') && (
               <Button
                 variant="outline"

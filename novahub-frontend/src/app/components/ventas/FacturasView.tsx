@@ -1020,6 +1020,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
             productId: item.productId || undefined,
             warehouseId: item.warehouseId || undefined,
             description: item.description || '',
+            commercialNoteSnapshot: item.commercialNoteSnapshot || findProductForItem(item)?.commercialNote || null,
             itemType: item.itemType || findProductForItem(item)?.itemType || findProductForItem(item)?.type || undefined,
             quantity: Number(item.quantity || 1),
             unitPrice: Number(item.unitPrice || 0),
@@ -1362,7 +1363,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
   const columns: ColumnDef<Invoice>[] = [
     {
       key: 'number',
-      header: 'Nº Factura',
+      header: 'N° Factura',
       width: '140px',
       render: (val, row) => {
         const source = getInvoiceSourceBadge(row);
@@ -1831,7 +1832,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                     <div className="flex min-w-0 flex-wrap items-center gap-1">
                       <div className="min-w-0 flex-1">
                         <Combobox
-                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id }))}
+                          options={getItemCatalog(item).map(p => ({ label: `${String(p.itemType || resolveItemType(item)).toUpperCase() === 'SERVICE' ? 'Servicio' : 'Producto'} · ${p.code || ''} - ${p.name}`, value: p.id, description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined }))}
                           value={item.productId || ''}
                           onChange={(val) => {
                         const newItems = [...(localDoc.items || [])];
@@ -1855,6 +1856,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                         };
                         if (selectedProd) {
                           newItems[idx].description = selectedProd.name;
+                          newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
                           const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
                           newItems[idx].unitPrice = localDoc?.currency === 'USD' ? baseSalePrice / Number(localDoc?.exchangeRate || globalRate || 1) : baseSalePrice;
                           newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
@@ -2039,7 +2041,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
                        }} className="h-8 w-full text-xs text-right" disabled={Boolean(item.productId && isSerialTracked(findProductForItem(item))) || isInvoiceLocked} />
                   </div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} placeholder="0"
+                    <Input type="number" inputMode="decimal" min="0" step="any" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} placeholder="0"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])];
                         const unitPrice = Number(String(e.target.value).replace(/,/g, '')) || 0;
@@ -2142,7 +2144,7 @@ export function FacturasView({ data, loading, onRefresh, customers = [], product
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="invoices" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />

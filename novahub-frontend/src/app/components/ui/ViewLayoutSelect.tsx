@@ -36,6 +36,8 @@ export function useCardsOnlyBelowTableBreakpoint() {
 interface ViewLayoutSelectProps {
   value: ViewLayoutMode;
   onChange: (value: ViewLayoutMode) => void;
+  /** Only views with a real Kanban renderer should expose this option. */
+  showKanban?: boolean;
   ariaLabel?: string;
   className?: string;
   dataTour?: string;
@@ -44,13 +46,16 @@ interface ViewLayoutSelectProps {
 export function ViewLayoutSelect({
   value,
   onChange,
+  showKanban = false,
   ariaLabel = 'Elegir distribución',
   className,
   dataTour,
 }: ViewLayoutSelectProps) {
+  const effectiveValue = !showKanban && value === 'kanban' ? 'table' : value;
+
   return (
     <Select
-      value={value}
+      value={effectiveValue}
       onValueChange={(nextValue) => onChange(nextValue as ViewLayoutMode)}
     >
       <SelectTrigger
@@ -67,7 +72,7 @@ export function ViewLayoutSelect({
       <SelectContent align="end">
         <SelectItem value="table">Lista</SelectItem>
         <SelectItem value="cards">Tarjetas</SelectItem>
-        <SelectItem value="kanban">Kanban</SelectItem>
+        {showKanban && <SelectItem value="kanban">Kanban</SelectItem>}
       </SelectContent>
     </Select>
   );

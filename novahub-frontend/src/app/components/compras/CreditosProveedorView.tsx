@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { BadgeDollarSign, Plus, Search, Eye, Pencil, TrendingUp, Hash, Ban, ChevronLeft, Send, CheckCircle2, Lock, FileText, Trash2, Boxes, Wrench, FileSpreadsheet, Upload, Download, Percent } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { vendorCreditsService } from '../../services/compras.service';
@@ -17,7 +18,6 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -25,10 +25,12 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import * as XLSX from 'xlsx';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface Props { data: SupplierCredit[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; supplierInvoices?: SupplierInvoice[]; productCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -71,6 +73,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
   const [issueLoading, setIssueLoading] = useState(false);
   const [applyTarget, setApplyTarget] = useState<SupplierCredit | null>(null);
+  const [detailCredit, setDetailCredit] = useState<SupplierCredit | null>(null);
   const [applyLoading, setApplyLoading] = useState(false);
   const [itemTypeFilter, setItemTypeFilter] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const [importOpen, setImportOpen] = useState(false);
@@ -297,36 +300,27 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Créditos de Proveedor',
-      columns: [
-        { key: 'number', label: 'Nº', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'total', label: 'Total', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number || '',
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        total: Number(item.total || 0),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Créditos de Proveedor',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de créditos...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Créditos de proveedor',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'N° Crédito', value: (row) => row.number || row.id?.slice(0, 8) || '—' },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Total', align: 'right', value: (row) => formatConvertedAmount(Number(row.total || 0), resolveSourceCurrency(row.currency), row.exchangeRate) },
+          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toLowerCase())?.label || row.status || '—' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
   const distinctSuppliers = [...new Map(filtered.map((c) => [c.supplier?.name || '-', c.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((c) => (c.supplier?.name || '-') === label).length }));
@@ -334,7 +328,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const resolveSourceCurrency = (value?: string) => ((value || '').toUpperCase() === 'USD' ? 'USD' : 'NIO');
 
   const columns: ColumnDef<SupplierCredit>[] = [
-    { key: 'number',   header: 'Crédito #',  width: '110px',
+    { key: 'number',   header: 'N° Crédito',  width: '110px',
       render: (_v, row) => <span className="font-black font-mono text-primary text-xs">{row.number||row.id?.slice(0,8)}</span> },
     { key: 'supplier', header: 'Proveedor',  width: '160px',
       headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
@@ -497,6 +491,31 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
     setLocalDoc({ ...localDoc, items: newItems as any });
   };
 
+  const handleDownloadCreditPdf = async (credit: SupplierCredit, format: PdfDownloadFormat = 'configured') => {
+    const exportToastId = toast.loading('Generando PDF del crédito...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.supplier-credit',
+        document: {
+          title: 'Crédito de proveedor',
+          number: String(credit.number || credit.id),
+          date: credit.date ? formatDateEs(credit.date) : undefined,
+          status: statusOpts.find((option) => option.value === String(credit.status || '').toLowerCase())?.label || credit.status,
+          supplier: credit.supplier?.name || 'Sin proveedor',
+          fields: [{ label: 'Documento de origen', value: credit.supplierInvoice?.number || 'Sin factura asociada' }, { label: 'Moneda', value: resolveSourceCurrency((credit as any).currency) }],
+          lines: ((credit as any).items || []).map((item: any) => ({ description: item.description || item.name || 'Artículo sin descripción', quantity: item.quantity || 0, unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate), total: formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          total: formatConvertedAmount(Number(credit.total || 0), resolveSourceCurrency((credit as any).currency), (credit as any).exchangeRate),
+          totalLabel: 'Total del crédito',
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toLowerCase());
@@ -656,25 +675,21 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                   )}
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                  <select
-                    disabled={!canMutate}
+                  <CurrencySelector
                     value={localDoc.currency || displayCurrency}
-                    onChange={(e) => {
-                      const newCurrency = e.target.value;
+                    baseCurrency={baseCurrency}
+                    exchangeRate={exchangeRate}
+                    label="Moneda"
+                    rateDecimals={2}
+                    disabled={!canMutate}
+                    onChange={(newCurrency) => {
                       setLocalDoc({
                         ...localDoc,
-                        currency: newCurrency as any,
-                        exchangeRate: newCurrency === 'NIO' ? 1 : (Number(exchangeRate) > 0 ? Number(exchangeRate) : 1),
+                        currency: newCurrency,
+                        exchangeRate: newCurrency === baseCurrency ? 1 : (Number(exchangeRate) > 0 ? Number(exchangeRate) : 1),
                       });
                     }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    <option value="NIO">C$ (NIO)</option>
-                    <option value="USD">$ (USD)</option>
-                  </select>
-                  {localDoc.currency && localDoc.currency !== baseCurrency && (
-                    <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa global: {Number(exchangeRate) > 0 ? exchangeRate : '—'}</p>
-                  )}
+                  />
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
@@ -727,17 +742,20 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">IVA</p>
-                  <select
+                  <Select
                     disabled={!canMutate || !!localDoc.supplierInvoiceId}
                     value={String(localDoc.taxType || 'EXENTO').toUpperCase()}
-                    onChange={(e) => {
-                      const gravado = e.target.value === 'GRAVADO';
+                    onValueChange={(taxType) => {
+                      const gravado = taxType === 'GRAVADO';
                       setLocalDoc({ ...localDoc, taxType: gravado ? 'GRAVADO' : 'EXENTO', taxRate: gravado ? (Number(localDoc.taxRate) || 15) : 0 });
                     }}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                    <option value="EXENTO">Exento</option>
-                    <option value="GRAVADO">Gravado</option>
-                  </select>
+                  >
+                    <SelectTrigger className="h-8 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EXENTO">Exento</SelectItem>
+                      <SelectItem value="GRAVADO">Gravado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Tasa IVA (%)</p>
@@ -751,27 +769,30 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Retención IR</p>
                   <div className="flex h-8 items-center gap-2">
-                    <select
+                    <Select
                       disabled={!canMutate || !!localDoc.supplierInvoiceId}
                       value={String(localDoc.withholdingType || 'NONE').toUpperCase()}
-                      onChange={(e) => {
-                        const withRetention = e.target.value !== 'NONE';
+                      onValueChange={(withholdingType) => {
+                        const withRetention = withholdingType !== 'NONE';
                         setLocalDoc({
                           ...localDoc,
-                          withholdingType: withRetention ? e.target.value : 'NONE',
-                          withholdingRate: withRetention ? (Number(localDoc.withholdingRate) || Number(e.target.value.split('_')[1] || 2)) : 0,
+                          withholdingType: withRetention ? withholdingType : 'NONE',
+                          withholdingRate: withRetention ? (Number(localDoc.withholdingRate) || Number(withholdingType.split('_')[1] || 2)) : 0,
                         });
                       }}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">
-                      <option value="NONE">Sin retención</option>
-                      <option value="IR_1">IR 1%</option>
-                      <option value="IR_2">IR 2%</option>
-                      <option value="IR_5">IR 5%</option>
-                      <option value="IR_10">IR 10%</option>
-                      <option value="IR_15">IR 15%</option>
-                      <option value="IR_20">IR 20%</option>
-                      <option value="IR_25">IR 25%</option>
-                    </select>
+                    >
+                      <SelectTrigger className="h-8 w-full text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">Sin retención</SelectItem>
+                        <SelectItem value="IR_1">IR 1%</SelectItem>
+                        <SelectItem value="IR_2">IR 2%</SelectItem>
+                        <SelectItem value="IR_5">IR 5%</SelectItem>
+                        <SelectItem value="IR_10">IR 10%</SelectItem>
+                        <SelectItem value="IR_15">IR 15%</SelectItem>
+                        <SelectItem value="IR_20">IR 20%</SelectItem>
+                        <SelectItem value="IR_25">IR 25%</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div>
@@ -847,14 +868,17 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
                 {(localDoc.items || []).map((item: any, idx: number) => (
                   <div key={item.id || idx} data-item-layout="credit" className="purchase-item-row grid min-w-0 grid-cols-12 gap-2 items-center">
                     <div className="col-span-1">
-                      <select
+                      <Select
                         disabled={!canMutate}
                         value={item.itemType || 'PRODUCT'}
-                        onChange={(e) => handleItemChange(idx, 'itemType', e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-background px-1 text-[9px] font-black uppercase">
-                        <option value="PRODUCT">Prod.</option>
-                        <option value="SERVICE">Serv.</option>
-                      </select>
+                        onValueChange={(itemType) => handleItemChange(idx, 'itemType', itemType)}
+                      >
+                        <SelectTrigger className="h-8 w-full px-1 text-[9px] font-black uppercase"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PRODUCT">Prod.</SelectItem>
+                          <SelectItem value="SERVICE">Serv.</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="col-span-4">
                       {canMutate && String(item.itemType || 'PRODUCT') === 'PRODUCT' ? (
@@ -1015,8 +1039,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Créditos de Proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="credits" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de créditos de proveedor" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos de proveedor" />
             {canPerform('PURCHASES_RETURNS', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Crédito</Button>
             )}
@@ -1025,36 +1049,44 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           actions={(row) => {
-            const status = String(row.status || '').toUpperCase();
             return (
-             <div className="flex gap-1">
-              {canPerform('PURCHASES_RETURNS', 'approve') && status === 'DRAFT' && (
-                <Button title="Emitir crédito (reserva el monto a favor del proveedor)" aria-label="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={() => setPendingIssueId(row.id)}>
-                  <Send className="size-4" />
-                </Button>
-              )}
-              {canPerform('PURCHASES_RETURNS', 'approve') && status === 'ISSUED' && (
-                <Button title="Aplicar crédito contra cuentas por pagar" aria-label="Aplicar crédito contra cuentas por pagar" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500" onClick={() => setApplyTarget(row)}>
-                  <CheckCircle2 className="size-4" />
-                </Button>
-              )}
-              {!['APPLIED', 'PARTIAL', 'PAID', 'VOIDED'].includes(status) && (
-                <Button title={canPerform('PURCHASES_RETURNS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_RETURNS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
-              )}
-              {['APPLIED', 'PARTIAL', 'PAID', 'VOIDED'].includes(status) && (
-                <Button title="Ver (solo lectura)" aria-label="Ver crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-muted/40" onClick={() => openEditor(row.id)}><Lock className="size-4" /></Button>
-              )}
-              <PurchaseAuditButton entity="SUPPLIER_CREDIT" entityId={row.id} title="Auditoria del Credito" />
-              {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && (
-                <Button title="Anular crédito (lo marca como anulado sin borrarlo)" aria-label="Anular crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingVoidId(row.id)}><Ban className="size-4" /></Button>
-              )}
+             <div className="flex items-center gap-1">
+              <Button title="Ver detalle" aria-label="Ver detalle del crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_RETURNS', 'edit') && <Button title="Editar crédito" aria-label="Editar crédito" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailCredit(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           );
           }}
         />
       </div>
+
+      <SalesDocumentDetailSheet
+        document={detailCredit ? {
+          id: detailCredit.id,
+          number: String(detailCredit.number || detailCredit.id),
+          title: 'Crédito de proveedor',
+          customerName: detailCredit.supplier?.name || 'Sin proveedor',
+          hideCustomer: true,
+          status: String(detailCredit.status || '').toUpperCase(),
+          totalLabel: formatConvertedAmount(Number(detailCredit.total || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate),
+          summaryDetails: [{ label: 'Documento origen', value: detailCredit.supplierInvoice?.number || 'Sin factura' }, { label: 'Moneda', value: resolveSourceCurrency((detailCredit as any).currency) }],
+          metadata: [{ label: 'Proveedor', value: detailCredit.supplier?.name || 'No disponible' }, { label: 'Fecha', value: detailCredit.date ? formatDateEs(detailCredit.date) : 'No disponible' }, { label: 'Estado', value: statusOpts.find((option) => option.value === String(detailCredit.status || '').toLowerCase())?.label || detailCredit.status || '—' }],
+          lines: ((detailCredit as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || item.name || 'Artículo sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate), totalLabel: formatConvertedAmount(Number(item.total || 0), resolveSourceCurrency((detailCredit as any).currency), (detailCredit as any).exchangeRate), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+        } : null}
+        entity="SUPPLIER_CREDIT"
+        open={Boolean(detailCredit)}
+        onClose={() => setDetailCredit(null)}
+        extraActions={detailCredit && (() => {
+          const status = String(detailCredit.status || '').toUpperCase();
+          return <>
+            {canPerform('PURCHASES_RETURNS', 'approve') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-blue-600" onClick={() => setPendingIssueId(detailCredit.id)}><Send className="size-4" /> Emitir</Button>}
+            {canPerform('PURCHASES_RETURNS', 'approve') && status === 'ISSUED' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => setApplyTarget(detailCredit)}><CheckCircle2 className="size-4" /> Aplicar</Button>}
+            {canPerform('PURCHASES_RETURNS', 'delete') && ['DRAFT', 'ISSUED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingVoidId(detailCredit.id)}><Ban className="size-4" /> Anular</Button>}
+          </>;
+        })()}
+        onDownloadPdf={(format) => detailCredit ? void handleDownloadCreditPdf(detailCredit, format) : undefined}
+      />
 
       <ConfirmDialog
         open={pendingIssueId !== null}

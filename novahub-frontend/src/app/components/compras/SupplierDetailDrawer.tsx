@@ -3,12 +3,13 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Activity,
+  Banknote,
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
   Clock3,
-  Edit2,
   FileText,
   History,
   Mail,
@@ -17,8 +18,9 @@ import {
   ReceiptText,
   Truck,
   User,
+  Loader2,
 } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -33,17 +35,22 @@ import {
 } from '../../services/compras.service';
 import { suppliersService } from '../../services/compras.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import type { Supplier } from '../../types';
 import { cn } from '../ui/utils';
-import { PurchaseViewTutorial } from './PurchaseViewTutorial';
+import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/supplierBalance';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
+import { fetchSupplierHistoryItems } from '../../utils/supplierHistory';
+import { toast } from 'sonner';
 
 interface SupplierDetailDrawerProps {
   supplierId: string | null;
   supplierSnapshot?: Supplier | null;
-  canEdit?: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit?: (supplier: Supplier) => void;
-  onOpenHistory?: (supplier: Supplier) => void;
+  onDownloadPdf?: (format: PdfDownloadFormat) => void;
 }
 
 type SupplierTab = 'general' | 'historial';
@@ -69,7 +76,7 @@ const toList = (response: any): any[] => {
 };
 
 const statusInfo = (supplier?: Supplier | null) => {
-  const inactive = supplier?.isActive === false || String((supplier as any)?.status || '').toUpperCase() === 'INACTIVE';
+  const inactive = (supplier as any)?.isActive === false || String((supplier as any)?.status || '').toUpperCase() === 'INACTIVE';
   return inactive
     ? { label: 'Inactivo', className: 'bg-muted/20 text-muted-foreground border-border/40' }
     : { label: 'Activo', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' };
@@ -98,17 +105,18 @@ const transactionStatus = (status?: string) => {
 export function SupplierDetailDrawer({
   supplierId,
   supplierSnapshot,
-  canEdit = false,
   onOpenChange,
-  onEdit,
-  onOpenHistory,
+  onDownloadPdf,
 }: SupplierDetailDrawerProps) {
   const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { user } = useAuth();
+  const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<SupplierTab>('general');
   const [detail, setDetail] = useState<Supplier | null>(supplierSnapshot || null);
   const [transactions, setTransactions] = useState<SupplierTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,9 +214,36 @@ export function SupplierDetailDrawer({
   const currentStatus = statusInfo(supplier);
   const currentType = typeInfo(supplier?.type);
   const TypeIcon = currentType.icon;
+  const supplierDebt = getSupplierDebtAmount(supplier);
+  const supplierFavor = getSupplierFavorAmount(supplier);
   const totalCommitted = useMemo(() => transactions.reduce((sum, item) => sum + item.amount, 0), [transactions]);
   const orderCount = transactions.filter((item) => item.type === 'Orden de compra').length;
   const invoiceCount = transactions.filter((item) => item.type === 'Factura de proveedor').length;
+
+  const handleDownloadHistory = async () => {
+    if (!supplier || exportingHistory) return;
+    const exportToastId = toast.loading('Generando historial del proveedor...');
+    setExportingHistory(true);
+    try {
+      const historyItems = await fetchSupplierHistoryItems(supplier.id);
+      if (!historyItems.length) {
+        toast.info('Este proveedor todavía no tiene transacciones para descargar.', { id: exportToastId });
+        return;
+      }
+      await generateSupplierHistoryPDF({
+        supplier,
+        items: historyItems,
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa',
+        tenantLogo: themeConfig?.logo,
+        formatAmount: formatConvertedAmount,
+      });
+      toast.success('Historial del proveedor descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el historial del proveedor.', { id: exportToastId });
+    } finally {
+      setExportingHistory(false);
+    }
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -232,13 +267,12 @@ export function SupplierDetailDrawer({
                 <div className="flex flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
                   <span className="font-bold">{supplier?.code || supplier?.id?.slice(0, 8) || '—'}</span>
                   {supplier?.createdAt && <span className="flex items-center gap-1 font-sans text-[11px]"><Calendar className="size-3" /> Registrado {format(new Date(supplier.createdAt), 'dd MMM yyyy', { locale: es })}</span>}
+                  {(loading || loadingTransactions) && <span role="status" className="inline-flex items-center gap-1 font-sans text-[10px] font-bold text-primary"><Loader2 className="size-3 animate-spin" /> Cargando detalle…</span>}
                 </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2" data-tour="supplier-detail-actions">
-              <PurchaseViewTutorial view="suppliers" context="form" labelOverride="Cómo consultar proveedor" stepKeys={['title', 'data', 'actions']} targetPrefix="supplier-detail" />
-              {canEdit && supplier && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider" onClick={() => onEdit?.(supplier)}><Edit2 className="mr-1.5 size-3.5" /> Editar proveedor</Button>}
-              {supplier && onOpenHistory && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase tracking-wider" onClick={() => onOpenHistory(supplier)}><History className="mr-1.5 size-3.5" /> Historial completo</Button>}
+              {supplier && onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} label="Exportar" includeRoll={false} standardLabel="Ficha del proveedor" firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del proveedor', onSelect: () => { void handleDownloadHistory(); } }} disabled={exportingHistory} />}
             </div>
             <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 font-bold text-xs">
               <TabsTrigger value="general" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><Truck className="size-3.5" /> General</TabsTrigger>
@@ -251,8 +285,9 @@ export function SupplierDetailDrawer({
               {error && <Card className="flex items-center gap-3 border-destructive/20 bg-destructive/10 p-4 text-destructive"><Activity className="size-5 shrink-0" /><p className="text-xs font-bold">{error}</p></Card>}
 
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <MetricCard label="Saldo" value={formatConvertedAmount(Number(supplier?.balance || 0), baseCurrency)} icon={CircleDollarSign} accent="text-rose-500" loading={loading} />
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                  <MetricCard label="Saldo pendiente" value={formatConvertedAmount(supplierDebt, baseCurrency)} icon={CircleDollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
+                  <MetricCard label="Saldo a favor" value={formatConvertedAmount(supplierFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label="Órdenes" value={String(orderCount)} icon={ReceiptText} accent="text-primary" loading={loadingTransactions} />
                   <MetricCard label="Facturas" value={String(invoiceCount)} icon={FileText} accent="text-primary" loading={loadingTransactions} />
                   <MetricCard label="Estado" value={currentStatus.label} icon={CheckCircle2} accent={currentStatus.label === 'Activo' ? 'text-emerald-500' : 'text-muted-foreground'} loading={loading} />
@@ -290,6 +325,11 @@ export function SupplierDetailDrawer({
               </TabsContent>
             </div>
           </ScrollArea>
+          <SheetFooter className="border-t border-border/50 bg-background/95 px-6 py-3 backdrop-blur-md">
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="ml-auto gap-1.5 rounded-xl font-bold text-xs">
+              Cerrar <ChevronRight className="size-3" />
+            </Button>
+          </SheetFooter>
         </Tabs>
       </SheetContent>
     </Sheet>

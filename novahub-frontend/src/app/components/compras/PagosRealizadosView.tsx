@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban, Download, FileDown } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Eye, Pencil, CheckCircle2, TrendingDown, Hash, ChevronLeft, Trash2, Ban } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { paymentsService, supplierInvoicesService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
@@ -14,23 +15,20 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { toast } from 'sonner';
-import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { generateExpensePDF } from '../../utils/pdfGenerator';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { isBankPaymentMethod, paymentMethodLabel, requiresPaymentReference } from '../../utils/paymentMethods';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 
 interface Props {
   data: PaymentMade[];
@@ -234,21 +232,6 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     if (String(method || '').toUpperCase() === 'MIXED') return 'Pago mixto';
     return methodOpts.find((opt) => opt.value === normalizeMethod(method))?.label || method || '-';
   };
-  const toExpensePayload = (payment: Partial<PaymentMade>, supplierName?: string) => ({
-    number: payment.number || payment.reference || payment.id || `PAG-${Date.now().toString().slice(-5)}`,
-    id: payment.id,
-    date: payment.date,
-    amount: Number(payment.amount || 0),
-    currency: payment.currency,
-    exchangeRate: payment.exchangeRate,
-    category: 'PAGO_PROVEEDOR',
-    description: payment.notes || `${payment.paymentLabel || 'Pago único'} a proveedor ${supplierName || '-'}`,
-    paidTo: supplierName || '-',
-    paymentSource: getMethodLabel(payment.method),
-    reference: payment.reference || '-',
-    status: 'PAID',
-  });
-
   const filtered = groupedPayments.filter((payment) => {
     if (!normalizedSearchTerm) return true;
     const linkedBill = bills.find((bill) => bill.id === payment.supplierInvoiceId);
@@ -302,38 +285,28 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return invoice?.purchaseReceipt?.purchaseOrder?.exchangeRate || invoice?.exchangeRate || payment.exchangeRate;
   };
 
-  const { printContent } = useBrowserPrint();
-
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Pagos Realizados',
-      columns: [
-        { key: 'reference', label: 'Referencia / No. de pago', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'expectedPayment', label: 'Importe comprometido', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'paidAmount', label: 'Pagado', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'method', label: 'Método', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        reference: item.displayReference || paymentReferenceLabel(item),
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        expectedPayment: expectedPaymentAmount(item),
-        paidAmount: paidPaymentAmount(item),
-        method: item.method || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Pagos Realizados',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de pagos...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Pagos realizados',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'Referencia', value: (row) => row.displayReference || paymentReferenceLabel(row) },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Comprometido', align: 'right', value: (row) => formatConvertedAmount(expectedPaymentAmount(row), paymentExpectedCurrency(row), paymentExpectedRate(row)) },
+          { label: 'Pagado', align: 'right', value: (row) => formatConvertedAmount(paidPaymentAmount(row), linkedInvoiceForPayment(row)?.currency || row.currency, linkedInvoiceForPayment(row)?.exchangeRate || row.exchangeRate) },
+          { label: 'Método', align: 'center', value: (row) => getMethodLabel(row.method) },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
   const distinctSuppliers = [...new Map(filtered.map((p) => [p.supplier?.name || '-', p.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((p) => (p.supplier?.name || '-') === label).length }));
@@ -342,9 +315,9 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     !!supplierId && (suppliers.find((s) => s.id === supplierId)?.status || '').toUpperCase() === 'ACTIVE';
 
   const columns: ColumnDef<PaymentMade>[] = [
-    { key: 'reference', header: 'Referencia / No. de pago', width: '175px',
+    { key: 'reference', header: 'N° Pago / Referencia', width: '175px',
       render: (_value, row) => <span className="text-xs font-mono text-muted-foreground">{row.displayReference || paymentReferenceLabel(row)}</span> },
-    { key: 'supplierInvoiceId', header: 'Factura #', width: '120px',
+    { key: 'supplierInvoiceId', header: 'N° Factura', width: '120px',
       render: (val) => {
         const invoice = bills.find((bill) => bill.id === val);
         return <span className="text-xs font-bold text-primary">{invoice?.number || '-'}</span>;
@@ -502,6 +475,37 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
     return sameSupplier && isOpen;
   });
 
+  const handleDownloadPaymentPdf = async (payment: PaymentMade, format: PdfDownloadFormat = 'configured') => {
+    const exportToastId = toast.loading('Generando comprobante de pago...');
+    try {
+      const paymentRows = payment.payments?.length ? payment.payments : [payment];
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.payment-made',
+        document: {
+          title: 'Pago a proveedor',
+          number: String(payment.number || payment.reference || payment.id),
+          date: payment.date ? formatDateEs(payment.date) : undefined,
+          status: payment.isActive === false ? 'Anulado' : 'Pagado',
+          supplier: payment.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Factura', value: linkedInvoiceForPayment(payment)?.number || 'Sin factura asociada' },
+            { label: 'Tipo', value: payment.paymentLabel || 'Pago único' },
+            { label: 'Referencia', value: payment.displayReference || paymentReferenceLabel(payment) },
+          ],
+          lines: paymentRows.map((row) => ({ description: getMethodLabel(row.method), quantity: 1, unitPrice: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), total: formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency), secondary: `Referencia: ${paymentReferenceLabel(row)}${row.bankAccountId ? ` · Banco: ${row.bankAccountId}` : ''}` })),
+          total: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency),
+          totalLabel: 'Total pagado',
+          notes: payment.notes,
+        },
+      });
+      toast.success('Comprobante generado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el comprobante', { id: exportToastId });
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     
@@ -519,21 +523,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="payments" context="form" />
-             {!isNew && (
-                <Button
-                  variant="outline"
-                  className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => generateExpensePDF({
-                    expense: toExpensePayload(localDoc, suppliers.find((s) => s.id === localDoc.supplierId)?.name),
-                    tenantName: user?.tenantName || 'Nova Hub',
-                    targetKey: 'compras.payment-made',
-                    formatAmount: (amount: number, currency?: string, rate?: number) =>
-                      formatConvertedAmount(Number(amount || 0), currency || (localDoc.currency as any), rate || localDoc.exchangeRate),
-                  })}
-                >
-                  <Download className="size-3 mr-2" /> Descargar PDF
-                </Button>
-              )}
+             {!isNew && <PdfDownloadButton label="Exportar" onDownload={(format) => void handleDownloadPaymentPdf(localDoc as PaymentMade, format)} />}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'delete') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
@@ -619,14 +609,14 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
                           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
                             <div>
                               <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                              <select
+                              <Select
                                 disabled={isNew ? !canPerform('PURCHASES_PAYMENTS', 'create') : !canPerform('PURCHASES_PAYMENTS', 'edit')}
                                 value={normalizeMethod(line.method)}
-                                onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as PurchasePaymentMethod, bankAccountId: undefined, reference: '' } : item))}
-                                className="h-10 w-full max-w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
+                                onValueChange={(method) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: method as PurchasePaymentMethod, bankAccountId: undefined, reference: '' } : item))}
                               >
-                                {methodOpts.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                              </select>
+                                <SelectTrigger className="h-10 w-full max-w-full text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                                <SelectContent>{methodOpts.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                              </Select>
                             </div>
                             <CurrencySelector
                               value={line.currency}
@@ -774,15 +764,15 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Pagos Realizados</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="payments" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de pagos a proveedores" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'create') && canPerform('PURCHASES_PAYMENTS', 'approve') && (
                <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
              )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'delete') ? async (ids) => {
             const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
             try {
@@ -804,78 +794,33 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
             }
           } : undefined}
            actions={(row) => (
-              <div className="flex gap-1">
-               <Button
-                 title="Descargar PDF"
-                 variant="ghost"
-                 size="icon"
-                 className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary"
-                 onClick={() => void (async () => {
-                   const pdfToastId = toast.loading('Generando comprobante de pago...');
-                   try {
-                     await generateExpensePDF({
-                       expense: toExpensePayload(row, row.supplier?.name),
-                       tenantName: user?.tenantName || 'Nova Hub',
-                       targetKey: 'compras.payment-made',
-                       formatAmount: (amount: number, currency?: string, rate?: number) =>
-                         formatConvertedAmount(Number(amount || 0), currency || row.currency, rate || row.exchangeRate),
-                     });
-                     toast.success('Comprobante generado', { id: pdfToastId });
-                   } catch (error: any) {
-                     toast.error(error?.message || 'No se pudo generar el comprobante', { id: pdfToastId });
-                   }
-                 })()}
-               >
-                 <FileDown className="size-4" />
-               </Button>
-                <Button title={row.isGroupedPayment ? 'Ver desglose del pago' : (canPerform('PURCHASES_PAYMENTS', 'edit') ? 'Editar' : 'Ver')} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => row.isGroupedPayment ? setDetailPayment(row) : setEditingId(row.id)}>{row.isGroupedPayment || !canPerform('PURCHASES_PAYMENTS', 'edit') ? <Eye className="size-4" /> : <Pencil className="size-4" />}</Button>
-               <PurchaseAuditButton entity="PAYMENT_MADE" entityId={row.id} title="Auditoria del Pago" />
-               {canPerform('PURCHASES_PAYMENTS', 'delete') && (
-                <Button title="Anular pago" aria-label="Anular pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setPendingCancelGroup(row); setCancelReason(''); }}><Ban className="size-4" /></Button>
-              )}
-            </div>
+              <div className="flex items-center gap-1">
+                <Button title="Ver detalle" aria-label="Ver detalle del pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button>
+                {canPerform('PURCHASES_PAYMENTS', 'edit') && !row.isGroupedPayment && <Button title="Editar pago" aria-label="Editar pago" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailPayment(null); setEditingId(row.id); }}><Pencil className="size-4" /></Button>}
+              </div>
           )}
         />
       </div>
-      <Dialog open={detailPayment !== null} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
-        <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <Eye className="size-5 text-primary" /> Detalle del pago
-            </DialogTitle>
-            <DialogDescription>
-              El pago mixto se muestra como un solo registro y conserva aquí el detalle de cada forma de pago.
-            </DialogDescription>
-          </DialogHeader>
-          {detailPayment && (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{detailPayment.number || detailPayment.reference || detailPayment.id}</p>
-                <p className="mt-1 text-2xl font-black text-primary">{detailPayment.paymentLabel || 'Pago único'}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{detailPayment.supplier?.name || 'Proveedor'} · {detailPayment.supplierInvoiceId ? (bills.find((bill) => bill.id === detailPayment.supplierInvoiceId)?.number || 'Factura asociada') : 'Sin factura asociada'}</p>
-              </div>
-              <div className="space-y-2">
-                {(detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => (
-                  <div key={payment.id || index} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{getMethodLabel(payment.method)}</p>
-                        <p className="mt-1 text-sm font-black">{payment.currency === 'USD' ? '$' : 'C$'} {Number(payment.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-                      </div>
-                      <Badge variant="outline" className="text-[9px] uppercase">{payment.currency || baseCurrency}</Badge>
-                    </div>
-                    {payment.bankAccountId && <p className="mt-2 text-[10px] text-muted-foreground">Banco: {payment.bankAccountId}</p>}
-                    <p className="mt-1 text-[10px] font-mono text-muted-foreground">Referencia / No. de pago: {paymentReferenceLabel(payment)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDetailPayment(null)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SalesDocumentDetailSheet
+        document={detailPayment ? {
+          id: detailPayment.id,
+          number: String(detailPayment.number || detailPayment.reference || detailPayment.id),
+          title: 'Pago a proveedor',
+          customerName: detailPayment.supplier?.name || 'Sin proveedor',
+          hideCustomer: true,
+          status: detailPayment.isActive === false ? 'VOIDED' : 'PAID',
+          totalLabel: formatCurrentAmount(Number(detailPayment.amount || 0), detailPayment.currency || displayCurrency),
+          summaryDetails: [{ label: 'Tipo', value: detailPayment.paymentLabel || 'Pago único' }, { label: 'Método', value: getMethodLabel(detailPayment.method) }],
+          metadata: [{ label: 'Fecha', value: detailPayment.date ? formatDateEs(detailPayment.date) : 'No disponible' }, { label: 'Factura', value: linkedInvoiceForPayment(detailPayment)?.number || 'Sin factura asociada' }, { label: 'Referencia', value: detailPayment.displayReference || paymentReferenceLabel(detailPayment) }],
+          lines: (detailPayment.payments?.length ? detailPayment.payments : [detailPayment]).map((payment, index) => ({ id: String(payment.id || index), description: getMethodLabel(payment.method), quantity: 1, unitPriceLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(payment.amount || 0), payment.currency || displayCurrency), secondaryLabel: `Referencia: ${paymentReferenceLabel(payment)}${payment.bankAccountId ? ` · Banco: ${payment.bankAccountId}` : ''}` })),
+          notes: detailPayment.notes,
+        } : null}
+        entity="PAYMENT_MADE"
+        open={Boolean(detailPayment)}
+        onClose={() => setDetailPayment(null)}
+        extraActions={detailPayment && canPerform('PURCHASES_PAYMENTS', 'delete') ? <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => { setPendingCancelId(detailPayment.id); setPendingCancelGroup(detailPayment); setCancelReason(''); }}><Ban className="size-4" /> Anular</Button> : undefined}
+        onDownloadPdf={(format) => detailPayment ? void handleDownloadPaymentPdf(detailPayment, format) : undefined}
+      />
       <ConfirmDialog
         open={pendingCancelId !== null}
         onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingCancelGroup(null); setCancelReason(''); } }}

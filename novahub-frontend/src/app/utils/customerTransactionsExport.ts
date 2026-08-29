@@ -1,8 +1,6 @@
 import ExcelJS from 'exceljs';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { getBase64Image } from './reportExportUtils';
-import { getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateConfiguredHistoryPDF } from './pdfGenerator';
+import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { formatCurrencyAmount } from './currency';
 
 export interface CustomerTransactionExportRow {
@@ -29,6 +27,7 @@ interface CustomerTransactionsExportOptions {
   primaryColor?: string | null;
   branchName?: string | null;
   pdfDesign?: { settings?: Record<string, any> } | Record<string, any> | null;
+  pdfFormat?: PdfDownloadFormat;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -116,54 +115,27 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
 }
 
 export async function exportCustomerTransactionsPdf(options: CustomerTransactionsExportOptions) {
-  const configuredSettings = options.pdfDesign && typeof options.pdfDesign === 'object' && 'settings' in options.pdfDesign ? options.pdfDesign.settings : options.pdfDesign;
-  const settings = (configuredSettings && typeof configuredSettings === 'object' ? configuredSettings : await getPdfDesignSettings('reportes.customers')) as Record<string, any>;
-  const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
-  const doc = new jsPDF(pdfDesignPaper(settings));
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
-  let currentY = 16;
-  const logo = options.tenantLogo ? await getBase64Image(options.tenantLogo) : null;
-  if (logo) {
-    try { doc.addImage(logo, 'PNG', margin, currentY, 22, 22, undefined, 'FAST'); currentY += 26; } catch { /* El PDF continúa sin logo. */ }
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(primary[0], primary[1], primary[2]);
-  doc.text(options.tenantName || 'NovaHub', margin, currentY);
-  currentY += 8;
-  doc.setFontSize(13);
-  doc.setTextColor(51, 65, 85);
-  doc.text('Historial de transacciones del cliente', margin, currentY);
-  currentY += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`${options.customerName} · ${options.branchName || 'Sucursal no identificada'} · Registros: ${options.rows.length}`, margin, currentY);
-  currentY += 5;
-  doc.text(`Generado: ${new Date().toLocaleString('es-NI')}`, margin, currentY);
-  currentY += 7;
-  doc.setDrawColor(primary[0], primary[1], primary[2]);
-  doc.setLineWidth(0.8);
-  doc.line(margin, currentY, pageWidth - margin, currentY);
-  currentY += 7;
-  autoTable(doc, {
-    head: [['Tipo', 'Número', 'Fecha', 'Estado', 'Monto', 'Tasa aplicada', 'Descripción']],
-    body: options.rows.map((row) => [row.kind || 'Transacción', row.number || '—', formatDate(row.date), statusLabel(row.status), `${formatMoney(row.amount, row.currency)}${row.reportAmount == null ? '' : `\n≈ ${formatMoney(row.reportAmount, row.reportCurrency)}`}`, row.reportRateLabel || '—', row.description || '—']),
-    startY: currentY,
-    margin: { left: margin, right: margin, bottom: 16 },
-    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak' },
-    headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    columnStyles: { 0: { fontStyle: 'bold' }, 4: { halign: 'right', fontStyle: 'bold' }, 5: { fontSize: 6.5 } },
+  const rows = Array.isArray(options.rows) ? options.rows : [];
+  await generateConfiguredHistoryPDF({
+    targetKey: 'reportes.customers',
+    title: 'Historial de transacciones',
+    subtitle: options.branchName || 'Sucursal no identificada',
+    subjectLabel: 'Cliente',
+    subjectName: options.customerName || 'Cliente',
+    tenantName: options.tenantName || 'NovaHub',
+    tenantLogo: options.tenantLogo,
+    format: options.pdfFormat || 'configured',
+    designOverride: options.pdfDesign || undefined,
+    rows,
+    fileName: `${fileStem(options.customerName)}.pdf`,
+    columns: [
+      { header: 'Tipo', value: (row) => row.kind || 'Transacción' },
+      { header: 'Número', value: (row) => row.number || '—' },
+      { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
+      { header: 'Estado', value: (row) => statusLabel(row.status) },
+      { header: 'Monto', align: 'right', value: (row) => `${formatMoney(row.amount, row.currency)}${row.reportAmount == null ? '' : `\n≈ ${formatMoney(row.reportAmount, row.reportCurrency)}`}` },
+      { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
+      { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },
+    ],
   });
-  const pageCount = (doc as any).internal.getNumberOfPages();
-  for (let page = 1; page <= pageCount; page += 1) {
-    doc.setPage(page);
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`${options.tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
-  }
-  doc.save(`${fileStem(options.customerName)}.pdf`);
 }

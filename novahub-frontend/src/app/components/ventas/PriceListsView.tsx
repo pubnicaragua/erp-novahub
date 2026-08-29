@@ -235,6 +235,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [missingSelectedIds, setMissingSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
+  const savingProductRef = useRef<Set<string>>(new Set());
   const [editingProductIds, setEditingProductIds] = useState<Set<string>>(new Set());
   const [editingPrices, setEditingPrices] = useState<Record<string, Record<string, string>>>({});
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
@@ -244,6 +245,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [importOpen, setImportOpen] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<PriceImportResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -254,9 +256,12 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [importCurrency, setImportCurrency] = useState(baseCurrency === 'USD' ? 'USD' : 'NIO');
   const [importRate, setImportRate] = useState<number>(Number(exchangeRate || 1));
   const [newListOpen, setNewListOpen] = useState(false);
+  const [creatingList, setCreatingList] = useState(false);
+  const creatingListRef = useRef(false);
   const [editingListId, setEditingListId] = useState<string | null>(null);
   const [editingListName, setEditingListName] = useState('');
   const [savingListName, setSavingListName] = useState(false);
+  const savingListNameRef = useRef(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [variantDetailOpen, setVariantDetailOpen] = useState(false);
@@ -264,6 +269,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [editingVariantPrices, setEditingVariantPrices] = useState<Record<string, Record<string, string>>>({});
   const [editingVariantIds, setEditingVariantIds] = useState<Set<string>>(new Set());
   const [savingVariant, setSavingVariant] = useState<string | null>(null);
+  const savingVariantRef = useRef<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const catalogProducts = useMemo(
@@ -409,7 +415,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   };
 
   const saveVariantPrices = async (variantId: string) => {
-    if (!canEditPriceList || !selectedVariantProduct) return;
+    if (!canEditPriceList || !selectedVariantProduct || savingVariantRef.current.has(variantId)) return;
     const values = editingVariantPrices[variantId] || {};
     const invalidList = visibleLists.find((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
@@ -423,6 +429,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       return { list, price };
     }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
     if (!changes.length) return cancelEditVariant(variantId);
+    savingVariantRef.current.add(variantId);
     setSavingVariant(variantId);
     try {
       await Promise.all(changes.map(({ list, price }) =>
@@ -439,6 +446,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     } catch (error: any) {
       toast.error(error.message || 'No se pudieron guardar los precios de la variante');
     } finally {
+      savingVariantRef.current.delete(variantId);
       setSavingVariant(null);
     }
   };
@@ -484,7 +492,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   };
 
   const saveProductPrices = async (productId: string) => {
-    if (!canEditPriceList) return;
+    if (!canEditPriceList || savingProductRef.current.has(productId)) return;
     const values = editingPrices[productId] || {};
     const byList = itemsByProduct.get(productId);
     const currency = displayCurrency;
@@ -504,18 +512,21 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       return { list, price };
     }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
     if (!changes.length) return cancelEditProduct(productId);
+    savingProductRef.current.add(productId);
     setSaving(productId);
     try {
       const updatedItems = await Promise.all(changes.map(({ list, price }) => priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate })));
       queryClient.setQueryData(['sales', 'price-lists', 'matrix', tenantKey], (current: any) => {
         if (!current) return current;
-        const nextItems = current.items.map((item: PriceListItem) => {
-          const index = changes.findIndex(({ list }) => list.id === item.priceListId && item.productId === productId);
-          if (index < 0) return item;
-          const updated: any = updatedItems[index];
-          const price = Number(updated?.price ?? changes[index].price);
+        const nextItems = [...current.items];
+        changes.forEach(({ list }, changeIndex) => {
+          const itemIndex = nextItems.findIndex((item: PriceListItem) => item.priceListId === list.id && item.productId === productId && !item.variantId);
+          const updated: any = updatedItems[changeIndex];
+          const price = Number(updated?.price ?? changes[changeIndex].price);
           const basePrice = Number(updated?.basePrice ?? (currency === baseCurrency ? price : currency === 'USD' ? price * rate : price / rate));
-          return { ...item, ...updated, price, currency, exchangeRate: rate, basePrice };
+          const nextItem = { ...(itemIndex >= 0 ? nextItems[itemIndex] : {}), ...updated, priceListId: list.id, productId, variantId: null, price, currency, exchangeRate: rate, basePrice };
+          if (itemIndex >= 0) nextItems[itemIndex] = nextItem;
+          else nextItems.push(nextItem);
         });
         const nextProducts = current.products?.map((product: any) => {
           const retailChange = changes.find(({ list }) => list.code === 'RETAIL');
@@ -529,7 +540,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       cancelEditProduct(productId);
       toast.success(`${changes.length} precio(s) guardado(s)`);
     } catch (error: any) { toast.error(error.message || 'No se pudieron guardar los precios'); }
-    finally { setSaving(null); }
+    finally { savingProductRef.current.delete(productId); setSaving(null); }
   };
 
   const openDownload = (productIds: string[]) => {
@@ -664,8 +675,9 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   };
 
   const executeImport = async () => {
-    if (!canImportPriceLists) return;
+    if (!canImportPriceLists || importingRef.current) return;
     if (importRows.some((row) => row.error) || !importRows.length) return;
+    importingRef.current = true;
     setImporting(true);
     setImportProgress(10);
     try {
@@ -697,6 +709,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     } catch (error: any) {
       toast.error(error.message || 'No se pudieron actualizar los precios');
     } finally {
+      importingRef.current = false;
       setImporting(false);
       setImportProgress(0);
     }
@@ -729,12 +742,15 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   }
 
   const createList = async () => {
-    if (!canCreatePriceList) return;
+    if (!canCreatePriceList || creatingListRef.current) return;
     if (!newListName.trim()) return;
+    creatingListRef.current = true;
+    setCreatingList(true);
     try {
       await priceListsService.create({ name: newListName });
       setNewListOpen(false); setNewListName(''); await refreshMatrix(); toast.success('Lista de precios creada');
     } catch (error: any) { toast.error(error.message || 'No se pudo crear la lista'); }
+    finally { creatingListRef.current = false; setCreatingList(false); }
   };
 
   const beginEditListName = (list: (typeof lists)[number]) => {
@@ -744,13 +760,14 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   };
 
   const saveListName = async () => {
-    if (!editingListId || !canEditPriceList) return;
+    if (!editingListId || !canEditPriceList || savingListNameRef.current) return;
     const name = editingListName.trim();
     if (!name) {
       toast.error('El nombre de la lista es requerido');
       return;
     }
 
+    savingListNameRef.current = true;
     setSavingListName(true);
     try {
       const updated = await priceListsService.update(editingListId, { name });
@@ -768,6 +785,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     } catch (error: any) {
       toast.error(error.message || 'No se pudo actualizar el nombre de la lista');
     } finally {
+      savingListNameRef.current = false;
       setSavingListName(false);
     }
   };
@@ -865,7 +883,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
         <DialogFooter className="flex-wrap"><Button variant="outline" onClick={() => setImportOpen(false)}>Cerrar</Button>{importFile && <Button onClick={handleOpenImportPreview} disabled={previewLoading}>Previsualizar actualización</Button>}</DialogFooter>
       </DialogContent>
     </Dialog>
-    <Dialog open={newListOpen} onOpenChange={setNewListOpen}><DialogContent><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)}>Cancelar</Button><Button onClick={createList} disabled={!newListName.trim()}>Crear lista</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={newListOpen} onOpenChange={(open) => { if (!creatingList) setNewListOpen(open); }}><DialogContent><DialogHeader data-tour="sales-form-title"><DialogTitle>Nueva lista de precios</DialogTitle><DialogDescription>Agrega una tarifa adicional para mostrarla como nueva columna en la matriz. El sistema asignará automáticamente su identificador.</DialogDescription><SalesViewTutorial view="price-lists" context="form" /></DialogHeader><div data-tour="sales-form-data"><Input placeholder="Nombre (ej. Promocional)" value={newListName} onChange={(event) => setNewListName(event.target.value)} autoFocus disabled={creatingList} /></div><DialogFooter data-tour="sales-form-actions"><Button variant="outline" onClick={() => setNewListOpen(false)} disabled={creatingList}>Cancelar</Button><Button onClick={() => void createList()} disabled={creatingList || !newListName.trim()}>{creatingList ? 'Creando…' : 'Crear lista'}</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={editingListId !== null} onOpenChange={(open) => { if (!open && !savingListName) { setEditingListId(null); setEditingListName(''); } }}><DialogContent><DialogHeader><DialogTitle>Editar nombre de lista</DialogTitle><DialogDescription>El cambio se aplicará a la lista existente. Los clientes asignados seguirán vinculados a la misma lista y mostrarán el nuevo nombre automáticamente.</DialogDescription></DialogHeader><Input placeholder="Nombre de la lista" value={editingListName} onChange={(event) => setEditingListName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveListName(); }} autoFocus disabled={savingListName} /><DialogFooter><Button variant="outline" onClick={() => { setEditingListId(null); setEditingListName(''); }} disabled={savingListName}>Cancelar</Button><Button onClick={() => void saveListName()} disabled={savingListName || !editingListName.trim()}>{savingListName ? 'Guardando…' : 'Guardar nombre'}</Button></DialogFooter></DialogContent></Dialog>
     <ImportProgressOverlay open={previewLoading} progress={previewProgress} title="Preparando previsualización" description="Leyendo el archivo, identificando los SKU y validando los precios de las listas seleccionadas." />
     <Dialog open={variantDetailOpen} onOpenChange={setVariantDetailOpen}>

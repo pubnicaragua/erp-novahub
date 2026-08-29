@@ -31,6 +31,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   categoryId,
   itemType,
   description: '',
+  commercialNote: '',
   priceCurrency: 'NIO',
   costPrice: '',
   salePrice: '',
@@ -331,6 +332,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           isActive: product.isActive !== false,
           description: product.description || '',
+          commercialNote: product.commercialNote || '',
           itemType: product.itemType || 'PRODUCT',
           initialStock: 0,
           imageUrl: uploadedImageUri || undefined,
@@ -432,6 +434,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, o
                   className="mt-1 min-h-16 text-xs"
                   placeholder={`Descripción del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                 />
+                <div className="mt-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Nota comercial <span className="normal-case font-medium">(opcional)</span></label>
+                  <Textarea
+                    value={draftProduct.commercialNote || ''}
+                    onChange={e => handleUpdateDraft('commercialNote', Array.from(e.target.value).slice(0, 100).join(''))}
+                    maxLength={100}
+                    className="mt-1 min-h-14 text-xs"
+                    placeholder="Nota visible en ventas, compras y facturas"
+                  />
+                  <p className="mt-1 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
+                </div>
               </div>
               <div className="sm:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría *</label>

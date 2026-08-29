@@ -30,12 +30,14 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { HRViewTutorial } from './HRViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(['number', 'name', 'email', 'phone', 'nationalId', 'department', 'position', 'salary', 'status', 'auth']);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`hr-employees-columns-${tenantKey}`, ['number', 'name', 'email', 'phone', 'nationalId', 'department', 'position', 'salary', 'status', 'auth'], 24 * 365);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');

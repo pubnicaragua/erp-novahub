@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse } from 'lucide-react';
+import { History, ArrowUpRight, ArrowDownLeft, RefreshCcw, Search, Download, CircleHelp, Package, X, ArrowRightLeft, CalendarDays, UserRound, Warehouse, Loader2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -11,6 +11,7 @@ import type { SalesPaginationControls } from '../../types';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
+import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -145,6 +146,7 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
 }
 
 export function MovimientosView({ movements, warehouses, pagination, onSearchChange, onTypeChange, onWarehouseChange, onDateChange }: MovimientosViewProps) {
+  const { openingId, startOpening } = useDetailOpeningFeedback();
   const [showTutorial, setShowTutorial] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -152,6 +154,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedMovement, setSelectedMovement] = useState<any | null>(null);
+  const openMovement = (movement: any) => startOpening(movement.id, () => setSelectedMovement(movement));
 
   const filteredMovements = movements.filter(m => {
     const matchesSearch = !searchTerm || 
@@ -294,8 +297,8 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
         <div className="min-w-0">
       <div className="space-y-3 lg:hidden" data-tour="movements-table">
         {filteredData.length === 0 ? <Card className="rounded-2xl border-dashed p-8 text-center text-muted-foreground"><History className="mx-auto mb-2 size-9 opacity-20" /><p>No hay movimientos</p></Card> : filteredData.map((move: any) => (
-          <Card key={move.id} role="button" tabIndex={0} onClick={() => setSelectedMovement(move)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedMovement(move); } }} className={`min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedMovement?.id === move.id ? 'border-primary/50 bg-primary/5' : ''}`}>
-            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><Badge variant="outline" className="shrink-0 text-[10px]">{getTypeLabel(move.type)}</Badge></div>
+          <Card key={move.id} role="button" tabIndex={0} aria-busy={String(openingId) === String(move.id) || undefined} data-detail-opening={String(openingId) === String(move.id) ? 'true' : undefined} onClick={() => openMovement(move)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMovement(move); } }} className={`min-w-0 cursor-pointer rounded-2xl border-border/50 bg-card/70 p-4 shadow-sm transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selectedMovement?.id === move.id ? 'border-primary/50 bg-primary/5' : ''}`}>
+            <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{getMovementIcon(move.type)}<div className="min-w-0"><p className="truncate font-bold">{move.product?.name || 'Producto sin nombre'}</p><p className="truncate text-xs text-muted-foreground" title={formatMovementReference(move.reference).full}>{formatMovementReference(move.reference).label}</p></div></div><div className="flex shrink-0 items-center gap-2">{String(openingId) === String(move.id) && <span role="status" className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-primary"><Loader2 className="size-3 animate-spin" /> Abriendo…</span>}<Badge variant="outline" className="text-[10px]">{getTypeLabel(move.type)}</Badge></div></div>
             <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-3 text-xs sm:grid-cols-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</p><p>{formatDateEs(move.date)}</p></div><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Almacén</p><p className="truncate">{move.warehouse?.name || '—'}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Cantidad</p><p className={`font-bold tabular-nums ${move.type === 'IN' ? 'text-emerald-500' : move.type === 'OUT' ? 'text-destructive' : 'text-primary'}`}>{move.type === 'OUT' ? '-' : '+'}{move.quantity}</p></div><div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Stock Ant. → Res.</p><p className="tabular-nums text-muted-foreground">{move.previousQty != null ? Number(move.previousQty) : '—'} → <span className="font-medium text-foreground">{move.resultingQty != null ? Number(move.resultingQty) : '—'}</span></p></div></div>
           </Card>
         ))}
@@ -332,9 +335,9 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
               </TableRow>
             ) : (
               filteredData.map((move: any) => (
-                <TableRow key={move.id} className={`cursor-pointer hover:bg-muted/30 ${selectedMovement?.id === move.id ? 'bg-primary/5' : ''}`} onClick={() => setSelectedMovement(move)}>
+                <TableRow key={move.id} aria-busy={String(openingId) === String(move.id) || undefined} data-detail-opening={String(openingId) === String(move.id) ? 'true' : undefined} className={`cursor-pointer hover:bg-muted/30 ${selectedMovement?.id === move.id ? 'bg-primary/5' : ''}`} onClick={() => openMovement(move)}>
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatDateEs(move.date, true)}
+                    <span className="inline-flex items-center gap-2">{formatDateEs(move.date, true)}{String(openingId) === String(move.id) && <Loader2 className="size-3 animate-spin text-primary" aria-label="Abriendo detalle" />}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Ban, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { recurringSupplierInvoicesService } from '../../services/compras.service';
 import type { RecurringSupplierInvoice, Supplier } from '../../types';
@@ -16,13 +17,14 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface Props { data: RecurringSupplierInvoice[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -41,7 +43,7 @@ const statusOpts = [
 
 export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
@@ -51,6 +53,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringSupplierInvoice> | null>(null);
+  const [detailInvoice, setDetailInvoice] = useState<RecurringSupplierInvoice | null>(null);
 
   useEffect(() => { setSuppliers(supplierCatalog); }, [supplierCatalog]);
 
@@ -85,36 +88,55 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
       ((r as any).supplier?.name||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const { printContent } = useBrowserPrint();
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de facturas recurrentes...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Facturas recurrentes',
+        rows: filtered,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'Descripción', value: (row) => row.description || 'Factura automática' },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.total || row.amount || 0), row.currency || displayCurrency) },
+          { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
+          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Facturas Recurrentes',
-      columns: [
-        { key: 'description', label: 'Descripción', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'total', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'frequency', label: 'Frecuencia', align: 'center' },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filtered.map((item: any) => ({
-        description: item.description || '',
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        total: Number(item.total || item.amount || 0),
-        frequency: freqMap[(item.frequency || '').toLowerCase()] || item.frequency || '',
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Facturas Recurrentes',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filtered, searchTerm, printContent, user?.tenantName]);
+  const handleDownloadRecurringInvoicePdf = async (invoice: RecurringSupplierInvoice, format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando PDF de la factura recurrente...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.recurring-supplier-invoice',
+        document: {
+          title: 'Factura recurrente de proveedor',
+          number: String(invoice.id),
+          status: statusOpts.find((option) => option.value === String(invoice.status || '').toUpperCase())?.label || invoice.status,
+          supplier: invoice.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Frecuencia', value: freqMap[String(invoice.frequency || '').toLowerCase()] || invoice.frequency || '—' },
+            { label: 'Próxima factura', value: invoice.nextInvoiceDate ? new Date(invoice.nextInvoiceDate).toLocaleDateString('es-NI') : '—' },
+            { label: 'Inicio', value: invoice.startDate ? new Date(invoice.startDate).toLocaleDateString('es-NI') : '—' },
+          ],
+          lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', quantity: item.quantity || 0, unitPrice: formatCurrentAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency), total: formatCurrentAmount(Number(item.total || 0), invoice.currency || displayCurrency), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          total: formatCurrentAmount(Number(invoice.total || (invoice as any).amount || 0), invoice.currency || displayCurrency),
+          totalLabel: 'Monto estimado',
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
 
   const columns: ColumnDef<RecurringSupplierInvoice>[] = [
     { key: 'description' as any, header: 'Descripción', editable: canPerform('PURCHASES_INVOICES_REC', 'edit'), 
@@ -257,14 +279,14 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
-                  <select 
+                  <Select
                     disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
                     value={localDoc.frequency || 'monthly'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as any })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
+                    onValueChange={(frequency) => setLocalDoc({ ...localDoc, frequency: frequency as any })}
                   >
-                    {freqOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                    <SelectTrigger className="h-8 text-xs font-bold uppercase text-primary"><SelectValue /></SelectTrigger>
+                    <SelectContent>{freqOpts.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha de Inicio</p>
@@ -368,16 +390,16 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
                 <div className="flex justify-end mt-4" data-tour="purchases-form-summary">
                    <div className="w-64 space-y-4 text-sm bg-muted/10 p-4 rounded-xl border border-border/50">
                       <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                         <div className="w-1/2">
-                            <select 
-                              disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
-                              value={localDoc.currency || 'NIO'} 
-                              onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value, exchangeRate: globalRate } as any)}
-                              className="h-6 w-full max-w-[80px] rounded-md border border-input bg-background px-1 text-[10px] font-bold uppercase"
-                            >
-                              <option value="NIO">NIO</option>
-                              <option value="USD">USD</option>
-                            </select>
+                         <div className="w-1/2 min-w-0">
+                           <CurrencySelector
+                             value={localDoc.currency || baseCurrency}
+                             baseCurrency={baseCurrency}
+                             exchangeRate={globalRate}
+                             label="Moneda"
+                             rateDecimals={2}
+                             disabled={isNew ? !canPerform('PURCHASES_INVOICES_REC', 'create') : !canPerform('PURCHASES_INVOICES_REC', 'edit')}
+                             onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
+                           />
                          </div>
                       </div>
                       <div className="flex justify-between items-center text-[10px] uppercase tracking-widest font-black text-rose-500">
@@ -447,15 +469,15 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas Recurrentes</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-invoices" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas recurrentes de proveedor" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes de proveedor" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Factura Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
@@ -470,19 +492,36 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
             }
           } : undefined}
           actions={(row) => (
-            <div className="flex gap-1">
-              {canPerform('PURCHASES_INVOICES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(String((row as any).status || '').toUpperCase()) && (
-                <Button title={String((row as any).status || '').toUpperCase() === 'ACTIVE' ? 'Pausar factura recurrente' : 'Activar factura recurrente'} aria-label={String((row as any).status || '').toUpperCase() === 'ACTIVE' ? 'Pausar factura recurrente' : 'Activar factura recurrente'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={() => void handleStatusAction(row)}>
-                  {String((row as any).status || '').toUpperCase() === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />}
-                </Button>
-              )}
-              <Button title={canPerform('PURCHASES_INVOICES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_INVOICES_REC', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
-              <PurchaseAuditButton entity="RECURRING_SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura Recurrente" />
-              {canPerform('PURCHASES_INVOICES_REC', 'delete') && (
-                <Button title="Anular factura recurrente" aria-label="Anular factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
-              )}
+            <div className="flex items-center gap-1">
+              <Button title="Ver detalle" aria-label="Ver detalle de la factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailInvoice(row)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_INVOICES_REC', 'edit') && <Button title="Editar factura recurrente" aria-label="Editar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailInvoice(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}
+        />
+        <SalesDocumentDetailSheet
+          document={detailInvoice ? {
+            id: detailInvoice.id,
+            number: String(detailInvoice.id),
+            title: 'Factura recurrente de proveedor',
+            customerName: detailInvoice.supplier?.name || 'Sin proveedor',
+            hideCustomer: true,
+            status: String(detailInvoice.status || 'ACTIVE').toUpperCase(),
+            totalLabel: formatCurrentAmount(Number(detailInvoice.total || (detailInvoice as any).amount || 0), detailInvoice.currency || displayCurrency),
+            summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailInvoice.frequency || '').toLowerCase()] || detailInvoice.frequency || '—' }],
+            metadata: [{ label: 'Proveedor', value: detailInvoice.supplier?.name || 'No disponible' }, { label: 'Próxima factura', value: detailInvoice.nextInvoiceDate ? new Date(detailInvoice.nextInvoiceDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' }],
+            lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatCurrentAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency), totalLabel: formatCurrentAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
+          } : null}
+          entity="RECURRING_SUPPLIER_INVOICE"
+          open={Boolean(detailInvoice)}
+          onClose={() => setDetailInvoice(null)}
+          extraActions={detailInvoice && (() => {
+            const status = String(detailInvoice.status || '').toUpperCase();
+            return <>
+              {canPerform('PURCHASES_INVOICES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailInvoice)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
+              {canPerform('PURCHASES_INVOICES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailInvoice.id)}><Ban className="size-4" /> Anular</Button>}
+            </>;
+          })()}
+          onDownloadPdf={(format) => detailInvoice ? void handleDownloadRecurringInvoicePdf(detailInvoice, format) : undefined}
         />
       </div>
     </div>

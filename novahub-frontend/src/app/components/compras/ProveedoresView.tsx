@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Truck, Plus, Search, Eye, History, Trash2, TrendingDown, CheckCircle2, ArrowUpDown, RefreshCw, Upload, Download, Ban, Pencil } from 'lucide-react';
-import { Card, CardContent } from '../ui/card';
+import { Truck, Plus, Search, Eye, TrendingDown, CheckCircle2, Upload, Download, Ban, Pencil } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -16,7 +15,6 @@ import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
-import { SupplierHistoryModal } from './SupplierHistoryModal';
 import { SupplierDetailDrawer } from './SupplierDetailDrawer';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -25,10 +23,11 @@ import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { SupplierImportPreview, type SupplierImportResult, type SupplierImportRow } from './SupplierImportPreview';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
+import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/supplierBalance';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; isSidebarCollapsed?: boolean; }
 
@@ -46,7 +45,7 @@ const emptyDraft = () => ({
   status: 'ACTIVE' as EntityStatus,
 });
 
-const isSupplierInactive = (s: Supplier) => s.isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
+const isSupplierInactive = (s: Supplier) => (s as any).isActive === false || String((s as any).status || '').toUpperCase() === 'INACTIVE';
 
 const compareSupplierNames = (left: Supplier, right: Supplier) =>
   String(left.name || '').trim().localeCompare(String(right.name || '').trim(), 'es', { sensitivity: 'base' }) ||
@@ -63,10 +62,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
-  const [balanceOrder, setBalanceOrder] = useState<'all' | 'highest' | 'lowest'>('all');
   const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState<Supplier | null>(null);
   const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<Supplier | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -89,7 +86,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   }, []);
 
   const filtered = data.filter(s => {
-    const isActive = s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE';
+    const isActive = (s as any).isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE';
     if (statusFilter === 'ACTIVE' && !isActive) return false;
     if (statusFilter === 'INACTIVE' && isActive) return false;
     const search = searchTerm.toLowerCase();
@@ -250,11 +247,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     setImportOpen(false);
   };
 
-  const filteredAndSorted = [...filtered].sort((a, b) => {
-    if (balanceOrder === 'highest') return Number(b.balance || 0) - Number(a.balance || 0);
-    if (balanceOrder === 'lowest') return Number(a.balance || 0) - Number(b.balance || 0);
-    return compareSupplierNames(a, b);
-  });
+  const filteredAndSorted = [...filtered].sort(compareSupplierNames);
 
   const colFilters = useColumnFilters();
   const filterGetters = {
@@ -264,41 +257,63 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     },
     type: (row: Supplier) => String(row.type || 'COMPANY').toUpperCase(),
     balance: (row: Supplier) => Number(row.balance || 0),
+    status: (row: Supplier) => isSupplierInactive(row) ? 'INACTIVE' : 'ACTIVE',
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
 
-  const { printContent } = useBrowserPrint();
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de proveedores...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Proveedores',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'Código', value: (row) => row.code || row.id?.slice(0, 8) || '—' },
+          { label: 'Nombre', value: (row) => row.name || '—' },
+          { label: 'Contacto', value: (row) => row.contactName || '—' },
+          { label: 'Teléfono', value: (row) => row.phone || '—' },
+          { label: 'Saldo pendiente', align: 'right', value: (row) => formatConvertedAmount(getSupplierDebtAmount(row), baseCurrency) },
+          { label: 'Saldo a favor', align: 'right', value: (row) => formatConvertedAmount(getSupplierFavorAmount(row), baseCurrency) },
+          { label: 'Estado', align: 'center', value: (row) => isSupplierInactive(row) ? 'Inactivo' : 'Activo' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Proveedores',
-      columns: [
-        { key: 'code', label: 'Código', align: 'left' },
-        { key: 'name', label: 'Nombre', align: 'left' },
-        { key: 'contactName', label: 'Contacto', align: 'left' },
-        { key: 'phone', label: 'Teléfono', align: 'left' },
-        { key: 'balance', label: 'Saldo', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        code: item.code || '',
-        name: item.name || '',
-        contactName: item.contactName || '',
-        phone: item.phone || '',
-        balance: Number(item.balance || 0),
-        status: item.status || 'ACTIVE',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todos',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Proveedores',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleDownloadSupplierPdf = async (supplier: Supplier, format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando PDF del proveedor...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.supplier',
+        document: {
+          title: 'Proveedor',
+          number: supplier.code || supplier.id.slice(0, 8),
+          status: isSupplierInactive(supplier) ? 'Inactivo' : 'Activo',
+          supplier: supplier.name,
+          fields: [
+            { label: 'Tipo', value: String(supplier.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'Individual' : 'Empresa' },
+            { label: 'RUC', value: supplier.ruc || supplier.taxId || '—' },
+            { label: 'Contacto', value: supplier.contactName || '—' },
+            { label: 'Correo', value: supplier.email || '—' },
+            { label: 'Teléfono', value: supplier.phone || '—' },
+            { label: 'Dirección', value: supplier.address || '—' },
+            { label: 'Saldo pendiente', value: formatConvertedAmount(getSupplierDebtAmount(supplier), baseCurrency) },
+            { label: 'Saldo a favor', value: formatConvertedAmount(getSupplierFavorAmount(supplier), baseCurrency) },
+          ],
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
 
   const typeOptions = [
     { value: 'COMPANY', label: 'Empresa', count: filteredAndSorted.filter((s) => String(s.type || 'COMPANY').toUpperCase() === 'COMPANY').length },
@@ -312,7 +327,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const columns: ColumnDef<Supplier>[] = [
     { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
-      headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" /> },
+      headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
+      render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span> },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
       headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} /> },
     { key: 'type', header: 'Tipo', width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select',
@@ -329,10 +345,24 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
     { key: 'contactName', header: 'Contacto',  editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
     { key: 'email',       header: 'Email',     editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
     { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
-    { key: 'balance', header: 'Saldo', width: '170px',
-      render: (val) => <span className="font-black text-rose-500 tabular-nums">{formatConvertedAmount(val || 0, baseCurrency)}</span>
+    { key: 'balance', header: 'Saldos del proveedor', width: '200px',
+      headerExtra: <ColumnFilterMenu label="Saldo del proveedor" sort={colFilters.state.balance?.sort || null} onSort={(sort) => colFilters.setSort('balance', sort)} sortType="number" />,
+      render: (_val, row) => {
+        const debt = getSupplierDebtAmount(row);
+        const favor = getSupplierFavorAmount(row);
+        if (debt <= 0.005 && favor <= 0.005) {
+          return <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Saldo al día</span>;
+        }
+        return (
+          <div className="min-w-[11rem] space-y-1 leading-tight">
+            {debt > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pendiente</span><span className="text-[12px] font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(debt, baseCurrency)}</span></div>}
+            {favor > 0.005 && <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">A favor</span><span className="text-[12px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(favor, baseCurrency)}</span></div>}
+          </div>
+        );
+      }
     },
     { key: 'status', header: 'Estado', width: '120px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), type: 'select', options: statusOptions,
+      headerExtra: <ColumnFilterMenu label="Estado" options={statusOptions.map((option) => ({ value: option.value, label: option.label, count: filteredAndSorted.filter((supplier) => (isSupplierInactive(supplier) ? 'INACTIVE' : 'ACTIVE') === option.value).length }))} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
       render: (val) => {
         const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
         return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>;
@@ -440,8 +470,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const kpis = [
     { title: 'Total',     value: data.length,                                                                              icon: Truck,         color: 'text-blue-500',    bg: 'bg-blue-500/10', kind: 'indicator' as const },
-    { title: 'Activos',   value: data.filter(s => s.isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
-    { title: `Saldo Total${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + Number(s.balance||0), 0), baseCurrency),       icon: TrendingDown,  color: 'text-rose-500',    bg: 'bg-rose-500/10', kind: 'indicator' as const },
+    { title: 'Activos',   value: data.filter(s => (s as any).isActive !== false && String((s as any).status || '').toUpperCase() !== 'INACTIVE').length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10', kind: 'filter' as const, filter: 'ACTIVE' as const },
+    { title: `Cartera pendiente${valuationModeSuffix}`, value: formatConvertedAmount(data.reduce((a, s) => a + getSupplierDebtAmount(s), 0), baseCurrency), icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10', kind: 'indicator' as const },
   ];
 
   if (importPreviewOpen) {
@@ -463,19 +493,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="suppliers" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de proveedores" />
-            <Select value={balanceOrder} onValueChange={(value: 'all' | 'highest' | 'lowest') => setBalanceOrder(value)}>
-              <SelectTrigger className="h-10 w-full sm:w-44 rounded-xl text-[10px] font-black uppercase tracking-widest">
-                <ArrowUpDown className="mr-2 size-4 shrink-0" />
-                <SelectValue placeholder="Ordenar saldo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Sin ordenar</SelectItem>
-                <SelectItem value="highest">Mayor saldo</SelectItem>
-                <SelectItem value="lowest">Menor saldo</SelectItem>
-              </SelectContent>
-            </Select>
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar proveedor..." className="pl-9 h-10 w-60 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} />
@@ -496,7 +515,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={(row) => handleOpenEdit(row)} editOnPencilOnly isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={(row) => handleOpenEdit(row)} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-28" fitContent showHorizontalControls layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={(ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"
@@ -510,14 +529,13 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             </Button>
           )}
           actions={(row) => (
-            <div className="flex gap-1">
-              <Button title="Ver detalle" aria-label="Ver detalle" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierDetail(row)}><Eye className="size-4" /></Button>
-              <Button title="Ver historial de compras" aria-label="Ver historial de compras" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierForHistory(row)}><History className="size-4" /></Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" title="Ver detalle" aria-label="Ver detalle del proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedSupplierDetail(row)}><Eye className="size-4" /></Button>
               {canPerform('PURCHASES_PROVIDERS', 'edit') && (
-                <Button title="Editar proveedor" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
+                <Button variant="ghost" size="icon" title="Editar proveedor" aria-label="Editar proveedor" className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenEdit(row)}><Pencil className="size-4" /></Button>
               )}
               {canPerform('PURCHASES_PROVIDERS', 'edit') && (
-                <Button title={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} aria-label={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingToggle(row)}><Ban className="size-4" /></Button>
+                <Button variant="ghost" size="icon" title={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} aria-label={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setPendingToggle(row)}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
@@ -641,16 +659,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       <SupplierDetailDrawer
         supplierId={selectedSupplierDetail?.id ?? null}
         supplierSnapshot={selectedSupplierDetail}
-        canEdit={canPerform('PURCHASES_PROVIDERS', 'edit')}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
-        onEdit={(supplier) => { setSelectedSupplierDetail(null); handleOpenEdit(supplier); }}
-        onOpenHistory={(supplier) => { setSelectedSupplierDetail(null); setSelectedSupplierForHistory(supplier); }}
-      />
-
-      <SupplierHistoryModal
-        supplier={selectedSupplierForHistory}
-        open={!!selectedSupplierForHistory}
-        onOpenChange={(open) => !open && setSelectedSupplierForHistory(null)}
+        onDownloadPdf={(format) => selectedSupplierDetail ? void handleDownloadSupplierPdf(selectedSupplierDetail, format) : undefined}
       />
     </div>
   );

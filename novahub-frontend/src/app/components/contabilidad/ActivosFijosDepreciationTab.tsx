@@ -192,6 +192,7 @@ export function ActivosFijosDepreciationTab() {
                   type="month"
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
+                  onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
                   className="h-8 rounded-md border border-border bg-background px-2 text-xs"
                 />
               </div>

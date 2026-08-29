@@ -289,6 +289,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
           invoiceItemId: item.invoiceItemId || undefined,
           productId: item.productId || undefined,
           description: item.description || '',
+          commercialNoteSnapshot: item.commercialNoteSnapshot || null,
           quantity: toWholeQuantity(item.quantity || 1),
           originalQuantity: toWholeQuantity(item.originalQuantity || item.quantity || 1),
           quantityToInventory: toWholeQuantity(item.quantityToInventory || 0),
@@ -356,6 +357,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     lines: (row.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), row.currency, row.exchangeRate),
       totalLabel: formatConvertedAmount(Number(item.total || 0), row.currency, row.exchangeRate),
@@ -387,7 +389,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
     : [];
 
   const columns: ColumnDef<SalesReturn>[] = [
-    { key: 'number', header: 'Nº Nota', width: '140px',
+    { key: 'number', header: 'N° Devolución', width: '140px',
       render: (val, row) => (
         <span 
           className={cn(
@@ -571,7 +573,7 @@ export function DevolucionesView({ data, loading, onRefresh, customers = [], inv
             </div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <SalesViewTutorial view="returns" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de notas de crédito" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de notas de crédito" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar nota..." className="pl-9 h-10 w-64 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>

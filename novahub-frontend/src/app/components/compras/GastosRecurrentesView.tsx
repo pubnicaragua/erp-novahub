@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { CalendarClock, Plus, Search, Eye, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CalendarClock, Plus, Search, Eye, Pencil, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { recurringExpensesService } from '../../services/compras.service';
 import type { RecurringExpense, Supplier } from '../../types';
@@ -16,14 +17,15 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ExpenseAccountingNotice } from './ExpenseAccountingNotice';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
+import { CurrencySelector } from '../ui/CurrencySelector';
 
 interface Props { data: RecurringExpense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -42,7 +44,7 @@ const statusOpts = [
 
 export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
-  const { exchangeRate: globalRate, displayCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
+  const { exchangeRate: globalRate, displayCurrency, baseCurrency, valuationMode, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
@@ -52,6 +54,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringExpense> | null>(null);
+  const [detailExpense, setDetailExpense] = useState<RecurringExpense | null>(null);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -84,36 +87,55 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
     return (e.description||'').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const { printContent } = useBrowserPrint();
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de gastos recurrentes...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Gastos recurrentes',
+        rows: filtered,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'Descripción', value: (row) => row.description || '—' },
+          { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency) },
+          { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
+          { label: 'Inicio', value: (row) => row.startDate ? new Date(row.startDate).toLocaleDateString('es-NI') : '—' },
+          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Gastos Recurrentes',
-      columns: [
-        { key: 'description', label: 'Descripción', align: 'left' },
-        { key: 'amount', label: 'Monto', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'frequency', label: 'Frecuencia', align: 'center' },
-        { key: 'startDate', label: 'Inicio', align: 'left' },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filtered.map((item) => ({
-        description: item.description || '',
-        amount: Number(item.amount || 0),
-        frequency: freqMap[(item.frequency || '').toLowerCase()] || item.frequency || '',
-        startDate: item.startDate ? new Date(item.startDate).toLocaleDateString('es-NI') : '',
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Gastos Recurrentes',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filtered, searchTerm, printContent, user?.tenantName]);
+  const handleDownloadRecurringPdf = async (expense: RecurringExpense, format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando PDF del gasto recurrente...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.recurring-expense',
+        document: {
+          title: 'Gasto recurrente',
+          number: String(expense.id),
+          status: statusOpts.find((option) => option.value === String(expense.status || '').toUpperCase())?.label || expense.status,
+          supplier: expense.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Frecuencia', value: freqMap[String(expense.frequency || '').toLowerCase()] || expense.frequency || '—' },
+            { label: 'Inicio', value: expense.startDate ? new Date(expense.startDate).toLocaleDateString('es-NI') : '—' },
+            { label: 'Fin', value: expense.endDate ? new Date(expense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' },
+            { label: 'Categoría', value: expense.category || '—' },
+          ],
+          total: formatCurrentAmount(Number(expense.amount || 0), expense.currency || displayCurrency),
+          totalLabel: 'Monto periódico',
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
 
   const columns: ColumnDef<RecurringExpense>[] = [
     { key: 'description', header: 'Descripción', editable: canPerform('PURCHASES_EXPENSES_REC', 'edit') },
@@ -291,14 +313,14 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
 
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
-                  <select 
+                  <Select
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                     value={localDoc.frequency || 'monthly'} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, frequency: e.target.value as RecurringExpense['frequency'] })}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase text-primary"
+                    onValueChange={(frequency) => setLocalDoc({ ...localDoc, frequency: frequency as RecurringExpense['frequency'] })}
                   >
-                    {freqOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                    <SelectTrigger className="h-8 text-xs font-bold uppercase text-primary"><SelectValue /></SelectTrigger>
+                    <SelectContent>{freqOpts.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
@@ -313,17 +335,16 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto Automático Promedio</p>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                     <div className="w-1/2">
-                        <p className="text-[10px] text-muted-foreground mb-1">Moneda</p>
-                        <select 
+                     <div className="w-1/2 min-w-0">
+                        <CurrencySelector
+                          value={localDoc.currency || baseCurrency}
+                          baseCurrency={baseCurrency}
+                          exchangeRate={globalRate}
+                          label="Moneda"
+                          rateDecimals={2}
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                          value={localDoc.currency || 'NIO'} 
-                          onChange={(e) => setLocalDoc({ ...localDoc, currency: e.target.value as any, exchangeRate: globalRate })}
-                          className="h-8 w-full max-w-[120px] rounded-md border border-input bg-background px-2 text-xs font-bold uppercase"
-                        >
-                          <option value="NIO">NIO</option>
-                          <option value="USD">USD</option>
-                        </select>
+                          onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
+                        />
                      </div>
                      <div className="w-1/2 flex flex-col items-end">
                         <p className="text-[10px] text-muted-foreground mb-1">Monto Fijo Estimado</p>
@@ -383,15 +404,15 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Gastos Recurrentes</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="recurring-expenses" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de gastos recurrentes" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailExpense(row)} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {
@@ -406,19 +427,36 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
             }
           } : undefined}
           actions={(row) => (
-            <div className="flex gap-1">
-              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title={String(row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar gasto recurrente' : 'Activar gasto recurrente'} aria-label={String(row.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar gasto recurrente' : 'Activar gasto recurrente'} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-amber-500/10 hover:text-amber-500" onClick={() => void handleStatusAction(row)}>
-                  {String(row.status || '').toUpperCase() === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />}
-                </Button>
-              )}
-              <Button title={canPerform('PURCHASES_EXPENSES_REC', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}><Eye className="size-4" /></Button>
-              <PurchaseAuditButton entity="RECURRING_EXPENSE" entityId={row.id} title="Auditoria del Gasto Recurrente" />
-              {canPerform('PURCHASES_EXPENSES_REC', 'delete') && (
-                <Button title="Anular configuración recurrente" aria-label="Anular gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
-              )}
+            <div className="flex items-center gap-1">
+              <Button title="Ver detalle" aria-label="Ver detalle del gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailExpense(row)}><Eye className="size-4" /></Button>
+              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && <Button title="Editar gasto recurrente" aria-label="Editar gasto recurrente" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setDetailExpense(null); openEditor(row.id); }}><Pencil className="size-4" /></Button>}
             </div>
           )}
+        />
+        <SalesDocumentDetailSheet
+          document={detailExpense ? {
+            id: detailExpense.id,
+            number: String(detailExpense.id),
+            title: 'Gasto recurrente',
+            customerName: detailExpense.supplier?.name || 'Sin proveedor',
+            hideCustomer: true,
+            status: String(detailExpense.status || 'ACTIVE').toUpperCase(),
+            totalLabel: formatCurrentAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency),
+            summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailExpense.frequency || '').toLowerCase()] || detailExpense.frequency || '—' }, { label: 'Categoría', value: detailExpense.category || '—' }],
+            metadata: [{ label: 'Inicio', value: detailExpense.startDate ? new Date(detailExpense.startDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Fin', value: detailExpense.endDate ? new Date(detailExpense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' }, { label: 'Proveedor', value: detailExpense.supplier?.name || 'No disponible' }],
+            lines: [{ id: detailExpense.id, description: detailExpense.description || 'Gasto recurrente', quantity: 1, totalLabel: formatCurrentAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency) }],
+          } : null}
+          entity="RECURRING_EXPENSE"
+          open={Boolean(detailExpense)}
+          onClose={() => setDetailExpense(null)}
+          extraActions={detailExpense && (() => {
+            const status = String(detailExpense.status || '').toUpperCase();
+            return <>
+              {canPerform('PURCHASES_EXPENSES_REC', 'edit') && ['ACTIVE', 'PAUSED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense)}>{status === 'ACTIVE' ? <PauseCircle className="size-4" /> : <PlayCircle className="size-4" />} {status === 'ACTIVE' ? 'Pausar' : 'Activar'}</Button>}
+              {canPerform('PURCHASES_EXPENSES_REC', 'delete') && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingDeleteId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
+            </>;
+          })()}
+          onDownloadPdf={(format) => detailExpense ? void handleDownloadRecurringPdf(detailExpense, format) : undefined}
         />
         <ConfirmDialog
           open={!!pendingDeleteId}

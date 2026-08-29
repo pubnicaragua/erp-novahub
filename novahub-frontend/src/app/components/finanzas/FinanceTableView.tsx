@@ -648,6 +648,7 @@ export function FinanceTableView({
                           <input autoFocus type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'} className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
                             onChange={e => handleCellEdit(item.id, col.key, col.type === 'number' ? Number(e.target.value) : e.target.value)}
                             onBlur={e => handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], e.target.value)}
+                            onClick={e => { if (e.currentTarget.type === 'date') { try { e.currentTarget.showPicker?.(); } catch {} } }}
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingCell(null); }} />
                         )
                       ) : (

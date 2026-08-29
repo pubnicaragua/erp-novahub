@@ -35,6 +35,7 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', source: 'printPosTicket' },
 
   { key: 'compras.supplier-history', module: 'compras', moduleLabel: 'Compras', label: 'Historial de proveedor', structure: 'history', source: 'generateSupplierHistoryPDF' },
+  { key: 'compras.supplier', module: 'compras', moduleLabel: 'Compras', label: 'Ficha de proveedor', structure: 'administrative', source: 'generatePurchaseRecordPDF' },
   { key: 'compras.expense', module: 'compras', moduleLabel: 'Compras', label: 'Comprobante de gasto', structure: 'receipt', source: 'generateExpensePDF' },
   { key: 'compras.purchase-order', module: 'compras', moduleLabel: 'Compras', label: 'Órdenes de compra', structure: 'transaction', source: 'generatePurchaseOrderPDF' },
   { key: 'compras.supplier-invoice', module: 'compras', moduleLabel: 'Compras', label: 'Facturas de proveedor', structure: 'transaction', source: 'generateSupplierInvoicePDF' },

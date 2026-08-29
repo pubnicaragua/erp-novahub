@@ -99,6 +99,7 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
 export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, formatConvertedAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-order', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
@@ -115,10 +116,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([
+  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-orders-columns-${tenantKey}`, [
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
     'invoiceNumber', 'invoicedAt', 'invoicedBy',
-  ]);
+  ], 24 * 365);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-orders-layout', 'table', 24 * 365);
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
@@ -136,12 +137,14 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     const options = catalog.map((product) => ({
       label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${product.code} - ${product.name}`,
       value: product.id,
+      description: product.commercialNote ? `Nota: ${product.commercialNote}` : undefined,
     }));
     const hasSelectedOption = Boolean(item.productId) && options.some((option) => option.value === item.productId);
     if (item.productId && !hasSelectedOption && String(item.description || '').trim()) {
       options.unshift({
         label: `${itemType === 'SERVICE' ? 'Servicio' : 'Producto'} · ${item.description}`,
         value: item.productId,
+        description: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       });
     }
     return options;
@@ -366,6 +369,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
     lines: (order.items || []).map((item) => ({
       id: item.id,
       description: item.description,
+      secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined,
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate),
       totalLabel: formatConvertedAmount(Number(item.total || 0), order.currency, order.exchangeRate),
@@ -631,9 +635,9 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
   const columns: ColumnDef<SalesOrder>[] = [
     { 
       key: 'number', 
-      header: 'Número de Orden', 
+      header: 'N° Orden',
       width: '200px',
-      headerExtra: <ColumnFilterMenu label="Número" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
+      headerExtra: <ColumnFilterMenu label="N° Orden" sort={colFilters.state.number?.sort || null} onSort={(sort) => colFilters.setSort('number', sort)} />,
       render: (val, row) => (
         <div className="flex items-center gap-2">
           <span 
@@ -751,7 +755,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
 
   const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(String(column.key)));
   const columnOptions = [
-    { key: 'number', label: 'Número de orden' },
+    { key: 'number', label: 'N° Orden' },
     { key: 'customer', label: 'Cliente' },
     { key: 'itemCount', label: 'Artículos' },
     { key: 'total', label: 'Monto total' },
@@ -1088,11 +1092,13 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                             newItems[idx].productId = val;
                             if (selectedProd) {
                               newItems[idx].description = selectedProd.name;
+                              newItems[idx].commercialNoteSnapshot = selectedProd.commercialNote || null;
                               const baseSalePrice = Number(selectedProd.salePrice ?? selectedProd.price ?? 0);
                               newItems[idx].unitPrice = priceInCurrency(baseSalePrice, localDoc?.currency || 'NIO', Number(localDoc?.exchangeRate || globalRate || 1));
                               newItems[idx].total = Number(newItems[idx].quantity) * Number(newItems[idx].unitPrice);
                             } else {
                               newItems[idx].description = 'Producto Customizado';
+                              newItems[idx].commercialNoteSnapshot = null;
                               newItems[idx].unitPrice = 0;
                               newItems[idx].total = 0;
                             }
@@ -1261,8 +1267,10 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
                   <div className={cn('col-span-2 min-w-0', pricingMode === 'individual' && 'xl:col-span-1')}>
                     <Input 
                       min="0"
-                      type="text"
-                      value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)} 
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice}
                       placeholder="0"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])] as any[];
@@ -1402,7 +1410,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de órdenes" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes" />
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_ORDERS', 'create') && (
               <Button onClick={handleAddOrder} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">

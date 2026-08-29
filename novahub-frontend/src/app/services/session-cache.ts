@@ -15,8 +15,20 @@ const PERSISTED_UI_KEYS = new Set([
   'novahub-pos-show-availability',
 ]);
 
+// These settings are intentionally tenant-scoped by their callers. Keep them
+// when the auth cache is cleared so a normal logout/login does not reset the
+// user's table configuration, while still clearing tenant data and drafts.
+const PERSISTED_COLUMN_KEY_PREFIXES = [
+  'nh-erp-sales-clients-columns-',
+  'nh-erp-sales-orders-columns-',
+  'nh-erp-sales-price-lists-columns-',
+  'nh-erp-hr-employees-columns-',
+  'nh-erp-accounting-accounts-columns-',
+];
+
 function shouldPreserveUiStateOnRefresh(key: string) {
   return PERSISTED_UI_KEYS.has(key)
+    || PERSISTED_COLUMN_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
     || key.startsWith('erp-scroll-position:')
     || key.startsWith('novahub-pos-draft:')
     || key.startsWith('novahub:sales-draft:');
@@ -40,10 +52,12 @@ export function clearSessionCache(options: { preserveAuthToken?: boolean; preser
       if (!key || !shouldRemoveLocalKey(key)) continue;
       if (options.preserveAuthToken && key === 'nh-auth-token') continue;
       if (options.preserveSessionBranding && key === 'nh-session-branding') continue;
-      // A hard refresh restores the same authenticated workspace. Keep only
-      // explicitly scoped UI preferences and POS drafts; a normal login or
-      // logout still clears them so state cannot cross identities.
-      if (options.preserveAuthToken && shouldPreserveUiStateOnRefresh(key)) continue;
+      // A hard refresh restores the same authenticated workspace. Keep the
+      // explicitly scoped UI preferences in both refresh and logout flows;
+      // tenant-scoped column keys cannot leak data between identities.
+      if (shouldPreserveUiStateOnRefresh(key) && (
+        options.preserveAuthToken || PERSISTED_COLUMN_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+      )) continue;
       if (options.preserveImpersonation && (
         key === 'nh-manager-token'
         || key === 'nh-impersonation-state'

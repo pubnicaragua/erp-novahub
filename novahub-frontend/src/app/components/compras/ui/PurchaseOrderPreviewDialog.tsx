@@ -5,19 +5,10 @@ import { Ban, CalendarDays, CheckCircle2, FileDown, History, Info, UserRound } f
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../ui/sheet';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../ui/table';
 import { cn } from '../../ui/utils';
 import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
-import { PurchaseViewTutorial } from '../PurchaseViewTutorial';
-
-const STATUS_META: Record<string, { label: string; className: string }> = {
-  PENDING: { label: 'Pendiente', className: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  DRAFT: { label: 'Pendiente', className: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  APPROVED: { label: 'Aprobada', className: 'border-primary/20 bg-primary/10 text-primary' },
-  CANCELLED: { label: 'Rechazada', className: 'border-destructive/20 bg-destructive/10 text-destructive' },
-  REJECTED: { label: 'Rechazada', className: 'border-destructive/20 bg-destructive/10 text-destructive' },
-};
+import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../../../utils/purchaseOrderStatus';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Creación',
@@ -27,8 +18,9 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Pendiente',
-  PENDING: 'Pendiente',
+  DRAFT: 'Borrador',
+  PENDING: 'En proceso',
+  IN_PROCESS: 'En proceso',
   APPROVED: 'Aprobada',
   CANCELLED: 'Rechazada',
   REJECTED: 'Rechazada',
@@ -89,13 +81,12 @@ export function PurchaseOrderPreviewDialog({
   const [history, setHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const status = String(order?.status || 'PENDING').toUpperCase();
-  const normalizedStatus = status === 'DRAFT' ? 'PENDING' : status;
-  const statusMeta = STATUS_META[normalizedStatus] || STATUS_META.PENDING;
+  const status = normalizePurchaseOrderStatus(order?.status);
+  const statusMeta = getPurchaseOrderStatusOption(status);
   const supplier = order?.supplier || suppliers?.find((item) => item.id === order?.supplierId);
   const items = order?.items || [];
-  const canApproveState = ['DRAFT', 'PENDING'].includes(status);
-  const isRejected = ['CANCELLED', 'REJECTED'].includes(status);
+  const canApproveState = PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(status);
+  const isRejected = status === 'REJECTED';
   const currency = String(order?.currency || 'NIO').toUpperCase();
   const currencyPrefix = currency === 'USD' ? '$' : currency === 'NIO' ? 'C$' : currency;
 
@@ -141,7 +132,7 @@ export function PurchaseOrderPreviewDialog({
                 <div className="min-w-0 flex-1">
                   <SheetTitle className="flex flex-wrap items-center gap-2 text-lg font-black uppercase tracking-tight">
                     Orden {order.number || 'de compra'}
-                    <Badge variant="outline" className={cn('text-[10px] font-black uppercase', statusMeta.className)}>
+                    <Badge variant="outline" className={cn('border-none text-[10px] font-black uppercase', statusMeta.color)}>
                       {statusMeta.label}
                     </Badge>
                   </SheetTitle>
@@ -156,11 +147,10 @@ export function PurchaseOrderPreviewDialog({
                 <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">{originLabel}</Badge>
                 {order.requestedBy && <span>Solicitada por {order.requestedBy}</span>}
               </div>
-              <PurchaseViewTutorial view="orders" context="form" labelOverride="Cómo consultar orden" stepKeys={['title', 'data', 'summary', 'actions']} targetPrefix="purchase-order-detail" />
             </SheetHeader>
 
             <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto p-5 sm:p-6" data-tour="purchase-order-detail-data">
-              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm min-[480px]:grid-cols-2 sm:grid-cols-4">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm min-[480px]:grid-cols-2 sm:grid-cols-3">
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Proveedor</span>
                   <p className="mt-1 break-words font-semibold">{supplier?.name || '—'}</p>
@@ -173,11 +163,6 @@ export function PurchaseOrderPreviewDialog({
                   <span className="text-[10px] font-bold uppercase text-muted-foreground">Entrega</span>
                   <p className="mt-1 font-medium">{formatDate(order.expectedDelivery)}</p>
                 </div>
-                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Moneda</span>
-                  <p className="mt-1 font-medium">{currency === 'USD' ? 'USD · Dólares' : 'NIO · Córdobas'}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Tasa: <span className="font-bold text-foreground">{currency === 'NIO' ? '1.00' : Number(order.exchangeRate || 1).toFixed(2)} NIO/USD</span></p>
-                </div>
               </div>
 
               <section className="space-y-2">
@@ -186,7 +171,7 @@ export function PurchaseOrderPreviewDialog({
                   <Badge variant="outline" className="text-[10px]">{items.length} artículos</Badge>
                 </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-border/50">
-                  <div className="space-y-2 p-2 sm:hidden">
+                  <div className="space-y-2 p-2">
                     {items.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-border/50 bg-muted/10 p-5 text-center text-sm text-muted-foreground">
                         No hay artículos registrados.
@@ -213,41 +198,6 @@ export function PurchaseOrderPreviewDialog({
                         </article>
                       );
                     })}
-                  </div>
-                  <div className="hidden max-w-full overflow-x-auto overscroll-x-contain sm:block">
-                    <Table containerClassName="!max-w-none !overflow-visible" className="min-w-[650px]">
-                      <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableHead className="text-[10px] uppercase">Código</TableHead>
-                          <TableHead className="text-[10px] uppercase">Nombre</TableHead>
-                          <TableHead className="text-right text-[10px] uppercase">Cant.</TableHead>
-                          <TableHead className="text-right text-[10px] uppercase">P. unitario</TableHead>
-                          <TableHead className="text-right text-[10px] uppercase">Subtotal</TableHead>
-                          <TableHead className="text-right text-[10px] uppercase">IVA</TableHead>
-                          <TableHead className="text-right text-[10px] uppercase">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.length === 0 ? (
-                          <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay artículos registrados.</TableCell></TableRow>
-                        ) : items.map((item: any, index: number) => {
-                          const lineTotal = Number(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice || 0));
-                          const tax = Number(item.taxAmount ?? 0);
-                          const subtotal = Number(item.taxBase ?? lineTotal - tax);
-                          return (
-                            <TableRow key={item.id || index}>
-                              <TableCell className="font-mono text-[11px]">{item.code || '—'}</TableCell>
-                              <TableCell className="max-w-[220px] whitespace-normal break-words text-xs">{item.name || item.description || '—'}</TableCell>
-                              <TableCell className="text-right text-xs">{Number(item.quantity || 0)}</TableCell>
-                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(item.unitPrice)}</TableCell>
-                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(subtotal)}</TableCell>
-                              <TableCell className="text-right text-xs">{currencyPrefix} {formatAmount(tax)}</TableCell>
-                              <TableCell className="text-right text-xs font-black">{currencyPrefix} {formatAmount(lineTotal)}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
                   </div>
                 </div>
               </section>

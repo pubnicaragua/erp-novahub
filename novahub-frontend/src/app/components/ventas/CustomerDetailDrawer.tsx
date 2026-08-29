@@ -25,11 +25,11 @@ import {
   Activity,
   Link2,
   Copy,
-  Download,
   RefreshCcw,
   X,
   TrendingUp,
   Banknote,
+  Loader2,
 } from 'lucide-react';
 
 import {
@@ -76,7 +76,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { previewSalesTransactionPDF } from '../../utils/pdfGenerator';
-import { exportCustomerTransactionsExcel, exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
+import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getInvoicePaymentPresentation, paymentMethodLabel } from '../../utils/paymentMethods';
@@ -349,7 +349,7 @@ export function CustomerDetailDrawer({
   const customerFavor = getCustomerFavorAmount(customer);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
 
-  const downloadHistory = async (exportFormat: 'xlsx' | 'pdf') => {
+  const downloadHistory = async (exportFormat: PdfDownloadFormat = 'configured') => {
     if (!customer?.id) return;
     setExportingHistory(true);
     try {
@@ -365,8 +365,7 @@ export function CustomerDetailDrawer({
         tenantLogo: themeConfig?.logo,
         primaryColor: themeConfig?.colors?.primary,
       };
-      if (exportFormat === 'pdf') await exportCustomerTransactionsPdf(options);
-      else await exportCustomerTransactionsExcel(options);
+      await exportCustomerTransactionsPdf({ ...options, pdfFormat: exportFormat });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo descargar el historial del cliente.');
     } finally {
@@ -462,8 +461,20 @@ export function CustomerDetailDrawer({
                       </span>
                     </>
                   )}
+                  {(loading || loadingRelated) && <span role="status" className="inline-flex items-center gap-1 font-sans text-[10px] font-bold text-primary"><Loader2 className="size-3 animate-spin" /> Cargando detalle…</span>}
                 </div>
               </div>
+            </div>
+
+            <div className="flex justify-end" data-tour="customer-detail-actions">
+              <PdfDownloadButton
+                label="Exportar"
+                includeRoll={false}
+                showStandardOptions={false}
+                onDownload={() => undefined}
+                firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del cliente', onSelect: () => { void downloadHistory('configured'); } }}
+                disabled={!customer || loadingRelated || exportingHistory || relatedTransactions.length === 0}
+              />
             </div>
 
             <TabsList className="w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
@@ -614,22 +625,22 @@ export function CustomerDetailDrawer({
                       <p className="mt-1 text-[11px] text-muted-foreground">Consulta facturas, órdenes, cotizaciones, pagos, créditos y notas de crédito en un solo lugar.</p>
                     </div>
                     <div className="w-full sm:w-56">
-                      <Label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mostrar</Label>
-                      <Select value={movementFilter} onValueChange={(value) => { setMovementFilter(value as MovementFilter); setSelectedInvoiceId(null); setSelectedMovement(null); }}>
-                        <SelectTrigger className="h-9 rounded-xl text-xs font-bold"><SelectValue placeholder="Todos los movimientos" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">Todos los movimientos</SelectItem>
-                          <SelectItem value="Factura">Facturas</SelectItem>
-                          <SelectItem value="Orden de venta">Órdenes de venta</SelectItem>
-                          <SelectItem value="Cotización">Cotizaciones</SelectItem>
-                          <SelectItem value="Nota de crédito">Notas de crédito</SelectItem>
-                          <SelectItem value="Crédito">Créditos</SelectItem>
-                          <SelectItem value="Pago recibido">Pagos recibidos</SelectItem>
-                          <SelectItem value="Factura recurrente">Facturas recurrentes</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <Label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mostrar</Label>
+                        <Select value={movementFilter} onValueChange={(value) => { setMovementFilter(value as MovementFilter); setSelectedInvoiceId(null); setSelectedMovement(null); }}>
+                          <SelectTrigger className="h-9 rounded-xl text-xs font-bold"><SelectValue placeholder="Todos los movimientos" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ALL">Todos los movimientos</SelectItem>
+                            <SelectItem value="Factura">Facturas</SelectItem>
+                            <SelectItem value="Orden de venta">Órdenes de venta</SelectItem>
+                            <SelectItem value="Cotización">Cotizaciones</SelectItem>
+                            <SelectItem value="Nota de crédito">Notas de crédito</SelectItem>
+                            <SelectItem value="Crédito">Créditos</SelectItem>
+                            <SelectItem value="Pago recibido">Pagos recibidos</SelectItem>
+                            <SelectItem value="Factura recurrente">Facturas recurrentes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
                   {loadingRelated ? (
                     <div className="mt-4 space-y-2"><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /><Skeleton className="h-12 w-full rounded-xl" /></div>
                   ) : visibleMovements.length === 0 ? (

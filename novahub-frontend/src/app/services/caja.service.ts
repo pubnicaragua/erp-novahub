@@ -152,6 +152,7 @@ export interface PosProduct {
   salePrice: number;
   taxRate: number;
   description?: string;
+  commercialNote?: string | null;
   imageUrl?: string | null;
   imageUrlStorageUri?: string;
   itemType?: 'PRODUCT' | 'SERVICE';
@@ -184,6 +185,7 @@ export interface PosInvoiceItem {
   variantId?: string;
   warehouseId?: string;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   priceListId?: string;
@@ -336,6 +338,7 @@ export interface PosHoldItem {
   productId?: string | null;
   variantId?: string | null;
   description: string;
+  commercialNoteSnapshot?: string | null;
   quantity: number;
   unitPrice: number;
   priceListId?: string | null;

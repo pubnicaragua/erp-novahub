@@ -40,6 +40,7 @@ import { PagosRealizadosView }     from './compras/PagosRealizadosView';
 import { CreditosProveedorView }   from './compras/CreditosProveedorView';
 import { SolicitudCompraView }     from './compras/SolicitudCompraView';
 import type { PurchaseAlertDetail, PurchaseAlertItem } from './compras/PurchaseAlertsButton';
+import { normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../utils/purchaseOrderStatus';
 
 const COMPRAS_SECTIONS = [
   { id: 'solicitudes',   label: 'Solicitudes',         icon: ClipboardPen,   description: 'Solicitudes de compra', requiredModules: ['PURCHASES_REQUESTS', 'PURCHASES'] },
@@ -394,7 +395,7 @@ export function ComprasPage({ activeSubModule, isSidebarCollapsed}: ComprasPageP
       detail: request.supplier?.name || `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || 'Sin proveedor asignado',
     }));
     const orderItems: PurchaseAlertItem[] = (filteredData.ordenes as PurchaseOrder[])
-      .filter((order) => ['PENDING', 'DRAFT'].includes(String(order.status || '').toUpperCase()))
+      .filter((order) => PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(order.status)))
       .map((order) => ({ id: String(order.id), label: order.number, detail: order.supplier?.name || 'Sin proveedor asignado' }));
     const receiptItems: PurchaseAlertItem[] = (filteredData.recepciones as PurchaseReceipt[])
       .filter((receipt) => ['PENDING', 'PARTIAL', 'WITH_INCIDENTS'].includes(String(receipt.status || 'PENDING').toUpperCase()))

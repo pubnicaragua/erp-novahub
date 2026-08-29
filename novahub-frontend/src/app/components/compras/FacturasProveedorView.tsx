@@ -186,7 +186,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
   };
 
   const columns: ColumnDef<SupplierInvoice>[] = [
-    { key: 'number',   header: 'Factura #',   width: '170px',
+    { key: 'number',   header: 'N° Factura',   width: '170px',
       render: (val, row) => <div className="flex min-w-0 flex-col items-start gap-1"><span className="font-black font-mono text-primary text-xs">{val||'-'}</span><Badge variant="outline" className="border-none bg-primary/10 px-1.5 py-0 text-[8px] font-black text-primary">{getPurchaseOriginBadge(row)}</Badge></div> },
     { key: 'supplier', header: 'Proveedor',
       render: (_v, row) => <span className="font-bold text-sm">{row.supplier?.name||'-'}</span> },
@@ -797,7 +797,7 @@ export function FacturasProveedorView({ data, loading, onRefresh, draftInvoiceFr
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Facturas de Proveedor</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="invoices" />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de facturas de proveedor" />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas de proveedor" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
           </div>

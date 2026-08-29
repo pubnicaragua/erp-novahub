@@ -214,7 +214,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     const paymentSymbol = paymentCurrency === 'USD' ? '$' : 'C$';
     return `<div class="row"><span>${paymentLabel(payment.method)}</span><span>${paymentSymbol} ${formatSalesAmount(Number(payment.amount || 0))}</span></div>`;
   }).join('');
-  const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div><div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
+  const itemRows = cart.map(item => `<div class="item"><div>${escapeTicketHtml(item.description)}</div>${item.commercialNoteSnapshot ? `<div style="font-size:9px">Nota: ${escapeTicketHtml(item.commercialNoteSnapshot)}</div>` : ''}<div class="row"><span>${item.quantity} x ${money(item.unitPrice / (currency === 'USD' ? exchangeRate : 1))}</span><span>${money(item.lineTotal / (currency === 'USD' ? exchangeRate : 1))}</span></div></div>`).join('');
   const discount = Number(invoice.discountAmount || 0);
   const delivery = Number(invoice.deliveryAmount || 0);
   const extraCharges = normalizeSalesExtraCharges(invoice).filter((charge) => charge.amount > 0);
@@ -384,6 +384,7 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     productId: item.productId,
     variantId: item.variantId,
     description: item.description,
+    commercialNoteSnapshot: item.commercialNoteSnapshot || null,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     priceListId: item.priceListId,
@@ -1292,6 +1293,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           variantId: variant.id,
           warehouseId,
           description: variantDescription,
+          commercialNoteSnapshot: product.commercialNote || null,
           quantity: 1,
           unitPrice: configuredPrice ?? 0,
           priceListId: isService ? undefined : selectedPriceListId,
@@ -1356,6 +1358,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
           productId: product.id,
           warehouseId,
           description: product.name,
+          commercialNoteSnapshot: product.commercialNote || null,
           quantity: 1,
           unitPrice: configuredPrice ?? 0,
           priceListId: isService ? undefined : selectedPriceListId,
@@ -1430,6 +1433,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
     const items: PosHoldItemInput[] = [{
       productId: product.id,
       description: product.name,
+      commercialNoteSnapshot: product.commercialNote || null,
       quantity: availabilityQuantity,
       unitPrice: configuredPrice ?? 0,
       priceListId: isService ? undefined : selectedPriceListId,
@@ -2232,6 +2236,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                                   />
                                 )}
                                 {prod.description && <p className="max-w-[320px] truncate text-[10px] text-muted-foreground">{prod.description}</p>}
+                                {prod.commercialNote && <p className="max-w-[320px] truncate text-[10px] text-primary/70" title={prod.commercialNote}>Nota: {prod.commercialNote}</p>}
                               </td>
                               <td className="px-2 sm:px-3 py-2.5 text-right font-mono whitespace-nowrap">
                                 {getCatalogPrice(prod) === undefined ? <span className="text-[10px] font-black uppercase text-rose-500">Sin precio</span> : formatCurrency(getCatalogPrice(prod) ?? 0)}
@@ -2410,6 +2415,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                             <td className="px-3 py-2 font-bold">
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <span className="min-w-0 flex-1">{item.description}</span>
+                                {item.commercialNoteSnapshot && <span className="basis-full truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}
                                 <SalesLinePriceListSelect productId={item.productId} productCode={productsById.get(item.productId)?.code} itemType={productsById.get(item.productId)?.itemType} value={item.priceListId} defaultPriceListId={selectedPriceListId} lineItems={cart} lineIndex={cart.indexOf(item)} currency={paymentCurrency} exchangeRate={Number(activeSession?.exchangeRateUSD || 1)} disabled={isRegisterDisabled} onChange={(priceListId, result) => { setCart((current) => current.map((line) => line.productId === item.productId && line.variantId === item.variantId && line.warehouseId === item.warehouseId ? { ...line, priceListId, unitPrice: result.unitPrice || 0, priceMissing: result.priceMissing, lineTotal: calculateLineTotal(line.quantity, result.unitPrice || 0) } : line)); }} />
                                 {item.priceMissing && <PriceMissingBadge className="basis-full" />}
                               </div>
@@ -2731,7 +2737,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
               </div>
               {createdTicketCart.map((item) => (
                 <div key={item.productId} className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-border/30 px-4 py-3 text-sm last:border-0">
-                  <span className="font-bold">{item.description}</span>
+                  <span className="min-w-0"><span className="block font-bold">{item.description}</span>{item.commercialNoteSnapshot && <span className="block truncate text-[10px] font-normal text-muted-foreground" title={item.commercialNoteSnapshot}>Nota: {item.commercialNoteSnapshot}</span>}</span>
                   <span className="font-mono text-muted-foreground">{item.quantity}</span>
                   <span className="font-mono font-bold">{formatCurrency(item.lineTotal)}</span>
                 </div>

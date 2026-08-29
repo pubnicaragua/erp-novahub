@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
-  PackageCheck, Plus, Search, Trash2, CheckCircle2, ChevronLeft, FilePlus2, Pencil, Ban,
-  AlertTriangle, XCircle, ArrowDown, FileText, Upload, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign
+  PackageCheck, Plus, Search, Eye, Trash2, CheckCircle2, ChevronLeft, Pencil, Ban,
+  AlertTriangle, XCircle, ArrowDown, FileText, Banknote, Calculator, ArrowRight, Paperclip, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { paymentsService, purchaseOrdersService, purchaseReceiptsService, supplierInvoicesService } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
@@ -22,7 +23,6 @@ import { TaxTypeSelect } from '../ui/TaxSelector';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
-import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
@@ -32,20 +32,41 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { CurrencySelector } from '../ui/CurrencySelector';
 import { isBankPaymentMethod, requiresPaymentReference } from '../../utils/paymentMethods';
-import { PrintButton } from '../ui/PrintButton';
-import { useBrowserPrint, type PaperSize } from '../../hooks/useBrowserPrint';
-import { generateTableHtml, generateDocumentHtml, type DocPrintData } from '../../utils/printUtils';
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
+import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 
 interface Props { data: PurchaseReceipt[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; accountCatalog?: any[]; warehouseCatalog?: Warehouse[]; orderCatalog?: PurchaseOrder[]; productCatalog?: any[]; productCategories?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 
 const statusOpts = [
-  { label: 'Pendiente',     value: 'PENDING',        color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  { label: 'Recibido',      value: 'RECEIVED',       color: 'bg-primary/10 text-primary' },
-  { label: 'Parcial',       value: 'PARTIAL',        color: 'bg-primary/10 text-primary' },
+  { label: 'Pendiente de recibir', value: 'PENDING',        color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  { label: 'Recibida',      value: 'RECEIVED',       color: 'bg-primary/10 text-primary' },
+  { label: 'Recepción parcial', value: 'PARTIAL',    color: 'bg-primary/10 text-primary' },
   { label: 'Recibida con incidencias', value: 'WITH_INCIDENTS', color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
+  { label: 'Pagada',        value: 'PAID',           color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
   { label: 'Cancelada',     value: 'REJECTED',       color: 'bg-destructive/10 text-destructive' },
 ];
+
+function getActiveReceiptInvoices(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
+  return (receipt.supplierInvoices || []).filter((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED');
+}
+
+function isReceiptPaid(receipt: Pick<PurchaseReceipt, 'supplierInvoices'>) {
+  const invoices = getActiveReceiptInvoices(receipt);
+  return invoices.length > 0 && invoices.every((invoice: any) => {
+    const status = String(invoice.status || '').toUpperCase();
+    const total = Number(invoice.total || 0);
+    const balance = Number(invoice.balance);
+    return status === 'PAID' || (total > 0 && Number.isFinite(balance) && balance <= 0.01);
+  });
+}
+
+function getReceiptDisplayStatus(receipt: Pick<PurchaseReceipt, 'status' | 'supplierInvoices'>) {
+  const operationalStatus = String(receipt.status || 'PENDING').toUpperCase();
+  if (operationalStatus === 'REJECTED') return operationalStatus;
+  return isReceiptPaid(receipt) ? 'PAID' : operationalStatus;
+}
 
 const STATUS_OPTIONS_RECEIVING = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'];
 // Una recepción ya marcada como recibida sigue siendo editable mientras no
@@ -63,21 +84,25 @@ const RECEIPT_WITHHOLDING_RATES: Record<string, number> = {
 function calculateReceiptLineAmounts(item: any) {
   const quantity = Math.max(0, Number(item.quantityReceived || 0));
   const unitPrice = Math.max(0, Number(item.unitPrice || 0));
-  const lineTotal = quantity * unitPrice;
+  const lineTotal = roundReceiptMoney(quantity * unitPrice);
   const taxType = String(item.taxType || 'GRAVADO').toUpperCase();
   const taxable = !RECEIPT_NON_TAXABLE_TYPES.has(taxType);
   const taxRate = taxable
     ? (Number(item.taxRate) > 0 ? Number(item.taxRate) : (['GRAVADO', 'GRAVADO_15'].includes(taxType) ? 15 : 0))
     : 0;
   const taxBase = taxable ? lineTotal : 0;
-  const taxAmount = taxBase * taxRate / 100;
+  const taxAmount = roundReceiptMoney(taxBase * taxRate / 100);
   const withholdingType = String(item.withholdingType || 'NONE').toUpperCase();
   const withholdingRate = withholdingType === 'NONE'
     ? 0
     : (Number(item.withholdingRate) > 0 ? Number(item.withholdingRate) : (RECEIPT_WITHHOLDING_RATES[withholdingType] || 0));
   const withholdingBase = withholdingType === 'NONE' ? 0 : lineTotal;
-  const withholdingAmount = withholdingBase * withholdingRate / 100;
+  const withholdingAmount = roundReceiptMoney(withholdingBase * withholdingRate / 100);
   return { lineTotal, taxRate, taxBase, taxAmount, withholdingRate, withholdingBase, withholdingAmount };
+}
+
+function roundReceiptMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function normalizeReceiptItemsForForm(items: any[]) {
@@ -101,14 +126,20 @@ function normalizeReceiptItemsForForm(items: any[]) {
 }
 
 function calculateReceiptTotalsForForm(items: any[]) {
-  return (items || []).reduce((totals, item) => {
+  const totals = (items || []).reduce((result, item) => {
     const amounts = calculateReceiptLineAmounts(item);
-    totals.subtotal += amounts.lineTotal;
-    totals.taxAmount += amounts.taxAmount;
-    totals.withholdingTotal += amounts.withholdingAmount;
-    totals.withholdingBase += amounts.withholdingBase;
-    return totals;
+    result.subtotal += amounts.lineTotal;
+    result.taxAmount += amounts.taxAmount;
+    result.withholdingTotal += amounts.withholdingAmount;
+    result.withholdingBase += amounts.withholdingBase;
+    return result;
   }, { subtotal: 0, taxAmount: 0, withholdingTotal: 0, withholdingBase: 0 });
+  return {
+    subtotal: roundReceiptMoney(totals.subtotal),
+    taxAmount: roundReceiptMoney(totals.taxAmount),
+    withholdingTotal: roundReceiptMoney(totals.withholdingTotal),
+    withholdingBase: roundReceiptMoney(totals.withholdingBase),
+  };
 }
 
 const RECEIPT_CURRENCY_META: Record<string, { code: string; label: string; symbol: string }> = {
@@ -337,7 +368,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
 
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] !max-w-xl overflow-y-auto rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
+      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] !max-w-3xl flex-col overflow-hidden rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12" data-tour="purchases-payment-title">
           <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20"><CircleDollarSign className="size-5" /></span>
@@ -346,8 +377,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
           <DialogDescription>El pago quedará guardado también en Pagos realizados y actualizará el saldo de la cuenta por pagar.</DialogDescription>
           <PurchaseViewTutorial view="payments" context="form" labelOverride="Cómo registrar pago" targetPrefix="purchases-payment" />
         </DialogHeader>
-        {draft && (
-          <div className="space-y-5 px-6 py-5" data-tour="purchases-payment-data">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+          {draft && (
+            <div className="space-y-5 px-6 py-5" data-tour="purchases-payment-data">
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4" data-tour="purchases-payment-summary">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -386,9 +418,15 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                   <div className="space-y-3">
                     {paymentLines.map((line, index) => (
                       <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3">
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end">
-                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p><select value={line.method} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: event.target.value as PaymentMethod, bankAccountId: undefined, reference: '' } : item))} disabled={saving} className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs font-bold uppercase">{RECEIPT_PAYMENT_METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-                          <CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" disabled={saving} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,11rem)_minmax(9rem,11rem)_auto] sm:items-start">
+                          <div>
+                            <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
+                            <Select value={line.method} onValueChange={(method) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: method as PaymentMethod, bankAccountId: undefined, reference: '' } : item))} disabled={saving}>
+                              <SelectTrigger className="h-10 w-full text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                              <SelectContent>{RECEIPT_PAYMENT_METHODS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                          <CurrencySelector className="[&_button]:h-10" value={line.currency} baseCurrency={baseCurrency} exchangeRate={globalRate} label="Moneda" rateDecimals={2} disabled={saving} onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
                             if (itemIndex !== index) return item;
                             const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
                             const nextRate = paymentLineRate(nextCurrency);
@@ -410,8 +448,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice }: { 
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
               </div>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
           {invoiceId && <Button onClick={handleSubmit} disabled={saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
@@ -496,8 +535,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   });
 
   const colFilters = useColumnFilters();
-  const activeReceiptInvoices = (receipt: PurchaseReceipt) =>
-    (receipt.supplierInvoices || []).filter((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED');
+  const activeReceiptInvoices = getActiveReceiptInvoices;
   const expectedReceiptPayment = (receipt: PurchaseReceipt) => {
     const orderTotal = Number(receipt.purchaseOrder?.total || 0);
     const invoiceTotal = activeReceiptInvoices(receipt).reduce((sum, invoice: any) => sum + Number(invoice.total || 0), 0);
@@ -513,7 +551,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
     title: 'Recepción de compra',
     customerName: receipt.supplier?.name || 'Proveedor sin nombre',
     hideCustomer: true,
-    status: String(receipt.status || ''),
+    status: getReceiptDisplayStatus(receipt),
     sourceLabel: receipt.purchaseOrder?.number ? `Orden de compra ${receipt.purchaseOrder.number}` : undefined,
     totalLabel: formatConvertedAmount(
       Number(receipt.total || 0),
@@ -542,7 +580,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         quantity: received,
         unitPriceLabel: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
         totalLabel: formatReceiptAmount(lineTotal, receipt.currency),
-        secondaryLabel: `Ordenada: ${ordered} · Recibida: ${received} · Rechazada: ${rejected}`,
+        secondaryLabel: `Ordenada: ${ordered} · Recibida: ${received} · Rechazada: ${rejected}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
       };
     }),
     notes: receipt.notes,
@@ -555,45 +593,72 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
   };
   const filteredData = colFilters.applyTo(filtered, filterGetters);
 
-  const { printContent } = useBrowserPrint();
+  const handleExportListPdf = async (format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando reporte de recepciones...');
+    try {
+      await generatePurchaseListPDF({
+        title: 'Recepciones de compra',
+        rows: filteredData,
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        columns: [
+          { label: 'N° Recepción', value: (row) => row.number },
+          { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
+          { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
+          { label: 'Comprometido', align: 'right', value: (row) => formatConvertedAmount(expectedReceiptPayment(row), receiptExpectedCurrency(row), row.purchaseOrder?.exchangeRate || row.exchangeRate) },
+          { label: 'Pagado', align: 'right', value: (row) => formatConvertedAmount(paidReceiptAmount(row), receiptPaidCurrency(row), activeReceiptInvoices(row)[0]?.exchangeRate || row.exchangeRate) },
+          { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === getReceiptDisplayStatus(row))?.label || row.status || '—' },
+        ],
+      });
+      toast.success('Reporte PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
+    }
+  };
 
-  const handlePrint = useCallback((paperSize: PaperSize) => {
-    const html = generateTableHtml({
-      title: 'Recepciones de Compra',
-      columns: [
-        { key: 'number', label: 'Nº', align: 'left' },
-        { key: 'supplierName', label: 'Proveedor', align: 'left' },
-        { key: 'date', label: 'Fecha', align: 'left' },
-        { key: 'expectedPayment', label: 'Importe comprometido', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'paidAmount', label: 'Pagado', align: 'right', format: (v: number) => `C$ ${v?.toFixed(2) || '0.00'}` },
-        { key: 'status', label: 'Estado', align: 'center' },
-      ],
-      rows: filteredData.map((item) => ({
-        number: item.number,
-        supplierName: item.supplier?.name || 'Sin proveedor',
-        date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '',
-        expectedPayment: expectedReceiptPayment(item),
-        paidAmount: paidReceiptAmount(item),
-        status: item.status || '',
-      })),
-      filters: {
-        'Búsqueda': searchTerm || 'Todas',
-      },
-    });
-
-    printContent(html, {
-      title: 'Reporte de Recepciones de Compra',
-      paperSize,
-      companyName: user?.tenantName || 'Empresa',
-    });
-  }, [filteredData, searchTerm, printContent, user?.tenantName]);
+  const handleDownloadReceiptPdf = async (receipt: PurchaseReceipt, format: PdfDownloadFormat) => {
+    const exportToastId = toast.loading('Generando PDF de la recepción...');
+    try {
+      await generatePurchaseRecordPDF({
+        tenantName: user?.tenantName || 'Empresa',
+        format,
+        targetKey: 'compras.purchase-receipt',
+        document: {
+          title: 'Recepción de compra',
+          number: receipt.number,
+          date: receipt.date ? formatDateEs(receipt.date) : undefined,
+           status: statusOpts.find((option) => option.value === getReceiptDisplayStatus(receipt))?.label || receipt.status,
+          supplier: receipt.supplier?.name || 'Sin proveedor',
+          fields: [
+            { label: 'Orden de compra', value: receipt.purchaseOrder?.number || 'No vinculada' },
+            { label: 'Moneda', value: String(receipt.currency || 'NIO').toUpperCase() },
+            { label: 'Importe comprometido', value: formatConvertedAmount(expectedReceiptPayment(receipt), receiptExpectedCurrency(receipt), receipt.purchaseOrder?.exchangeRate || receipt.exchangeRate) },
+            { label: 'Pagado', value: formatConvertedAmount(paidReceiptAmount(receipt), receiptPaidCurrency(receipt), activeReceiptInvoices(receipt)[0]?.exchangeRate || receipt.exchangeRate) },
+          ],
+          lines: (receipt.items || []).map((item) => ({
+            description: item.description || item.name || item.code || 'Artículo sin descripción',
+            quantity: Number(item.quantityReceived || 0),
+            unitPrice: formatReceiptAmount(Number(item.unitPrice || 0), receipt.currency),
+            total: formatReceiptAmount(Number(item.quantityReceived || 0) * Number(item.unitPrice || 0), receipt.currency),
+            secondary: `Ordenada: ${Number(item.quantityOrdered || 0)} · Rechazada: ${Number(item.quantityRejected || 0)}${item.commercialNoteSnapshot ? ` · Nota: ${item.commercialNoteSnapshot}` : ''}`,
+          })),
+          total: formatReceiptAmount(Number(receipt.total || 0), receipt.currency),
+          totalLabel: 'Total recibido',
+          notes: receipt.notes,
+        },
+      });
+      toast.success('PDF descargado', { id: exportToastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
+    }
+  };
 
   const distinctSuppliers = [...new Map(filtered.map((r) => [r.supplier?.name || '-', r.supplier?.name || '-'])).entries()]
     .map(([, label]) => ({ value: label, label, count: filtered.filter((r) => (r.supplier?.name || '-') === label).length }));
-  const statusOptionsForFilter = statusOpts.map((o) => ({ value: o.value, label: o.label, count: filtered.filter((r) => String(r.status || '').toUpperCase() === o.value).length }));
+  const statusOptionsForFilter = statusOpts.map((o) => ({ value: o.value, label: o.label, count: filtered.filter((r) => getReceiptDisplayStatus(r) === o.value).length }));
 
   const columns: ColumnDef<PurchaseReceipt>[] = [
-    { key: 'number',    header: 'Recibo #',    width: '120px',
+    { key: 'number',    header: 'N° Recepción',    width: '120px',
       render: (val) => <span className="font-black font-mono text-primary text-xs">{val}</span> },
     { key: 'supplier',  header: 'Proveedor',   width: '200px',
       headerExtra: <ColumnFilterMenu label="Proveedor" options={distinctSuppliers} selected={colFilters.state.supplier?.values || []} onSelect={(values) => colFilters.setValues('supplier', values)} sort={colFilters.state.supplier?.sort || null} onSort={(sort) => colFilters.setSort('supplier', sort)} />,
@@ -658,12 +723,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         return <div className="flex items-center gap-2">
           <span className="text-xs font-black tabular-nums">{total} art.</span>
           {faltantes.length > 0 && <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{faltantes.length} falt.</span>}
-          {rechazados.length > 0 && <span className="text-[9px] font-black text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-full">{rechazados.length} recha.</span>}
+          {rechazados.length > 0 && <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">{rechazados.length} no acept.</span>}
         </div>;
       } },
     { key: 'status',    header: 'Estado',      width: '130px',
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
-      render: (val) => { const o = statusOpts.find(x => x.value === (val||'').toUpperCase()); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label||val}</Badge>; } },
+      render: (_val, row) => { const displayStatus = getReceiptDisplayStatus(row); const o = statusOpts.find(x => x.value === displayStatus); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase px-2 py-0.5 border-none', o?.color||'bg-muted/20 text-muted-foreground')}>{o?.label || displayStatus}</Badge>; } },
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<PurchaseReceipt>) => {
@@ -765,7 +830,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       items: itemsToSave,
       status: autoComputedStatus as any,
       ...financialTotals,
-      total: financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal,
+      total: roundReceiptMoney(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal),
     };
     const isReceiving = STATUS_OPTIONS_RECEIVING.includes(autoComputedStatus);
     const previousStatus = editingId !== 'NEW'
@@ -863,7 +928,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         items: newItems as any,
         status: autoStatus as any,
         ...financialTotals,
-        total: financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal,
+        total: roundReceiptMoney(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal),
       };
     });
   };
@@ -920,7 +985,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         items: normalizedItems as any,
         status: autoStatus as any,
         ...financialTotals,
-        total: financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal,
+        total: roundReceiptMoney(financialTotals.subtotal + financialTotals.taxAmount - financialTotals.withholdingTotal),
       };
     });
   };
@@ -943,7 +1008,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
       && persistedStatus === 'PENDING'
       && canEditCurrent
       && canPerform('PURCHASES_RECEIPTS', 'approve');
-    const currentStatus = statusOpts.find(s => s.value === receiptStatus);
+    const displayStatus = getReceiptDisplayStatus(localDoc as PurchaseReceipt);
+    const currentStatus = statusOpts.find(s => s.value === displayStatus);
     const linkedOrder = (localDoc as any)?.purchaseOrder
       || orders.find((order) => String(order.id) === String(localDoc.purchaseOrderId));
     const receiptCurrency = normalizeReceiptCurrency(localDoc.currency || linkedOrder?.currency);
@@ -978,7 +1044,6 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="receipts" context="form" />
-            {!isNew && localDoc.id && <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={localDoc.id} title="Historial de la recepción" />}
             {canReceiveCurrent && (
               <Button onClick={handleSaveDoc} className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6">
                 <PackageCheck className="mr-2 size-3.5" /> {persistedStatus === 'PENDING' ? 'Recepcionar' : 'Guardar recepción'}
@@ -1055,6 +1120,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                           // Si la orden histórica no la tiene, la selección debe
                           // quedar vacía para forzar una elección válida.
                           warehouseId: (ord as any)?.warehouseId || '',
+                          commercialNoteSnapshot: (it as any).commercialNoteSnapshot || null,
                         })) || [];
                         const autoStatus = calcStatus(newItems);
                         setLocalDoc({
@@ -1112,10 +1178,10 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           const qRej = Number(it.quantityRejected||0);
           return qRec < qOrd || qRej > 0;
         }) && (
-          <Card className="rounded-2xl border-orange-500/30 bg-orange-500/5">
+          <Card className="rounded-2xl border-border/60 bg-muted/10">
             <CardContent className="p-4 flex items-center gap-4 flex-wrap">
-              <AlertTriangle className="size-5 text-orange-500 shrink-0" />
-              <p className="text-[10px] font-black uppercase tracking-widest text-orange-500">Incidencias detectadas</p>
+              <AlertTriangle className="size-5 shrink-0 text-muted-foreground" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Resumen de cantidades</p>
               {(localDoc.items || []).map((it: any, i: number) => {
                 const qOrd = Number(it.quantityOrdered||0);
                 const qRec = Number(it.quantityReceived||0);
@@ -1123,7 +1189,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const falt = qRej > 0 ? 0 : Math.max(0, qOrd - qRec);
                 return <div key={i} className="text-[9px] font-bold text-muted-foreground">
                   {it.description || `Ítem ${i+1}`}: {falt > 0 && <span className="text-amber-500">{falt} faltante(s) </span>}
-                  {qRej > 0 && <span className="text-rose-500">{qRej} rechazado(s)</span>}
+                  {qRej > 0 && <span className="text-amber-600 dark:text-amber-400">{qRej} no aceptado(s)</span>}
                   {(falt <= 0 && qRej <= 0) && <span className="text-emerald-500">Completo</span>}
                   {i < (localDoc.items||[]).length - 1 && <span className="mx-1.5 text-muted-foreground/30">|</span>}
                 </div>;
@@ -1164,11 +1230,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                 const missingWarehouse = item.stockApplies !== false && !String(item.warehouseId || '').trim();
                 const lineAmounts = calculateReceiptLineAmounts(item);
                 return (
-                <div key={item.id || idx} className={cn('group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200', missingWarehouse ? 'border-rose-500/70 bg-rose-500/[0.045] hover:border-rose-500' : (faltante || rechazado) ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'hover:border-primary/50 hover:shadow-md')}>
+                <div key={item.id || idx} className={cn('group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200', missingWarehouse ? 'border-rose-500/70 bg-rose-500/[0.045] hover:border-rose-500' : rechazado ? 'border-amber-500/25 bg-amber-500/[0.03] hover:border-amber-500/45' : faltante ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'hover:border-primary/50 hover:shadow-md')}>
                   {((faltante || rechazado) && !isNew) && (
                     <div className="flex items-center gap-1.5 mb-2">
                       {faltante && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-500"><ArrowDown className="size-2.5 mr-1" /> Faltante: {qOrdered - qReceived} uds.</Badge>}
-                      {rechazado && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-rose-500/10 text-rose-500"><XCircle className="size-2.5 mr-1" /> Rechazado: {qRejected} uds.</Badge>}
+                      {rechazado && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-700 dark:text-amber-300"><XCircle className="size-2.5 mr-1" /> No aceptado: {qRejected} uds.</Badge>}
                     </div>
                   )}
                   <div className="flex items-center gap-3">
@@ -1186,7 +1252,11 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                       )}
                       <Combobox
                         disabled={!canEditCurrent}
-                        options={products.map((p) => ({ label: `${p.code} - ${p.name}`, value: p.id }))}
+                        options={products.map((p) => ({
+                          label: `${p.code} - ${p.name}`,
+                          value: p.id,
+                          description: p.commercialNote ? `Nota: ${p.commercialNote}` : undefined,
+                        }))}
                         value={item.productId || ''}
                         onChange={(val) => {
                           const prod = products.find((p) => p.id === val);
@@ -1197,6 +1267,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                             handleItemChange(idx, 'code', prod.code);
                             handleItemChange(idx, 'category', prod.category?.name || prod.category || '');
                             handleItemChange(idx, 'categoryId', prod.categoryId || (prod.category?.id ? prod.category.id : ''));
+                            handleItemChange(idx, 'commercialNoteSnapshot', prod.commercialNote || null);
                             handleItemChange(idx, 'unitPrice', Number(prod.costPrice || prod.cost || prod.price || 0));
                           }
                         }}
@@ -1219,6 +1290,20 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         className="h-8 text-xs font-bold"
                         placeholder="Ej. Llantas Michelin"
                       />
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Nota comercial</p>
+                          <span className="text-[9px] text-muted-foreground">{Array.from(item.commercialNoteSnapshot || '').length}/100</span>
+                        </div>
+                        <Input
+                          disabled={!canEditCurrent}
+                          value={item.commercialNoteSnapshot || ''}
+                          maxLength={100}
+                          onChange={(e) => handleItemChange(idx, 'commercialNoteSnapshot', e.target.value.slice(0, 100))}
+                          className="h-8 text-xs"
+                          placeholder="Nota visible en documentos"
+                        />
+                      </div>
                     </div>
                     {!item.productId && (
                       <>
@@ -1241,15 +1326,17 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         </div>
                         <div className="min-w-0">
                           <p className="text-[9px] font-black uppercase tracking-widest text-foreground mb-1.5">Categoría</p>
-                          <select
+                          <Select
                             disabled={!canEditCurrent}
-                            value={item.categoryId || ''}
-                            onChange={(e) => handleItemChange(idx, 'categoryId', e.target.value)}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-bold"
+                            value={item.categoryId || '__none__'}
+                            onValueChange={(categoryId) => handleItemChange(idx, 'categoryId', categoryId === '__none__' ? '' : categoryId)}
                           >
-                            <option value="">Sin categoría</option>
-                            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
+                            <SelectTrigger className="h-8 w-full text-xs font-bold"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Sin categoría</SelectItem>
+                              {categories.map((c: any) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </>
                     )}
@@ -1282,7 +1369,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
                         type="number" min="0" 
                         value={item.quantityRejected === 0 ? '' : item.quantityRejected} 
                         onChange={(e) => handleItemChange(idx, 'quantityRejected', e.target.value)} 
-                        className={cn('h-8 text-xs text-right font-bold', rechazado ? 'text-rose-500 border-rose-500/50' : '')} placeholder="0" 
+                        className={cn('h-8 text-xs text-right font-bold', rechazado ? 'text-amber-700 border-amber-500/50 dark:text-amber-300' : '')} placeholder="0"
                       />
                     </div>
                     <div className="col-span-2">
@@ -1406,8 +1493,8 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           <div><h2 className="text-xl font-black uppercase tracking-tight" data-tour="purchases-list-title">Recepciones</h2></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             <PurchaseViewTutorial view="receipts" />
-            <PrintButton onPrint={handlePrint} label="Imprimir" showDropdown includeRoll />
-            <ViewLayoutSelect value={layoutMode} onChange={setLayoutMode} ariaLabel="Elegir distribución de recepciones" />
+            <PdfDownloadButton label="Exportar" includeRoll={false} onDownload={(format) => void handleExportListPdf(format)} />
+            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full sm:w-56 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
@@ -1439,11 +1526,12 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
           } : undefined}
           actions={(row) => {
             const receiptStatus = String(row.status || '').toUpperCase();
+            const canReceiveRow = receiptStatus === 'PENDING'
+              && canPerform('PURCHASES_RECEIPTS', 'approve')
+              && canPerform('PURCHASES_RECEIPTS', 'edit');
             const isApprovedReceipt = ['RECEIVED', 'PARTIAL', 'WITH_INCIDENTS'].includes(receiptStatus);
             const activeInvoice = isApprovedReceipt
-              ? (row.supplierInvoices || []).find((invoice: any) =>
-                String(invoice.status || '').toUpperCase() !== 'CANCELLED',
-              )
+              ? (row.supplierInvoices || []).find((invoice: any) => String(invoice.status || '').toUpperCase() !== 'CANCELLED')
               : undefined;
             const payableInvoice = activeInvoice && Number(activeInvoice.balance || 0) > 0 ? activeInvoice : undefined;
             const canRegisterPayment = Boolean(payableInvoice)
@@ -1454,31 +1542,47 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
               && canPerform('PURCHASES_PAYMENTS', 'create')
               && canPerform('PURCHASES_PAYMENTS', 'approve');
             return (
-            <div className="flex gap-1">
-              {receiptStatus === 'PENDING' && canPerform('PURCHASES_RECEIPTS', 'approve') && canPerform('PURCHASES_RECEIPTS', 'edit') && (
-                <Button title="Recepcionar" aria-label={`Recepcionar ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(row.id)}>
-                  <PackageCheck className="size-4" />
+              <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                <Button title="Ver detalle" aria-label={`Ver detalle de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setDetailReceipt(row)}>
+                  <Eye className="size-4" />
                 </Button>
-              )}
-              {isApprovedReceipt && (canRegisterPayment || canRegisterInvoice) && (
-                <Button
-                  title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
-                  aria-label={canRegisterPayment ? `Registrar pago de ${row.number || 'recepción'}` : `Registrar factura y pago de ${row.number || 'recepción'}`}
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10"
-                  onClick={() => openPaymentModal(row, payableInvoice)}
-                >
-                  <Banknote className="size-4" />
-                </Button>
-              )}
-              <PurchaseAuditButton entity="PURCHASE_RECEIPT" entityId={row.id} title="Auditoría de la recepción" />
-              {canPerform('PURCHASES_RECEIPTS', 'delete') && String(row.status || '').toUpperCase() !== 'REJECTED' && (
-                <Button title="Cancelar recepción" aria-label={`Cancelar recepción ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
-                  <Ban className="size-4" />
-                </Button>
-              )}
-            </div>
+                {canReceiveRow && (
+                  <Button
+                    title="Recepcionar"
+                    aria-label={`Recepcionar ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary"
+                    onClick={() => setEditingId(row.id)}
+                  >
+                    <PackageCheck className="size-4" />
+                  </Button>
+                )}
+                {isApprovedReceipt && (canRegisterPayment || canRegisterInvoice) && (
+                  <Button
+                    title={canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'}
+                    aria-label={`${canRegisterPayment ? 'Registrar pago' : 'Registrar factura y pago'} de ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                    onClick={() => openPaymentModal(row, payableInvoice)}
+                  >
+                    <Banknote className="size-4" />
+                  </Button>
+                )}
+                {canPerform('PURCHASES_RECEIPTS', 'delete') && receiptStatus !== 'REJECTED' && (
+                  <Button
+                    title="Cancelar recepción"
+                    aria-label={`Cancelar ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
+                    onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}
+                  >
+                    <Ban className="size-4" />
+                  </Button>
+                )}
+              </div>
             );
           }}
         />
@@ -1491,12 +1595,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         entity="PURCHASE_RECEIPT"
         open={Boolean(detailReceipt)}
         onClose={() => setDetailReceipt(null)}
-        onOpenDocument={() => {
-          if (!detailReceipt) return;
-          const receiptId = detailReceipt.id;
-          setDetailReceipt(null);
-          setEditingId(receiptId);
-        }}
+        onDownloadPdf={(format) => detailReceipt ? void handleDownloadReceiptPdf(detailReceipt, format) : undefined}
       />
 
       <Dialog open={inventoryCostOperations !== null} onOpenChange={(open) => { if (!open) setInventoryCostOperations(null); }}>
