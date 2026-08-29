@@ -234,7 +234,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Detalle del Ticket</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedTicket(null)} className="text-muted-foreground hover:text-primary"><X className="size-6" /></button>
+                <button type="button" onClick={() => setSelectedTicket(null)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar detalle del ticket" title="Cerrar"><X className="size-6" /></button>
               </div>
               <div className="space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -291,7 +291,7 @@ export function SoporteTecnicoView({ activeSubModule, onSubModuleChange}: Soport
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Soporte Técnico Nova</p>
                   </div>
                 </div>
-                <button onClick={() => setShowCreateModal(false)} className="text-muted-foreground hover:text-primary"><X className="size-6" /></button>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar nuevo ticket" title="Cerrar"><X className="size-6" /></button>
               </div>
               <div className="space-y-5">
                 <div className="space-y-2">

@@ -12,16 +12,16 @@ export function SalesDateRangeFilter({ dateFrom = '', dateTo = '', onChange }: S
   const hasFilters = Boolean(dateFrom || dateTo);
 
   return (
-    <div className="flex flex-wrap items-start gap-x-3 gap-y-5 pt-2 sm:items-center sm:gap-2 sm:pt-0" data-toolbar-role="filters">
-      <label className="relative flex h-10 w-full items-center sm:w-auto">
-        <span className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:-top-3">Desde</span>
+    <div className="flex flex-wrap items-start gap-x-3 gap-y-3 pt-0 sm:items-center sm:gap-2" data-toolbar-role="filters">
+      <label className="relative flex w-full min-w-0 flex-col gap-1 sm:h-10 sm:w-auto sm:flex-row sm:items-center sm:gap-0">
+        <span className="text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:pointer-events-none sm:absolute sm:-top-3 sm:left-1">Desde</span>
         <Input type="date" value={dateFrom} onChange={(event) => onChange(event.target.value, dateTo)} className="h-10 w-full pr-10 text-foreground font-semibold [&::-webkit-calendar-picker-indicator]:opacity-0 sm:w-[170px]" aria-label="Fecha desde" />
-        <CalendarDays className="pointer-events-none absolute right-3 size-4 text-primary" aria-hidden="true" />
+        <CalendarDays className="pointer-events-none absolute right-3 top-[calc(50%+0.4rem)] size-4 -translate-y-1/2 text-primary sm:top-1/2" aria-hidden="true" />
       </label>
-      <label className="relative flex h-10 w-full items-center sm:w-auto">
-        <span className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:-top-3">Hasta</span>
+      <label className="relative flex w-full min-w-0 flex-col gap-1 sm:h-10 sm:w-auto sm:flex-row sm:items-center sm:gap-0">
+        <span className="text-[9px] font-black uppercase tracking-widest text-foreground/75 sm:pointer-events-none sm:absolute sm:-top-3 sm:left-1">Hasta</span>
         <Input type="date" value={dateTo} onChange={(event) => onChange(dateFrom, event.target.value)} className="h-10 w-full pr-10 text-foreground font-semibold [&::-webkit-calendar-picker-indicator]:opacity-0 sm:w-[170px]" aria-label="Fecha hasta" />
-        <CalendarDays className="pointer-events-none absolute right-3 size-4 text-primary" aria-hidden="true" />
+        <CalendarDays className="pointer-events-none absolute right-3 top-[calc(50%+0.4rem)] size-4 -translate-y-1/2 text-primary sm:top-1/2" aria-hidden="true" />
       </label>
       {hasFilters && (
         <button

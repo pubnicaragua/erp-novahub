@@ -12,6 +12,7 @@ import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Download, FileBarCh
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_REPORTS_VIEWS, type ManagerReportsView } from './manager-reports.types';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -53,7 +54,7 @@ export function ManagerReportsModule({ view, onViewChange, groupId, businessUnit
       const exportRows = (report.data || []).map((row: any) => ({ Vista: labels[view], Registro: row.number || row.name || row.productName || row.employeeName || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd), Estado: statusLabel(row.status || row.kind), Monto: row.total ?? row.amount ?? row.balance ?? row.netPay ?? '', Sucursal: row.branchName || '', Rubro: row.businessUnitName || '' }));
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Reportes');
-      XLSX.writeFile(workbook, `manager-reportes-${view}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_consolidado', labels[view]], 'xlsx', dateFrom, dateTo));
     } finally { setExporting(false); }
   };
   const Icon = useMemo(() => view === 'overview' ? LayoutDashboard : FileBarChart, [view]);

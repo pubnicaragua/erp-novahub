@@ -278,6 +278,63 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
   };
 
+  const historyEntries = (
+    <div className="space-y-4">
+      {(providedLogs ?? logs).map((log) => {
+        const detailsObj = parseDetails(log.details);
+        const visibleDetailEntries = detailsObj && typeof detailsObj === 'object' && !Array.isArray(detailsObj)
+          ? Object.entries(detailsObj).filter(([key, value]) => !isInternalDetail(key, value))
+          : [];
+        return (
+          <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">
+            <div className="absolute left-[-5px] top-0 size-2.5 rounded-full bg-primary ring-4 ring-background" />
+            <div className="-mt-1.5 p-4 rounded-2xl bg-card border border-border/40 shadow-sm relative overflow-hidden group">
+              <div className="relative z-10 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant="outline" className={cn(
+                    "text-[9px] font-black uppercase tracking-widest border",
+                    actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
+                  )}>
+                    {actionLabels[log.action] || log.action}
+                  </Badge>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                    <Calendar className="size-3" />
+                    {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm", { locale: es })}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <UserIcon className="size-3.5 text-muted-foreground" />
+                    {log.user ? log.user.name : 'Sistema automático'}
+                  </div>
+                  {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
+                </div>
+                {detailsObj && (typeof detailsObj !== 'object' || visibleDetailEntries.length > 0) && (
+                  <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                      <Info className="size-3" /> Detalles:
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      {typeof detailsObj === 'object' ? (
+                        <ul className="list-disc list-inside space-y-1">
+                          {visibleDetailEntries.map(([key, value]) => (
+                            <li key={key}>
+                              <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <p>{detailsObj}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const historyBody = (
     <div className="mt-4">
       {loading ? (
@@ -290,62 +347,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
           <p className="text-xs font-bold text-muted-foreground">No hay registros de auditoría para este elemento.</p>
         </div>
       ) : (
-        <ScrollArea className="h-[400px] pr-4">
-          <div className="space-y-4">
-            {(providedLogs ?? logs).map((log) => {
-              const detailsObj = parseDetails(log.details);
-              const visibleDetailEntries = detailsObj && typeof detailsObj === 'object' && !Array.isArray(detailsObj)
-                ? Object.entries(detailsObj).filter(([key, value]) => !isInternalDetail(key, value))
-                : [];
-              return (
-                <div key={log.id} className="relative pl-6 pb-4 border-l-2 border-primary/20 last:border-transparent last:pb-0">
-                  <div className="absolute left-[-5px] top-0 size-2.5 rounded-full bg-primary ring-4 ring-background" />
-                  <div className="-mt-1.5 p-4 rounded-2xl bg-card border border-border/40 shadow-sm relative overflow-hidden group">
-                    <div className="relative z-10 flex flex-col gap-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Badge variant="outline" className={cn(
-                          "text-[9px] font-black uppercase tracking-widest border",
-                          actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
-                        )}>
-                          {actionLabels[log.action] || log.action}
-                        </Badge>
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                          <Calendar className="size-3" />
-                          {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm", { locale: es })}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                          <UserIcon className="size-3.5 text-muted-foreground" />
-                          {log.user ? log.user.name : 'Sistema automático'}
-                        </div>
-                        {log.user?.email && <p className="text-[10px] text-muted-foreground pl-5">{log.user.email}</p>}
-                      </div>
-                      {detailsObj && (typeof detailsObj !== 'object' || visibleDetailEntries.length > 0) && (
-                        <div className="bg-muted/20 p-3 rounded-xl border border-border/30 mt-1">
-                          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                            <Info className="size-3" /> Detalles:
-                          </div>
-                          <div className="text-xs font-mono text-muted-foreground">
-                            {typeof detailsObj === 'object' ? (
-                              <ul className="list-disc list-inside space-y-1">
-                                {visibleDetailEntries.map(([key, value]) => (
-                                  <li key={key}>
-                                    <span className="font-bold text-foreground">{translateKey(key)}:</span> {translateValue(value, key)}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : <p>{detailsObj}</p>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
+        presentation === 'inline' ? historyEntries : <ScrollArea className="h-[400px] pr-4">{historyEntries}</ScrollArea>
       )}
     </div>
   );

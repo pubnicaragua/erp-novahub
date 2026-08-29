@@ -963,6 +963,18 @@ function ManagerSidebar({
 }) {
   const { user } = useAuth();
   const groups = [...new Set(sections.map((item) => item.group))];
+  const [isDesktopViewport, setIsDesktopViewport] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 1024,
+  );
+
+  useEffect(() => {
+    const handleViewportChange = () => setIsDesktopViewport(window.innerWidth >= 1024);
+    handleViewportChange();
+    window.addEventListener("resize", handleViewportChange);
+    return () => window.removeEventListener("resize", handleViewportChange);
+  }, []);
+
+  const sidebarCollapsed = Boolean(collapsed && isDesktopViewport);
   return (
     <>
       <div
@@ -975,20 +987,20 @@ function ManagerSidebar({
       />
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-[270px] border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
+          "fixed left-0 top-0 z-50 h-dvh max-h-[100dvh] w-[270px] overflow-hidden overscroll-none border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300",
           open ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0",
-          collapsed ? "lg:w-[72px]" : "lg:w-[270px]",
+          sidebarCollapsed ? "lg:w-[72px]" : "lg:w-[270px]",
         )}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
           <div
             className={cn(
               "flex h-16 shrink-0 items-center overflow-visible border-b border-sidebar-border px-3",
-              collapsed ? "justify-center" : "justify-between",
+              sidebarCollapsed ? "justify-center" : "justify-between",
             )}
           >
-            {collapsed ? (
+            {sidebarCollapsed ? (
               <div
                 className="flex items-center justify-center"
                 title={groupName || "Grupo empresarial"}
@@ -1034,17 +1046,17 @@ function ManagerSidebar({
             </div>
           </div>
           <TooltipProvider delayDuration={100}>
-            <nav className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <nav data-sidebar-navigation className="no-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
               {groups.map((group) => (
                 <div key={group} className="mb-3">
-                  {!collapsed && (
+                  {!sidebarCollapsed && (
                     <div className="flex px-3 pb-1 pt-4">
                       <span className="w-full border-b border-sidebar-border/50 pb-1 text-[11px] font-bold uppercase tracking-widest text-sidebar-foreground/60">
                         {group}
                       </span>
                     </div>
                   )}
-                  {collapsed && <div className="pt-3" />}
+                  {sidebarCollapsed && <div className="pt-3" />}
                   <div className="space-y-0.5">
                     {sections
                       .filter((item) => item.group === group)
@@ -1062,16 +1074,16 @@ function ManagerSidebar({
                               "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-all duration-150",
                               "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                              collapsed && "justify-center",
+                              sidebarCollapsed && "justify-center",
                               active
                                 ? "bg-sidebar-accent/80 text-sidebar-foreground shadow-sm font-semibold"
                                 : "text-sidebar-foreground/70",
                             )}
                             aria-current={active ? "page" : undefined}
-                            aria-label={collapsed ? item.label : undefined}
+                            aria-label={sidebarCollapsed ? item.label : undefined}
                           >
                             <Icon className="size-5 shrink-0" />
-                            {!collapsed && (
+                            {!sidebarCollapsed && (
                               <>
                                 <span className="flex-1 truncate text-left">
                                   {item.label}
@@ -1091,7 +1103,7 @@ function ManagerSidebar({
                         const submenu = active &&
                           hasSubmenu &&
                           isExpanded &&
-                          !collapsed && (
+                          !sidebarCollapsed && (
                             <div className="ml-5 mt-0.5 max-h-[52vh] space-y-0.5 overflow-y-auto py-1 pl-3">
                               {(item.id === "inventory"
                                 ? MANAGER_INVENTORY_VIEWS
@@ -1176,7 +1188,7 @@ function ManagerSidebar({
                           );
                         return (
                           <div key={item.id}>
-                            {collapsed ? (
+                            {sidebarCollapsed ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   {button}
@@ -1201,14 +1213,14 @@ function ManagerSidebar({
               ))}
             </nav>
           </TooltipProvider>
-          <div className="shrink-0 border-t border-sidebar-border p-3">
+          <div className="shrink-0 border-t border-sidebar-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             <div
               className={cn(
                 "flex items-center gap-3 rounded-xl border border-sidebar-border/50 bg-sidebar-accent",
-                collapsed ? "justify-center p-1.5" : "px-3 py-3",
+                sidebarCollapsed ? "justify-center p-1.5" : "px-3 py-3",
               )}
               title={
-                collapsed
+                sidebarCollapsed
                   ? `${user?.name || "Manager"} · Acceso Manager`
                   : undefined
               }

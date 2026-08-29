@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Download,
   FileText,
   History,
   Mail,
@@ -25,7 +26,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
+import { Label } from '../ui/label';
 import { ScrollArea } from '../ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Skeleton } from '../ui/skeleton';
 import {
   expensesService,
@@ -40,20 +44,20 @@ import { useTheme } from '../../contexts/ThemeContext';
 import type { Supplier } from '../../types';
 import { cn } from '../ui/utils';
 import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/supplierBalance';
-import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { generateSupplierHistoryPDF } from '../../utils/pdfGenerator';
-import { fetchSupplierHistoryItems } from '../../utils/supplierHistory';
+import { fetchSupplierHistoryItems, type SupplierHistoryItem } from '../../utils/supplierHistory';
+import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from 'sonner';
 
 interface SupplierDetailDrawerProps {
   supplierId: string | null;
   supplierSnapshot?: Supplier | null;
   onOpenChange: (open: boolean) => void;
-  onDownloadPdf?: (format: PdfDownloadFormat) => void;
 }
 
 type SupplierTab = 'general' | 'historial';
+type HistoryExportScope = 'ALL' | 'FILTERED';
+type HistoryExportCurrency = 'NIO' | 'USD';
 
 type SupplierTransaction = {
   id: string;
@@ -106,9 +110,8 @@ export function SupplierDetailDrawer({
   supplierId,
   supplierSnapshot,
   onOpenChange,
-  onDownloadPdf,
 }: SupplierDetailDrawerProps) {
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<SupplierTab>('general');
@@ -117,12 +120,20 @@ export function SupplierDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [exportingHistory, setExportingHistory] = useState(false);
+  const [historyExportDialogOpen, setHistoryExportDialogOpen] = useState(false);
+  const [historyExportScope, setHistoryExportScope] = useState<HistoryExportScope>('ALL');
+  const [historyExportFilter, setHistoryExportFilter] = useState('ALL');
+  const [historyExportCurrency, setHistoryExportCurrency] = useState<HistoryExportCurrency>(baseCurrency);
+  const [historyExportItems, setHistoryExportItems] = useState<SupplierHistoryItem[]>([]);
+  const [historyExportLoading, setHistoryExportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supplierId) {
       setDetail(null);
       setTransactions([]);
+      setHistoryExportItems([]);
+      setHistoryExportDialogOpen(false);
       setError(null);
       setActiveTab('general');
       return;
@@ -219,23 +230,52 @@ export function SupplierDetailDrawer({
   const totalCommitted = useMemo(() => transactions.reduce((sum, item) => sum + item.amount, 0), [transactions]);
   const orderCount = transactions.filter((item) => item.type === 'Orden de compra').length;
   const invoiceCount = transactions.filter((item) => item.type === 'Factura de proveedor').length;
+  const historyExportTypeOptions = Array.from(new Set(historyExportItems.map((item) => item.type).filter(Boolean)));
+  const selectedHistoryItems = historyExportScope === 'FILTERED' && historyExportFilter !== 'ALL'
+    ? historyExportItems.filter((item) => item.type === historyExportFilter)
+    : historyExportItems;
 
-  const handleDownloadHistory = async () => {
+  const openHistoryExportDialog = () => {
     if (!supplier || exportingHistory) return;
+    setHistoryExportScope('ALL');
+    setHistoryExportFilter('ALL');
+    setHistoryExportCurrency(baseCurrency);
+    setHistoryExportItems([]);
+    setHistoryExportDialogOpen(true);
+    setHistoryExportLoading(true);
+    void fetchSupplierHistoryItems(supplier.id)
+      .then((items) => setHistoryExportItems(items))
+      .catch((error: any) => {
+        setHistoryExportItems([]);
+        toast.error(error?.message || 'No se pudo cargar el historial del proveedor.');
+      })
+      .finally(() => setHistoryExportLoading(false));
+  };
+
+  const confirmHistoryExport = async () => {
+    if (!supplier || exportingHistory || historyExportLoading) return;
+    if (!selectedHistoryItems.length) {
+      toast.info('Este proveedor todavía no tiene transacciones para descargar.');
+      return;
+    }
     const exportToastId = toast.loading('Generando historial del proveedor...');
+    setHistoryExportDialogOpen(false);
     setExportingHistory(true);
     try {
-      const historyItems = await fetchSupplierHistoryItems(supplier.id);
-      if (!historyItems.length) {
-        toast.info('Este proveedor todavía no tiene transacciones para descargar.', { id: exportToastId });
-        return;
-      }
+      const outputItems = selectedHistoryItems.map((item) => ({
+        ...item,
+        unitPrice: Number(convertBetweenCurrencies(Number(item.unitPrice || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(2)),
+        total: Number(convertBetweenCurrencies(Number(item.total || 0), item.currency, historyExportCurrency, item.exchangeRate, exchangeRate).toFixed(2)),
+        currency: historyExportCurrency,
+        exchangeRate: 1,
+      }));
       await generateSupplierHistoryPDF({
         supplier,
-        items: historyItems,
+        items: outputItems,
         tenantName: user?.sessionBranding?.name || user?.tenantName || 'Nuestra Empresa',
         tenantLogo: themeConfig?.logo,
-        formatAmount: formatConvertedAmount,
+        formatAmount: (amount: number, currency?: string) => formatCurrencyAmount(amount, currency, true),
+        outputCurrency: historyExportCurrency,
       });
       toast.success('Historial del proveedor descargado', { id: exportToastId });
     } catch (error: any) {
@@ -246,8 +286,9 @@ export function SupplierDetailDrawer({
   };
 
   return (
+    <>
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="supplier-detail-panel flex w-full flex-col gap-0 border-l border-border/50 bg-background p-0 sm:max-w-3xl">
+      <SheetContent side="right" className="supplier-detail-panel flex w-full flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-3xl">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SupplierTab)} className="flex min-h-0 flex-1 flex-col gap-0">
           <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-6 py-4 backdrop-blur-md" data-tour="supplier-detail-title">
             <div className="flex items-start gap-4 pr-8">
@@ -271,8 +312,11 @@ export function SupplierDetailDrawer({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2" data-tour="supplier-detail-actions">
-              {supplier && onDownloadPdf && <PdfDownloadButton onDownload={onDownloadPdf} label="Exportar" includeRoll={false} standardLabel="Ficha del proveedor" firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del proveedor', onSelect: () => { void handleDownloadHistory(); } }} disabled={exportingHistory} />}
+            <div className="flex flex-wrap items-center justify-end gap-2" data-tour="supplier-detail-actions">
+              {supplier && <Button type="button" variant="outline" onClick={openHistoryExportDialog} disabled={exportingHistory} className="max-w-full gap-1.5 rounded-xl text-xs font-bold">
+                <Download className="size-4 shrink-0 text-primary" />
+                <span className="truncate">Exportar historial del proveedor</span>
+              </Button>}
             </div>
             <TabsList className="h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/40 bg-muted/40 p-1 font-bold text-xs">
               <TabsTrigger value="general" className="gap-1.5 rounded-lg px-3 py-1 text-xs font-bold"><Truck className="size-3.5" /> General</TabsTrigger>
@@ -333,6 +377,95 @@ export function SupplierDetailDrawer({
         </Tabs>
       </SheetContent>
     </Sheet>
+    <Dialog open={historyExportDialogOpen} onOpenChange={setHistoryExportDialogOpen}>
+      <DialogContent className="max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-black">
+            <FileText className="size-5 text-primary" /> Exportar historial del proveedor
+          </DialogTitle>
+          <DialogDescription>
+            Selecciona todas las operaciones o filtra por tipo. También puedes elegir la moneda del PDF.
+          </DialogDescription>
+        </DialogHeader>
+        {historyExportLoading ? (
+          <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground" role="status">
+            <Loader2 className="size-4 animate-spin text-primary" /> Cargando operaciones para configurar la exportación…
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2" role="radiogroup" aria-label="Alcance de transacciones a exportar">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={historyExportScope === 'ALL'}
+                onClick={() => setHistoryExportScope('ALL')}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors ${historyExportScope === 'ALL' ? 'border-primary bg-primary/5' : 'border-border/50 hover:bg-muted/40'}`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-foreground">Todas las operaciones</span>
+                  <span className="block text-[11px] text-muted-foreground">Incluye todo el historial relacionado con este proveedor.</span>
+                </span>
+                <span className="shrink-0 text-xs font-black text-primary">{historyExportItems.length}</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={historyExportScope === 'FILTERED'}
+                disabled={!historyExportTypeOptions.length}
+                onClick={() => {
+                  if (!historyExportTypeOptions.length) return;
+                  setHistoryExportScope('FILTERED');
+                  if (historyExportFilter === 'ALL') setHistoryExportFilter(historyExportTypeOptions[0]);
+                }}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors ${historyExportScope === 'FILTERED' ? 'border-primary bg-primary/5' : 'border-border/50 hover:bg-muted/40'} disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-foreground">Aplicar filtro de exportación</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {historyExportFilter === 'ALL' ? 'Selecciona el tipo de operación que deseas incluir.' : `Tipo: ${historyExportFilter}.`}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-black text-primary">{historyExportScope === 'FILTERED' ? selectedHistoryItems.length : historyExportItems.length}</span>
+              </button>
+            </div>
+            {historyExportScope === 'FILTERED' && (
+              <div className="mt-4 space-y-1.5">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de operación</Label>
+                <Select value={historyExportFilter} onValueChange={setHistoryExportFilter}>
+                  <SelectTrigger className="h-9 rounded-xl text-xs font-bold">
+                    <SelectValue placeholder="Selecciona un tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {historyExportTypeOptions.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </>
+        )}
+        <div className="mt-4 space-y-1.5">
+          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de descarga</Label>
+          <Select value={historyExportCurrency} onValueChange={(value) => setHistoryExportCurrency(value as HistoryExportCurrency)}>
+            <SelectTrigger className="h-9 rounded-xl text-xs font-bold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
+              <SelectItem value="USD">Dólares (USD)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">Los montos se convertirán a la moneda seleccionada antes de generar el PDF.</p>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setHistoryExportDialogOpen(false)} disabled={exportingHistory}>Cancelar</Button>
+          <Button type="button" onClick={() => void confirmHistoryExport()} disabled={historyExportLoading || !selectedHistoryItems.length || exportingHistory} className="gap-2">
+            {exportingHistory && <Loader2 className="size-4 animate-spin" />}
+            {exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryItems.length} registros`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

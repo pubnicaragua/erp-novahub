@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { Search, Printer, Barcode, ChevronDown, ChevronUp } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import jsPDF from 'jspdf';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -244,7 +245,7 @@ export function LabelPrintModal({ open, onClose, products, companyName = 'Nova H
         }
       }
 
-      doc.save(`etiquetas_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(buildDatedDownloadFileName(['etiquetas_productos'], 'pdf'));
       toast.success(`PDF generado con ${selectedIds.size} producto(s)`);
       onClose();
     } catch (e: any) {

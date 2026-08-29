@@ -29,7 +29,8 @@ import {
 } from './financialAnalytics';
 import type { FinancialData, BreakEvenConfig, BreakEvenResult, CostBehavior } from './financialAnalytics';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const STATUS_LABEL: Record<string, string> = {
   PAID: 'Pagado',
@@ -408,6 +409,8 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.finance', title: 'Reporte financiero', tenantName: companyName, tenantLogo: logoUrl, rows: trialRows, columns: [{ header: 'Cuenta', value: row => row.name || row.accountName || row.code || '—' }, { header: 'Tipo', value: row => row.type || '—' }, { header: 'Debe', value: row => row.debit || 0, align: 'right' }, { header: 'Haber', value: row => row.credit || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_financiero'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') 
@@ -533,7 +536,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
           doc.text(`${companyName} - Reporte Financiero - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(`Reporte_Finanzas_${now.toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_finanzas'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         console.error(e);
@@ -677,7 +680,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         renderTable('Pagos por Categoría', ['Categoría', 'Monto', 'Participación', '', ''], pagComposition.rows.slice(0, 8).map(r => [r.nombre, fmt(r.monto), `${r.pct.toFixed(1)}%`, '', '']), 'FFF43F5E');
         renderTable('Antigüedad de Cuentas por Pagar', ['Rango', 'Monto', 'Facturas', '', ''], cxpAging.buckets.map(b => [b.label, fmt(b.monto), String(b.facturas), '', '']), 'FFF59E0B');
 
-        await downloadExcelWorkbook(wb, `Reporte_Finanzas_${new Date().toISOString().split('T')[0]}.xlsx`);
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_finanzas'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
       } catch (e: any) {
         console.error(e);

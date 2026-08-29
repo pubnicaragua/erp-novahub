@@ -39,21 +39,16 @@ import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/
 import { SalesDocumentDetailSheet, type SalesDocumentPanelData } from '../ventas/SalesDocumentDetailSheet';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
+import { BankAccountSelect } from '../ui/BankAccountSelect';
+import { isBankPaymentMethod } from '../../utils/paymentMethods';
 
 interface Props { data: Expense[]; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
-const paymentSourceOptions = ['EFECTIVO', 'BAC', 'LAFISE', 'ATLANTIDA', 'FICOHSA', 'BANPRO', 'BDF', 'AVANZ'] as const;
+const paymentSourceOptions = ['CASH', 'CARD', 'TRANSFER', 'CHECK'] as const;
 const PAYMENT_SOURCE_LABELS: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   CASH: 'Efectivo',
-  BAC: 'BAC',
-  LAFISE: 'LaFise',
-  ATLANTIDA: 'Atlántida',
-  FICOHSA: 'Ficohsa',
-  BANPRO: 'Banpro',
-  BDF: 'BDF',
-  AVANZ: 'Avanz',
   TRANSFER: 'Transferencia',
   CHECK: 'Cheque',
   CARD: 'Tarjeta',
@@ -116,6 +111,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [paymentExpense, setPaymentExpense] = useState<Expense | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<(typeof paymentMethodOptions)[number]['value']>('CASH');
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [selectedExpenseDetail, setSelectedExpenseDetail] = useState<Expense | null>(null);
@@ -200,6 +196,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.expense',
         columns: [
           { label: 'Fecha', value: (row) => row.date ? formatDateEs(row.date) : '—' },
           { label: 'Categoría', value: (row) => row.category || '—' },
@@ -220,9 +217,9 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const downloadExpenseTemplate = () => {
     const headers = ['Fecha', 'Descripción', 'Categoría', 'Categoría personalizada', 'Monto', 'Moneda', 'Fuente de pago', 'Pagado a', 'Referencia', 'Estado'];
     const rows = [
-      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '', '1500', 'NIO', 'BAC', 'Proveedor Internet', 'FAC-001', 'PENDING'],
+      ['2026-01-15', 'Pago servicio internet', 'OPERATIVO', '', '1500', 'NIO', 'TRANSFER', 'Proveedor Internet', 'FAC-001', 'PENDING'],
       ['2026-01-16', 'Mantenimiento de aires acondicionados', 'OTRO', 'Mantenimiento', '250', 'USD', 'EFECTIVO', 'Técnico XYZ', '', 'DRAFT'],
-      ['2026-01-17', 'Publicidad en redes sociales', 'VENTAS', '', '800', 'NIO', 'LAFISE', 'Agencia ABC', 'TRANSF-088', 'PENDING'],
+      ['2026-01-17', 'Publicidad en redes sociales', 'VENTAS', '', '800', 'NIO', 'CARD', 'Agencia ABC', 'TRANSF-088', 'PENDING'],
     ];
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(14, Math.min(28, header.length + 4)) }));
@@ -236,7 +233,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       ['Categoría personalizada', 'Obligatoria cuando Categoría = OTRO. Escribe un nombre libre, ej. "Mantenimiento".'],
       ['Monto', 'Obligatorio. Mayor que 0. Acepta punto o coma decimal (ej. 1500.50).'],
       ['Moneda', 'NIO o USD. Si está vacía se usa la moneda configurada en la empresa.'],
-      ['Fuente de pago', 'EFECTIVO, BAC, LAFISE, ATLANTIDA, FICOHSA, BANPRO, BDF o AVANZ. Si está vacía se usa EFECTIVO.'],
+      ['Fuente de pago', 'CASH, CARD, TRANSFER o CHECK. Tarjeta, transferencia y cheque requieren una cuenta bancaria global al pagar. Si está vacía se usa CASH.'],
       ['Pagado a', 'Opcional. Nombre de la persona o proveedor que recibe el pago.'],
       ['Referencia', 'Opcional. Nº de factura, recibo, transferencia o comprobante.'],
       ['Estado', 'DRAFT (borrador), PENDING (pendiente) o PAID (pagado). Si está vacío se crea como PENDING.'],
@@ -445,6 +442,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
   const openPaymentDialog = (row: Expense) => {
     setPaymentExpense(row);
     setPaymentMethod('CASH');
+    setPaymentBankAccountId('');
     setPaymentReference('');
   };
 
@@ -454,12 +452,17 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
       toast.error('La referencia es obligatoria para transferencia, tarjeta o cheque');
       return;
     }
+    if (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId) {
+      toast.error('Selecciona la cuenta bancaria global que realizará el pago');
+      return;
+    }
     const paymentToastId = toast.loading(`Marcando ${paymentExpense.number} como pagado...`);
     try {
       setPaymentLoading(true);
       await expensesService.update(paymentExpense.id, {
         status: 'PAID',
         paymentSource: paymentMethod,
+        bankAccountId: isBankPaymentMethod(paymentMethod) ? paymentBankAccountId : undefined,
         reference: paymentReference.trim() || undefined,
       } as any);
       toast.success('Gasto pagado y enviado a Finanzas', { id: paymentToastId });
@@ -1034,11 +1037,12 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método de pago</p>
-                    <Select value={paymentMethod} onValueChange={(nextMethod) => { const method = nextMethod as typeof paymentMethod; setPaymentMethod(method); if (!requiresPaymentReference(method)) setPaymentReference(''); }}>
+                    <Select value={paymentMethod} onValueChange={(nextMethod) => { const method = nextMethod as typeof paymentMethod; setPaymentMethod(method); if (!requiresPaymentReference(method)) setPaymentReference(''); if (!isBankPaymentMethod(method)) setPaymentBankAccountId(''); }}>
                       <SelectTrigger className="h-10 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
                       <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  {isBankPaymentMethod(paymentMethod) && <BankAccountSelect value={paymentBankAccountId} onChange={setPaymentBankAccountId} label="Cuenta bancaria que realiza el pago" className="sm:col-span-2" />}
                   {requiresPaymentReference(paymentMethod) && <div>
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                     <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." className="h-10 text-xs" />
@@ -1048,7 +1052,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setPaymentExpense(null)} disabled={paymentLoading}>Cancelar</Button>
-              <Button onClick={() => void handlePayment()} disabled={paymentLoading || (requiresPaymentReference(paymentMethod) && !paymentReference.trim())} className="bg-primary font-black uppercase tracking-widest">
+              <Button onClick={() => void handlePayment()} disabled={paymentLoading || (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) || (isBankPaymentMethod(paymentMethod) && !paymentBankAccountId)} className="bg-primary font-black uppercase tracking-widest">
                 {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
               </Button>
             </DialogFooter>
@@ -1074,7 +1078,7 @@ export function GastosView({ data, loading, onRefresh, supplierCatalog = [], exp
                       Columnas (Excel o CSV): <span className="font-mono">Fecha, Descripción, Categoría, Categoría personalizada, Monto, Moneda, Fuente de pago, Pagado a, Referencia, Estado</span>
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Categoría: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · Estado: DRAFT/PENDING/PAID · Moneda: NIO/USD · Fuente: EFECTIVO/BAC/LAFISE/ATLANTIDA/FICOHSA/BANPRO/BDF/AVANZ
+                      Categoría: OPERATIVO/ADMINISTRATIVO/VENTAS/FINANCIERO/OTRO · Estado: DRAFT/PENDING/PAID · Moneda: NIO/USD · Fuente: CASH/CARD/TRANSFER/CHECK
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Si la categoría es OTRO, la columna "Categoría personalizada" es obligatoria. Acepta encabezados en español o inglés.

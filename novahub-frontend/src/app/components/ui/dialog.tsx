@@ -43,7 +43,7 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close aria-label="Cerrar diálogo" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-4 right-4 inline-flex size-9 items-center justify-center rounded-lg opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+      <DialogPrimitive.Close aria-label="Cerrar diálogo" title="Cerrar" className="text-muted-foreground hover:bg-muted hover:text-foreground ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-foreground absolute top-4 right-4 z-20 inline-flex size-9 items-center justify-center rounded-lg opacity-90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
         <XIcon />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

@@ -987,6 +987,7 @@ export interface Expense {
   description: string;
   paidTo?: string;
   paymentSource?: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'OTHER' | 'EFECTIVO' | 'BAC' | 'LAFISE' | 'ATLANTIDA' | 'FICOHSA' | 'BANPRO' | 'BDF' | 'AVANZ';
+  bankAccountId?: string;
   evidenceFileName?: string;
   evidenceFileType?: string;
   evidenceFileSize?: number;
@@ -1021,6 +1022,7 @@ export interface RecurringExpense {
   description: string;
   source?: string;
   paymentSource?: string;
+  bankAccountId?: string;
   notes?: string;
   status: RecurringExpenseStatus;
   createdAt: string;

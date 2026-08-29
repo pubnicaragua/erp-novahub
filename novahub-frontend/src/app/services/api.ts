@@ -10,6 +10,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  rawBody?: BodyInit;
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -226,19 +227,19 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, params, headers = {}, signal } = options;
+  const { method = 'GET', body, rawBody, params, headers = {}, signal } = options;
   const context = describeRequest(path, method);
 
   let response: Response;
   const requestInit: RequestInit = {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(rawBody === undefined ? { 'Content-Type': 'application/json' } : {}),
         ...getAuthHeaders(),
         ...headers,
       },
       cache: 'no-store',
-      body: body ? JSON.stringify(body) : undefined,
+      body: rawBody ?? (body ? JSON.stringify(body) : undefined),
       signal,
   };
   try {

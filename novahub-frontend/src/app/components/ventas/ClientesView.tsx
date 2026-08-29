@@ -164,11 +164,9 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     const seenTaxIds = new Set<string>();
     return rows.map((row) => {
       const next: CustomerImportRow = { ...row, error: undefined, warning: undefined };
-      const email = row.email.trim().toLowerCase();
       const identifiers = [row.taxId, row.ruc].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
       const priceListMatch = row.priceListCode && priceLists.some((list) => list.code.toLowerCase() === row.priceListCode.trim().toLowerCase() || list.name.toLowerCase() === row.priceListCode.trim().toLowerCase());
       if (!row.name.trim()) next.error = 'Nombre obligatorio';
-      else if (email && !/^\S+@\S+\.\S+$/.test(email)) next.error = 'Correo inválido';
       else if (identifiers.some((identifier) => existingTaxIds.has(identifier) || seenTaxIds.has(identifier))) next.error = 'Cédula o RUC duplicado';
       else if (row.type === 'COMPANY' && !row.ruc.trim()) next.error = 'RUC obligatorio para empresas';
       else if (row.creditLimit !== '' && (!Number.isFinite(Number(row.creditLimit)) || Number(row.creditLimit) < 0)) next.error = 'Límite de crédito inválido';
@@ -178,12 +176,21 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
     });
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    let availablePriceLists = priceLists;
+    try {
+      const response: any = await priceListsService.getAll();
+      availablePriceLists = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : priceLists);
+      setPriceLists(availablePriceLists);
+    } catch {
+      // La plantilla todavía puede generarse con el último catálogo cargado.
+    }
+    const importablePriceLists = availablePriceLists.filter((list) => list.isActive !== false);
     const headers = ['Nombre', 'Tipo', 'Cédula', 'RUC', 'Correo', 'Teléfono', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Régimen fiscal', 'Límite de crédito', 'Lista de precios', 'Estado', 'Notas'];
-    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, priceLists[0]?.code || '', 'ACTIVO', ''];
+    const example = ['Cliente Ejemplo', 'PARTICULAR', '001-010190-1000A', '', 'cliente@correo.com', '8888-8888', 'Del parque central 2 cuadras al sur', 'Managua', 'Managua', 'Nicaragua', 'Régimen general', 0, importablePriceLists[0]?.code || '', 'ACTIVO', ''];
     const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
     sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(30, header.length + 4)) }));
-    const guide = XLSX.utils.aoa_to_sheet([
+    const guideRows: any[][] = [
       ['GUÍA DE LLENADO · IMPORTACIÓN DE CLIENTES'],
       ['La importación puede ejecutarse varias veces. Cada cliente válido recibirá un número automático del sistema. No agregues código o número de cliente.'],
       ['Campo', 'Regla'],
@@ -196,7 +203,12 @@ export function ClientesView({ data, loading, onRefresh, pagination, onSearchCha
       ['Límite de crédito', 'Opcional. Usa un número mayor o igual a cero. La cuenta por cobrar se calcula con las operaciones registradas.'],
       ['Estado', 'Usa ACTIVO o INACTIVO. Los clientes inactivos no podrán utilizarse en nuevas operaciones.'],
       ['Previsualización', 'Después de cargar el archivo, abre la previsualización para corregir datos. Los errores se omiten; los avisos no bloquean la importación.'],
-    ]);
+      [],
+      ['LISTAS DE PRECIOS DISPONIBLES', 'Estas son las listas activas al momento de descargar esta plantilla. Puedes usar el código o el nombre en la columna Lista de precios.'],
+      ['Código', 'Nombre'],
+      ...(importablePriceLists.length ? importablePriceLists.map((list) => [list.code, list.name]) : [['—', 'No hay listas de precios activas registradas.']]),
+    ];
+    const guide = XLSX.utils.aoa_to_sheet(guideRows);
     guide['!cols'] = [{ wch: 28 }, { wch: 110 }];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, 'Clientes');

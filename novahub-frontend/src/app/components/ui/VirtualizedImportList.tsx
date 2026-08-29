@@ -18,7 +18,10 @@ export function useVirtualizedImportRows(
     count,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => estimateSize,
-    overscan: options.overscan ?? 8,
+    // Mantener pocas filas fuera del viewport evita trabajo innecesario al
+    // desplazarse por archivos grandes y sigue el patrón optimizado de
+    // Productos para todas las importaciones.
+    overscan: options.overscan ?? 2,
     getItemKey: (index) => index,
   });
 }

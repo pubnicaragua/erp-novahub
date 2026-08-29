@@ -1,7 +1,10 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { getPdfDesign, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { renderPdfTemplateToPdf } from './pdf-template-renderer';
+import { sanitizeTemplateDefinition, type PdfTemplateData } from '../services/pdf-template-definition';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
+import { buildPdfFileName } from './exportFileNames';
 
 type PdfRgb = [number, number, number];
 
@@ -51,7 +54,6 @@ const withPaperFormat = (settings: Record<string, any>, format: PdfDownloadForma
 
 const valueText = (value: unknown) => String(value ?? '—');
 const purchaseLineDescription = (line: PurchasePdfLine) => line.secondary ? `${line.description}\n${line.secondary}` : line.description;
-const cleanFileName = (value: unknown) => valueText(value).replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'registro_compra';
 const isRoll = (format: PdfDownloadFormat) => format === 'roll-58' || format === 'roll-80';
 
 const countLines = (doc: jsPDF, value: unknown, size: number, width: number) => {
@@ -128,7 +130,26 @@ function renderRollPdf({ document, tenantName, format, settings }: { document: P
 }
 
 export async function generatePurchaseRecordPDF({ document, tenantName, format = 'configured', targetKey = 'compras.purchase-record' }: { document: PurchasePdfDocument; tenantName: string; format?: PdfDownloadFormat; targetKey?: string }) {
+  const configuredDesign = await getPdfDesign(targetKey);
   const settings = await getPdfDesignSettings(targetKey);
+  if (!isRoll(format) && configuredDesign?.layoutZones?.definition) {
+    const paperSettings = withPaperFormat(settings, format);
+    const fieldData = Object.fromEntries((document.fields || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
+    const totalsData = Object.fromEntries((document.totals || []).map(field => [field.label.toLowerCase().replace(/\s+/g, '_'), valueText(field.value)]));
+    if (document.total) totalsData.total = document.total;
+    const data: PdfTemplateData = {
+      company: { name: tenantName },
+      document: { title: document.title, number: document.number, date: document.date, status: document.status, notes: document.notes || '' },
+      supplier: { name: document.supplier || '' },
+      party: { name: document.supplier || '' },
+      items: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
+      rows: (document.lines || []).map(line => ({ description: purchaseLineDescription(line), quantity: line.quantity || '', unitPrice: line.unitPrice || '', total: line.total || '' })),
+      totals: { subtotal: totalsData.subtotal || '', tax: totalsData.tax || totalsData.impuesto || '', discount: totalsData.discount || totalsData.descuento || '', total: totalsData.total || '' },
+      ...fieldData,
+    };
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, paperSettings), settings: paperSettings, targetKey, data, fileName: buildPdfFileName([document.title, document.number || 'sin_numero'], format), save: true });
+    return rendered.doc;
+  }
   const doc = isRoll(format)
     ? renderRollPdf({ document, tenantName, format, settings })
     : new jsPDF(pdfDesignPaper(withPaperFormat(settings, format)));
@@ -158,14 +179,25 @@ export async function generatePurchaseRecordPDF({ document, tenantName, format =
     if (document.notes) { doc.setTextColor(...text); doc.setFontSize(8); doc.text(doc.splitTextToSize(`Notas: ${document.notes}`, pageWidth - margin * 2), margin, currentY); }
     doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`Generado por ${tenantName || 'Nova Hub'} - Módulo de Compras`, margin, pageHeight - 10);
   }
-  doc.save(`${cleanFileName(document.number || document.title)}_${format}.pdf`);
+  doc.save(buildPdfFileName([document.title, document.number || 'sin_numero'], format));
   return doc;
 }
 
 export async function generatePurchaseListPDF({ title, rows, columns, tenantName, format = 'configured', targetKey = 'compras.list' }: { title: string; rows: any[]; columns: PurchasePdfListColumn[]; tenantName: string; format?: PdfDownloadFormat; targetKey?: string }) {
   if (isRoll(format)) throw new Error('Los reportes generales solo están disponibles en tamaños de página PDF.');
+  const configuredDesign = await getPdfDesign(targetKey);
   const settings = await getPdfDesignSettings(targetKey);
   const paperSettings = withPaperFormat(settings, format === 'configured' ? 'configured' : format);
+  if (configuredDesign?.layoutZones?.definition) {
+    const mappedRows = rows.map(row => {
+      const mapped: Record<string, unknown> = { description: columns[0] ? valueText(columns[0].value(row)) : '', quantity: columns[1] ? valueText(columns[1].value(row)) : '', unitPrice: columns[2] ? valueText(columns[2].value(row)) : '', total: columns[3] ? valueText(columns[3].value(row)) : '' };
+      columns.forEach((column, index) => { mapped[`column-${index}`] = valueText(column.value(row)); mapped[column.label.toLowerCase().replace(/\s+/g, '_')] = valueText(column.value(row)); });
+      return mapped;
+    });
+    const data: PdfTemplateData = { company: { name: tenantName }, document: { title, number: `${rows.length} registro(s)` }, rows: mappedRows, items: mappedRows };
+    const rendered = await renderPdfTemplateToPdf({ definition: sanitizeTemplateDefinition(configuredDesign.layoutZones.definition, targetKey, paperSettings), settings: paperSettings, targetKey, data, fileName: buildPdfFileName([title], format), save: true });
+    return rendered.doc;
+  }
   const doc = new jsPDF(pdfDesignPaper(paperSettings));
   const primary = pdfDesignColor(paperSettings.primaryColor, [16, 185, 129]);
   const text = pdfDesignColor(paperSettings.textColor, [51, 65, 85]);
@@ -174,6 +206,6 @@ export async function generatePurchaseListPDF({ title, rows, columns, tenantName
   doc.setTextColor(...text); doc.setFontSize(12); doc.text(title, margin, 28);
   autoTable(doc, { startY: 38, head: [columns.map((column) => column.label)], body: rows.length ? rows.map((row) => columns.map((column) => valueText(column.value(row)))) : [columns.map(() => '—')], theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left' }])), styles: { cellPadding: 3, overflow: 'linebreak' } });
   doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.text(`${rows.length} registro(s) · Generado por ${tenantName || 'Nova Hub'}`, margin, doc.internal.pageSize.getHeight() - 10);
-  doc.save(`${cleanFileName(title)}_${format}.pdf`);
+  doc.save(buildPdfFileName([title], format));
   return doc;
 }

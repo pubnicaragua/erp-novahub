@@ -361,7 +361,7 @@ export function ActivosFijosCategoriesTab() {
                       </Badge>
                     )}
                   </div>
-                  <Button variant="outline" size="icon" className="size-8 rounded-full shrink-0" onClick={() => setSelectedCategoryId(null)}>
+                  <Button type="button" variant="outline" size="icon" className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setSelectedCategoryId(null)} aria-label="Cerrar detalle de categoría" title="Cerrar">
                     <X className="size-4" />
                   </Button>
                 </div>

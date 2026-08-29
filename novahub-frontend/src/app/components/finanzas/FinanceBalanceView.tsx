@@ -13,7 +13,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ExcelJS from 'exceljs';
@@ -369,6 +370,8 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const pageHeight = doc.internal.pageSize.getHeight();
       const companyName = (themeConfig.tenantName || user?.tenantName || 'Mi Empresa').toUpperCase();
       const logoUrl = themeConfig.logo || '';
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.balance', title: 'Balance general', tenantName: companyName, tenantLogo: logoUrl, rows: [...fIncomes, ...fExpenses], columns: [{ header: 'Concepto', value: row => row.description || row.concept || row.category || '—' }, { header: 'Tipo', value: row => row.type || (row.amount >= 0 ? 'Ingreso' : 'Gasto') }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Monto', value: row => fmtNum(Math.abs(cv(row))), align: 'right' }], totals: { subtotal: fmtNum(totalIncome), tax: fmtNum(totalExpense), total: fmtNum(balance) }, fileName: buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end) });
+      if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 
         ? [parseInt(primaryColor.slice(1,3), 16), parseInt(primaryColor.slice(3,5), 16), parseInt(primaryColor.slice(5,7), 16)]
@@ -666,7 +669,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         }
       }
 
-      doc.save(`Balance_General_${now.toISOString().split('T')[0]}.pdf`);
+      doc.save(buildDateFilteredDownloadFileName(['balance_general'], 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) {
        console.error(e);
@@ -973,7 +976,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Balance_General_${now.toISOString().split('T')[0]}.xlsx`;
+      a.download = buildDateFilteredDownloadFileName(['balance_general'], 'xlsx', dateRange.start, dateRange.end);
       a.click();
       toast.success("Excel exportado exitosamente");
     } catch (e: any) {

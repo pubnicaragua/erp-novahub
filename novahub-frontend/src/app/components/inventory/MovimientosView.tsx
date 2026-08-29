@@ -12,6 +12,7 @@ import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { formatDateEs } from '../../utils/dateFormat';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 interface MovimientosViewProps {
   movements: any[];
@@ -92,7 +93,7 @@ function MovementDetailsPanel({ movement, onClose }: { movement: any; onClose: (
             <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
           </div>
         </div>
-        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg" onClick={onClose} aria-label="Cerrar detalle del movimiento">
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={onClose} aria-label="Cerrar detalle del movimiento" title="Cerrar">
           <X className="size-4" />
         </Button>
       </div>
@@ -230,7 +231,7 @@ export function MovimientosView({ movements, warehouses, pagination, onSearchCha
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `movimientos_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = buildDateFilteredDownloadFileName(['reporte_movimientos_inventario'], 'csv', dateFrom, dateTo);
       link.click();
       toast.success('Movimientos exportados');
     } catch (e: any) {

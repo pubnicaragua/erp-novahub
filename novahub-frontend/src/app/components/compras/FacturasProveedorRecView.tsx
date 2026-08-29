@@ -96,6 +96,7 @@ export function FacturasProveedorRecView({ data, loading, onRefresh, supplierCat
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.recurring-supplier-invoice',
         columns: [
           { label: 'Descripción', value: (row) => row.description || 'Factura automática' },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },

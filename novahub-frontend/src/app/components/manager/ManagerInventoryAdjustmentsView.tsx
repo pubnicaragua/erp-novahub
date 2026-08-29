@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import type { ManagerInventoryView } from './manager-inventory.types';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
@@ -124,13 +125,26 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
       if (!exportRows.length) return;
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), 'Ajustes');
-      XLSX.writeFile(workbook, `ajustes-manager-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_ajustes_inventario'], 'xlsx', dateFrom, dateTo));
     } finally {
       setExporting(false);
     }
   };
 
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['manager-inventory-adjustments'] }); };
+
+  const printReport = () => {
+    const previousTitle = document.title;
+    const printFileName = buildDateFilteredDownloadFileName(['reporte_ajustes_inventario'], 'pdf', dateFrom, dateTo);
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener('afterprint', restoreTitle);
+    };
+    document.title = printFileName;
+    window.addEventListener('afterprint', restoreTitle, { once: true });
+    window.print();
+    window.setTimeout(restoreTitle, 60_000);
+  };
 
   const approveAuditAdjustment = async () => {
     if (!pendingApproval) return;
@@ -158,7 +172,7 @@ export function ManagerInventoryAdjustmentsView({ groupId, businessUnitId, branc
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className="rounded-xl" onClick={exportReport} disabled={exporting || query.isLoading}><FileDown className="mr-2 size-4" />{exporting ? 'Preparando…' : 'Exportar Excel'}</Button>
-          <Button type="button" variant="outline" className="rounded-xl" onClick={() => window.print()}><Download className="mr-2 size-4" />Imprimir / PDF</Button>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={printReport}><Download className="mr-2 size-4" />Imprimir / PDF</Button>
         </div>
       </div>}
 

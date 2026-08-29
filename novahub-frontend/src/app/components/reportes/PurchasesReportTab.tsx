@@ -16,7 +16,8 @@ import { ShoppingBag, CreditCard, Wallet, Activity, Truck, TrendingUp, Package, 
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -939,6 +940,8 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.purchases', title: 'Reporte de compras', tenantName: companyName, tenantLogo: logoUrl, rows: fBills, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Proveedor', value: row => row.supplier?.name || row.provider?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -1077,7 +1080,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           doc.text(`${companyName} - Reporte Compras - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(`Reporte_Compras_${now.toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_compras'], 'pdf', dateRange));
         toast.success('PDF generado exitosamente');
       } catch (e: any) {
         console.error(e);
@@ -1224,7 +1227,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         renderTable('Productos con Mayor Inversión', ['#', 'Producto', 'Detalle', 'Monto'], visibleProducts.filter(p => p.monto > 0).slice(0, 5).map((p, i) => [i + 1, p.name, `${p.qty} unidades · precio prom. ${fmtShort(p.priceAvg)}`, Number(p.monto)]), 'FF3B82F6');
         renderTable('Retenciones Registradas', ['#', 'Proveedor', 'Detalle', 'Monto'], retenciones.list.slice(0, 5).map((r, i) => [i + 1, r.proveedor, `${r.factura} · ${r.tipo} · ${r.estado}`, Number(r.monto)]), 'FFF59E0B');
 
-        await downloadExcelWorkbook(wb, `Reporte_Compras_${new Date().toISOString().split('T')[0]}.xlsx`);
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_compras'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');
       } catch (e: any) {
         console.error(e);

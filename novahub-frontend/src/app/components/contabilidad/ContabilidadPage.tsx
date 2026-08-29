@@ -465,7 +465,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                         <HelpCircle className="size-5 text-primary" />
                         <h3 className="text-sm font-black uppercase tracking-tight">¿Qué es esta vista?</h3>
                       </div>
-                      <button onClick={() => setShowHelp(false)} className="size-7 rounded-lg hover:bg-muted flex items-center justify-center">
+                      <button type="button" onClick={() => setShowHelp(false)} className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar ayuda" title="Cerrar">
                         <X className="size-4" />
                       </button>
                     </div>

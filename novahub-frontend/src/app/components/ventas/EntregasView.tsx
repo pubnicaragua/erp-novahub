@@ -14,7 +14,7 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { formatSalesAmount } from '../../utils/salesPriceList';
-import { isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
+import { isBankPaymentMethod, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, requiresPaymentReference } from '../../utils/paymentMethods';
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -141,12 +141,12 @@ export function EntregasView({ branchId }: EntregasViewProps) {
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
-    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
-      toast.error('La transferencia requiere una referencia');
+    if (payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) {
+      toast.error('La transferencia, tarjeta o cheque requiere una referencia');
       return;
     }
-    if (payments.some((payment) => ['CARD', 'TRANSFER'].includes(payment.method) && !payment.bankAccountId)) {
-      toast.error('Selecciona el banco global para cada pago con tarjeta o transferencia');
+    if (payments.some((payment) => isBankPaymentMethod(payment.method) && !payment.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada pago con tarjeta, transferencia o cheque');
       return;
     }
     submittingRef.current = true;
@@ -292,7 +292,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
                 <p className="text-xs font-bold text-primary">{holdToPay.number} · {holdToPay.customer?.name || holdToPay.customCustomerName || 'Cliente General'}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Entrega desde {holdToPay.deliveryBranch?.name || 'la sucursal de entrega'}</p>
               </div>
-              <Button variant="ghost" onClick={() => { setShowPayment(false); setHoldToPay(null); }}>✕</Button>
+              <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar pago de venta suspendida" title="Cerrar" onClick={() => { setShowPayment(false); setHoldToPay(null); }}>✕</Button>
             </div>
 
             <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -318,7 +318,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
               {payments.map((payment, index) => (
                 <div key={`${payment.method}-${index}`} className="rounded-xl border p-3">
                   <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' ? item.reference : undefined, bankAccountId: ['CARD', 'TRANSFER'].includes(value) ? item.bankAccountId : undefined, cardCommissionPercent: value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: value === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
+                    <Select value={payment.method} onValueChange={(value: PosPaymentLine['method']) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, method: value, reference: value === 'TRANSFER' || value === 'CHECK' ? item.reference : undefined, bankAccountId: isBankPaymentMethod(value) ? item.bankAccountId : undefined, cardCommissionPercent: value === 'CARD' ? item.cardCommissionPercent : 0, cardCommissionAmount: value === 'CARD' ? item.cardCommissionAmount : 0 } : item))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="CASH">Efectivo</SelectItem>
@@ -335,7 +335,7 @@ export function EntregasView({ branchId }: EntregasViewProps) {
                     <Input className="mt-2" placeholder="ID de referencia *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />
                   )}
                   {payment.method === 'CHECK' && <Input className="mt-2" placeholder="Número de cheque *" value={payment.reference || ''} onChange={(event) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} />}
-                  {['CARD', 'TRANSFER'].includes(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
+                  {isBankPaymentMethod(payment.method) && <BankAccountSelect className="mt-2" value={payment.bankAccountId} onChange={(bankAccountId) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPayments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label="Banco global de destino" />}
                   {isCardPaymentMethod(payment.method) && payment.bankAccountId && Number(payment.cardCommissionPercent || 0) > 0 && (
                     <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
                       <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>

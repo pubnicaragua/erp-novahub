@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -371,6 +371,21 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   const workspaceKind: 'group' | 'branch' | 'platform' = user?.isPlatformAdmin
     ? 'platform'
     : (user?.sessionBranding?.kind || (user?.clientTenant ? 'branch' : 'group'));
+  const [isDesktopViewport, setIsDesktopViewport] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 1024,
+  );
+
+  useEffect(() => {
+    const handleViewportChange = () => setIsDesktopViewport(window.innerWidth >= 1024);
+    handleViewportChange();
+    window.addEventListener('resize', handleViewportChange);
+    return () => window.removeEventListener('resize', handleViewportChange);
+  }, []);
+
+  // El estado persistido de escritorio no debe convertir el menú móvil en
+  // una barra de iconos: en pantallas pequeñas siempre se muestran las
+  // etiquetas y los submenús navegables.
+  const sidebarCollapsed = Boolean(isCollapsed && isDesktopViewport);
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(activeModule && activeModule !== 'overview' ? [activeModule] : []));
 
   const [prevActiveModule, setPrevActiveModule] = useState(activeModule);
@@ -399,7 +414,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       return;
     }
     if (item.submenu) {
-      if (isCollapsed) {
+      if (sidebarCollapsed) {
         const visibleSubmenu = item.submenu.filter(subItem => hasSubmenuAccess(item.id, subItem.id));
         const currentSubmenu = activeModule === item.id
           ? visibleSubmenu.find(subItem => subItem.id === activeSubModule)
@@ -539,15 +554,15 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 h-dvh min-h-0 w-[270px] border-r border-sidebar-border bg-sidebar transition-all duration-300',
+          'fixed left-0 top-0 z-50 h-dvh max-h-[100dvh] min-h-0 w-[270px] overflow-hidden overscroll-none border-r border-sidebar-border bg-sidebar transition-all duration-300',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:sticky lg:translate-x-0',
-          isCollapsed ? 'lg:w-[72px]' : 'lg:w-[270px]'
+          sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-[270px]'
         )}
       >
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {/* Logo */}
-          <div className={cn("flex h-16 items-center border-b border-sidebar-border px-3 overflow-visible", isCollapsed ? "justify-center" : "justify-between")}>
+          <div className={cn("flex h-16 items-center justify-between border-b border-sidebar-border px-3 overflow-visible", sidebarCollapsed && "lg:justify-center")}>
             <div className="flex items-center gap-3">
               <BrandLogo
                 src={workspaceLogo}
@@ -556,7 +571,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                 className="size-9 rounded-xl bg-sidebar-accent text-sidebar-foreground ring-0 transition-all"
                 imageClassName="rounded-xl"
               />
-              {!isCollapsed && (
+              {!sidebarCollapsed && (
                 <div className="flex flex-col items-start leading-none overflow-hidden">
                   <span className="text-sm font-black tracking-tight text-sidebar-foreground truncate max-w-[130px]">
                     {workspaceName}
@@ -577,7 +592,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           </div>
 
           {/* Navigation */}
-          <div className="flex-1 min-h-0 overscroll-contain overflow-y-auto py-3 no-scrollbar">
+          <div data-sidebar-navigation className="min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] no-scrollbar">
             <TooltipProvider delayDuration={100}>
             <nav className="px-3 space-y-0.5">
               {activeMenuArray.map((item) => {
@@ -610,16 +625,16 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
                 return (
                   <React.Fragment key={item.id}>
-                    {showSection && !isCollapsed && (
+                    {showSection && !sidebarCollapsed && (
                       <div className="px-3 pt-6 pb-2 flex">
                         <span className="text-[11px] font-bold uppercase tracking-widest text-sidebar-foreground/60 border-b border-sidebar-border/50 pb-1 w-full">
                           {item.section}
                         </span>
                       </div>
                     )}
-                    {showSection && isCollapsed && <div className="pt-4" />}
+                    {showSection && sidebarCollapsed && <div className="pt-4" />}
                     <div>
-                      {isCollapsed ? (
+                      {sidebarCollapsed ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             {item.submenu ? (
@@ -675,7 +690,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
                       )}
 
                       <AnimatePresence>
-                        {visibleSubmenu && visibleSubmenu.length > 0 && isExpanded && !isCollapsed && (
+                        {visibleSubmenu && visibleSubmenu.length > 0 && isExpanded && !sidebarCollapsed && (
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
@@ -719,12 +734,12 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
           </div>
 
           {/* User Info Footer */}
-          <div className="border-t border-sidebar-border p-3">
-            <div className={cn("flex items-center gap-3 rounded-xl bg-sidebar-accent border border-sidebar-border/50", isCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
+          <div className="shrink-0 border-t border-sidebar-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div className={cn("flex items-center gap-3 rounded-xl bg-sidebar-accent border border-sidebar-border/50", sidebarCollapsed ? "p-1.5 justify-center" : "px-3 py-3")}>
               <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm">
                 {user?.name.charAt(0)}
               </div>
-              {!isCollapsed && (
+              {!sidebarCollapsed && (
                 <div className="flex-1 overflow-hidden">
                   <p className="truncate text-sm font-medium text-sidebar-foreground">
                     {user?.name}

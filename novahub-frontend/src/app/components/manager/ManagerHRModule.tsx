@@ -12,6 +12,7 @@ import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Download, Graduatio
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_HR_VIEWS, type ManagerHrView } from './manager-hr.types';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -53,7 +54,7 @@ export function ManagerHRModule({ view, onViewChange, groupId, businessUnitId, b
       const exportRows = (report.data || []).map((row: any) => ({ Vista: labels[view], Registro: row.employeeName || row.name || row.employeeNumber || row.id, Fecha: formatDate(row.date || row.createdAt || row.periodEnd || row.startDate), Estado: statusLabel(row.status || row.employmentStatus || row.paymentStatus), Valor: row.netPay ?? row.amount ?? row.salary ?? row.cost ?? row.days ?? '', Sucursal: row.branchName || '', Rubro: row.businessUnitName || '' }));
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Recursos Humanos');
-      XLSX.writeFile(workbook, `manager-recursos-humanos-${view}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_recursos_humanos', labels[view]], 'xlsx', dateFrom, dateTo));
     } finally { setExporting(false); }
   };
   return <div className="manager-hr-module min-w-0 space-y-5 overflow-x-hidden p-4 sm:p-6 md:p-8">

@@ -17,7 +17,8 @@ import { Users, DollarSign, Clock, Activity, Plane, TrendingUp, Scale, Graduatio
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -956,6 +957,8 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.hr', title: 'Reporte de capital humano', tenantName: companyName, rows: fEmployees, columns: [{ header: 'Colaborador', value: row => row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || '—' }, { header: 'Cargo', value: row => row.position?.name || row.position || '—' }, { header: 'Estado', value: row => row.employmentStatus || 'Activo' }, { header: 'Ingreso', value: row => row.hireDate || '—' }], fileName: buildReportDownloadFileName(['reporte_rrhh'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -1087,7 +1090,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
           vacStats.topSaldo.map(v => [v.name, `${v.remaining}`, '', '']),
           [80, 40, 20, 20]);
 
-        doc.save(`Reporte_RRHH_${new Date().toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
@@ -1240,7 +1243,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         addTable('Ausentismo por tipo', ['Tipo', 'Días', '', ''],
           Object.entries(ausentismoPorTipo).map(([k, v]) => [k, `${v}`, '', '']));
 
-        await downloadExcelWorkbook(wb, `Reporte_RRHH_${new Date().toISOString().split('T')[0]}.xlsx`);
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_recursos_humanos'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");

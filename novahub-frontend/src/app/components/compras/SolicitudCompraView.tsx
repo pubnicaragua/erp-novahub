@@ -147,6 +147,7 @@ export function SolicitudCompraView({ data, loading, onRefresh, pagination, onSe
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.purchase-request',
         columns: [
           { label: 'N° Solicitud', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || row.management?.[0]?.supplier?.name || 'Sin proveedor' },

@@ -14,7 +14,8 @@ import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -205,6 +206,8 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.customers', title: 'Reporte de clientes', tenantName: companyName, tenantLogo: logoUrl, rows: fCus, columns: [{ header: 'Cliente', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1,3), 16), parseInt(primaryHex.slice(3,5), 16), parseInt(primaryHex.slice(5,7), 16)] : [16, 185, 129];
@@ -301,7 +304,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           doc.text(`${companyName} - Reporte de Clientes - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(`Reporte_Clientes_${now.toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },
@@ -405,7 +408,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Clientes_${new Date().toISOString().split('T')[0]}.xlsx`; link.click();
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange); link.click();
         toast.success("Excel generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
     }

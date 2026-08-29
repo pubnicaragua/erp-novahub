@@ -43,7 +43,7 @@ export function DevIdentitySwitcher() {
                     value={customId}
                     onChange={(e) => setCustomId(e.target.value)}
                     placeholder="Enter User ID..."
-                    className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:border-emerald-500/50 focus:outline-none"
+                    className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:border-primary/50 focus:outline-none"
                   />
                   <button
                     onClick={() => customId && switchIdentity(customId)}

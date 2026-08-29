@@ -22,6 +22,7 @@ import {
 import facturacionCajaDemo from '../../assets/landing/facturacion-caja-demo.png';
 import { NovaHubLogo } from './NovaHubLogo';
 import { LandingChatModal } from './LandingChatModal';
+import { buildDownloadFileName } from '../utils/exportFileNames';
 
 const EXCHANGE_RATE = 36.5;
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -802,7 +803,7 @@ function downloadContract() {
     heading('IV. Seguridad, confidencialidad y datos'); paragraph('Las partes tratarán como confidencial la información a la que tengan acceso. NovaHub aplicará controles de autenticación, autorización, separación por empresa y medidas técnicas razonables para proteger la información.');
     heading('V. Implementación y soporte'); paragraph('La implementación puede incluir configuración inicial, carga de catálogos, permisos, capacitación y acompañamiento. El soporte cubre incidencias técnicas y consultas de uso según el horario y nivel contratado.');
     heading('VI. Vigencia y aceptación'); paragraph('La vigencia, renovación, terminación y exportación de información se determinarán en la propuesta aceptada. Este archivo es un modelo comercial descargable y no sustituye asesoría legal.');
-    ensure(32); y += 10; doc.line(margin, y, margin + 70, y); doc.line(width - margin - 70, y, width - margin, y); y += 5; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text('EL PROVEEDOR', margin + 35, y, { align: 'center' }); doc.text('EL CLIENTE', width - margin - 35, y, { align: 'center' }); footer(); doc.save('Contrato_Licencia_NovaHub_ERP.pdf');
+    ensure(32); y += 10; doc.line(margin, y, margin + 70, y); doc.line(width - margin - 70, y, width - margin, y); y += 5; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text('EL PROVEEDOR', margin + 35, y, { align: 'center' }); doc.text('EL CLIENTE', width - margin - 35, y, { align: 'center' }); footer(); doc.save(buildDownloadFileName(['contrato_licencia_novahub_erp'], 'pdf'));
   });
 }
 

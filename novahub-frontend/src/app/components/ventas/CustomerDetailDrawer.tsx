@@ -29,6 +29,7 @@ import {
   X,
   TrendingUp,
   Banknote,
+  Download,
   Loader2,
 } from 'lucide-react';
 
@@ -51,6 +52,7 @@ import { Label } from '../ui/label';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { getSalesInvoiceStatusColor, getSalesStatusColor } from '../../utils/salesStatus';
 import {
   Table,
@@ -94,6 +96,8 @@ interface CustomerDetailDrawerProps {
 
 type TabKey = 'general' | 'movimientos' | 'historial';
 type MovementFilter = 'ALL' | 'Factura' | 'Orden de venta' | 'Cotización' | 'Nota de crédito' | 'Crédito' | 'Pago recibido' | 'Factura recurrente';
+type HistoryExportScope = 'ALL' | 'FILTERED';
+type HistoryExportCurrency = 'NIO' | 'USD';
 
 type RelatedTransaction = {
   id: string;
@@ -188,13 +192,14 @@ export function CustomerDetailDrawer({
   onOpenChange,
   customerSnapshot,
 }: CustomerDetailDrawerProps) {
-  const { baseCurrency, formatConvertedAmount } = useCurrency();
+  const { baseCurrency, formatConvertedAmount, convertBetweenCurrencies, exchangeRate } = useCurrency();
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [detail, setDetail] = useState<Customer | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [relatedTransactions, setRelatedTransactions] = useState<RelatedTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingRelated, setLoadingRelated] = useState(false);
@@ -206,12 +211,17 @@ export function CustomerDetailDrawer({
   const [publicLinksLoading, setPublicLinksLoading] = useState(false);
   const [creatingPortalLink, setCreatingPortalLink] = useState(false);
   const [exportingHistory, setExportingHistory] = useState(false);
+  const [historyExportDialogOpen, setHistoryExportDialogOpen] = useState(false);
+  const [historyExportScope, setHistoryExportScope] = useState<HistoryExportScope>('ALL');
+  const [historyExportFilter, setHistoryExportFilter] = useState<string>('ALL');
+  const [historyExportCurrency, setHistoryExportCurrency] = useState<HistoryExportCurrency>(baseCurrency);
 
   useEffect(() => {
     if (!customerId) {
       setDetail(null);
       setInvoices([]);
       setHistory([]);
+      setHistoryLoading(false);
       setRelatedTransactions([]);
       setLoadingRelated(false);
       setSelectedInvoiceId(null);
@@ -225,6 +235,8 @@ export function CustomerDetailDrawer({
     setSelectedInvoiceId(null);
     setSelectedMovement(null);
     setMovementFilter('ALL');
+    setHistory([]);
+    setHistoryLoading(true);
     setRelatedTransactions([]);
     setLoading(true);
     setError(null);
@@ -266,6 +278,8 @@ export function CustomerDetailDrawer({
         if (!cancelled) setHistory(Array.isArray(list) ? list : []);
       } catch {
         if (!cancelled) setHistory([]);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
       }
     })();
 
@@ -331,10 +345,18 @@ export function CustomerDetailDrawer({
     if (transaction.kind === 'Factura') {
       const invoice = (transaction.document as Invoice | undefined) || invoices.find((item) => item.id === transaction.id);
       if (invoice) {
+        if (selectedInvoiceId === invoice.id) {
+          setSelectedInvoiceId(null);
+          return;
+        }
         setSelectedInvoiceId(invoice.id);
         setSelectedMovement(null);
         return;
       }
+    }
+    if (selectedMovement?.id === transaction.id) {
+      setSelectedMovement(null);
+      return;
     }
     setSelectedInvoiceId(null);
     setSelectedMovement(transaction);
@@ -348,30 +370,6 @@ export function CustomerDetailDrawer({
   const customerDebt = getCustomerDebtAmount(customer);
   const customerFavor = getCustomerFavorAmount(customer);
   const creditDays = customer?.creditDays != null ? Number(customer.creditDays) : 0;
-
-  const downloadHistory = async (exportFormat: PdfDownloadFormat = 'configured') => {
-    if (!customer?.id) return;
-    setExportingHistory(true);
-    try {
-      if (!relatedTransactions.length) {
-        toast.info('Este cliente todavía no tiene transacciones para descargar.');
-        return;
-      }
-      const options = {
-        rows: relatedTransactions.map(({ document: _document, ...row }) => row),
-        customerName: customer.name || 'Cliente',
-        branchName: customer.branchName,
-        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
-        tenantLogo: themeConfig?.logo,
-        primaryColor: themeConfig?.colors?.primary,
-      };
-      await exportCustomerTransactionsPdf({ ...options, pdfFormat: exportFormat });
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo descargar el historial del cliente.');
-    } finally {
-      setExportingHistory(false);
-    }
-  };
 
   const toBaseValue = (value: number, currency?: string, exchangeRate?: number) => {
     const amount = Number(value || 0);
@@ -392,6 +390,72 @@ export function CustomerDetailDrawer({
   const visibleMovements = movementFilter === 'ALL'
     ? relatedTransactions
     : relatedTransactions.filter((transaction) => transaction.kind === movementFilter);
+  const historyExportTypeOptions = Array.from(
+    new Set(relatedTransactions.map((transaction) => transaction.kind).filter(Boolean)),
+  );
+  const selectedHistoryRows = historyExportScope === 'FILTERED' && historyExportFilter !== 'ALL'
+    ? relatedTransactions.filter((transaction) => transaction.kind === historyExportFilter)
+    : relatedTransactions;
+
+  const auditEventsByNewest = [...history].sort((left, right) => {
+    const leftTime = left?.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTime = right?.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTime - leftTime;
+  });
+  const createdAuditEvent = auditEventsByNewest.find((event) => String(event?.action || '').toUpperCase() === 'CREATE');
+  const updatedAuditEvent = auditEventsByNewest.find((event) => ['UPDATE', 'STATUS_CHANGE'].includes(String(event?.action || '').toUpperCase()));
+  const auditActor = (event: any) => event?.user?.name || event?.user?.email || (event?.userId ? `Usuario ${String(event.userId).slice(0, 8)}` : 'No disponible');
+  const auditDate = (event: any) => event?.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : 'Fecha no disponible';
+
+  const downloadHistory = async (exportFormat: PdfDownloadFormat = 'configured', scope: HistoryExportScope = 'ALL') => {
+    if (!customer?.id) return;
+    setExportingHistory(true);
+    try {
+      const rowsToExport = scope === 'FILTERED' && historyExportFilter !== 'ALL'
+        ? relatedTransactions.filter((transaction) => transaction.kind === historyExportFilter)
+        : relatedTransactions;
+      if (!rowsToExport.length) {
+        toast.info('Este cliente todavía no tiene transacciones para descargar.');
+        return;
+      }
+      const options = {
+        rows: rowsToExport.map(({ document: _document, ...row }) => ({
+          ...row,
+          amount: Number(convertBetweenCurrencies(
+            Number(row.amount || 0),
+            row.currency,
+            historyExportCurrency,
+            row.exchangeRate,
+            exchangeRate,
+          ).toFixed(2)),
+          currency: historyExportCurrency,
+        })),
+        customerName: customer.name || 'Cliente',
+        branchName: customer.branchName,
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
+        tenantLogo: themeConfig?.logo,
+        primaryColor: themeConfig?.colors?.primary,
+        outputCurrency: historyExportCurrency,
+      };
+      await exportCustomerTransactionsPdf({ ...options, pdfFormat: exportFormat });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo descargar el historial del cliente.');
+    } finally {
+      setExportingHistory(false);
+    }
+  };
+
+  const openHistoryExportDialog = () => {
+    setHistoryExportScope('ALL');
+    setHistoryExportFilter('ALL');
+    setHistoryExportCurrency(baseCurrency);
+    setHistoryExportDialogOpen(true);
+  };
+
+  const confirmHistoryExport = () => {
+    setHistoryExportDialogOpen(false);
+    void downloadHistory('configured', historyExportScope);
+  };
 
   const createPortalLink = async () => {
     if (!customer?.id) return;
@@ -412,10 +476,11 @@ export function CustomerDetailDrawer({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+    <>
+      <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="customer-detail-panel w-full sm:max-w-3xl p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
+        className="customer-detail-panel w-full overflow-hidden sm:max-w-3xl p-0 flex flex-col gap-0 border-l border-border/50 bg-background"
       >
         <Tabs
           value={activeTab}
@@ -467,14 +532,16 @@ export function CustomerDetailDrawer({
             </div>
 
             <div className="flex justify-end" data-tour="customer-detail-actions">
-              <PdfDownloadButton
-                label="Exportar"
-                includeRoll={false}
-                showStandardOptions={false}
-                onDownload={() => undefined}
-                firstOption={{ label: 'Historial de transacciones', description: 'Todas las operaciones del cliente', onSelect: () => { void downloadHistory('configured'); } }}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openHistoryExportDialog}
                 disabled={!customer || loadingRelated || exportingHistory || relatedTransactions.length === 0}
-              />
+                className="max-w-full gap-1.5 rounded-xl text-xs font-bold"
+              >
+                <Download className="size-4 shrink-0 text-primary" />
+                <span className="truncate">Exportar historial del cliente</span>
+              </Button>
             </div>
 
             <TabsList className="w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
@@ -501,7 +568,7 @@ export function CustomerDetailDrawer({
 
               {/* Tab General */}
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                   <MetricCard label="Saldo pendiente" value={formatConvertedAmount(customerDebt, baseCurrency)} icon={DollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(customerFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label="Límite Crédito" value={formatConvertedAmount(creditLimit, baseCurrency)} icon={CreditCard} accent="text-primary" loading={loading} />
@@ -518,28 +585,31 @@ export function CustomerDetailDrawer({
                       Plazo: {creditDays > 0 ? `${creditDays} días` : 'Contado'}
                     </Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p>
-                      <p className="mt-1 font-mono text-sm font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(customerDebt, baseCurrency)}</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">Pendiente por cobrar</p>
+                  <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-5">
+                    <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Saldo pendiente</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(customerDebt, baseCurrency)}</p>
+                      <p className="mt-1 min-h-[1.5rem] text-[10px] leading-relaxed text-muted-foreground">Pendiente por cobrar</p>
                     </div>
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo a favor</p>
-                      <p className="mt-1 font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(customerFavor, baseCurrency)}</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">Disponible para aplicar</p>
+                    <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Saldo a favor</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(customerFavor, baseCurrency)}</p>
+                      <p className="mt-1 min-h-[1.5rem] text-[10px] leading-relaxed text-muted-foreground">Disponible para aplicar</p>
                     </div>
-                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">De contado (pagado)</p>
-                      <p className="mt-1 font-mono text-sm font-black text-foreground">{formatConvertedAmount(cashTotal, baseCurrency)}</p>
+                    <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">De contado (pagado)</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-foreground">{formatConvertedAmount(cashTotal, baseCurrency)}</p>
+                      <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
-                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">En crédito (pendiente)</p>
-                      <p className={`mt-1 font-mono text-sm font-black ${creditOutstanding > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{formatConvertedAmount(creditOutstanding, baseCurrency)}</p>
+                    <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">En crédito (pendiente)</p>
+                      <p className={`mt-1 min-h-[1.25rem] text-sm font-black tabular-nums ${creditOutstanding > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{formatConvertedAmount(creditOutstanding, baseCurrency)}</p>
+                      <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
-                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Límite de crédito</p>
-                      <p className="mt-1 font-mono text-sm font-black text-primary">{formatConvertedAmount(creditLimit, baseCurrency)}</p>
+                    <div className="flex min-w-0 min-h-[100px] flex-col rounded-xl border border-border/50 bg-muted/10 p-2.5">
+                      <p className="min-h-[2rem] text-[9px] font-black uppercase leading-tight tracking-widest text-muted-foreground">Límite de crédito</p>
+                      <p className="mt-1 min-h-[1.25rem] text-sm font-black tabular-nums text-primary">{formatConvertedAmount(creditLimit, baseCurrency)}</p>
+                      <div className="mt-1 min-h-[1.5rem]" aria-hidden="true" />
                     </div>
                   </div>
                   {creditLimit > 0 && (
@@ -649,12 +719,12 @@ export function CustomerDetailDrawer({
                     <div className="mt-4 divide-y divide-border/40 rounded-xl border border-border/50">
                       {visibleMovements.slice(0, 100).map((transaction) => (
                         <Fragment key={`${transaction.kind}-${transaction.id}`}>
-                          <button type="button" className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
+                          <button type="button" aria-expanded={selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id} className="flex w-full items-center justify-between gap-3 p-3 text-left transition-colors hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50" onClick={() => openMovementDetail(transaction)}>
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
                               <div className="min-w-0"><p className="truncate text-xs font-bold text-foreground">{transaction.kind}</p><p className="truncate font-mono text-[10px] text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-3 text-right"><div><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className="size-4 text-primary" /></div>
+                            <div className="flex shrink-0 items-center gap-3 text-right"><div><p className="text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '—'}</p><p className="text-[10px] font-black text-foreground">{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`size-4 text-primary transition-transform ${selectedInvoice?.id === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
                           </button>
                           {selectedInvoice?.id === transaction.id && transaction.kind === 'Factura' && <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
                           {selectedMovement?.id === transaction.id && <MovementInlineDetail transaction={selectedMovement} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />}
@@ -671,17 +741,33 @@ export function CustomerDetailDrawer({
                   <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
                     <History className="size-4 text-primary" /> Cambios del registro del cliente
                   </h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Agregado por</p>
+                      <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : createdAuditEvent ? auditActor(createdAuditEvent) : 'No disponible'}</p>
+                      <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : createdAuditEvent ? auditDate(createdAuditEvent) : 'Sin registro de auditoría'}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Última modificación por</p>
+                      <p className="mt-1 break-words text-sm font-bold text-foreground">{historyLoading ? 'Cargando…' : updatedAuditEvent ? auditActor(updatedAuditEvent) : 'Sin modificaciones registradas'}</p>
+                      <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="size-3" /> {historyLoading ? 'Consultando auditoría…' : updatedAuditEvent ? auditDate(updatedAuditEvent) : '—'}</p>
+                    </div>
+                  </div>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
-                    {history.length > 0 ? history.slice(0, 30).map((event: any) => {
+                    {historyLoading ? <div className="space-y-3"><Skeleton className="h-14 w-full rounded-xl" /><Skeleton className="h-14 w-full rounded-xl" /></div> : history.length > 0 ? history.slice(0, 30).map((event: any) => {
                       let details: any = {};
                       try { details = event.details ? JSON.parse(event.details) : {}; } catch { details = {}; }
                       const changes = details.commercial_changes ? Object.entries(details.commercial_changes).map(([field, values]: any) => `${field}: ${values.before ?? '—'} → ${values.after ?? '—'}`).join(' · ') : '';
-                      return <div key={event.id} className="relative pl-4 space-y-1"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{event.action === 'CREATE' ? 'Cliente registrado' : 'Datos comerciales actualizados'}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;
+                      const action = String(event.action || '').toUpperCase();
+                      const title = action === 'CREATE' ? 'Cliente registrado' : action === 'UPDATE' ? 'Datos del cliente modificados' : action === 'DELETE' ? 'Cliente eliminado' : 'Cambio del registro';
+                      const actorLabel = action === 'CREATE' ? 'Agregado por' : 'Modificado por';
+                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p></div>;
                     }) : <>
                     {customer?.createdAt && (
                       <div className="relative pl-4 space-y-1">
                         <div className="absolute -left-[21px] top-1 size-3 rounded-full bg-primary border-2 border-background" />
                         <p className="text-xs font-bold text-foreground">Cliente Registrado</p>
+                        <p className="text-[11px] text-muted-foreground"><User className="mr-1 inline size-3" />Agregado por: No disponible</p>
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
                           <Clock className="size-3" />
                           {format(new Date(customer.createdAt), 'PPP p', { locale: es })}
@@ -692,6 +778,7 @@ export function CustomerDetailDrawer({
                       <div className="relative pl-4 space-y-1">
                         <div className="absolute -left-[21px] top-1 size-3 rounded-full bg-primary border-2 border-background" />
                         <p className="text-xs font-bold text-foreground">Última Actualización</p>
+                        <p className="text-[11px] text-muted-foreground"><User className="mr-1 inline size-3" />Modificado por: No disponible</p>
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
                           <Clock className="size-3" />
                           {format(new Date(customer.updatedAt), 'PPP p', { locale: es })}
@@ -714,7 +801,88 @@ export function CustomerDetailDrawer({
           </div>
         </Tabs>
       </SheetContent>
-    </Sheet>
+      </Sheet>
+      <Dialog open={historyExportDialogOpen} onOpenChange={setHistoryExportDialogOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black">
+              <FileText className="size-5 text-primary" /> Transacciones a exportar
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona todas las transacciones o filtra por tipo. También puedes elegir la moneda del PDF.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2" role="radiogroup" aria-label="Alcance de transacciones a exportar">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={historyExportScope === 'ALL'}
+              onClick={() => setHistoryExportScope('ALL')}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors ${historyExportScope === 'ALL' ? 'border-primary bg-primary/5' : 'border-border/50 hover:bg-muted/40'}`}
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">Todas las transacciones</span>
+                <span className="block text-[11px] text-muted-foreground">Incluye todos los registros relacionados con este cliente.</span>
+              </span>
+              <span className="shrink-0 text-xs font-black text-primary">{relatedTransactions.length}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={historyExportScope === 'FILTERED'}
+              disabled={!historyExportTypeOptions.length}
+              onClick={() => {
+                if (!historyExportTypeOptions.length) return;
+                setHistoryExportScope('FILTERED');
+                if (historyExportFilter === 'ALL') setHistoryExportFilter(historyExportTypeOptions[0]);
+              }}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors ${historyExportScope === 'FILTERED' ? 'border-primary bg-primary/5' : 'border-border/50 hover:bg-muted/40'} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">Aplicar filtro de exportación</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {historyExportFilter === 'ALL' ? 'Selecciona el tipo de transacción que deseas incluir.' : `Tipo: ${historyExportFilter}.`}
+                </span>
+              </span>
+              <span className="shrink-0 text-xs font-black text-primary">{historyExportScope === 'FILTERED' ? selectedHistoryRows.length : relatedTransactions.length}</span>
+            </button>
+          </div>
+          {historyExportScope === 'FILTERED' && (
+            <div className="mt-4 space-y-1.5">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo de transacción</Label>
+              <Select value={historyExportFilter} onValueChange={setHistoryExportFilter}>
+                <SelectTrigger className="h-9 rounded-xl text-xs font-bold">
+                  <SelectValue placeholder="Selecciona un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {historyExportTypeOptions.map((kind) => <SelectItem key={kind} value={kind}>{kind}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="mt-4 space-y-1.5">
+            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda de descarga</Label>
+            <Select value={historyExportCurrency} onValueChange={(value) => setHistoryExportCurrency(value as HistoryExportCurrency)}>
+              <SelectTrigger className="h-9 rounded-xl text-xs font-bold">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NIO">Córdobas (NIO)</SelectItem>
+                <SelectItem value="USD">Dólares (USD)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">Los montos se convertirán a la moneda seleccionada antes de generar el PDF.</p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setHistoryExportDialogOpen(false)} disabled={exportingHistory}>Cancelar</Button>
+            <Button type="button" onClick={confirmHistoryExport} disabled={!selectedHistoryRows.length || exportingHistory} className="gap-2">
+              {exportingHistory && <Loader2 className="size-4 animate-spin" />}
+              {exportingHistory ? 'Generando…' : `Exportar ${selectedHistoryRows.length} transacciones`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -722,12 +890,12 @@ export function CustomerDetailDrawer({
 interface MetricCardProps { label: string; value: string; icon: React.ComponentType<{ className?: string }>; accent?: string; loading?: boolean; }
 function MetricCard({ label, value, icon: Icon, accent = 'text-foreground', loading }: MetricCardProps) {
   return (
-    <Card className="p-3.5 border-border/60 hover:border-primary/30 transition-all rounded-xl shadow-xs">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-black">{label}</p>
+    <Card className="flex min-w-0 min-h-[92px] flex-col rounded-xl border-border/60 p-3 shadow-xs transition-all hover:border-primary/30">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-h-[2rem] min-w-0 text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground/70">{label}</p>
         <Icon className={`size-3.5 ${accent}`} />
       </div>
-      {loading ? <Skeleton className="h-5 w-3/4 mt-2" /> : <p className={`text-sm font-black tabular-nums ${accent} truncate mt-1`} title={value}>{value}</p>}
+      {loading ? <Skeleton className="mt-auto h-5 w-3/4" /> : <p className={`mt-auto min-w-0 truncate text-sm font-black tabular-nums ${accent}`} title={value}>{value}</p>}
     </Card>
   );
 }

@@ -26,7 +26,8 @@ import {
   getImplementationSetupSummary,
   type ImplementationSetupSummary,
 } from '../services/implementation-setup.service';
-import { getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -373,6 +374,8 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
       y += 8;
 
       const kpiRows: [string, string][] = selectedKpiData.map((kpi) => [kpi.label, String(kpi.value)]);
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'dashboard.tenant-overview', title: 'Reporte del dashboard', tenantName: themeConfig.tenantName || user?.tenantName || 'Mi Empresa', tenantLogo: themeConfig.logo || '', rows: selectedKpiData, columns: [{ header: 'Indicador', value: row => row.label }, { header: 'Valor', value: row => row.value }, { header: 'Detalle', value: row => row.detail || '—' }], fileName: buildDatedDownloadFileName(['reporte_dashboard'], 'pdf') });
+      if (configured) { toast.success('PDF exportado exitosamente'); setIsExporting(false); return; }
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -459,7 +462,7 @@ export function TenantOverview({ onNavigate, onNavigateToDashboard }: TenantOver
         }
       }
 
-      doc.save(`reporte_dashboard_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(buildDatedDownloadFileName(['reporte_resumen_general'], 'pdf'));
       toast.success('Reporte PDF exportado');
     } catch (err) {
       console.error('Error exportando PDF:', err);

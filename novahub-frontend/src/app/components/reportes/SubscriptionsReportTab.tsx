@@ -12,7 +12,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Layers, CheckCircle2, TrendingUp, DollarSign, Activity, ShoppingCart, ArrowUpRight, Scale, RefreshCw, UserMinus } from 'lucide-react';
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -133,6 +134,9 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
       try {
         const pdfSettings = await getPdfDesignSettings('reportes.subscriptions');
         const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+        const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.subscriptions', title: 'Reporte de suscripciones', tenantName: companyName, rows: activeSubs, columns: [{ header: 'Cliente', value: row => row.clientTenant?.name || row.client?.name || row.name || '—' }, { header: 'Estado', value: row => row.status || '—' }, { header: 'Plan', value: row => row.plan?.name || row.planName || '—' }, { header: 'Monto', value: row => row.amount || row.price || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_suscripciones'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryHex = String(pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981');
         let currentY = 20;
 
@@ -159,7 +163,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
           headStyles: { fillColor: primaryHex as any }
         });
 
-        doc.save(`Suscripciones_${new Date().getTime()}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_suscripciones'], 'pdf', dateRange));
         toast.success("PDF Exportado");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
@@ -190,7 +194,7 @@ export const SubscriptionsReportTab = forwardRef<ReportExportRef, ReportProps>((
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Suscripciones_${new Date().getTime()}.xlsx`;
+        a.download = buildReportDownloadFileName(['reporte_suscripciones'], 'xlsx', dateRange);
         a.click();
         toast.success("Excel Exportado");
       } catch (e: any) {

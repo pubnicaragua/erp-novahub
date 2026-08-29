@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ManagerInventoryAdjustmentsView } from './ManagerInventoryAdjustmentsView';
 import { ManagerInventoryImportView } from './ManagerInventoryImportDialog';
 import { MANAGER_INVENTORY_VIEWS, type ManagerInventoryView } from './manager-inventory.types';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { useManagerShellNavigation } from '../ManagerShell';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
@@ -132,7 +133,7 @@ export function ManagerInventoryModule({ view, onViewChange, groupId, businessUn
       if (!exportRows.length) { toast.info('No hay datos para exportar'); return; }
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows), viewLabels[view].slice(0, 31));
-      XLSX.writeFile(workbook, `inventario-manager-${view}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_inventario', viewLabels[view]], 'xlsx', dateFrom, dateTo));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte');
     } finally {

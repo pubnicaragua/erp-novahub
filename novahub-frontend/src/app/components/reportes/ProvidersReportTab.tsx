@@ -14,7 +14,8 @@ import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { cn } from '../ui/utils';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -184,6 +185,8 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || user?.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.providers', title: 'Reporte de proveedores', tenantName: companyName, tenantLogo: logoUrl, rows: suppliers, columns: [{ header: 'Proveedor', value: row => row.name || row.businessName || '—' }, { header: 'Identificación', value: row => row.taxId || row.ruc || '—' }, { header: 'Teléfono', value: row => row.phone || '—' }, { header: 'Estado', value: row => row.status || 'Activo' }], fileName: buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -321,7 +324,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           doc.text(`${companyName} - Reporte Proveedores - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(`Reporte_Proveedores_${now.toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_proveedores'], 'pdf', dateRange));
         toast.success('PDF generado exitosamente');
       } catch (e: any) {
         console.error(e);
@@ -509,7 +512,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
           });
         });
 
-        await downloadExcelWorkbook(wb, `Reporte_Proveedores_${new Date().toISOString().split('T')[0]}.xlsx`);
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_proveedores'], 'xlsx', dateRange));
         toast.success('Excel exportado exitosamente');
       } catch (e: any) {
         console.error(e);

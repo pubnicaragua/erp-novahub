@@ -2,9 +2,10 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64Image } from './reportExportUtils';
-import { getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { formatCurrencyDescriptor } from './currency';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
+import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 
 type ManagerSalesExportOptions = {
   rows: Array<Record<string, unknown>>;
@@ -18,6 +19,8 @@ type ManagerSalesExportOptions = {
   metrics?: Record<string, any>;
   extraSheets?: Array<{ name: string; rows: Array<Record<string, unknown>> }>;
   pdfFormat?: PdfDownloadFormat;
+  dateFrom?: unknown;
+  dateTo?: unknown;
   /** Diseño resuelto para el tenant de la sucursal cuando se descarga un registro. */
   pdfDesign?: { settings?: Record<string, any> } | Record<string, any> | null;
 };
@@ -134,10 +137,15 @@ export async function exportManagerSalesExcel(options: ManagerSalesExportOptions
     sheet.autoFilter = { from: 'A3', to: `${sheetEndColumn}3` };
   });
   const buffer = await workbook.xlsx.writeBuffer();
-  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${options.fileBase}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDateFilteredDownloadFileName([options.fileBase], 'xlsx', options.dateFrom, options.dateTo));
 }
 
 export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) {
+  const reportKeys = Object.keys(options.rows[0] || {}).slice(0, 4);
+  const configured = options.pdfFormat !== 'roll-58' && options.pdfFormat !== 'roll-80'
+    ? await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: options.title, tenantName: options.tenantName, tenantLogo: options.tenantLogo, designOverride: options.pdfDesign, rows: options.rows, columns: reportKeys.map((key, index) => ({ header: key, value: row => row[key], align: index === 3 ? 'right' as const : 'left' as const })), fileName: buildDateFilteredPdfFileName([options.fileBase], 'configured', options.dateFrom, options.dateTo) })
+    : null;
+  if (configured) return configured;
   const configuredSettings = options.pdfDesign && typeof options.pdfDesign === 'object' && 'settings' in options.pdfDesign
     ? options.pdfDesign.settings
     : options.pdfDesign;
@@ -209,5 +217,5 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     doc.setTextColor(148, 163, 184);
     doc.text(`${options.tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 7, { align: 'center' });
   }
-  doc.save(`${options.fileBase}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(buildDateFilteredPdfFileName([options.fileBase], options.pdfFormat, options.dateFrom, options.dateTo));
 }

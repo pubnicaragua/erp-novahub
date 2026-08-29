@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { generateConfiguredHistoryPDF } from './pdfGenerator';
 import type { PdfDownloadFormat } from './pdfDownloadFormats';
 import { formatCurrencyAmount } from './currency';
+import { buildDownloadFileName, sanitizeDownloadPart } from './exportFileNames';
 
 export interface CustomerTransactionExportRow {
   id?: string;
@@ -28,6 +29,7 @@ interface CustomerTransactionsExportOptions {
   branchName?: string | null;
   pdfDesign?: { settings?: Record<string, any> } | Record<string, any> | null;
   pdfFormat?: PdfDownloadFormat;
+  outputCurrency?: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -64,7 +66,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 function fileStem(customerName: string) {
-  return `historial-transacciones-${String(customerName || 'cliente').trim().replace(/[^a-z0-9áéíóúüñ]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'cliente'}`;
+  return `historial_transacciones_cliente_${sanitizeDownloadPart(customerName, 'cliente').toLowerCase()}`;
 }
 
 export async function exportCustomerTransactionsExcel(options: CustomerTransactionsExportOptions) {
@@ -111,15 +113,16 @@ export async function exportCustomerTransactionsExcel(options: CustomerTransacti
   worksheet.columns = [{ width: 22 }, { width: 18 }, { width: 15 }, { width: 16 }, { width: 22 }, { width: 28 }, { width: 48 }];
   worksheet.autoFilter = { from: 'A4', to: 'G4' };
   const buffer = await workbook.xlsx.writeBuffer();
-  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileStem(options.customerName)}.xlsx`);
+  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDownloadFileName([fileStem(options.customerName)], 'xlsx'));
 }
 
 export async function exportCustomerTransactionsPdf(options: CustomerTransactionsExportOptions) {
   const rows = Array.isArray(options.rows) ? options.rows : [];
+  const outputCurrency = options.outputCurrency ? String(options.outputCurrency).toUpperCase() : null;
   await generateConfiguredHistoryPDF({
     targetKey: 'reportes.customers',
     title: 'Historial de transacciones',
-    subtitle: options.branchName || 'Sucursal no identificada',
+    subtitle: [options.branchName || 'Sucursal no identificada', outputCurrency ? `Moneda: ${outputCurrency}` : ''].filter(Boolean).join(' · '),
     subjectLabel: 'Cliente',
     subjectName: options.customerName || 'Cliente',
     tenantName: options.tenantName || 'NovaHub',
@@ -127,13 +130,13 @@ export async function exportCustomerTransactionsPdf(options: CustomerTransaction
     format: options.pdfFormat || 'configured',
     designOverride: options.pdfDesign || undefined,
     rows,
-    fileName: `${fileStem(options.customerName)}.pdf`,
+    fileName: fileStem(options.customerName),
     columns: [
       { header: 'Tipo', value: (row) => row.kind || 'Transacción' },
       { header: 'Número', value: (row) => row.number || '—' },
       { header: 'Fecha', align: 'center', value: (row) => formatDate(row.date) },
       { header: 'Estado', value: (row) => statusLabel(row.status) },
-      { header: 'Monto', align: 'right', value: (row) => `${formatMoney(row.amount, row.currency)}${row.reportAmount == null ? '' : `\n≈ ${formatMoney(row.reportAmount, row.reportCurrency)}`}` },
+      { header: outputCurrency ? `Monto (${outputCurrency})` : 'Monto', align: 'right', value: (row) => `${formatMoney(row.amount, row.currency)}${row.reportAmount == null ? '' : `\n≈ ${formatMoney(row.reportAmount, row.reportCurrency)}`}` },
       { header: 'Tasa aplicada', value: (row) => row.reportRateLabel || '—' },
       { header: 'Descripción / sucursal', value: (row) => `${row.description || '—'} · ${row.branchName || options.branchName || 'Sucursal'}` },
     ],

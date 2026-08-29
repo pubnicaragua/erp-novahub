@@ -715,7 +715,7 @@ export function PagosRecibidosView({ data, loading, onRefresh, customers = [], i
       </div>
 
       <Sheet open={Boolean(detailPayment)} onOpenChange={(open) => { if (!open) setDetailPayment(null); }}>
-        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 border-l border-border/50 bg-background p-0 sm:max-w-xl">
+        <SheetContent side="right" className="flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
           <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6" data-tour="sales-payment-detail-title">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Wallet className="size-5" /></div>

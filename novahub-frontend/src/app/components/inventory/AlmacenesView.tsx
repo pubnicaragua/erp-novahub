@@ -600,7 +600,7 @@ export function AlmacenesView({ warehouses, onRefresh }: AlmacenesViewProps) {
                   <Warehouse className="size-4 text-muted-foreground" />
                   <h4 className="text-sm font-bold">Detalle de Bodega</h4>
                 </div>
-                <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => setDetailWarehouse(null)} title="Cerrar detalle" aria-label="Cerrar detalle">
+                <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setDetailWarehouse(null)} title="Cerrar" aria-label="Cerrar detalle de bodega">
                   <X className="size-3.5" />
                 </Button>
               </div>

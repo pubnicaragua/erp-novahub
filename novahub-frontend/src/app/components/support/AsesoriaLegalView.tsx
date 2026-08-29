@@ -227,7 +227,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
         <DialogContent className="w-[95vw] !max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
           <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nuevo Caso Legal</DialogTitle>
-            <button onClick={() => setShowNewCase(false)} className="size-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors">
+            <button type="button" onClick={() => setShowNewCase(false)} className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar nuevo caso legal" title="Cerrar">
               <X className="size-4" />
             </button>
           </div>
@@ -244,7 +244,7 @@ export function AsesoriaLegalView({ activeSubModule, onSubModuleChange, isSideba
         <DialogContent className="w-[95vw] !max-w-md max-h-[90vh] overflow-y-auto p-0 rounded-3xl border-none">
           <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border/30 bg-muted/10">
             <DialogTitle className="text-lg font-black">Nuevo Recordatorio</DialogTitle>
-            <button onClick={() => setShowNewReminder(false)} className="size-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors">
+            <button type="button" onClick={() => setShowNewReminder(false)} className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar nuevo recordatorio" title="Cerrar">
               <X className="size-4" />
             </button>
           </div>

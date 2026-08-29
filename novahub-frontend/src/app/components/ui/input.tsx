@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "./utils";
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, onClick, ...props }, ref) => {
+  ({ className, type, onClick, onWheel, ...props }, ref) => {
     const opensNativePicker = type === 'date'
       || type === 'datetime-local'
       || type === 'month'
@@ -30,6 +30,14 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           } catch {
             // Older browsers open the native picker automatically on click.
           }
+        }}
+        onWheel={(event) => {
+          // A focused number input uses the wheel as a spinner in Chromium and
+          // Firefox. Blur it first so scrolling never changes a captured value.
+          if (type === 'number' && document.activeElement === event.currentTarget) {
+            event.currentTarget.blur();
+          }
+          onWheel?.(event);
         }}
         {...props}
       />

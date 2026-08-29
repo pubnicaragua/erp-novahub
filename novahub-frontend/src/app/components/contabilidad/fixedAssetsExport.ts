@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { contabilidadService } from '../../services/contabilidad.service';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Activo',
@@ -116,5 +117,5 @@ export function exportFixedAssetsExcel(details: any[], options: FixedAssetExport
   const wsProjection = XLSX.utils.json_to_sheet(projectionRows);
   wsProjection['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, ...(toBase ? [{ wch: 14 }, { wch: 14 }, { wch: 14 }] : [])];
   XLSX.utils.book_append_sheet(workbook, wsProjection, 'Proyección de Depreciación');
-  XLSX.writeFile(workbook, `activos_fijos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(workbook, buildDatedDownloadFileName(['reporte_activos_fijos'], 'xlsx'));
 }

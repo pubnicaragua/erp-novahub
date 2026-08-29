@@ -293,6 +293,7 @@ export function PagosRealizadosView({ data, loading, onRefresh, supplierInvoices
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.payment-made',
         columns: [
           { label: 'Referencia', value: (row) => row.displayReference || paymentReferenceLabel(row) },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },

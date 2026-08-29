@@ -30,19 +30,25 @@ select.erp-filter-select,
 [data-tour="sales-list-actions"] > select,
 [data-tour="purchases-list-actions"] > select,
 .manager-shell main [class*="xl:grid-cols-"] > label > select {
-  appearance: none;
-  padding-right: 1.65rem !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right .55rem center;
-  background-size: .72rem .72rem;
+  appearance: auto;
+  background-image: none;
+  padding-right: .75rem !important;
 }
 
-select.erp-filter-select:focus-visible,
-[data-tour="sales-list-actions"] > select:focus-visible,
-[data-tour="purchases-list-actions"] > select:focus-visible,
-.manager-shell main [class*="xl:grid-cols-"] > label > select:focus-visible {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300a86b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+/* Los controles de edición de la cotización administrativa comparten los
+   tokens del ERP; la hoja del documento conserva su paleta propia. */
+[data-platform-quote-editor] > [data-slot="card-content"] > div:first-child select,
+[data-platform-quote-editor] > [data-slot="card-content"] > div:first-child input {
+  border-color: var(--border) !important;
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+[data-platform-quote-editor] > [data-slot="card-content"] > div:first-child select:focus-visible,
+[data-platform-quote-editor] > [data-slot="card-content"] > div:first-child input:focus-visible {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+  outline: none;
 }
 
 /* Las cabeceras de los módulos consolidados ya comunican el contexto mediante
@@ -75,12 +81,33 @@ select.erp-filter-select:focus-visible,
 /* Guardrails comunes para formularios y overlays de cualquier módulo. */
 #root,
 [data-slot="dialog-content"],
-[data-slot="drawer-content"] {
+[data-slot="drawer-content"],
+[data-slot="sheet-content"] {
   min-width: 0;
 }
 
-[data-slot="drawer-content"] {
-  max-width: 100%;
+/* En móvil el menú lateral conserva una señal visual de desplazamiento. Esto
+   evita que las opciones que quedan debajo del primer viewport parezcan
+   ausentes, manteniendo el scrollbar oculto en escritorio. */
+[data-sidebar-navigation] {
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1023px) {
+  [data-sidebar-navigation] {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 35%, transparent) transparent;
+  }
+
+  [data-sidebar-navigation]::-webkit-scrollbar {
+    display: block;
+    width: 4px;
+  }
+
+  [data-sidebar-navigation]::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--sidebar-foreground) 35%, transparent);
+    border-radius: 999px;
+  }
 }
 
 [data-slot="dialog-content"] input,
@@ -112,6 +139,11 @@ select.erp-filter-select:focus-visible,
 
   [data-slot="drawer-content"][data-vaul-drawer-direction="left"],
   [data-slot="drawer-content"][data-vaul-drawer-direction="right"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  [data-slot="sheet-content"] {
     width: 100% !important;
     max-width: 100% !important;
   }
@@ -911,7 +943,10 @@ th .column-filter-menu .column-filter-icon,
     overflow: hidden !important;
   }
 
-  .customer-detail-scroll,
+  .customer-detail-scroll {
+    min-height: 0 !important;
+  }
+
   .customer-detail-scroll [data-slot="scroll-area-viewport"] {
     min-height: 0 !important;
     overflow-y: auto !important;

@@ -26,6 +26,7 @@ import { formatSalesAmount } from '../../utils/salesPriceList';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
+import { buildDownloadFileName } from '../../utils/exportFileNames';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -85,7 +86,7 @@ function PriceImportPreviewPage({
   const validRows = rows.filter((row) => !row.error).length;
   const issueRows = rows.length - validRows;
   const gridTemplate = `80px 176px minmax(256px, 1fr) 144px ${lists.map(() => '144px').join(' ')} minmax(208px, 1fr)`;
-  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58, { overscan: 4 });
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 58, { overscan: 2 });
 
   useEffect(() => {
     if (!result) return;
@@ -132,7 +133,7 @@ function PriceImportPreviewPage({
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={issueRows} entityLabel="actualizaciones de precio" />
 
         <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
-        <HorizontalTableScroller scrollRef={tableScrollRef} className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
+        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="min-h-0 min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · columna por columna">
           <Table containerClassName="w-max min-w-full max-w-none overflow-visible" className="block w-max min-w-[1050px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted/95 backdrop-blur">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
@@ -169,8 +170,8 @@ function PriceImportPreviewPage({
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita los precios por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 min-w-0 flex-1">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={300} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={300} overscan={2} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para actualizar.</div>}
           </div>
         </section>
 
@@ -595,7 +596,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Precios');
     XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
-    XLSX.writeFile(workbook, `plantilla_precios_${selectedProducts.length}_productos.xlsx`);
+    XLSX.writeFile(workbook, buildDownloadFileName(['plantilla_precios', selectedProducts.length, 'productos'], 'xlsx'));
     toast.success('Plantilla descargada');
     setDownloadOpen(false);
   };

@@ -12,6 +12,7 @@ import { Banknote, BarChart3, CalendarDays, ChevronLeft, ChevronRight, Download,
 import { cn } from '../ui/utils';
 import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
 import { MANAGER_FINANCE_VIEWS, type ManagerFinanceView } from './manager-finance.types';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 type BranchOption = { id: string; name: string; businessUnitId?: string | null };
 type LayoutMode = 'table' | 'cards';
@@ -70,7 +71,7 @@ export function ManagerFinanceModule({ view, onViewChange, groupId, businessUnit
         return { Vista: labels[view], Identificador: row.number || row.name || row.id, Fecha: formatDate(row.date || row.createdAt || row.nextExecutionDate), Descripción: row.description || row.source || row.category || '', Estado: statusLabel(row.status), Monto: formatMoney(original, row.currency || (view === 'analysis' ? reportCurrency : 'NIO')), Equivalencia: equivalent == null ? '' : formatMoney(equivalent, reportCurrency), 'Tasa aplicada': row.reportRateLabel || '', Sucursal: row.branchName || '', Rubro: row.businessUnitName || '' };
       });
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(exportRows.length ? exportRows : [{ Mensaje: 'Sin registros para el alcance seleccionado' }]), 'Finanzas');
-      XLSX.writeFile(workbook, `manager-finanzas-${view}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_finanzas', labels[view]], 'xlsx', dateFrom, dateTo));
     } finally { setExporting(false); }
   };
   const Icon = icons[view] || BarChart3;

@@ -449,6 +449,21 @@ function AppContent() {
   const lastSessionStartVersion = useRef(0);
 
   useEffect(() => {
+    // Native number inputs act as spinners while focused. Keep the wheel for
+    // scrolling and make the value change only through an explicit edit. This
+    // lives at the application shell so it also covers the manager view and
+    // public screens that render native inputs instead of the shared Input.
+    const blurNumberInputOnWheel = (event: WheelEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === 'number' && document.activeElement === target) {
+        target.blur();
+      }
+    };
+    document.addEventListener('wheel', blurNumberInputOnWheel, { capture: true, passive: true });
+    return () => document.removeEventListener('wheel', blurNumberInputOnWheel, true);
+  }, []);
+
+  useEffect(() => {
     if (!sessionStartVersion || sessionStartVersion === lastSessionStartVersion.current) return;
     lastSessionStartVersion.current = sessionStartVersion;
     setShowingSessionBranding(true);

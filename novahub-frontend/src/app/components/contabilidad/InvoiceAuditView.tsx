@@ -530,7 +530,7 @@ export function InvoiceAuditView() {
           </div>
           <DialogFooter>
             {auditModal?.results ? (
-              <Button className="rounded-xl" onClick={() => setAuditModal(null)}><X className="size-4" /> Cerrar</Button>
+              <Button type="button" variant="outline" className="rounded-xl text-muted-foreground hover:text-foreground" onClick={() => setAuditModal(null)}><X className="size-4" /> Cerrar</Button>
             ) : (
               <>
                 <Button variant="outline" className="rounded-xl" disabled={auditModal?.saving} onClick={() => setAuditModal(null)}>Cancelar</Button>

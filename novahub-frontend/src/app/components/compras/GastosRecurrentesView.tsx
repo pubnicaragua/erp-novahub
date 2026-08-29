@@ -95,6 +95,7 @@ export function GastosRecurrentesView({ data, loading, onRefresh, supplierCatalo
         rows: filtered,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.recurring-expense',
         columns: [
           { label: 'Descripción', value: (row) => row.description || '—' },
           { label: 'Monto', align: 'right', value: (row) => formatCurrentAmount(Number(row.amount || 0), row.currency || displayCurrency) },

@@ -14,6 +14,7 @@ import { AccountMovementsDetail } from './AccountMovementsDetail';
 import { AccountChecklistDialog } from './AccountChecklistDialog';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { DateField } from '../ui/DateField';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -170,7 +171,8 @@ export function BalanceComprobacionView() {
       });
       return html;
     };
-    printWindow.document.write(`<!DOCTYPE html><html><head>${style}</head><body>
+    const printFileName = buildDateFilteredDownloadFileName(['balance_comprobacion'], 'pdf', dateFrom, dateTo);
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>${printFileName}</title>${style}</head><body>
       <h1>${title}</h1>
       ${period ? `<h2>${period}</h2>` : ''}
       <table>

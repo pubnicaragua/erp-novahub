@@ -32,6 +32,7 @@ import { hrService } from '../../services/hr.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 
 type CommissionLayout = 'table' | 'cards';
 type CommissionTab = 'sellers' | 'recent';
@@ -219,7 +220,7 @@ export function ComisionesView() {
       XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalle');
       XLSX.utils.book_append_sheet(workbook, sellerSheet, 'Por vendedor');
       XLSX.utils.book_append_sheet(workbook, recentSheet, 'Recientes');
-      XLSX.writeFile(workbook, `reporte-comisiones-${from || 'inicio'}-${to || 'hoy'}.xlsx`);
+      XLSX.writeFile(workbook, buildDateFilteredDownloadFileName(['reporte_comisiones'], 'xlsx', from, to));
       toast.success(`Reporte de comisiones descargado (${items.length} registro(s))`);
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo preparar el reporte de comisiones'); }
     finally { setExporting(false); }

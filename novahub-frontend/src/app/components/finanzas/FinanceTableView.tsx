@@ -23,7 +23,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { translatePaymentMethodText } from '../../utils/paymentMethods';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import ExcelJS from 'exceljs';
@@ -344,7 +345,7 @@ export function FinanceTableView({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${title.replace(/\s+/g, '_')}_${now.toISOString().split('T')[0]}.xlsx`;
+      a.download = buildDateFilteredDownloadFileName([title], 'xlsx', dateRange.start, dateRange.end);
       a.click();
       toast.success("Excel exportado exitosamente");
     } catch (e: any) { 
@@ -358,6 +359,8 @@ export function FinanceTableView({
       toast.info("Generando PDF, por favor espere...");
       const pdfSettings = await getPdfDesignSettings('finanzas.transactions');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings));
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'finanzas.transactions', title, tenantName: companyName, rows: filteredData, columns: columns.slice(0, 4).map(column => ({ header: column.label, value: row => row[column.key] })), fileName: buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end) });
+      if (configured) { toast.success('PDF exportado exitosamente'); return; }
       const pageWidth = doc.internal.pageSize.getWidth();
       const primaryColor = themeConfig.colors.primary || '#10b981';
       const rgbPrimary = primaryColor.startsWith('#') 
@@ -435,7 +438,7 @@ export function FinanceTableView({
         doc.text(`${companyName} - Página ${i} de ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
       }
 
-      doc.save(`${title.replace(/\s+/g, '_')}_${now.toISOString().split('T')[0]}.pdf`);
+      doc.save(buildDateFilteredDownloadFileName([title], 'pdf', dateRange.start, dateRange.end));
       toast.success("PDF exportado exitosamente");
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || "Error al exportar PDF"); }
   };
@@ -648,6 +651,7 @@ export function FinanceTableView({
                           <input autoFocus type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'} className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
                             onChange={e => handleCellEdit(item.id, col.key, col.type === 'number' ? Number(e.target.value) : e.target.value)}
                             onBlur={e => handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], e.target.value)}
+                            onWheel={e => e.currentTarget.type === 'number' && e.currentTarget.blur()}
                             onClick={e => { if (e.currentTarget.type === 'date') { try { e.currentTarget.showPicker?.(); } catch {} } }}
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingCell(null); }} />
                         )

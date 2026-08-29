@@ -195,7 +195,7 @@ export function HistoricalCashReport({ initialRegisterId }: { initialRegisterId?
             </div>
             <div className="flex flex-wrap gap-2">
               <Button className="gap-2" onClick={() => void exportSessionDetail()} disabled={detailExporting}><Download className="size-4" /> {detailExporting ? 'Generando…' : 'PDF 16:9'}</Button>
-              <Button variant="ghost" size="icon" aria-label="Cerrar detalle" onClick={() => { setSessionDetail(null); setSelectedSessionId(''); }}><X className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar detalle" title="Cerrar" onClick={() => { setSessionDetail(null); setSelectedSessionId(''); }}><X className="size-4" /></Button>
             </div>
           </div>
         </CardHeader>

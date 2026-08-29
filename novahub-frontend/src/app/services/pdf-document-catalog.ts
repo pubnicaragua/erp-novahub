@@ -1,4 +1,5 @@
 export type PdfDocumentStructure = 'transaction' | 'history' | 'report' | 'receipt' | 'administrative' | 'dashboard' | 'print';
+export type PdfTemplateFamily = 'transaction' | 'history' | 'report' | 'receipt' | 'cash' | 'dashboard' | 'label' | 'administrative';
 
 export type PdfTemplateModule =
   | 'ventas'
@@ -15,6 +16,12 @@ export interface PdfTemplateTarget {
   moduleLabel: string;
   label: string;
   structure: PdfDocumentStructure;
+  family?: PdfTemplateFamily;
+  capabilities?: {
+    editableCanvas?: boolean;
+    importable?: boolean;
+    repeatableTable?: boolean;
+  };
   legacyKeys?: string[];
   source: string;
 }
@@ -33,13 +40,20 @@ export const PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.credit-note', module: 'ventas', moduleLabel: 'Ventas', label: 'Notas de crédito', structure: 'transaction', legacyKeys: ['credit-note'], source: 'generateEstimatePDF' },
   { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
   { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', source: 'printPosTicket' },
+  { key: 'ventas.cash-historical-report', module: 'ventas', moduleLabel: 'Ventas', label: 'Reporte histórico de caja', structure: 'report', family: 'cash', source: 'generateHistoricalCashReportPDF' },
 
+  { key: 'compras.list', module: 'compras', moduleLabel: 'Compras', label: 'Listado de compras', structure: 'report', source: 'generatePurchaseListPDF' },
+  { key: 'compras.purchase-record', module: 'compras', moduleLabel: 'Compras', label: 'Registro de compra', structure: 'transaction', source: 'generatePurchaseRecordPDF' },
   { key: 'compras.supplier-history', module: 'compras', moduleLabel: 'Compras', label: 'Historial de proveedor', structure: 'history', source: 'generateSupplierHistoryPDF' },
   { key: 'compras.supplier', module: 'compras', moduleLabel: 'Compras', label: 'Ficha de proveedor', structure: 'administrative', source: 'generatePurchaseRecordPDF' },
+  { key: 'compras.supplier-credit', module: 'compras', moduleLabel: 'Compras', label: 'Crédito de proveedor', structure: 'receipt', source: 'generatePurchaseRecordPDF' },
+  { key: 'compras.recurring-supplier-invoice', module: 'compras', moduleLabel: 'Compras', label: 'Factura recurrente de proveedor', structure: 'transaction', source: 'generatePurchaseRecordPDF' },
+  { key: 'compras.recurring-expense', module: 'compras', moduleLabel: 'Compras', label: 'Gasto recurrente', structure: 'receipt', source: 'generatePurchaseRecordPDF' },
   { key: 'compras.expense', module: 'compras', moduleLabel: 'Compras', label: 'Comprobante de gasto', structure: 'receipt', source: 'generateExpensePDF' },
   { key: 'compras.purchase-order', module: 'compras', moduleLabel: 'Compras', label: 'Órdenes de compra', structure: 'transaction', source: 'generatePurchaseOrderPDF' },
   { key: 'compras.supplier-invoice', module: 'compras', moduleLabel: 'Compras', label: 'Facturas de proveedor', structure: 'transaction', source: 'generateSupplierInvoicePDF' },
   { key: 'compras.payment-made', module: 'compras', moduleLabel: 'Compras', label: 'Pagos realizados', structure: 'receipt', source: 'generateExpensePDF' },
+  { key: 'compras.purchase-receipt', module: 'compras', moduleLabel: 'Compras', label: 'Recepción de compra', structure: 'receipt', source: 'generatePurchaseRecordPDF' },
   { key: 'compras.purchase-request', module: 'compras', moduleLabel: 'Compras', label: 'Solicitud de compra', structure: 'administrative', source: 'generatePurchaseRequestPDF' },
 
   { key: 'finanzas.balance', module: 'finanzas', moduleLabel: 'Finanzas', label: 'Balance general', structure: 'report', source: 'FinanceBalanceView.exportPDF' },
@@ -63,7 +77,15 @@ export const PDF_TEMPLATE_MODULES = Array.from(
 
 export function getPdfTemplateTarget(key: string | null | undefined) {
   if (!key) return PDF_TEMPLATE_TARGETS[0];
-  return PDF_TEMPLATE_TARGETS.find(target => target.key === key || target.legacyKeys?.includes(key)) || PDF_TEMPLATE_TARGETS[0];
+  return PDF_TEMPLATE_TARGETS.find(target => target.key === key || target.legacyKeys?.includes(key)) || {
+    key,
+    module: 'reportes',
+    moduleLabel: 'Otros',
+    label: `Documento (${key})`,
+    structure: 'administrative',
+    family: 'administrative',
+    source: 'unmapped',
+  } satisfies PdfTemplateTarget;
 }
 
 export function normalizePdfTemplateKey(key: string | null | undefined) {

@@ -2,9 +2,10 @@ import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getBase64Image } from './reportExportUtils';
-import { getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignColor, pdfDesignPaper } from './pdfGenerator';
 import { formatCurrencyAmount, formatCurrencyDescriptor } from './currency';
 import { normalizeSalesExtraCharges } from './salesCharges';
+import { buildDateFilteredDownloadFileName, buildDateFilteredPdfFileName } from './exportFileNames';
 
 export interface ManagerQuoteExportRow {
   number?: string | null;
@@ -36,6 +37,8 @@ interface ManagerQuotesExportOptions {
   tenantLogo?: string | null;
   primaryColor?: string | null;
   filterSummary?: string;
+  dateFrom?: unknown;
+  dateTo?: unknown;
   metrics?: { total?: number; amount?: number; amountCurrency?: string | null; amountCurrencySymbol?: string | null; valuationLabel?: string | null; historicalRateFallbackCount?: number; aggregationComplete?: boolean; topBranchName?: string | null; topBranchCount?: number };
 }
 
@@ -158,10 +161,12 @@ export async function exportManagerQuotesExcel(options: ManagerQuotesExportOptio
   ];
   worksheet.autoFilter = { from: 'A4', to: 'L4' };
   const buffer = await workbook.xlsx.writeBuffer();
-  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `cotizaciones-manager-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildDateFilteredDownloadFileName(['reporte_cotizaciones_consolidadas'], 'xlsx', options.dateFrom, options.dateTo));
 }
 
 export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions) {
+  const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Cotizaciones consolidadas', tenantName: options.tenantName, tenantLogo: options.tenantLogo, rows: options.rows, columns: [{ header: 'Documento', value: row => row.number || '—' }, { header: 'Sucursal', value: row => row.branchName || '—' }, { header: 'Cliente', value: row => row.customerName || '—' }, { header: 'Total', value: row => row.reportTotal ?? row.total ?? 0, align: 'right' }], fileName: buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo) });
+  if (configured) return configured;
   const settings = await getPdfDesignSettings('reportes.sales');
   const primary = pdfDesignColor(settings.primaryColor || options.primaryColor, [16, 185, 129]);
   const doc = new jsPDF({ ...pdfDesignPaper(settings), orientation: 'landscape' });
@@ -222,5 +227,5 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
     doc.setTextColor(148, 163, 184);
     doc.text(`${options.tenantName || 'NovaHub'} · Página ${page} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }
-  doc.save(`cotizaciones-manager-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(buildDateFilteredPdfFileName(['reporte_cotizaciones_consolidadas'], 'configured', options.dateFrom, options.dateTo));
 }

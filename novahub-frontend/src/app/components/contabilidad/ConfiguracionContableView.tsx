@@ -79,13 +79,13 @@ type ModuleField = {
 const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; description: string; fields: ModuleField[] }[] = [
   {
     id: 'invoice', label: 'Facturas de Venta', icon: FileText,
-    description: 'Cuando la factura queda pagada, se registra una sola vez contra el cobro real',
+    description: 'Cuando la factura queda pagada, el asiento comercial cuadra con su total; el costo de inventario se registra aparte',
     fields: [
       { key: 'income', label: 'Ingresos', side: 'credit', description: 'Se acredita el subtotal (sin IVA)', defaultCode: '4000', defaultName: 'Ingresos Operativos', defaultType: 'INCOME' },
       { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada al cliente', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
       { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
-      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita el costo de los productos vendidos y se acredita el inventario de la bodega', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita en un asiento separado el costo real de los productos y se acredita el inventario de la bodega', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
@@ -99,7 +99,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'cashSale', label: 'Facturación por Caja', icon: Wallet,
-    description: 'Venta POS pagada en el momento → banco hijo o medio de cobro + Ingresos + IVA',
+    description: 'Venta POS pagada en el momento → medio de cobro + Ingresos + IVA; el costo de inventario va en un asiento separado',
     fields: [
       { key: 'cash', label: 'Efectivo / Caja', side: 'debit', description: 'Se debita la cuenta global de efectivo para Facturación por Caja', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
       { key: 'customerBalance', label: 'Saldo a favor del cliente', side: 'debit', description: 'Se debita al aplicar saldo a favor en una venta POS', defaultCode: '1100', defaultName: 'Saldo a favor del cliente', defaultType: 'ASSET' },
@@ -107,12 +107,12 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'extraCost', label: 'Costes extra de venta', side: 'credit', description: 'Se acredita el importe de la descripción variable cobrada en caja', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
       { key: 'delivery', label: 'Delivery', side: 'credit', description: 'Se acredita el importe cobrado por delivery en caja', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
       { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA de la venta POS', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
-      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita el costo de los productos vendidos en Facturación por Caja', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
+      { key: 'cogs', label: 'Costo de Ventas', side: 'debit', description: 'Se debita en un asiento separado el costo real de los productos vendidos en Facturación por Caja', defaultCode: '5810', defaultName: 'Costo de Ventas', defaultType: 'EXPENSE' },
     ],
   },
   {
     id: 'purchaseReceipt', label: 'Recepciones de compra pagadas', icon: Package,
-    description: 'Solo al registrar el pago → la cuenta de Inventario/Gasto se toma de la bodega destino; las demás cuentas salen de esta configuración',
+    description: 'Al aprobar la recepción se reconoce la compra; el pago posterior solo cancela CxP. La cuenta de Inventario/Gasto se toma de la bodega destino',
     fields: [
       { key: 'ivaCreditable', label: 'IVA Acreditable', side: 'debit', description: 'Se utiliza para registrar pagos a proveedores: se debita el IVA soportado que la empresa puede acreditar', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
       { key: 'irWithholdingPayable', label: 'IR retenido por pagar', side: 'credit', description: 'Se utiliza para registrar pagos a proveedores: se acredita el IR retenido al proveedor', defaultCode: '2300', defaultName: 'IR Retenido por Pagar', defaultType: 'LIABILITY' },
@@ -128,7 +128,6 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     fields: [
       { key: 'expense', label: 'Cuenta de Gasto', side: 'debit', description: 'Se debita el gasto', defaultCode: '5000', defaultName: 'Gastos Operativos', defaultType: 'EXPENSE' },
       { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita la salida de efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
-      { key: 'check', label: 'Cheques', side: 'credit', description: 'Se acredita la cuenta configurada para cheques', defaultCode: '1030', defaultName: 'Cheques por Depositar', defaultType: 'ASSET' },
     ],
   },
   {
@@ -418,7 +417,6 @@ const FIELD_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
   cash: ['caja', 'efectivo', 'banco', 'bancos'],
   card: ['tarjeta', 'tarjetas'],
   transfer: ['transferencia', 'banco', 'bancos'],
-  check: ['cheque', 'cheques'],
   other: ['otro', 'otros', 'varios'],
   receivable: ['cobrar', 'cliente', 'clientes', 'deuda'],
   customerBalance: ['saldo', 'favor', 'cliente', 'cobrar'],

@@ -486,7 +486,7 @@ export function TrainingHubView() {
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mt-1">Sube contenido educativo</p>
                   </div>
                 </div>
-                <button onClick={() => { setShowUploadModal(false); setEditingVideo(null); }} className="text-muted-foreground hover:text-primary transition-colors">
+                <button type="button" onClick={() => { setShowUploadModal(false); setEditingVideo(null); }} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Cerrar formulario de guía" title="Cerrar">
                   <X className="size-6" />
                 </button>
               </div>

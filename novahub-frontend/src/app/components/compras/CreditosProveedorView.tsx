@@ -308,6 +308,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.supplier-credit',
         columns: [
           { label: 'N° Crédito', value: (row) => row.number || row.id?.slice(0, 8) || '—' },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },

@@ -240,7 +240,7 @@ export function InventoryDetailPanel({ kind, data, onClose }: InventoryDetailPan
             </div>
             <div className="flex items-center gap-1" data-tour="inventory-detail-actions">
             <InventoryViewTutorial label={isTransfer ? 'Cómo consultar transferencia' : 'Cómo consultar ajuste'} targetPrefix="inventory-detail" stepKeys={['title', 'data']} copy={{ data: { description: isTransfer ? 'Revisa origen, destino, unidades y artículos transferidos.' : 'Revisa almacén, razón, cantidades, costos y diferencias del ajuste.' } }} />
-            <Button variant="ghost" size="icon" className="w-6 h-6" onClick={onClose}>
+            <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar">
               <X className="w-3.5 h-3.5" />
             </Button>
             </div>

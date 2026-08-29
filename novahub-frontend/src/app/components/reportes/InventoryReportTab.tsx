@@ -21,7 +21,8 @@ import { Package, TrendingDown, DollarSign, Activity, ArrowUpRight, Scale, Wareh
 import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { downloadExcelWorkbook, getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName, buildDownloadFileName } from '../../utils/exportFileNames';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
@@ -388,7 +389,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
     XLSX.utils.book_append_sheet(wb, guide, 'Guía');
-    XLSX.writeFile(wb, `plantilla_inventario_${importMonth}.xlsx`);
+    XLSX.writeFile(wb, buildDownloadFileName(['plantilla_inventario', importMonth], 'xlsx'));
   }
 
   async function handleImportFile(file: File) {
@@ -805,6 +806,8 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.inventory', title: 'Reporte de inventario', tenantName: companyName, rows: effectiveRows, columns: [{ header: 'Producto', value: row => row.name || row.product?.name || '—' }, { header: 'Código', value: row => row.code || row.sku || '—' }, { header: 'Existencia', value: row => row.qty ?? row.quantity ?? 0, align: 'right' }, { header: 'Valor', value: row => row.value ?? row.stockValue ?? 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#')
@@ -920,7 +923,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         renderTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [String(i.productName || '').substring(0, 32), i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), [245, 158, 11]);
 
-        doc.save(`Reporte_Inventario_${new Date().toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_inventario'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
@@ -1061,7 +1064,7 @@ export const InventoryReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         writeTable('Productos con mayor rotación', ['Producto', 'Salidas', 'Stock prom.', 'Rotación', 'Stock actual', 'Cobertura'], topRotated.map((p) => [p.name, fmtQty(p.outs), fmtQty(p.avgQty), p.rotation !== null ? `${p.rotation.toFixed(1)}x` : 'N/D', fmtQty(p.qty), p.coverage !== null ? `${Math.round(p.coverage)} días` : 'N/D']), 'FF3B82F6');
         writeTable('Reposición sugerida', ['Producto', 'Bodega', 'Actual', 'Mínimo', 'Sugerido', 'Estado'], replenishItems.map((i: any) => [i.productName, i.warehouseName, fmtQty(i.currentStock), fmtQty(i.minStock), fmtQty(i.suggestedQuantity), i.status || '']), 'FFF59E0B');
 
-        await downloadExcelWorkbook(wb, `Reporte_Inventario_${new Date().toISOString().split('T')[0]}.xlsx`);
+        await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_inventario'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");
       } catch (e: any) {
         toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");

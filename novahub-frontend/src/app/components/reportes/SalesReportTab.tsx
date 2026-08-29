@@ -16,7 +16,8 @@ import type { ReportExportRef, ReportProps } from './types';
 import { useTenantQuery, asList } from '../../hooks/useTenantQuery';
 import { getBase64Image, sanitizeHtml2CanvasOklch } from '../../utils/reportExportUtils';
 import { cn } from '../ui/utils';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildReportDownloadFileName } from '../../utils/exportFileNames';
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DAY_MS = 86400000;
@@ -674,6 +675,8 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const pageHeight = doc.internal.pageSize.getHeight();
         const companyName = themeConfig.tenantName || 'Mi Empresa';
         const logoUrl = themeConfig.logo || '';
+        const configured = await generateConfiguredReportTemplate({ targetKey: 'reportes.sales', title: 'Reporte de ventas', tenantName: companyName, tenantLogo: logoUrl, rows: sortedInvoices, columns: [{ header: 'Documento', value: row => row.number || row.id || '—' }, { header: 'Cliente', value: row => row.customer?.name || row.client?.name || '—' }, { header: 'Fecha', value: row => row.date || row.createdAt || '—' }, { header: 'Total', value: row => row.total || 0, align: 'right' }], fileName: buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange) });
+        if (configured) return;
         const primaryColor = pdfSettings.primaryColor || themeConfig.colors.primary || '#10b981';
         const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#10b981';
         const rgbPrimary = primaryHex.startsWith('#') ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)] : [16, 185, 129];
@@ -769,7 +772,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
           doc.text(`${companyName} - Reporte de Ventas - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
         }
 
-        doc.save(`Reporte_Ventas_${now.toISOString().split('T')[0]}.pdf`);
+        doc.save(buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
     },
@@ -876,7 +879,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Ventas_${new Date().toISOString().split('T')[0]}.xlsx`; link.click();
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = buildReportDownloadFileName(['reporte_ventas'], 'xlsx', dateRange); link.click();
         toast.success("Excel generado exitosamente");
       } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
     }

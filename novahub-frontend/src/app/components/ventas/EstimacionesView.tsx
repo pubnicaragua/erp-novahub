@@ -21,6 +21,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { buildPdfFileName } from '../../utils/exportFileNames';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { PriceMissingBadge, SalesLinePriceListSelect } from './SalesLinePriceListSelect';
@@ -394,7 +395,7 @@ export function EstimacionesView({ data, loading: _loading, onRefresh, onConvert
             save: true,
           });
           // Compatibilidad: solo usa el enlace legado si el servicio seguro no está disponible.
-          const fileName = `${estimate.number || 'Cotizacion'}_${Date.now()}.pdf`;
+          const fileName = buildPdfFileName(['cotizacion', estimate.number || 'sin_numero']);
           const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
           const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'cotizaciones' });
           if (uploaded?.url) publicPdfUrl = uploaded.url;

@@ -96,7 +96,7 @@ export function HorizontalTableScroller({ children, label = 'Desplazamiento hori
           <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollByColumn('right')} disabled={!scrollState.right} aria-label="Desplazar una columna a la derecha"><ChevronRight className="size-4" /></Button>
         </div>
       </div>
-      <div ref={scrollRef} tabIndex={0} onKeyDownCapture={handleTableKeyDown} onMouseDown={() => scrollRef.current?.focus({ preventScroll: true })} aria-label={`${label}. Usa las flechas izquierda y derecha para moverte por columna.`} className={cn('min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay', tableClassName)}>
+      <div ref={scrollRef} tabIndex={0} onKeyDownCapture={handleTableKeyDown} onMouseDown={() => scrollRef.current?.focus({ preventScroll: true })} aria-label={`${label}. Usa las flechas izquierda y derecha para moverte por columna.`} className={cn('min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-primary/40 scrollbar-overlay [&_[data-slot="table-container"]]:!w-max [&_[data-slot="table-container"]]:!min-w-full [&_[data-slot="table-container"]]:!max-w-none [&_[data-slot="table-container"]]:!overflow-visible', tableClassName)}>
         {children}
       </div>
     </div>

@@ -68,9 +68,9 @@ export function translatePaymentMethodText(value: unknown): string {
   );
 }
 
-export function isBankPaymentMethod(method?: string | null, includeCheck = false): boolean {
+export function isBankPaymentMethod(method?: string | null, _includeCheck = false): boolean {
   const normalized = String(method || '').toUpperCase();
-  return BANK_PAYMENT_METHODS.has(normalized) || (includeCheck && normalized === 'CHECK');
+  return BANK_PAYMENT_METHODS.has(normalized) || normalized === 'CHECK';
 }
 
 export function requiresPaymentReference(method?: string | null): boolean {

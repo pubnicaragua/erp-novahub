@@ -25,7 +25,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import { generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { getSupplierDebtAmount, getSupplierFavorAmount } from '../../utils/supplierBalance';
 
@@ -269,6 +269,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.supplier',
         columns: [
           { label: 'Código', value: (row) => row.code || row.id?.slice(0, 8) || '—' },
           { label: 'Nombre', value: (row) => row.name || '—' },
@@ -282,36 +283,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       toast.success('Reporte PDF descargado', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el reporte', { id: exportToastId });
-    }
-  };
-
-  const handleDownloadSupplierPdf = async (supplier: Supplier, format: PdfDownloadFormat) => {
-    const exportToastId = toast.loading('Generando PDF del proveedor...');
-    try {
-      await generatePurchaseRecordPDF({
-        tenantName: user?.tenantName || 'Empresa',
-        format,
-        targetKey: 'compras.supplier',
-        document: {
-          title: 'Proveedor',
-          number: supplier.code || supplier.id.slice(0, 8),
-          status: isSupplierInactive(supplier) ? 'Inactivo' : 'Activo',
-          supplier: supplier.name,
-          fields: [
-            { label: 'Tipo', value: String(supplier.type || 'COMPANY').toUpperCase() === 'INDIVIDUAL' ? 'Individual' : 'Empresa' },
-            { label: 'RUC', value: supplier.ruc || supplier.taxId || '—' },
-            { label: 'Contacto', value: supplier.contactName || '—' },
-            { label: 'Correo', value: supplier.email || '—' },
-            { label: 'Teléfono', value: supplier.phone || '—' },
-            { label: 'Dirección', value: supplier.address || '—' },
-            { label: 'Saldo pendiente', value: formatConvertedAmount(getSupplierDebtAmount(supplier), baseCurrency) },
-            { label: 'Saldo a favor', value: formatConvertedAmount(getSupplierFavorAmount(supplier), baseCurrency) },
-          ],
-        },
-      });
-      toast.success('PDF descargado', { id: exportToastId });
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo generar el PDF', { id: exportToastId });
     }
   };
 
@@ -660,7 +631,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         supplierId={selectedSupplierDetail?.id ?? null}
         supplierSnapshot={selectedSupplierDetail}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
-        onDownloadPdf={(format) => selectedSupplierDetail ? void handleDownloadSupplierPdf(selectedSupplierDetail, format) : undefined}
       />
     </div>
   );

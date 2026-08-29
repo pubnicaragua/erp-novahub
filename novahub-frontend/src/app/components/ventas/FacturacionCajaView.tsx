@@ -20,6 +20,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
+import { buildPdfFileName } from '../../utils/exportFileNames';
 import {
   cajaService,
   type CashRegister,
@@ -221,6 +222,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
   const additionalRows = `${extraCharges.map((charge) => `<div class="row"><span>${escapeTicketHtml(charge.description || 'Coste extra')}</span><span>${money(charge.amount / (currency === 'USD' ? exchangeRate : 1))}</span></div>`).join('')}${delivery > 0 ? `<div class="row"><span>${escapeTicketHtml(invoice.deliveryDescription || 'Delivery')}</span><span>${money(delivery / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}`;
   const totalRecibidoHtml = payments.length > 1 ? `<div class="row"><span>Total recibido</span><span>${money(paidDisplay)}</span></div>` : '';
   const registerCode = invoice.register?.code || 'N/D';
+  const printFileName = buildPdfFileName(['factura', invoice.number || 'sin_numero'], isTicket ? 'roll-80' : 'configured');
 
   const pageStyle = isTicket
     ? '@page{size:80mm auto;margin:0}*{box-sizing:border-box}html{width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff}body{display:flex;justify-content:center;align-items:flex-start;width:80mm;min-width:80mm;max-width:80mm;margin:0;padding:0;background:#fff;color:#000;font:10px monospace;filter:grayscale(1);-webkit-filter:grayscale(1)}body>div{width:72mm;max-width:72mm;margin:0;padding:4mm 0}.center{text-align:center;line-height:1.35}.line{border-top:1px dashed #000;margin:8px 0 0;padding:6px 0 0}.label{font-weight:800;letter-spacing:.08em;margin:4px 0}.item{padding:3px 0;border-bottom:1px dotted #555}.row{display:flex;justify-content:space-between;gap:8px;line-height:1.35}.row>span:first-child{min-width:0;overflow-wrap:anywhere}.row>span:last-child{flex:0 0 auto;text-align:right}.totals{margin-top:6px}.total{font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px}.footer{text-align:center;border-top:1px dashed #000;margin-top:10px;padding-top:6px}.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}'
@@ -237,7 +239,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     ? `${logoHtml}<h2>${escapeTicketHtml(companyName)}</h2><h3>Comprobante de venta</h3>`
     : `<div style="text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #000;">${logoHtml}<h1 style="font-size:18pt;font-weight:800;margin:0 0 5px;text-transform:uppercase;">${escapeTicketHtml(companyName)}</h1><p style="font-size:10pt;color:#555;margin:0;">Comprobante de venta</p></div>`;
 
-  win.document.write(`<html><head><title>${escapeTicketHtml(invoice.number)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
+  win.document.write(`<html><head><title>${escapeTicketHtml(printFileName)}</title><style>${pageStyle}</style></head><body><div ${containerStyle}>${headerHtml}<div class="center">Factura: ${escapeTicketHtml(invoice.number)}<br>Caja: ${escapeTicketHtml(registerCode)}<br>Fecha: ${new Date().toLocaleString('es-NI')}</div><div class="line"><div class="label">CLIENTE</div><div>${escapeTicketHtml(customerName)}</div>${customerPhone ? `<div>Tel: ${escapeTicketHtml(customerPhone)}</div>` : ''}</div><div class="label">DETALLE</div>${itemRows}<div class="line totals"><div class="row"><span>Subtotal</span><span>${money(Number(invoice.subtotal) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${discount > 0 ? `<div class="row"><span>Descuento</span><span>- ${money(discount / (currency === 'USD' ? exchangeRate : 1))}</span></div>` : ''}<div class="row"><span>IVA</span><span>${money(Number(invoice.taxAmount) / (currency === 'USD' ? exchangeRate : 1))}</span></div>${additionalRows}<div class="row total"><span>TOTAL</span><span>${money(Number(invoice.total) / (currency === 'USD' ? exchangeRate : 1))}</span></div></div><div class="line"><div class="label">PAGO</div>${paymentRows}${totalRecibidoHtml}<div class="row"><span>Cambio / vuelto</span><span>C$ ${formatSalesAmount(changeLocal)}</span></div></div><div class="footer">Gracias por su compra</div></div></body></html>`);
   const designStyle = win.document.createElement('style');
   designStyle.textContent = ['body{font-family:', ticketFont, ';color:', ticketText, '}', 'h2,.label,.total{color:', ticketPrimary, '}', '.line{border-color:', ticketPrimary, '}', isTicket ? '.company-logo{filter:grayscale(1);-webkit-filter:grayscale(1)}' : ''].join('');
   win.document.head.appendChild(designStyle);
@@ -1536,12 +1538,12 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
       toast.error('El monto solo puede superar el total cuando el método es efectivo.');
       return;
     }
-    if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.reference?.trim())) {
-      toast.error('La transferencia requiere una referencia');
+    if (payments.some((payment) => requiresPaymentReference(payment.method) && !payment.reference?.trim())) {
+      toast.error('La transferencia, tarjeta o cheque requiere una referencia');
       return;
     }
-    if (payments.some((payment) => ['CARD', 'TRANSFER'].includes(payment.method) && !payment.bankAccountId)) {
-      toast.error('Selecciona el banco global para cada pago con tarjeta o transferencia');
+    if (payments.some((payment) => isBankPaymentMethod(payment.method) && !payment.bankAccountId)) {
+      toast.error('Selecciona el banco global para cada pago con tarjeta, transferencia o cheque');
       return;
     }
     submittingRef.current = true;
@@ -2728,7 +2730,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${createdInvoice.customer.phone}` : ''}</p>
                 <p className="mt-1 text-xs font-bold text-primary">Caja: {createdInvoice.register?.code || 'N/D'}</p>
               </div>
-              <Button variant="ghost" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura">✕</Button>
+              <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura" title="Cerrar">✕</Button>
             </div>
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-border/50">
@@ -2790,7 +2792,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId }: Factu
                 <h2 className="text-lg font-black">Checkout / Pago</h2>
                 {holdCreateDto && <p className="text-xs font-bold text-primary">Reserva con cobro inmediato</p>}
               </div>
-               <Button variant="ghost" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>✕</Button>
+               <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Cerrar pago" title="Cerrar" onClick={() => { setShowPayment(false); setHoldCreateDto(null); setMixedPaymentEnabled(false); }}>✕</Button>
             </div>
 
             {(() => {

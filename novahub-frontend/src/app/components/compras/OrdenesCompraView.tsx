@@ -193,7 +193,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const gridTemplate = '32px 144px 300px 250px 180px 160px 96px 112px 128px 160px 112px 96px 112px 160px 112px 96px 128px';
-  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 72, { overscan: 4 });
+  const tableVirtualizer = useVirtualizedImportRows(rows.length, tableScrollRef, 72, { overscan: 2 });
 
   const openCategoryDialog = (index: number, initialName: string) => {
     setCategoryRowIndex(index);
@@ -300,7 +300,7 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="productos" />
 
         <div className="hidden min-h-0 min-w-0 flex-1 sm:flex">
-        <HorizontalTableScroller scrollRef={tableScrollRef} className="h-[clamp(500px,65vh,760px)] min-h-[500px] min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
+        <HorizontalTableScroller scrollRef={tableScrollRef} scrollBehavior="auto" className="h-[clamp(500px,65vh,760px)] min-h-[500px] min-w-0 flex-1" tableClassName="overflow-x-auto overflow-y-auto scrollbar-overlay" label="Desplazamiento horizontal · usa la barra inferior o las flechas">
           <Table containerClassName="!max-w-none !overflow-visible" containerStyle={{ width: '2500px', minWidth: '2500px', maxWidth: 'none' }} className="block w-[2500px] min-w-[2500px]">
             <TableHeader className="sticky top-0 z-10 block bg-muted shadow-sm">
               <TableRow style={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
@@ -385,8 +385,8 @@ function PurchaseImportPreview({ rows, fileName, isSidebarCollapsed = true, impo
             <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Revisión móvil</p><p className="mt-1 text-xs text-muted-foreground">Edita un producto por tarjeta</p></div>
             <Badge variant="secondary" className="shrink-0 text-[10px]">{rows.length} registros</Badge>
           </div>
-          <div className="min-h-0 min-w-0 flex-1">
-            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={520} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {rows.length ? <VirtualizedImportList count={rows.length} scrollRef={mobileScrollRef} estimateSize={520} overscan={2} className="min-w-0 max-w-full space-y-3 pt-3 pr-1" renderItem={(index) => <div className="pb-3">{renderMobileCard(rows[index], index)}</div>} /> : <div className="p-8 text-center text-sm text-muted-foreground">El archivo no contiene filas para importar.</div>}
           </div>
         </section>
 
@@ -1228,6 +1228,7 @@ export function OrdenesCompraView({ data, loading, onRefresh, supplierCatalog = 
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.purchase-order',
         columns: [
           { label: 'N° Orden', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },

@@ -906,7 +906,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true }: PlanCuentasViewPr
                   <CardTitle className="text-sm font-medium">Detalle de Cuenta</CardTitle>
                 </div>
                 {selectedAccount && (
-                  <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { setSelectedAccount(null); setSelectedTransaction(null); }}>
+                  <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setSelectedAccount(null); setSelectedTransaction(null); }} aria-label="Cerrar detalle de cuenta" title="Cerrar">
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 )}

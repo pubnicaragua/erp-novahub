@@ -14,7 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { generateConfiguredReportTemplate, getPdfDesignSettings, pdfDesignPaper } from '../../utils/pdfGenerator';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { formatDateEs } from '../../utils/dateFormat';
@@ -22,7 +23,7 @@ import { HRViewTutorial } from './HRViewTutorial';
 
 export function NominasView({ payrolls, employees, onRefresh }: any) {
   const { displayCurrency, valuationMode, valuationModeLabel, valuationModeSuffix, formatCurrentAmount, convertAmount, convertCurrentAmount } = useCurrency();
-  const { canPerform } = useAuth();
+  const { user, canPerform } = useAuth();
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [includeCommissions, setIncludeCommissions] = useState(true);
@@ -213,6 +214,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
   const handleExportPDF = async () => {
     try {
+      const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', rows: filteredPayrolls, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Estado', value: row => row.status === 'PAID' ? 'Pagado' : row.status === 'PENDING' ? 'Pendiente' : row.status }], fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
+      if (configured) { toast.success('Reporte PDF descargado'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings)) as any;
       doc.text("Reporte de Nominas", 14, 15);
@@ -236,7 +239,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         body: tableData,
       });
 
-      doc.save(`nominas_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(buildDatedDownloadFileName(['reporte_nominas'], 'pdf'));
       toast.success('Reporte PDF descargado');
     } catch {
       toast.error('Error generando PDF');

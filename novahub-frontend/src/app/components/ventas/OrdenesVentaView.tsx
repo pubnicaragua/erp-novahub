@@ -19,6 +19,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { generateEstimatePDF, previewSalesTransactionPDF } from '../../utils/pdfGenerator';
+import { buildPdfFileName } from '../../utils/exportFileNames';
 import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -303,7 +304,7 @@ export function OrdenesVentaView({ data, loading, onRefresh, onGenerateInvoice, 
           documentType: 'order',
           save: true,
         });
-        const pdfFile = new File([blob], `${order.number || 'OrdenVenta'}_${Date.now()}.pdf`, { type: 'application/pdf' });
+        const pdfFile = new File([blob], buildPdfFileName(['orden_de_venta', order.number || 'sin_numero']), { type: 'application/pdf' });
         const uploaded = await storageService.uploadFile('documents', pdfFile, { folder: 'ordenes-venta' });
         if (uploaded?.url) publicPdfUrl = uploaded.url;
       }

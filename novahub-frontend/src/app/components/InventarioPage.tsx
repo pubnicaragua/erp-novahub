@@ -36,6 +36,7 @@ import { AtributosView } from './inventory/AtributosView';
 import { LinkedWarehouseProductsView } from './inventory/LinkedWarehouseProductsView';
 import { api } from '../services/api';
 import { inventoryService } from '../services/inventario.service';
+import { buildDateFilteredDownloadFileName } from '../utils/exportFileNames';
 import { motion } from 'motion/react';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import { BranchScopeFilter } from './ui/BranchScopeFilter';
@@ -477,7 +478,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = buildDateFilteredDownloadFileName(['reporte_inventario'], 'csv', dateFrom, dateTo);
       link.click();
       toast.success('Archivo CSV descargado');
     } catch (e: any) {

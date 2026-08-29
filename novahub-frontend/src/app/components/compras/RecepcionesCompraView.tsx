@@ -601,6 +601,7 @@ export function RecepcionesCompraView({ data, loading, onRefresh, supplierCatalo
         rows: filteredData,
         tenantName: user?.tenantName || 'Empresa',
         format,
+        targetKey: 'compras.purchase-receipt',
         columns: [
           { label: 'N° Recepción', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || 'Sin proveedor' },
